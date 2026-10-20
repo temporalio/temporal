@@ -211,7 +211,8 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
-		true, // isWorkflow
+		false, // checkRunAlreadyExists: reset keeps a random run ID
+		true,  // isWorkflow
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
 	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
@@ -277,7 +278,8 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
-		true, // isWorkflow
+		false, // checkRunAlreadyExists: reset keeps a random run ID
+		true,  // isWorkflow
 	).Return(int64(0), int64(0), nil)
 
 	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, nil, nil, resetWorkflow)
@@ -350,7 +352,8 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 		(*int64)(nil),
 		(*persistence.WorkflowSnapshot)(nil),
 		([]*persistence.WorkflowEvents)(nil),
-		true, // isWorkflow
+		false, // checkRunAlreadyExists: no new run
+		true,  // isWorkflow
 	).Return(baseUpdateEventsSize, int64(0), nil)
 
 	resetNewEventsSize := int64(4321)

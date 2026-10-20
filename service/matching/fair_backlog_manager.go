@@ -219,7 +219,7 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -292,8 +292,8 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		// Note that there could be more than one subqueue for the same priority.
 		if _, ok := result[pk]; !ok {
 			result[pk] = &taskqueuepb.TaskQueueStats{
-				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-				// be more appropriate in the future.
+				// TODO(pri): returning 0 to match existing behavior, but maybe -1 (meaning empty)
+				// would be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
 			}
 		}
@@ -371,10 +371,11 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
 			},
-			LoadedTasks:             int64(r.getLoadedTasks()),
-			FairMaxReadLevel:        maxReadLevel.toProto(),
-			ApproximateBacklogCount: count,
-			BacklogDrained:          r.isDrained(),
+			LoadedTasks:              int64(r.getLoadedTasks()),
+			FairMaxReadLevel:         maxReadLevel.toProto(),
+			ApproximateBacklogCount:  count,
+			BacklogDrained:           r.isDrained(),
+			FairnessKeyCountEstimate: c.taskWriter.getFairnessKeyCountEstimate(subqueueIndex(i)),
 		}
 	}
 	return status
