@@ -1263,8 +1263,7 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 }
 
 // setupVersionedTQManager creates a physicalTaskQueueManagerImpl for a versioned
-// deployment with empty user data and a fake deployment client. This is a test
-// helper for TestDeploymentVersionMonitorStartConditions.
+// deployment with empty user data and a fake deployment client.
 func setupVersionedTQManager(
 	t *testing.T,
 	deployment *deploymentpb.Deployment,
@@ -1285,7 +1284,6 @@ func setupVersionedTQManager(
 
 	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
 	engine.workerDeploymentClient = &fakeDeploymentClient{registerErr: registerErr}
-	// Zero out the registration error backoff to avoid a 5-second sleep in the error path.
 	engine.testHooks = testhooks.NewTestHooks()
 	testhooks.Set(engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff, time.Duration(0), ns.ID())
 
@@ -1295,21 +1293,15 @@ func setupVersionedTQManager(
 	)
 	prtn := queueKey.Partition()
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
-	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
-	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{})
 	require.NoError(t, err)
-
-	udMgr.lock.Lock()
-	udMgr.userData = &persistencespb.VersionedTaskQueueUserData{
-		Data: &persistencespb.TaskQueueUserData{},
-	}
-	udMgr.userDataState = userDataEnabled
-	udMgr.lock.Unlock()
 
 	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
 	require.NoError(t, err)
+
+	// Cancel tqCtx on cleanup to stop any monitor goroutine.
+	t.Cleanup(tqMgr.tqCtxCancel)
 
 	return ns, tqMgr
 }
