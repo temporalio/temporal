@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1128,6 +1129,28 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 			return nil
 		},
 	)
+
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAttributesNoExistingRecord() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
+	// A closed run created from another cluster's snapshot carries the source's cleanup flag but
+	// has no visibility record on this cluster yet.
+	mutableState.GetExecutionInfo().Memo = nil
+	mutableState.GetExecutionInfo().SearchAttributes = nil
+	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
+	visibilityTask := s.closeVisibilityTaskForTest(execution)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("no record"))
+	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.NoError(resp.ExecutionErr)

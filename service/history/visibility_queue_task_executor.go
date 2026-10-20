@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -294,11 +295,15 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 			return nil
 		}
 		relocated, err := t.relocatableAttributesFetcher.Fetch(ctx, mutableState)
-		if err != nil {
+		if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+			// No record to preserve, e.g. a closed run created here from a snapshot inherits the
+			// source's flag. Record from mutable state as before.
+		} else if err != nil {
 			return err
+		} else {
+			memo = relocated.Memo.GetFields()
+			searchAttributes = relocated.SearchAttributes.GetIndexedFields()
 		}
-		memo = relocated.Memo.GetFields()
-		searchAttributes = relocated.SearchAttributes.GetIndexedFields()
 	}
 
 	requestBase := t.getVisibilityRequestBase(
