@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	persistence "go.temporal.io/server/api/persistence/v1"
+	v1 "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -258,11 +258,11 @@ func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gom
 }
 
 // PartitionedSnapshot mocks base method.
-func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
+func (m *MockChasmTree) PartitionedSnapshot(arg0 *v1.VersionedTransition) (chasm.NodesSnapshot, *v1.ChasmLocalState) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PartitionedSnapshot", arg0)
 	ret0, _ := ret[0].(chasm.NodesSnapshot)
-	ret1, _ := ret[1].(*persistence.ChasmLocalState)
+	ret1, _ := ret[1].(*v1.ChasmLocalState)
 	return ret0, ret1
 }
 
@@ -287,7 +287,7 @@ func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
 }
 
 // Snapshot mocks base method.
-func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.NodesSnapshot {
+func (m *MockChasmTree) Snapshot(arg0 *v1.VersionedTransition) chasm.NodesSnapshot {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Snapshot", arg0)
 	ret0, _ := ret[0].(chasm.NodesSnapshot)
@@ -328,4 +328,20 @@ func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.
 func (mr *MockChasmTreeMockRecorder) ValidateSideEffectTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ValidateSideEffectTask), ctx, task)
+}
+
+// ValidateStandbySideEffectTask mocks base method.
+func (m *MockChasmTree) ValidateStandbySideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateStandbySideEffectTask", ctx, task)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ValidateStandbySideEffectTask indicates an expected call of ValidateStandbySideEffectTask.
+func (mr *MockChasmTreeMockRecorder) ValidateStandbySideEffectTask(ctx, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateStandbySideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ValidateStandbySideEffectTask), ctx, task)
 }

@@ -188,7 +188,7 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+	isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task, true)
 	if err != nil {
 		return err
 	}

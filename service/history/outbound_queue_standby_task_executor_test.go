@@ -166,7 +166,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
 					Return(true, true, nil)
 			},
 			expectHandlerCalled: true,
@@ -188,7 +188,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
 					Return(true, false, nil)
 			},
 			expectHandlerCalled: false,
@@ -210,7 +210,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
 					Return(false, false, nil)
 			},
 			expectHandlerCalled: false,
@@ -335,7 +335,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
+		chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)
