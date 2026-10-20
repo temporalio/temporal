@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
@@ -41,6 +43,16 @@ const (
 )
 
 const maxFastUserDataFetches = 5
+
+const (
+	userDataChasmOutcomeSuccess  = "success"
+	userDataChasmOutcomeNotFound = "not_found"
+	userDataChasmOutcomeError    = "error"
+
+	userDataChasmWriteReasonMissing metrics.ReasonString = "missing_user_data"
+	userDataChasmWriteReasonDBNewer metrics.ReasonString = "db_clock_newer"
+	userDataChasmWriteReasonUpdate  metrics.ReasonString = "user_data_update"
+)
 
 // noEphemeralDataVersion as a value for LastKnownEphemeralDataVersion means
 // the caller does not want to receive ephemeral data.
@@ -111,6 +123,8 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		matchingClient    matchingservice.MatchingServiceClient
+		chasmClient       tquserdatapb.TaskQueueUserDataServiceClient
+		metricsHandler    metrics.Handler
 		goroGroup         goro.Group
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
@@ -146,6 +160,8 @@ func newUserDataManager(
 	config *taskQueueConfig,
 	logger log.Logger,
 	registry namespace.Registry,
+	chasmClient tquserdatapb.TaskQueueUserDataServiceClient,
+	metricsHandler metrics.Handler,
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:             onFatalErr,
@@ -157,6 +173,8 @@ func newUserDataManager(
 		namespaceRegistry:      registry,
 		logger:                 logger,
 		matchingClient:         matchingClient,
+		chasmClient:            chasmClient,
+		metricsHandler:         metricsHandler,
 		userDataReady:          future.NewFuture[struct{}](),
 		ephemeralDataChanged:   make(chan struct{}),
 	}
@@ -411,6 +429,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
 	m.logNewUserData("loaded user data from db", response.UserData)
+	m.seedUserDataToChasmLocked(ctx, response.UserData)
 
 	return nil
 }
@@ -556,6 +575,8 @@ func (m *userDataManagerImpl) updateUserData(
 		}
 	}
 
+	// Capture the CHASM version before the DB write so delayed writers cannot overwrite a newer mirror.
+	chasmRequest := m.prepareUserDataChasmWriteLocked(ctx, updatedUserData)
 	_, err = m.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
 		NamespaceId:     m.partition.NamespaceId(),
 		TaskQueue:       m.partition.TaskQueue().Name(),
@@ -571,8 +592,117 @@ func (m *userDataManagerImpl) updateUserData(
 	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
 	m.logNewUserData("modified user data", updatedVersionedData, tag.String("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
+	m.upsertUserDataToChasmLocked(ctx, chasmRequest, userDataChasmWriteReasonUpdate)
 
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) seedUserDataToChasmLocked(
+	ctx context.Context,
+	userData *persistencespb.VersionedTaskQueueUserData,
+) {
+	if len(userData.GetData().GetPerType()) == 0 || m.chasmClient == nil ||
+		m.config.WriteUserDataToChasm == nil || !m.config.WriteUserDataToChasm() {
+		return
+	}
+	chasmUserData, err := m.readUserDataFromChasm(ctx)
+	if err != nil && !common.IsNotFoundError(err) {
+		return
+	}
+	reason := userDataChasmWriteReasonMissing
+	if err == nil {
+		dbClock, chasmClock := userData.GetData().GetClock(), chasmUserData.GetClock()
+		if dbClock != nil && (chasmClock == nil || hybrid_logical_clock.Greater(dbClock, chasmClock)) {
+			m.logger.Warn("task queue user data clock in db is newer than CHASM",
+				tag.UserDataVersion(userData.GetVersion()),
+				tag.DBTaskQueueUserData(userData.GetData()),
+				tag.ChasmTaskQueueUserData(chasmUserData),
+			)
+			if len(chasmUserData.GetPerType()) > 0 {
+				reason = userDataChasmWriteReasonDBNewer
+			}
+		} else if len(chasmUserData.GetPerType()) > 0 {
+			if chasmClock != nil && (dbClock == nil || hybrid_logical_clock.Less(dbClock, chasmClock)) {
+				m.logger.Warn("task queue user data clock in db is older than CHASM",
+					tag.UserDataVersion(userData.GetVersion()),
+					tag.DBTaskQueueUserData(userData.GetData()),
+					tag.ChasmTaskQueueUserData(chasmUserData),
+				)
+			}
+			return
+		}
+	}
+	data := common.CloneProto(userData.GetData())
+	m.upsertUserDataToChasmLocked(ctx, &tquserdatapb.UpsertTaskQueueUserDataRequest{
+		NamespaceId:     m.partition.NamespaceId(),
+		TaskQueue:       m.partition.TaskQueue().Name(),
+		PerType:         data.GetPerType(),
+		Clock:           data.GetClock(),
+		ExpectedVersion: chasmUserData.GetVersion(),
+	}, reason)
+}
+
+func (m *userDataManagerImpl) readUserDataFromChasm(ctx context.Context) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
+	response, err := m.chasmClient.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
+		NamespaceId: m.partition.NamespaceId(),
+		TaskQueue:   m.partition.TaskQueue().Name(),
+	})
+	outcome := userDataChasmOutcomeSuccess
+	if common.IsNotFoundError(err) {
+		outcome = userDataChasmOutcomeNotFound
+	} else if err != nil {
+		outcome = userDataChasmOutcomeError
+		m.logger.Error("failed to read task queue user data from CHASM", tag.Error(err))
+	}
+	metrics.TaskQueueUserDataChasmReadOutcomes.With(m.metricsHandler).Record(1, metrics.OutcomeTag(outcome))
+	return response, err
+}
+
+func (m *userDataManagerImpl) prepareUserDataChasmWriteLocked(
+	ctx context.Context,
+	userData *persistencespb.TaskQueueUserData,
+) *tquserdatapb.UpsertTaskQueueUserDataRequest {
+	if m.chasmClient == nil || m.config.WriteUserDataToChasm == nil || !m.config.WriteUserDataToChasm() ||
+		len(userData.GetPerType()) == 0 {
+		return nil
+	}
+	response, err := m.readUserDataFromChasm(ctx)
+	if err != nil && !common.IsNotFoundError(err) {
+		return nil
+	}
+	data := common.CloneProto(userData)
+	request := &tquserdatapb.UpsertTaskQueueUserDataRequest{
+		NamespaceId: m.partition.NamespaceId(),
+		TaskQueue:   m.partition.TaskQueue().Name(),
+		PerType:     data.GetPerType(),
+		Clock:       data.GetClock(),
+	}
+	if err == nil {
+		dbClock, chasmClock := userData.GetClock(), response.GetClock()
+		if chasmClock != nil && (dbClock == nil || hybrid_logical_clock.Less(dbClock, chasmClock)) {
+			m.logger.Warn("task queue user data clock in db is older than CHASM", tag.UserDataVersion(m.userData.GetVersion()))
+			return nil
+		}
+		request.ExpectedVersion = response.GetVersion()
+	}
+	return request
+}
+
+func (m *userDataManagerImpl) upsertUserDataToChasmLocked(
+	ctx context.Context,
+	request *tquserdatapb.UpsertTaskQueueUserDataRequest,
+	reason metrics.ReasonString,
+) {
+	if request == nil {
+		return
+	}
+	_, err := m.chasmClient.UpsertTaskQueueUserData(ctx, request)
+	outcome := userDataChasmOutcomeSuccess
+	if err != nil {
+		outcome = userDataChasmOutcomeError
+		m.logger.Error("failed to write task queue user data to CHASM", tag.Error(err), tag.UserDataVersion(m.userData.GetVersion()))
+	}
+	metrics.TaskQueueUserDataChasmWriteOutcomes.With(m.metricsHandler).Record(1, metrics.ReasonTag(reason), metrics.OutcomeTag(outcome))
 }
 
 func (m *userDataManagerImpl) HandleGetUserDataRequest(
