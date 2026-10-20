@@ -9,7 +9,7 @@ import "temporal/server/api/routing/v1/extension.proto";
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
 service TaskQueueUserDataService {
-  rpc GetTaskQueueUserDataSnapshot(GetTaskQueueUserDataSnapshotRequest) returns (GetTaskQueueUserDataSnapshotResponse) {
+  rpc GetTaskQueueUserData(GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }

@@ -64,9 +64,9 @@ func newTestHandler(t *testing.T, engineOptions ...chasmtest.EngineOption) (*han
 	}
 }
 
-func readTestTaskQueueUserData(ctx context.Context, t *testing.T, h *handler, req *tquserdatapb.UpsertTaskQueueUserDataRequest) *tquserdatapb.GetTaskQueueUserDataSnapshotResponse {
+func readTestTaskQueueUserData(ctx context.Context, t *testing.T, h *handler, req *tquserdatapb.UpsertTaskQueueUserDataRequest) *tquserdatapb.GetTaskQueueUserDataResponse {
 	t.Helper()
-	response, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+	response, err := h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 		NamespaceId: req.NamespaceId,
 		TaskQueue:   req.TaskQueue,
 	})
@@ -74,7 +74,7 @@ func readTestTaskQueueUserData(ctx context.Context, t *testing.T, h *handler, re
 	return response
 }
 
-func TestTaskQueueUserDataSnapshotLogsErrorsExceptNotFound(t *testing.T) {
+func TestTaskQueueUserDataLogsErrorsExceptNotFound(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
 		name     string
@@ -99,7 +99,7 @@ func TestTaskQueueUserDataSnapshotLogsErrorsExceptNotFound(t *testing.T) {
 				testCase.prepare(t, h, ctx, req)
 			}
 			capture := logger.StartCapture()
-			_, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+			_, err := h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 				NamespaceId: req.NamespaceId,
 				TaskQueue:   req.TaskQueue,
 			})
@@ -135,7 +135,7 @@ func TestTaskQueueUserDataZeroExpectedVersionCreates(t *testing.T) {
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: 1}, response)
 	stored := readTestTaskQueueUserData(ctx, t, h, req)
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,
@@ -148,7 +148,7 @@ func TestTaskQueueUserDataVersionIncrementsOnCAS(t *testing.T) {
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: 1}, response)
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,
@@ -159,7 +159,7 @@ func TestTaskQueueUserDataVersionIncrementsOnCAS(t *testing.T) {
 		response, err = h.UpsertTaskQueueUserData(ctx, req)
 		require.NoError(t, err)
 		protorequire.ProtoEqual(t, &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: version + 1}, response)
-		protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+		protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 			Version: version + 1,
 			PerType: req.PerType,
 			Clock:   req.Clock,
@@ -191,7 +191,7 @@ func TestTaskQueueUserDataCASConflictPreservesVersionAndData(t *testing.T) {
 			req.ExpectedVersion = 1
 			_, err = h.UpsertTaskQueueUserData(ctx, req)
 			require.NoError(t, err)
-			expected := common.CloneProto(&tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+			expected := common.CloneProto(&tquserdatapb.GetTaskQueueUserDataResponse{
 				Version: 2,
 				PerType: req.PerType,
 				Clock:   req.Clock,
@@ -210,7 +210,7 @@ func TestTaskQueueUserDataCASConflictPreservesVersionAndData(t *testing.T) {
 func TestTaskQueueUserDataRoundTrip(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
-	expected := common.CloneProto(&tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	expected := common.CloneProto(&tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,
@@ -324,7 +324,7 @@ func TestTaskQueueUserDataEmptyPerTypeMapRejected(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/existing=%t", testCase.name, existing), func(t *testing.T) {
 				t.Parallel()
 				h, ctx, req := newTestHandler(t)
-				var expected *tquserdatapb.GetTaskQueueUserDataSnapshotResponse
+				var expected *tquserdatapb.GetTaskQueueUserDataResponse
 				if existing {
 					_, err := h.UpsertTaskQueueUserData(ctx, req)
 					require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestTaskQueueUserDataEmptyPerTypeMapRejected(t *testing.T) {
 				if existing {
 					protorequire.ProtoEqual(t, expected, readTestTaskQueueUserData(ctx, t, h, req))
 				} else {
-					_, err = h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+					_, err = h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 						NamespaceId: req.NamespaceId,
 						TaskQueue:   req.TaskQueue,
 					})
@@ -358,7 +358,7 @@ func TestTaskQueueUserDataNegativeExpectedVersion(t *testing.T) {
 	req.ExpectedVersion = -1
 	_, err = h.UpsertTaskQueueUserData(ctx, req)
 	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,
@@ -371,7 +371,7 @@ func TestTaskQueueUserDataPositiveExpectedVersionDoesNotCreate(t *testing.T) {
 	req.ExpectedVersion = 1
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.ErrorAs(t, err, new(*serviceerror.NotFound))
-	_, err = h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+	_, err = h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 		NamespaceId: req.NamespaceId,
 		TaskQueue:   req.TaskQueue,
 	})
@@ -404,7 +404,7 @@ func TestTaskQueueUserDataTerminationClosesComponent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, chasm.LifecycleStateCompleted, lifecycleState)
 
-	stored, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+	stored, err := h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 		NamespaceId: req.NamespaceId,
 		TaskQueue:   req.TaskQueue,
 	})
@@ -414,7 +414,7 @@ func TestTaskQueueUserDataTerminationClosesComponent(t *testing.T) {
 	req.Clock.WallClock = 30
 	_, err = h.UpsertTaskQueueUserData(ctx, req)
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-	stored, err = h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+	stored, err = h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 		NamespaceId: req.NamespaceId,
 		TaskQueue:   req.TaskQueue,
 	})
@@ -437,7 +437,7 @@ func TestTaskQueueUserDataTerminationClosesComponent(t *testing.T) {
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: 1}, response)
 	stored = readTestTaskQueueUserData(ctx, t, h, req)
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,
@@ -472,7 +472,7 @@ func TestTaskQueueUserDataVersionCASPreservesIncomingClock(t *testing.T) {
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: 2}, response)
 			stored := readTestTaskQueueUserData(ctx, t, h, req)
-			protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+			protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 				Version: 2,
 				PerType: req.PerType,
 				Clock:   req.Clock,
@@ -497,20 +497,20 @@ func TestTaskQueueUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
 	stored, err := chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue}),
-		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ struct{}) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
+		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ struct{}) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
 			return taskQueueUserData.getTaskQueueUserData(chasmContext), nil
 		},
 		struct{}{},
 	)
 	require.NoError(t, err)
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{Version: 1, PerType: req.PerType, Clock: req.Clock}, stored)
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{Version: 1, PerType: req.PerType, Clock: req.Clock}, stored)
 
-	response, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
+	response, err := h.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
 		NamespaceId: req.NamespaceId,
 		TaskQueue:   req.TaskQueue,
 	})
 	require.NoError(t, err)
-	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+	protorequire.ProtoEqual(t, &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: 1,
 		PerType: req.PerType,
 		Clock:   req.Clock,

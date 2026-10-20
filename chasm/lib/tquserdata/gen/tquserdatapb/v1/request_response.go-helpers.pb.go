@@ -79,35 +79,35 @@ func (this *UpsertTaskQueueUserDataResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type GetTaskQueueUserDataSnapshotRequest to the protobuf v3 wire format
-func (val *GetTaskQueueUserDataSnapshotRequest) Marshal() ([]byte, error) {
+// Marshal an object of type GetTaskQueueUserDataRequest to the protobuf v3 wire format
+func (val *GetTaskQueueUserDataRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type GetTaskQueueUserDataSnapshotRequest from the protobuf v3 wire format
-func (val *GetTaskQueueUserDataSnapshotRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetTaskQueueUserDataRequest from the protobuf v3 wire format
+func (val *GetTaskQueueUserDataRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *GetTaskQueueUserDataSnapshotRequest) Size() int {
+func (val *GetTaskQueueUserDataRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two GetTaskQueueUserDataSnapshotRequest values are equivalent by recursively
+// Equal returns whether two GetTaskQueueUserDataRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *GetTaskQueueUserDataSnapshotRequest) Equal(that interface{}) bool {
+func (this *GetTaskQueueUserDataRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *GetTaskQueueUserDataSnapshotRequest
+	var that1 *GetTaskQueueUserDataRequest
 	switch t := that.(type) {
-	case *GetTaskQueueUserDataSnapshotRequest:
+	case *GetTaskQueueUserDataRequest:
 		that1 = t
-	case GetTaskQueueUserDataSnapshotRequest:
+	case GetTaskQueueUserDataRequest:
 		that1 = &t
 	default:
 		return false
@@ -116,35 +116,35 @@ func (this *GetTaskQueueUserDataSnapshotRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type GetTaskQueueUserDataSnapshotResponse to the protobuf v3 wire format
-func (val *GetTaskQueueUserDataSnapshotResponse) Marshal() ([]byte, error) {
+// Marshal an object of type GetTaskQueueUserDataResponse to the protobuf v3 wire format
+func (val *GetTaskQueueUserDataResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type GetTaskQueueUserDataSnapshotResponse from the protobuf v3 wire format
-func (val *GetTaskQueueUserDataSnapshotResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetTaskQueueUserDataResponse from the protobuf v3 wire format
+func (val *GetTaskQueueUserDataResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *GetTaskQueueUserDataSnapshotResponse) Size() int {
+func (val *GetTaskQueueUserDataResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two GetTaskQueueUserDataSnapshotResponse values are equivalent by recursively
+// Equal returns whether two GetTaskQueueUserDataResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *GetTaskQueueUserDataSnapshotResponse) Equal(that interface{}) bool {
+func (this *GetTaskQueueUserDataResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *GetTaskQueueUserDataSnapshotResponse
+	var that1 *GetTaskQueueUserDataResponse
 	switch t := that.(type) {
-	case *GetTaskQueueUserDataSnapshotResponse:
+	case *GetTaskQueueUserDataResponse:
 		that1 = t
-	case GetTaskQueueUserDataSnapshotResponse:
+	case GetTaskQueueUserDataResponse:
 		that1 = &t
 	default:
 		return false

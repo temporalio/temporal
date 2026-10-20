@@ -6,6 +6,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	libraryName   = "taskQueueUserData"
+	componentName = "taskQueueUserData"
+)
+
+var (
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
+)
+
 type library struct {
 	chasm.UnimplementedLibrary
 	handler *handler
@@ -21,12 +31,12 @@ func newLibrary(handler *handler) *library {
 }
 
 func (*library) Name() string {
-	return "taskQueueUserData"
+	return libraryName
 }
 
 func (*library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*TaskQueueUserData]("taskQueueUserData"),
+		chasm.NewRegistrableComponent[*TaskQueueUserData](componentName),
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/all"
+	"go.temporal.io/server/chasm/lib/tquserdata"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -42,7 +43,7 @@ func TestNewNilRegistry(t *testing.T) {
 		chasm.WorkflowArchetype,
 		chasm.SchedulerArchetype,
 		activity.Archetype,
-		chasm.FullyQualifiedName("taskQueueUserData", "taskQueueUserData"),
+		tquserdata.Archetype,
 	} {
 		id, ok := registry.ComponentIDByFqn(archetype)
 		require.True(t, ok, "archetype %s not registered", archetype)

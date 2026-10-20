@@ -29,17 +29,17 @@ message UpsertTaskQueueUserDataResponse {
 }
 
 // TODO: Accept a task queue type and return user data for that type only.
-message GetTaskQueueUserDataSnapshotRequest {
+message GetTaskQueueUserDataRequest {
   // Namespace containing the task queue family.
   string namespace_id = 1;
   // Task queue family name, used internally as the CHASM business ID.
   string task_queue = 2;
 }
 
-message GetTaskQueueUserDataSnapshotResponse {
-  // Snapshot payloads keyed by temporal.api.enums.v1.TaskQueueType.
+message GetTaskQueueUserDataResponse {
+  // Per-type payloads keyed by temporal.api.enums.v1.TaskQueueType.
   map<int32, temporal.server.api.persistence.v1.TaskQueueTypeUserData> per_type = 1;
-  // CHASM CAS version of this snapshot, independent of the DB version.
+  // CHASM CAS version of the returned user data, independent of the DB version.
   int64 version = 2;
   // Incoming user data HLC, preserved unchanged.
   temporal.server.api.clock.v1.HybridLogicalClock clock = 3;

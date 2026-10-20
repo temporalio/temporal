@@ -65,18 +65,18 @@ func NewTaskQueueUserDataServiceLayeredClient(
 func (c *TaskQueueUserDataServiceLayeredClient) Stop() {
 	c.redirector.Close()
 }
-func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataSnapshotNoRetry(
+func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataNoRetry(
 	ctx context.Context,
-	request *GetTaskQueueUserDataSnapshotRequest,
+	request *GetTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (*GetTaskQueueUserDataSnapshotResponse, error) {
-	var response *GetTaskQueueUserDataSnapshotResponse
+) (*GetTaskQueueUserDataResponse, error) {
+	var response *GetTaskQueueUserDataResponse
 	var err error
 	startTime := time.Now().UTC()
 	// the caller is a namespace, hence the tag below.
 	caller := headers.GetCallerInfo(ctx).CallerName
 	metricsHandler := c.metricsHandler.WithTags(
-		metrics.OperationTag("TaskQueueUserDataService.GetTaskQueueUserDataSnapshot"),
+		metrics.OperationTag("TaskQueueUserDataService.GetTaskQueueUserData"),
 		metrics.NamespaceTag(caller),
 		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 	)
@@ -92,19 +92,19 @@ func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataSnapshot
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
 		defer cancel()
-		response, err = client.GetTaskQueueUserDataSnapshot(ctx, request, opts...)
+		response, err = client.GetTaskQueueUserData(ctx, request, opts...)
 		return err
 	}
 	err = c.redirector.Execute(ctx, shardID, op)
 	return response, err
 }
-func (c *TaskQueueUserDataServiceLayeredClient) GetTaskQueueUserDataSnapshot(
+func (c *TaskQueueUserDataServiceLayeredClient) GetTaskQueueUserData(
 	ctx context.Context,
-	request *GetTaskQueueUserDataSnapshotRequest,
+	request *GetTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (*GetTaskQueueUserDataSnapshotResponse, error) {
-	call := func(ctx context.Context) (*GetTaskQueueUserDataSnapshotResponse, error) {
-		return c.callGetTaskQueueUserDataSnapshotNoRetry(ctx, request, opts...)
+) (*GetTaskQueueUserDataResponse, error) {
+	call := func(ctx context.Context) (*GetTaskQueueUserDataResponse, error) {
+		return c.callGetTaskQueueUserDataNoRetry(ctx, request, opts...)
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }

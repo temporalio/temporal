@@ -20,10 +20,10 @@ func newHandler(logger log.Logger) *handler {
 	return &handler{logger: logger}
 }
 
-func (h *handler) GetTaskQueueUserDataSnapshot(
+func (h *handler) GetTaskQueueUserData(
 	ctx context.Context,
-	req *tquserdatapb.GetTaskQueueUserDataSnapshotRequest,
-) (_ *tquserdatapb.GetTaskQueueUserDataSnapshotResponse, retErr error) {
+	req *tquserdatapb.GetTaskQueueUserDataRequest,
+) (_ *tquserdatapb.GetTaskQueueUserDataResponse, retErr error) {
 	defer func() {
 		if retErr != nil {
 			if _, ok := errors.AsType[*serviceerror.NotFound](retErr); !ok {
@@ -41,7 +41,7 @@ func (h *handler) GetTaskQueueUserDataSnapshot(
 	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}),
-		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataSnapshotRequest) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
+		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataRequest) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
 			if taskQueueUserData.Closed {
 				return nil, serviceerror.NewNotFound("task queue user data is terminated")
 			}

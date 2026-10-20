@@ -44,8 +44,8 @@ func (t *TaskQueueUserData) Terminate(chasm.MutableContext, chasm.TerminateCompo
 	return chasm.TerminateComponentResponse{}, nil
 }
 
-func (t *TaskQueueUserData) getTaskQueueUserData(ctx chasm.Context) *tquserdatapb.GetTaskQueueUserDataSnapshotResponse {
-	data := &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+func (t *TaskQueueUserData) getTaskQueueUserData(ctx chasm.Context) *tquserdatapb.GetTaskQueueUserDataResponse {
+	data := &tquserdatapb.GetTaskQueueUserDataResponse{
 		Version: t.Version,
 		Clock:   t.Clock,
 		PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData, len(t.PerType)),
