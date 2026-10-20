@@ -2284,9 +2284,10 @@ func (adh *AdminHandler) getDLQWorkflowID(
 
 // validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
 // It performs the following checks:
-// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
-// 2. If both archetypeID and archetype are specified, validates they match each other
-// 3. If only archetype is specified, converts it to an ID
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry.
+// 2. If both archetypeID and archetype are specified, validates they match each other.
+// 3. If only archetype is specified, converts it to an ID.
+// 4. If neither is specified (archetypeID is zero and archetype is empty), defaults to WorkflowArchetypeID.
 func (adh *AdminHandler) validateAndResolveArchetypeID(
 	archetype chasm.Archetype,
 	archetypeID uint32,

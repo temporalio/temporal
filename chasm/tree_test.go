@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -6172,6 +6173,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 	// preserves the unmanaged skippable flag so IsExecutionSkippable is deterministic.
 	gateRoot := func(skippable bool) *Node {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return true }
 		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 		s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -6267,9 +6269,14 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	s.Run("ConfigEnabledAndGateNotImplemented_InternalError", func() {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return true }
 		executionInfo(&persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		})
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.metricsHandler = metricsHandler
 		root := s.testComponentTree()
 
 		tl, ok := s.logger.(*testlogger.TestLogger)
@@ -6280,15 +6287,39 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Require().Error(err, "enabled config with no gate implementation is a misconfiguration")
 		var internalErr *serviceerror.Internal
 		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
+		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()]
+		s.Require().Len(recordings, 1)
+		s.Equal(testComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+	})
+
+	s.Run("FeatureFlagDisabled_LeavesStateUnchanged", func() {
+		root := gateRoot(true)
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return false }
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Nil(recorded)
+		s.True(s.nodeBackend.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled())
+		s.Zero(s.nodeBackend.NumTasksAdded())
 	})
 
 	s.Run("GateNotSkippable_NoStateChange", func() {
 		root := gateRoot(false)
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Debug,
+			"chasm time skipping skipped because the execution is not skippable",
+			tag.Archetype(testTimeSkippingComponentName),
+		)
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
 		s.NoError(err)
+		s.True(expectedLog.Matched())
 		s.Nil(recorded, "a gate that reports not-skippable must not record a transition")
 		s.Equal(0, s.nodeBackend.NumTasksAdded(), "no timer tasks are regenerated when skipping is gated out")
 	})
@@ -6304,7 +6335,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		expectedLog := tl.Expect(
 			testlogger.Debug,
 			"a pending task blocks chasm time skipping",
-			tag.ArchetypeID(root.ArchetypeID()),
+			tag.Archetype(testTimeSkippingComponentName),
 			tag.String("chasm-task-type", testPureTaskFQN),
 		)
 
@@ -6319,9 +6350,17 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		root := gateRoot(true)
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Debug,
+			"chasm time skipping transition recorded",
+			tag.Archetype(testTimeSkippingComponentName),
+		)
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
 		s.NoError(err)
+		s.True(expectedLog.Matched())
 		s.Require().NotNil(recorded, "a skippable execution with a future timer must record a transition")
 		s.True(recorded.IsValid())
 		s.True(baseTime.Add(time.Hour).Equal(recorded.GetTargetTime()), "skips to the earliest future timer task")
@@ -6330,6 +6369,27 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
 		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
 			"pure-task deletion is anchored at the earliest pure scheduled time")
+	})
+
+	s.Run("AccumulatedDurationCap_RejectsTransition", func() {
+		root := gateRoot(true)
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.nodeBackend.HandleTimeSkippingMaxAccumulatedDuration = func() time.Duration { return 90 * time.Minute }
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		root.metricsHandler = metricsHandler
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Nil(recorded)
+		s.Zero(s.nodeBackend.NumTasksAdded())
+		s.Require().Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()], 1)
 	})
 
 	s.Run("FastForwardReached_RecordsTransitionWithoutRegeneratingTasks", func() {

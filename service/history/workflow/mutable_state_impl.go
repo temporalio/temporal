@@ -20,6 +20,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -86,6 +87,9 @@ const (
 	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 
 	int64SizeBytes = 8
+
+	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
+	minRetainedActivityFailureSize = 128
 )
 
 // Scheduled tasks with timestamp after this will not be created.
@@ -169,7 +173,9 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
+		activityFailureSize int
+		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -350,6 +356,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		activityFailureSize:          0,
 		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(workflowID),
@@ -469,6 +476,7 @@ func NewMutableStateFromDB(
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
 		mutableState.approximateSize += activityInfo.Size()
+		mutableState.activityFailureSize += activityInfo.GetRetryLastFailure().Size()
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
@@ -1007,6 +1015,17 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 	return common.CloneProto(msProto)
 }
 
+func (ms *MutableStateImpl) eventKey(eventID int64, version int64) events.EventKey {
+	return events.EventKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		WorkflowID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		EventID:     eventID,
+		Version:     version,
+		ShardUUID:   ms.shard.GetOwner(),
+	}
+}
+
 func (ms *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
 	return definition.NewWorkflowKey(
 		ms.executionInfo.NamespaceId,
@@ -1433,14 +1452,7 @@ func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) 
 	if err != nil {
 		return nil, err
 	}
-	wfKey := ms.GetWorkflowKey()
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(wfKey.NamespaceID),
-		WorkflowID:  wfKey.WorkflowID,
-		RunID:       wfKey.RunID,
-		EventID:     ref.EventId,
-		Version:     version,
-	}
+	eventKey := ms.eventKey(ref.EventId, version)
 
 	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
 }
@@ -1568,6 +1580,12 @@ func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
 	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
 }
 
+func (ms *MutableStateImpl) GetUpdateNexusSerializationContext(
+	updateID string,
+) *nexuspb.PropagatedSerializationContext {
+	return ms.executionInfo.GetUpdateInfos()[updateID].GetNexusSerializationContext()
+}
+
 func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	ctx context.Context,
 	updateID string,
@@ -1588,13 +1606,7 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	if err != nil {
 		return nil, err
 	}
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-		WorkflowID:  ms.executionInfo.WorkflowId,
-		RunID:       ms.executionState.RunId,
-		EventID:     completion.EventId,
-		Version:     version,
-	}
+	eventKey := ms.eventKey(completion.EventId, version)
 	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
@@ -1621,13 +1633,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ai.ScheduledEventId,
-			Version:     version,
-		},
+		ms.eventKey(ai.ScheduledEventId, version),
 		ai.ScheduledEventBatchId,
 		currentBranchToken,
 	)
@@ -1718,13 +1724,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ci.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(ci.InitiatedEventId, version),
 		ci.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1764,13 +1764,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ri.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(ri.InitiatedEventId, version),
 		ri.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1840,13 +1834,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     si.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(si.InitiatedEventId, version),
 		si.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1892,13 +1880,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     completionEventID,
-			Version:     version,
-		},
+		ms.eventKey(completionEventID, version),
 		firstEventID,
 		currentBranchToken,
 	)
@@ -1990,13 +1972,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     common.FirstEventID,
-			Version:     startVersion,
-		},
+		ms.eventKey(common.FirstEventID, startVersion),
 		common.FirstEventID,
 		currentBranchToken,
 	)
@@ -2105,13 +2081,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// during the processing of DeleteTransferTask without loading this event from database.
 	// For Update events: store it here so that Update disposition lookups can be fast.
 	ms.eventsCache.PutEvent(
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     event.GetEventId(),
-			Version:     event.GetVersion(),
-		},
+		ms.eventKey(event.GetEventId(), event.GetVersion()),
 		event,
 	)
 }
@@ -2183,6 +2153,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastHeartbeatDetails = incomingActivityInfo.GetDetails()
 	ai.Attempt = incomingActivityInfo.GetAttempt()
 	ai.RetryLastWorkerIdentity = incomingActivityInfo.GetLastWorkerIdentity()
+	ms.activityFailureSize += incomingActivityInfo.LastFailure.Size() - ai.GetRetryLastFailure().Size()
 	ai.RetryLastFailure = incomingActivityInfo.LastFailure
 
 	if resetActivityTimerTaskStatus {
@@ -2245,6 +2216,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
 		ms.approximateSize -= activityInfo.Size() + int64SizeBytes
+		ms.activityFailureSize -= activityInfo.GetRetryLastFailure().Size()
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -3042,6 +3014,7 @@ func computeDeclinedTargetVersionUpgrade(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
+	// The time source uses virtual time for time-skipped executions.
 	now := ms.timeSource.Now()
 	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
@@ -3141,6 +3114,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 				metrics.RunInitiatorTag(prevRunID, event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
+	}
+	if event.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig() != nil {
+		ms.emitTimeSkippingConfigUpdatedMetric()
 	}
 
 	return event, nil
@@ -4395,6 +4371,10 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	}
 
 	return event, ai, err
+}
+
+func (ms *MutableStateImpl) GenerateActivityTask(scheduledEventID int64) error {
+	return ms.taskGenerator.GenerateActivityTasks(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
@@ -5805,7 +5785,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternalf("Update ID %s is already present in mutable state", updateID)
 	}
-	ui := persistencespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{
+		Value:                     admission,
+		NexusSerializationContext: attrs.GetRequest().GetPropagatedNexusSerializationContext(),
+	}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -5873,12 +5856,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		ui.Value = &persistencespb.UpdateInfo_Acceptance{
 			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
+		// A nil AcceptedRequest means the context was already recorded from the UpdateAdmitted event.
+		if attrs.GetAcceptedRequest() != nil {
+			ui.NexusSerializationContext = attrs.GetAcceptedRequest().GetPropagatedNexusSerializationContext()
+		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
 		ui := persistencespb.UpdateInfo{
 			Value: &persistencespb.UpdateInfo_Acceptance{
 				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
+			NexusSerializationContext: attrs.GetAcceptedRequest().GetPropagatedNexusSerializationContext(),
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++
@@ -6054,6 +6042,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
+	}
+	if timeSkippingConfigUpdated {
+		ms.emitTimeSkippingConfigUpdatedMetric()
 	}
 
 	return event, nil
@@ -6986,7 +6977,9 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			ClearActivityStartedState(activityInfo)
-			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
+			truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+			ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
+			activityInfo.RetryLastFailure = truncated
 			activityInfo.Attempt++
 			if ms.config.EnableActivityRetryStampIncrement() {
 				activityInfo.Stamp++
@@ -7068,11 +7061,15 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	activityFailure *failurepb.Failure,
 ) error {
 	return ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		// The truncation and the size accounting both read the failure being replaced, so they run
+		// before UpdateActivityInfoForRetries overwrites RetryLastFailure.
+		truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+		ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
 		UpdateActivityInfoForRetries(
 			activityInfo,
 			ms.GetCurrentVersion(),
 			nextAttempt,
-			ms.truncateRetryableActivityFailure(activityFailure),
+			truncated,
 			timestamppb.New(nextScheduledTime),
 			ms.config.EnableActivityRetryStampIncrement(),
 		)
@@ -7288,11 +7285,46 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 	return problems
 }
 
+// truncateRetryableActivityFailure decides whether activityFailure needs to be fully preserved or truncated using
+// two limits: per failure limit and total limit.
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
+	activityInfo *persistencespb.ActivityInfo,
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {
+	if activityFailure == nil {
+		return nil
+	}
+
 	namespaceName := ms.namespaceEntry.Name().String()
 	failureSize := activityFailure.Size()
+
+	// What every other pending activity holds. activityInfo's own failure is being replaced, so excluding it here.
+	totalWithout := ms.activityFailureSize - activityInfo.GetRetryLastFailure().Size()
+	metrics.ActivityFailureTotalSize.With(ms.metricsHandler).Record(
+		int64(totalWithout+failureSize),
+		metrics.NamespaceTag(namespaceName),
+	)
+
+	totalLimitError := ms.config.MutableStateActivityFailureTotalSizeLimitError(namespaceName)
+	if totalLimitError > 0 && failureSize+totalWithout > totalLimitError {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds error limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+		return failure.TruncateWithDepth(activityFailure, minRetainedActivityFailureSize, 0)
+	}
+
+	totalLimitWarn := ms.config.MutableStateActivityFailureTotalSizeLimitWarn(namespaceName)
+	if totalLimitWarn > 0 && totalWithout+failureSize > totalLimitWarn {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds warn limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+	}
 
 	if failureSize <= ms.config.MutableStateActivityFailureSizeLimitWarn(namespaceName) {
 		return activityFailure
@@ -9480,6 +9512,7 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
 		incoming.TimerTaskStatus = ms.getActivityTimerTaskStatus(current, incoming)
+		ms.activityFailureSize += incoming.RetryLastFailure.Size() - current.GetRetryLastFailure().Size()
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 		ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
