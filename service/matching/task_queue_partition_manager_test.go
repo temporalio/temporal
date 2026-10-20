@@ -2438,7 +2438,7 @@ func (s *PartitionManagerTestSuite) TestTasksAddedMetric_SyncMatch() {
 	}()
 
 	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
-	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
 
 	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
@@ -2473,7 +2473,7 @@ func (s *PartitionManagerTestSuite) TestTasksAddedMetric_NotEmittedForForwardedS
 	}()
 
 	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
-	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
 
 	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
