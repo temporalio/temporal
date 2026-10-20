@@ -99,7 +99,7 @@ func (h *cancellationInvocationTaskHandler) Validate(
 func (h *cancellationInvocationTaskHandler) Execute(
 	ctx context.Context,
 	cancelRef chasm.ComponentRef,
-	attrs chasm.TaskAttributes,
+	_ chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationTask,
 ) error {
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(cancelRef.NamespaceID))
@@ -122,7 +122,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
+	callTimeout := h.config.RequestTimeout(ns.Name().String(), args.endpointName)
 	var timeoutType enumspb.TimeoutType
 	if args.startToCloseTimeout > 0 {
 		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
