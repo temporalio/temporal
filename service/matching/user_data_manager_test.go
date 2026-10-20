@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
@@ -80,6 +81,8 @@ func createUserDataManager(
 		newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns),
 		logger,
 		mockNamespaceCache,
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 

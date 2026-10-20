@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/client"
 	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -59,10 +60,11 @@ type frontendClients struct {
 }
 
 type historyClients struct {
-	once      sync.Once
-	conn      *grpc.ClientConn
-	history   historyservice.HistoryServiceClient
-	scheduler schedulerpb.SchedulerServiceClient
+	once              sync.Once
+	conn              *grpc.ClientConn
+	history           historyservice.HistoryServiceClient
+	scheduler         schedulerpb.SchedulerServiceClient
+	taskQueueUserData tquserdatapb.TaskQueueUserDataServiceClient
 }
 
 type matchingClient struct {
@@ -132,6 +134,11 @@ func (c *clients) SchedulerClient() schedulerpb.SchedulerServiceClient {
 	return c.history.scheduler
 }
 
+func (c *clients) TaskQueueUserDataClient() tquserdatapb.TaskQueueUserDataServiceClient {
+	c.ensureHistory()
+	return c.history.taskQueueUserData
+}
+
 func (c *clients) ensureHistory() {
 	c.history.once.Do(func() {
 		conn, err := c.newConn(primitives.HistoryService)
@@ -141,6 +148,7 @@ func (c *clients) ensureHistory() {
 		c.history.conn = conn
 		c.history.history = historyservice.NewHistoryServiceClient(conn)
 		c.history.scheduler = schedulerpb.NewSchedulerServiceClient(conn)
+		c.history.taskQueueUserData = tquserdatapb.NewTaskQueueUserDataServiceClient(conn)
 	})
 }
 

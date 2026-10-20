@@ -1025,6 +1025,14 @@ func Deployment(d string) ZapTag {
 	return NewAnyTag("deployment", d)
 }
 
+func DBTaskQueueUserData(data any) ZapTag {
+	return NewAnyTag("db-task-queue-user-data", data)
+}
+
+func ChasmTaskQueueUserData(data any) ZapTag {
+	return NewAnyTag("chasm-task-queue-user-data", data)
+}
+
 func UserDataVersion(v int64) ZapTag {
 	return NewInt64("user-data-version", v)
 }

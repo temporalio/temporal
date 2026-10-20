@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -424,6 +425,11 @@ func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
 // SchedulerClient returns a scheduler client from the test cluster
 func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 	return tc.host.SchedulerClient()
+}
+
+// TaskQueueUserDataClient returns a CHASM task queue user data client from the test cluster.
+func (tc *TestCluster) TaskQueueUserDataClient() tquserdatapb.TaskQueueUserDataServiceClient {
+	return tc.host.TaskQueueUserDataClient()
 }
 
 // ExecutionManager returns an execution manager factory from the test cluster

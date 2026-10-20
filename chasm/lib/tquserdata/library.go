@@ -16,8 +16,12 @@ var (
 	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
-type library struct {
+type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
+}
+
+type library struct {
+	componentOnlyLibrary
 	handler *handler
 }
 
@@ -30,11 +34,11 @@ func newLibrary(handler *handler) *library {
 	return &library{handler: handler}
 }
 
-func (*library) Name() string {
+func (*componentOnlyLibrary) Name() string {
 	return libraryName
 }
 
-func (*library) Components() []*chasm.RegistrableComponent {
+func (*componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*TaskQueueUserData](componentName),
 	}

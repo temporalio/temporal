@@ -1571,6 +1571,14 @@ var (
 		"namespace_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
 	)
+	TaskQueueUserDataChasmReadOutcomes = NewCounterDef(
+		"task_queue_user_data_chasm_read_outcomes",
+		WithDescription("The number of CHASM task queue user data read outcomes from Matching."),
+	)
+	TaskQueueUserDataChasmWriteOutcomes = NewCounterDef(
+		"task_queue_user_data_chasm_write_outcomes",
+		WithDescription("The number of CHASM task queue user data write outcomes from Matching, tagged by reason."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),
