@@ -1040,12 +1040,8 @@ func (s *matchingEngineSuite) TestDroppedTaskMetric_LabelKeysAreVersionScoped() 
 	}, gotKeys)
 }
 
-// TestDispatchMetrics_FairnessKeyTag asserts the default, operator-facing dispatch path
-// carries the task's real fairness key when the breakdown is enabled. Unlike the pri_matcher
-// unit test (which flips EmitTaskDispatchLatencyAtPoll off to reach the matcher emit), this
-// drives a full engine add/poll at the default setting, so task_dispatch_latency comes from
-// the engine's poll-time emission and poll_success from the matcher — the paths a default
-// deployment actually uses.
+// TestDispatchMetrics_FairnessKeyTag drives a full add/poll with default config, covering the
+// poll-time task_dispatch_latency emission and the matcher's poll_success.
 func (s *matchingEngineSuite) TestDispatchMetrics_FairnessKeyTag() {
 	s.matchingEngine.config.BreakdownMetricsByFairnessKey = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 	capture := s.captureDroppedOnEngine()

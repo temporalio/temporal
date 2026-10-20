@@ -391,9 +391,8 @@ func MatchingTaskPriorityTag(value int32) Tag {
 }
 
 func FairnessKeyTag(value string, breakdown bool) Tag {
-	// An absent key maps to "__none__" regardless of the breakdown setting, so a task with no
-	// fairness key stays distinguishable from one whose real key is hidden ("__omitted__")
-	// without enabling the high-cardinality breakdown.
+	// "__none__" is emitted even with the breakdown off, so keyless tasks stay distinguishable
+	// from hidden ("__omitted__") keys.
 	if value == "" {
 		value = none
 	} else if !breakdown {
