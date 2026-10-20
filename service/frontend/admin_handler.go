@@ -17,6 +17,7 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -38,6 +40,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
@@ -119,6 +122,7 @@ type (
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
+		wciClient                  wcipb.WorkerControllerInstanceServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -155,6 +159,7 @@ type (
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
 		MetricsHandler                      metrics.Handler
+		WCIClient                           wcipb.WorkerControllerInstanceServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -213,6 +218,7 @@ func NewAdminHandler(
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
 		metricsHandler:             args.MetricsHandler,
+		wciClient:                  args.WCIClient,
 	}
 }
 
@@ -2511,6 +2517,43 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("unknown migration target: %v", request.GetTarget())
 	}
+}
+
+// MigrateWorkerControllerInstance moves a CHASM-backed WCI to its workflow; see ASW docs/chasm-migration.md.
+func (adh *AdminHandler) MigrateWorkerControllerInstance(
+	ctx context.Context,
+	request *adminservice.MigrateWorkerControllerInstanceRequest,
+) (_ *adminservice.MigrateWorkerControllerInstanceResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespace() == "" {
+		return nil, errNamespaceNotSet
+	}
+	if request.GetDeploymentName() == "" || request.GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("DeploymentName and BuildId must be set on request.")
+	}
+	if request.GetIdentity() == "" {
+		return nil, errIdentityNotSet
+	}
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	instanceID := wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: request.GetDeploymentName(),
+		BuildId:        request.GetBuildId(),
+	})
+	adh.logger.Info("Migrating worker controller instance to workflow",
+		tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowID(instanceID), tag.NewStringTag("identity", request.GetIdentity()))
+	if _, err := adh.wciClient.MigrateToWorkflow(ctx, &wcipb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		InstanceId:  instanceID,
+	}); err != nil {
+		return nil, err
+	}
+	return &adminservice.MigrateWorkerControllerInstanceResponse{}, nil
 }
 
 func (adh *AdminHandler) migrateScheduleToChasm(

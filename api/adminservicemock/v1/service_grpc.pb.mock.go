@@ -783,6 +783,26 @@ func (mr *MockAdminServiceClientMockRecorder) MigrateSchedule(ctx, in any, opts 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceClient)(nil).MigrateSchedule), varargs...)
 }
 
+// MigrateWorkerControllerInstance mocks base method.
+func (m *MockAdminServiceClient) MigrateWorkerControllerInstance(ctx context.Context, in *adminservice.MigrateWorkerControllerInstanceRequest, opts ...grpc.CallOption) (*adminservice.MigrateWorkerControllerInstanceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MigrateWorkerControllerInstance", varargs...)
+	ret0, _ := ret[0].(*adminservice.MigrateWorkerControllerInstanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateWorkerControllerInstance indicates an expected call of MigrateWorkerControllerInstance.
+func (mr *MockAdminServiceClientMockRecorder) MigrateWorkerControllerInstance(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateWorkerControllerInstance", reflect.TypeOf((*MockAdminServiceClient)(nil).MigrateWorkerControllerInstance), varargs...)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *adminservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1738,6 +1758,21 @@ func (m *MockAdminServiceServer) MigrateSchedule(arg0 context.Context, arg1 *adm
 func (mr *MockAdminServiceServerMockRecorder) MigrateSchedule(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceServer)(nil).MigrateSchedule), arg0, arg1)
+}
+
+// MigrateWorkerControllerInstance mocks base method.
+func (m *MockAdminServiceServer) MigrateWorkerControllerInstance(arg0 context.Context, arg1 *adminservice.MigrateWorkerControllerInstanceRequest) (*adminservice.MigrateWorkerControllerInstanceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MigrateWorkerControllerInstance", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.MigrateWorkerControllerInstanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateWorkerControllerInstance indicates an expected call of MigrateWorkerControllerInstance.
+func (mr *MockAdminServiceServerMockRecorder) MigrateWorkerControllerInstance(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateWorkerControllerInstance", reflect.TypeOf((*MockAdminServiceServer)(nil).MigrateWorkerControllerInstance), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.

@@ -527,6 +527,20 @@ func (c *metricClient) MigrateSchedule(
 	return c.client.MigrateSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) MigrateWorkerControllerInstance(
+	ctx context.Context,
+	request *adminservice.MigrateWorkerControllerInstanceRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.MigrateWorkerControllerInstanceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientMigrateWorkerControllerInstance")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MigrateWorkerControllerInstance(ctx, request, opts...)
+}
+
 func (c *metricClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
