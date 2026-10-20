@@ -132,7 +132,7 @@ func (t *TimeSkippingTransition) GetTargetTime() time.Time {
 }
 
 func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
-	if !t.isInitialized() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
+	if !t.isInitialized() || candidate.IsZero() || !candidate.After(t.CurrentTime) {
 		return
 	}
 	if t.targetTime.IsZero() || candidate.Before(t.targetTime) {

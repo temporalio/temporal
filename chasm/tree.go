@@ -243,6 +243,8 @@ type (
 		EndpointRegistry() EndpointRegistry
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
+		TimeSkippingMaxAccumulatedDuration() time.Duration
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
@@ -4201,36 +4203,58 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	if !tsi.GetConfig().GetEnabled() {
 		return nil
 	}
+	if !n.backend.IsTimeSkippingFeatureEnabled(n.ArchetypeID()) {
+		return nil
+	}
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
+	archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1,
+			metrics.ArchetypeTag(archetypeName),
+		)
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
-		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+		return serviceerror.NewInternal("time skipping is not implemented for current execution type")
 	}
 
 	// runtime check
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
+		n.logger.Debug("chasm time skipping skipped because the execution is not skippable",
+			tag.Archetype(archetypeName))
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
 	if !transition.IsValid() {
 		return nil
 	}
+	accumulatedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	maxDuration := n.backend.TimeSkippingMaxAccumulatedDuration()
+	if transition.GetSkippedDuration() > maxDuration-accumulatedDuration {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1, metrics.ArchetypeTag(archetypeName))
+		n.logger.Warn("chasm time skipping exceeds maximum accumulated duration",
+			tag.Archetype(archetypeName),
+			tag.Duration("accumulated-skipped-duration", accumulatedDuration),
+			tag.Duration("proposed-skipped-duration", transition.GetSkippedDuration()),
+			tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
+		return nil
+	}
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	n.logger.Info("CHASM time skipping transition recorded",
-		tag.ArchetypeID(n.ArchetypeID()),
-		tag.Time("currentTime", transition.CurrentTime),
-		tag.Time("targetTime", transition.GetTargetTime()),
-		tag.Duration("skippedDuration", transition.GetSkippedDuration()),
-		tag.Bool("disabledAfterFastForward", transition.DisabledAfterFastForward),
+	n.logger.Debug("chasm time skipping transition recorded",
+		tag.Archetype(archetypeName),
+		tag.Time("current-time", transition.CurrentTime),
+		tag.Time("target-time", transition.GetTargetTime()),
+		tag.Duration("skipped-duration", transition.GetSkippedDuration()),
+		tag.Bool("disabled-after-fast-forward", transition.DisabledAfterFastForward),
 	)
 	if transition.GetSkippedDuration() > 0 {
 		return n.regenerateTimerTasksForTimeSkipping()
@@ -4281,9 +4305,9 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
 }
 
-// defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
-// as the target time for time skipping, and conditionally adjusts the target time with the fast-forward time if set.
-// this method doesn't validate tasks and is assumed to be called after invalidate tasks are deleted
+// defaultFindNextTargetTime finds the earliest timer task from both pure and side-effect tasks
+// and applies the fast-forward bound. Invalidated tasks are removed before this method runs.
+// A timer still scheduled at or before now is pending and blocks time skipping until it runs.
 func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 	transition := NewTimeSkippingTransition(n.Now(nil))
 	now := transition.CurrentTime
@@ -4302,7 +4326,12 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				}
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
-					continue
+					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
+					archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
+					n.logger.Debug("a pending task blocks chasm time skipping",
+						tag.Archetype(archetypeName),
+						tag.String("chasm-task-type", taskType))
+					return nil
 				}
 				transition.TrackEarliestFutureTime(scheduledTime)
 			}
