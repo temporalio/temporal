@@ -35,6 +35,43 @@ func taskQueueUserDataWithDeployment(
 	}
 }
 
+// Replicating an identical snapshot leaves persisted data unchanged and emits no conflict diagnostics.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdenticalSnapshots() {
+	captureHandler := s.captureDroppedOnEngine()
+	current := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 20, Version: 1, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build"},
+				RevisionNumber:           5,
+			},
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"build": {RevisionNumber: 5, Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+			},
+		},
+	)
+	currentPerType := current.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
+	currentPerType.Config = &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"tenant": 2}}
+	currentPerType.FairnessState = enumsspb.FAIRNESS_STATE_V2
+	incoming := common.CloneProto(current)
+	taskQueue := uuid.NewString()
+	s.seedTaskQueueUserData(taskQueue, current)
+	metricCapture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(metricCapture)
+	logCapture := s.logger.StartCapture()
+	defer s.logger.StopCapture(logCapture)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+	protorequire.ProtoEqual(s.T(), current, got)
+	s.Require().Empty(metricCapture.SnapshotMetric(metrics.TaskQueueUserDataReplicationEqualRevisionConflicts.Name()))
+	for _, record := range logCapture.Snapshot() {
+		s.Require().False(record.Level == testlogger.Warn && record.Message == "task queue user data replication encountered an equal-revision conflict")
+	}
+}
+
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUnionsDeploymentDataByRevision() {
 	currentClock := &clockspb.HybridLogicalClock{WallClock: 200, ClusterId: 1}
 	incomingClock := &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1}
@@ -114,6 +151,97 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUnionsDe
 	s.Contains(gotShared.GetVersions(), "B")
 	s.Contains(gotShared.GetVersions(), "C")
 	protorequire.ProtoEqual(s.T(), incomingZeroRouting, gotDeployments["zero-routing"].GetRoutingConfig())
+}
+
+// Reordered and repeated snapshots retain the highest revisions, all build IDs, and the newest parent clock and config.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReorderedAndRepeatedSnapshots() {
+	older := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			RoutingConfig: newTestRoutingConfig(1, "A"),
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+			},
+		},
+	)
+	older.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"older": 1},
+	}
+	newer := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			RoutingConfig: newTestRoutingConfig(2, "A"),
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			},
+		},
+	)
+	newer.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"newer": 1},
+	}
+	disjoint := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
+			},
+		},
+	)
+	disjoint.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"disjoint": 1},
+	}
+	want := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			RoutingConfig: newTestRoutingConfig(2, "A"),
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
+			},
+		},
+	)
+	want.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"disjoint": 1},
+	}
+	tests := []struct {
+		name      string
+		snapshots []*persistencespb.TaskQueueUserData
+	}{
+		{
+			name:      "ordered updates then stale snapshot",
+			snapshots: []*persistencespb.TaskQueueUserData{older, newer, disjoint, older},
+		},
+		{
+			name:      "newest parent first then stale snapshot",
+			snapshots: []*persistencespb.TaskQueueUserData{disjoint, newer, older, older},
+		},
+		{
+			name:      "newer version before stale then repeated subset",
+			snapshots: []*persistencespb.TaskQueueUserData{newer, older, disjoint, newer},
+		},
+	}
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			taskQueue := uuid.NewString()
+			s.seedTaskQueueUserData(taskQueue, test.snapshots[0])
+			var got *persistencespb.TaskQueueUserData
+			for _, incoming := range test.snapshots[1 : len(test.snapshots)-1] {
+				got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+			}
+			protorequire.ProtoEqual(s.T(), want, got)
+
+			got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.snapshots[len(test.snapshots)-1])
+			protorequire.ProtoEqual(s.T(), want, got)
+		})
+	}
 }
 
 //nolint:staticcheck // SA1019 verifies that deprecated deployment fields remain snapshot-scoped

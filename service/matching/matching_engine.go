@@ -98,12 +98,7 @@ const (
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 
-	taskQueueUserDataConflictSelectedSideCurrent  = "current"
-	taskQueueUserDataConflictSelectedSideIncoming = "incoming"
-	taskQueueUserDataConflictResolutionCurrent    = "current_parent_clock"
-	taskQueueUserDataConflictResolutionIncoming   = "incoming_parent_clock"
-	taskQueueUserDataConflictResolutionFallback   = "incoming_clock_fallback"
-	taskQueueUserDataConflictLogMessage           = "task queue user data replication encountered an equal-revision conflict"
+	taskQueueUserDataConflictLogMessage = "task queue user data replication encountered an equal-revision conflict"
 )
 
 type (
@@ -2559,9 +2554,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		Source:                   "ApplyTaskQueueUserDataReplicationEvent",
 	}
 	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		incoming := req.GetUserData()
 		currentVersioningData := current.GetVersioningData()
-		newVersioningData := req.GetUserData().GetVersioningData()
-		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, newVersioningData)
+		incomingVersioningData := incoming.GetVersioningData()
+		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, incomingVersioningData)
 		var buildIdsToRevive []string
 		for _, buildId := range buildIdsRemoved {
 			// We accept that the user data is locked for updates while running these visibility queries.
@@ -2575,51 +2571,34 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		// merge v1 sets
-		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
+		// Merge V1 sets.
+		mergedVersioningData := MergeVersioningData(currentVersioningData, incomingVersioningData)
 
-		// The parent HLC orders snapshot-scoped data, but deployment cells carry independent revisions.
-		currentClock := current.GetClock()
-		incomingClock := req.GetUserData().GetClock()
-		// User data persisted before clock propagation was fixed may be clockless. Preserve the
-		// existing incoming fallback when the clocks cannot order the snapshots.
-		currentWins := currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock))
-		preferredUserData := req.GetUserData()
-		otherUserData := current
-		selectedSide := taskQueueUserDataConflictSelectedSideIncoming
-		resolution := taskQueueUserDataConflictResolutionFallback
-		if currentWins {
-			preferredUserData = current
-			otherUserData = req.GetUserData()
-			selectedSide = taskQueueUserDataConflictSelectedSideCurrent
-			resolution = taskQueueUserDataConflictResolutionCurrent
-		} else if incomingClock != nil && (currentClock == nil || hlc.Greater(incomingClock, currentClock)) {
-			resolution = taskQueueUserDataConflictResolutionIncoming
-		}
-
-		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(preferredUserData, otherUserData)
-		if mergedData != nil {
-			preferredVersioningData := preferredUserData.GetVersioningData()
+		// Merge task queue user data by taking snapshot-scoped fields from the parent-HLC-selected
+		// base (or the incoming compatibility fallback) and unioning worker-deployment data by revision.
+		baseSnapshot, mergeSourceSnapshot, selectionReason := selectTaskQueueUserDataSnapshots(current, incoming)
+		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+		if mergedVersioningData != nil {
+			baseVersioningData := baseSnapshot.GetVersioningData()
 			// v2 rules
-			mergedData.AssignmentRules = preferredVersioningData.GetAssignmentRules()
-			mergedData.RedirectRules = preferredVersioningData.GetRedirectRules()
+			mergedVersioningData.AssignmentRules = baseVersioningData.GetAssignmentRules()
+			mergedVersioningData.RedirectRules = baseVersioningData.GetRedirectRules()
 		}
 		e.recordTaskQueueUserDataMergeConflicts(
 			ns,
 			req,
 			mergeConflicts,
-			selectedSide,
-			resolution,
-			currentClock,
-			incomingClock,
+			selectionReason,
+			current.GetClock(),
+			incoming.GetClock(),
 		)
 
 		for _, buildId := range buildIdsToRevive {
-			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
+			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedVersioningData, buildId)
 			if setIdx == -1 {
 				continue
 			}
-			set := mergedData.VersionSets[setIdx]
+			set := mergedVersioningData.VersionSets[setIdx]
 			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
 			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIdIdx].StateUpdateTimestamp)
 
@@ -2633,9 +2612,9 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		if mergedData != nil {
+		if mergedVersioningData != nil {
 			// No need to keep the v1 tombstones around after replication.
-			mergedUserData.VersioningData = ClearTombstones(mergedData)
+			mergedUserData.VersioningData = ClearTombstones(mergedVersioningData)
 		}
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
@@ -2646,11 +2625,12 @@ func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
 	ns *namespace.Namespace,
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
 	conflicts []taskQueueUserDataMergeConflict,
-	selectedSide string,
-	resolution string,
+	selectionReason taskQueueUserDataSnapshotSelectionReason,
 	currentClock *clockspb.HybridLogicalClock,
 	incomingClock *clockspb.HybridLogicalClock,
 ) {
+	selectedSnapshotSource := selectionReason.selectedSnapshotSource()
+	resolution := string(selectionReason)
 	for _, conflict := range conflicts {
 		taskQueueType := enumspb.TaskQueueType(conflict.taskQueueType)
 		conflictType := string(conflict.conflictType)
@@ -2669,7 +2649,7 @@ func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
 			tag.Deployment(conflict.deploymentName),
 			tag.NewStringTag("conflict-type", conflictType),
 			tag.NewInt64("revision", conflict.revisionNumber),
-			tag.NewStringTag("selected-side", selectedSide),
+			tag.NewStringTag("selected-side", selectedSnapshotSource),
 			tag.NewStringTag("resolution", resolution),
 			tag.NewAnyTag("current-clock", currentClock),
 			tag.NewAnyTag("incoming-clock", incomingClock),
