@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc"
 )
 
@@ -105,7 +106,11 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
-	defer log.CapturePanic(i.logger, &retError)
+	logger := i.logger
+	if tags := logtags.NexusStage(req, info.FullMethod); len(tags) > 0 {
+		logger = log.With(logger, tags...)
+	}
+	defer log.CapturePanic(logger, &retError)
 
 	if !i.handlesMethod(info.FullMethod) {
 		return handler(ctx, req)
