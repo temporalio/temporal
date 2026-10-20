@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1915,6 +1916,19 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pending() {
+	s.processPendingActivityRetryTimer(false, false)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSession() {
+	s.processPendingActivityRetryTimer(true, false)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSessionWithoutPlacement() {
+	s.processPendingActivityRetryTimer(true, true)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(useSession, missingPlacement bool) {
+	s.T().Helper()
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -1946,8 +1960,17 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
-	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
+	scheduledEvent, activityInfo := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
 		timerTimeout, timerTimeout, timerTimeout, timerTimeout)
+
+	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if useSession {
+		activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+		if !missingPlacement {
+			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+		}
+		expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
+	}
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
 	mutableState.InsertTasks[tasks.CategoryTimer] = nil
@@ -1978,6 +2001,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	if missingPlacement {
+		s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+		return
+	}
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action
@@ -1986,21 +2013,23 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
+	directive := worker_versioning.MakeUseAssignmentRulesDirective()
+	if useSession {
+		directive = nil
+	}
+
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
-			NamespaceId: s.namespaceID.String(),
-			Execution:   execution,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueueName,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
+			NamespaceId:            s.namespaceID.String(),
+			Execution:              execution,
+			TaskQueue:              expectedTaskQueue,
 			ScheduledEventId:       scheduledEvent.EventId,
 			ScheduleToStartTimeout: durationpb.New(timerTimeout),
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
-			VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
+			VersionDirective:       directive,
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)

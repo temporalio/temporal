@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -609,9 +608,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: activityInfo.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	taskQueue, err := workflow.ActivityTaskQueue(mutableState, activityInfo)
+	if err != nil {
+		return err
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)

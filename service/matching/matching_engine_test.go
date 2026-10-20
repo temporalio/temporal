@@ -6990,3 +6990,84 @@ func TestFairnessConfigOverridesPersistedV0(t *testing.T) {
 
 	require.True(t, pm.config.EnableFairness)
 }
+
+func (s *matchingEngineSuite) TestStickyActivityBacklogSurvivesUnload() {
+	s.testStickyActivityBacklogSurvivesUnload(false)
+}
+
+func (s *matchingEngineSuite) TestStickyActivityVersionedBacklogSurvivesUnload() {
+	s.testStickyActivityBacklogSurvivesUnload(true)
+}
+
+func (s *matchingEngineSuite) testStickyActivityBacklogSurvivesUnload(versioned bool) {
+	s.T().Helper()
+	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
+	var directive *taskqueuespb.TaskVersionDirective
+	if versioned {
+		independent := tv.WithBuildIDNumber(2)
+		s.seedTaskQueueUserData(tv.TaskQueue().GetName(), &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							tv.DeploymentSeries(): {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion:  independent.ExternalDeploymentVersion(),
+									CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		directive = &taskqueuespb.TaskVersionDirective{
+			Behavior:          enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			DeploymentVersion: tv.DeploymentVersion(),
+			RevisionNumber:    1,
+		}
+	}
+	queue := &taskqueuepb.TaskQueue{
+		Name: "sticky-activity-worker", NormalName: tv.TaskQueue().GetName(), Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+	}
+	partition, err := tqid.PartitionFromProto(queue, tv.NamespaceID().String(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.Require().NoError(err)
+	key := UnversionedQueueKey(partition)
+	_, syncMatch, err := s.matchingEngine.AddActivityTask(s.T().Context(), &matchingservice.AddActivityTaskRequest{
+		NamespaceId: tv.NamespaceID().String(), Execution: tv.WorkflowExecution(),
+		TaskQueue: queue, ScheduledEventId: 5, ScheduleToStartTimeout: durationpb.New(time.Minute), VersionDirective: directive,
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatch)
+	s.Require().Equal(1, s.v1TaskManager.getTaskCount(key))
+	s.Require().Zero(s.v1TaskManager.getTaskCount(newUnversionedRootQueueKey(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)))
+	s.Require().Zero(s.v1TaskManager.getTaskCount(UnversionedQueueKey(newTestTaskQueue(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(queue.Name))))
+	s.Require().Zero(s.v1TaskManager.getTaskCount(UnversionedQueueKey(newTestTaskQueue(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_ACTIVITY).StickyPartition("other-worker"))))
+
+	queueManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(s.T().Context(), partition, false, loadCauseUnspecified)
+	s.Require().NoError(err)
+	s.matchingEngine.unloadTaskQueuePartition(queueManager, unloadCauseUnspecified)
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *historyservice.RecordActivityTaskStartedRequest, _ ...grpc.CallOption) (*historyservice.RecordActivityTaskStartedResponse, error) {
+			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1, StartedTime: timestamppb.Now(),
+				ScheduledEvent: newActivityTaskScheduledEvent(req.ScheduledEventId, 4, &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId: "session-activity", ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
+					StartToCloseTimeout: durationpb.New(time.Minute),
+				}),
+			}, nil
+		})
+	pollRequest := &workflowservice.PollActivityTaskQueueRequest{TaskQueue: queue, Identity: tv.WorkerIdentity()}
+	if versioned {
+		pollRequest.DeploymentOptions = tv.WorkerDeploymentOptions(true)
+	}
+	response, err := s.matchingEngine.PollActivityTaskQueue(s.T().Context(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: tv.NamespaceID().String(),
+		PollRequest: pollRequest,
+	}, metrics.NoopMetricsHandler)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Equal("session-activity", response.GetActivityId())
+	s.Require().NotEmpty(response.GetTaskToken())
+}

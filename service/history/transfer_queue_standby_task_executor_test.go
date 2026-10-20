@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -59,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -230,6 +232,19 @@ func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {
+	s.processPendingActivityTask(false, false)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingWorkflowSession() {
+	s.processPendingActivityTask(true, false)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingWorkflowSessionWithoutPlacement() {
+	s.processPendingActivityTask(true, true)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSession, missingPlacement bool) {
+	s.T().Helper()
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -261,7 +276,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	taskID := s.mustGenerateTaskID()
 	activityID := "activity-1"
 	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
+	event, activityInfo := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
+
+	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if useSession {
+		activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+		if !missingPlacement {
+			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+		}
+		expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
+	}
 
 	now := time.Now().UTC()
 	transferTask := &tasks.ActivityTask{
@@ -283,6 +307,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	if missingPlacement {
+		s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+		return
+	}
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action
@@ -292,7 +320,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Cond(func(request *matchingservice.AddActivityTaskRequest) bool {
+		return proto.Equal(expectedTaskQueue, request.TaskQueue)
+	}), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
 }

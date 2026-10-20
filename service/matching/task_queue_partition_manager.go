@@ -2221,6 +2221,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, nil, nil, 0, nil, errDefaultQueueNotInit
 	}
 
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+		// Sticky activities inherit the workflow's placement rather than the normal activity queue's deployment routing.
+		// TODO (Shivam): Confirm this if this assumption is valid!
+		return dbq, dbq, userDataChanged, taskDirectiveRevisionNumber, worker_versioning.DeploymentVersionFromDeployment(deployment), nil
+	}
+
 	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 		current,

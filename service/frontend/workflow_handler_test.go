@@ -27,6 +27,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -6897,4 +6898,24 @@ func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 			Url: "https://localhost/nexus-callback",
 		},
 	}
+}
+
+func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	request := &workflowservice.PollActivityTaskQueueRequest{
+		Namespace:      s.testNamespace.String(),
+		TaskQueue:      &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal-queue"},
+		SessionOptions: &sessionpb.WorkerSessionOptions{},
+	}
+	s.mockMatchingClient.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.PollActivityTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+			s.Require().Same(request, req.PollRequest)
+			s.Require().Equal(s.testNamespaceID.String(), req.NamespaceId)
+			return &matchingservice.PollActivityTaskQueueResponse{}, nil
+		})
+	ctx, cancel := context.WithTimeout(s.T().Context(), time.Minute)
+	defer cancel()
+	_, err := wh.PollActivityTaskQueue(ctx, request)
+	s.Require().NoError(err)
 }

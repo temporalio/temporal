@@ -7,20 +7,26 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -622,6 +628,76 @@ func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
 				false, false, true, 0)
 			s.Require().Error(err)
 			tc.assertErr(err)
+		})
+	}
+}
+
+func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
+	options := &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+	command := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:             "session-activity",
+		ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "normal-queue"},
+		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+		SessionOptions:         options,
+	}
+	event, batchID := s.mutableState.hBuilder.AddActivityTaskScheduledEvent(4, command, tests.Namespace)
+	data, err := proto.Marshal(event)
+	s.Require().NoError(err)
+	restoredEvent := &historypb.HistoryEvent{}
+	s.Require().NoError(proto.Unmarshal(data, restoredEvent))
+	protorequire.ProtoEqual(s.T(), options, restoredEvent.GetActivityTaskScheduledEventAttributes().GetSessionOptions())
+
+	s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any())
+	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(batchID, restoredEvent)
+	s.Require().NoError(err)
+	protorequire.ProtoEqual(s.T(), options, ai.GetSessionOptions())
+	s.Require().Equal("normal-queue", ai.GetTaskQueue())
+
+	data, err = proto.Marshal(ai)
+	s.Require().NoError(err)
+	restored := &persistencespb.ActivityInfo{}
+	s.Require().NoError(proto.Unmarshal(data, restored))
+	UpdateActivityInfoForRetries(restored, 1, 2, nil, timestamppb.Now(), true)
+	protorequire.ProtoEqual(s.T(), options, restored.GetSessionOptions())
+	s.Require().Equal(int32(2), restored.GetAttempt())
+}
+
+func TestActivityTaskQueue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		options          *sessionpb.ActivitySessionOptions
+		missingPlacement bool
+	}{
+		{name: "no session options"},
+		{name: "empty session options", options: &sessionpb.ActivitySessionOptions{}},
+		{name: "session disabled", options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{}}},
+		{name: "session enabled", options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}},
+		{name: "session missing placement", missingPlacement: true, options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tv := testvars.New(t)
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionOptions: tc.options}
+			expected := tv.TaskQueue()
+			if tc.options.GetUseWorkflowSession() {
+				current := tv.StickyTaskQueue()
+				if tc.missingPlacement {
+					current = tv.TaskQueue()
+				}
+				ms.EXPECT().CurrentTaskQueue().Return(current)
+				expected = current
+			}
+			queue, err := ActivityTaskQueue(ms, ai)
+			if tc.missingPlacement {
+				require.ErrorIs(t, err, consts.ErrDependencyTaskNotCompleted)
+				require.Nil(t, queue)
+			} else {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expected, queue)
+			}
 		})
 	}
 }

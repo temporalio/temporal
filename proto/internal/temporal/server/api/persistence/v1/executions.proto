@@ -13,6 +13,7 @@ import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
+import "temporal/api/session/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
@@ -760,6 +761,9 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // Session membership retained across persistence reloads and activity retries.
+  temporal.api.session.v1.ActivitySessionOptions session_options = 53;
 }
 
 // timer_map column

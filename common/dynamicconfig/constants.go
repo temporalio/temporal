@@ -201,6 +201,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		true,
 		`EnableStickyQuery indicates if sticky query should be enabled per namespace`,
 	)
+	EnableStickyActivityExecution = NewNamespaceBoolSetting(
+		"system.enableStickyActivityExecution",
+		false,
+		`EnableStickyActivityExecution allows scheduling activities in the workflow session.`,
+	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
 		true,

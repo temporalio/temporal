@@ -224,7 +224,7 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 			UseRampingVersion: false,
 		}
 	}
-	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
+	if !activityInfo.GetSessionOptions().GetUseWorkflowSession() && !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)

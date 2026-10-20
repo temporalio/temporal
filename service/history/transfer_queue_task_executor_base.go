@@ -5,7 +5,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -95,6 +94,7 @@ func newTransferQueueTaskExecutorBase(
 func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
+	taskQueue *taskqueuepb.TaskQueue,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
@@ -106,10 +106,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
 		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		TaskQueue:              taskQueue,
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),

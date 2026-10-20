@@ -4454,6 +4454,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
 		Priority:                attributes.Priority,
+		SessionOptions:          attributes.SessionOptions,
 	}
 
 	if attributes.UseWorkflowBuildId {

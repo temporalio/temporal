@@ -408,6 +408,7 @@ type Config struct {
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
 
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
+	EnableStickyActivityExecution     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
@@ -845,6 +846,7 @@ func NewConfig(
 		ESProcessorAckTimeout:    dynamicconfig.WorkerESProcessorAckTimeout.Get(dc),
 
 		EnableCrossNamespaceCommands:      dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
+		EnableStickyActivityExecution:     dynamicconfig.EnableStickyActivityExecution.Get(dc),
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
 		EnableActivityEagerDispatchCheck:  dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),

@@ -12,6 +12,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1350,95 +1351,125 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.NewString(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
+	for _, tc := range []struct {
+		name             string
+		session          bool
+		missingPlacement bool
+	}{
+		{name: "regular activity with sticky workflow"},
+		{name: "workflow-session activity", session: true},
+		{name: "workflow-session activity awaiting placement", session: true, missingPlacement: true},
+	} {
+		s.Run(tc.name, func() {
+			execution := &commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.NewString(),
+			}
+			workflowType := "some random workflow type"
+			taskQueueName := "some random task queue"
 
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: taskQueueName,
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+			_, err := mutableState.AddWorkflowExecutionStartedEvent(
+				execution,
+				&historyservice.StartWorkflowExecutionRequest{
+					Attempt:     1,
+					NamespaceId: s.namespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueueName,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+					},
 				},
-				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-			},
-		},
-	)
-	s.NoError(err)
+			)
+			s.NoError(err)
 
-	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
-	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+			wt := addWorkflowTaskScheduledEvent(mutableState)
+			event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+			wt.StartedEventID = event.GetEventId()
+			event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	activityID := "activity"
-	activityType := "activity type"
-	timerTimeout := 2 * time.Second
-	scheduledEvent, activityInfo := addActivityTaskScheduledEventWithRetry(
-		mutableState,
-		event.GetEventId(),
-		activityID,
-		activityType,
-		taskQueueName,
-		nil,
-		timerTimeout,
-		timerTimeout,
-		timerTimeout,
-		timerTimeout,
-		&commonpb.RetryPolicy{
-			InitialInterval:        durationpb.New(1 * time.Second),
-			BackoffCoefficient:     1.2,
-			MaximumInterval:        durationpb.New(5 * time.Second),
-			MaximumAttempts:        5,
-			NonRetryableErrorTypes: []string{"（╯' - ')╯ ┻━┻ "},
-		},
-	)
-	activityInfo.Attempt = 1
+			activityID := "activity"
+			activityType := "activity type"
+			timerTimeout := 2 * time.Second
+			scheduledEvent, activityInfo := addActivityTaskScheduledEventWithRetry(
+				mutableState,
+				event.GetEventId(),
+				activityID,
+				activityType,
+				taskQueueName,
+				nil,
+				timerTimeout,
+				timerTimeout,
+				timerTimeout,
+				timerTimeout,
+				&commonpb.RetryPolicy{
+					InitialInterval:        durationpb.New(1 * time.Second),
+					BackoffCoefficient:     1.2,
+					MaximumInterval:        durationpb.New(5 * time.Second),
+					MaximumAttempts:        5,
+					NonRetryableErrorTypes: []string{"（╯' - ')╯ ┻━┻ "},
+				},
+			)
+			if tc.session {
+				activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+			}
+			if !tc.missingPlacement {
+				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			}
 
-	timerTask := &tasks.ActivityRetryTimerTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:             s.version,
-		TaskID:              s.mustGenerateTaskID(),
-		VisibilityTimestamp: s.now,
-		EventID:             activityInfo.ScheduledEventId,
-		Attempt:             activityInfo.Attempt,
+			activityInfo.Attempt = 1
+
+			timerTask := &tasks.ActivityRetryTimerTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					s.namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+				),
+				Version:             s.version,
+				TaskID:              s.mustGenerateTaskID(),
+				VisibilityTimestamp: s.now,
+				EventID:             activityInfo.ScheduledEventId,
+				Attempt:             activityInfo.Attempt,
+			}
+
+			persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+			expectedTaskQueue := &taskqueuepb.TaskQueue{Name: activityInfo.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			if tc.session && !tc.missingPlacement {
+				expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
+			}
+			directive := worker_versioning.MakeUseAssignmentRulesDirective()
+			if tc.session {
+				directive = nil
+			}
+			if !tc.missingPlacement {
+				s.mockMatchingClient.EXPECT().AddActivityTask(
+					gomock.Any(),
+					pm.Eq(&matchingservice.AddActivityTaskRequest{
+						NamespaceId:            s.namespaceID.String(),
+						Execution:              execution,
+						TaskQueue:              expectedTaskQueue,
+						ScheduledEventId:       activityInfo.ScheduledEventId,
+						ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
+						Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
+						VersionDirective:       directive,
+					}),
+					gomock.Any(),
+				).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			}
+
+			resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+			if tc.missingPlacement {
+				s.Require().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+			} else {
+				s.Require().NoError(resp.ExecutionErr)
+			}
+		})
 	}
-
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddActivityTask(
-		gomock.Any(),
-		pm.Eq(&matchingservice.AddActivityTaskRequest{
-			NamespaceId: s.namespaceID.String(),
-			Execution:   execution,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: activityInfo.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			ScheduledEventId:       activityInfo.ScheduledEventId,
-			ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
-			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
-			VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
-		}),
-		gomock.Any(),
-	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-
-	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
