@@ -59,7 +59,6 @@ func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 	method := info.FullMethod
 
 	tags := i.workflowTags.Extract(request, method)
-	tags = append(tags, logtags.NexusStage(request, method)...)
 	tags = append(tags, tag.Duration("duration", elapsed))
 	tags = append(tags, tag.String("method", method))
 
