@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -39,10 +40,10 @@ func NewServiceErrorInterceptor(
 func (i *ServiceErrorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
-	_ *grpc.UnaryServerInfo,
+	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	resp, err := i.capturePanicHandler(ctx, req, handler)
+	resp, err := i.capturePanicHandler(ctx, req, info, handler)
 
 	var deserializationError *serialization.DeserializationError
 	var serializationError *serialization.SerializationError
@@ -66,8 +67,15 @@ func (i *ServiceErrorInterceptor) Intercept(
 func (i *ServiceErrorInterceptor) capturePanicHandler(
 	ctx context.Context,
 	req any,
+	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
-	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
+	logger := i.logger
+	if info != nil {
+		if tags := logtags.NexusStage(req, info.FullMethod); len(tags) > 0 {
+			logger = log.With(logger, tags...)
+		}
+	}
+	defer metrics.CapturePanic(logger, i.metricsHandler, &retError)
 	return handler(ctx, req)
 }
