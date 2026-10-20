@@ -4002,6 +4002,10 @@ func (x *TaskQueueFamilySummary) GetBloomFilterWords() []int64 {
 	return nil
 }
 
+// MaxTaskQueuesInVersionFailureDetails is the details of the failure when the maximum number
+// of task queues in a version is exceeded. By storing the task queue family summary, the deployment workflow
+// uses a bloom filter, during subsequent registrations, to determine if a task queue family may exist in the version
+// at the time of registration of a new task queue.
 type MaxTaskQueuesInVersionFailureDetails struct {
 	state                  protoimpl.MessageState  `protogen:"open.v1"`
 	TaskQueueFamilySummary *TaskQueueFamilySummary `protobuf:"bytes,1,opt,name=task_queue_family_summary,json=taskQueueFamilySummary,proto3" json:"task_queue_family_summary,omitempty"`
