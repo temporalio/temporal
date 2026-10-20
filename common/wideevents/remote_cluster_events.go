@@ -1,6 +1,8 @@
 package wideevents
 
-import "go.opentelemetry.io/otel/log"
+import (
+	"go.opentelemetry.io/otel/attribute"
+)
 
 // RemoteClusterLifecycleEventName aliases NamespaceLifecycleEventName for compatibility.
 // TODO: Remove it after callers migrate to NamespaceLifecycleEventName.
@@ -19,6 +21,6 @@ func (p RemoteClusterLifecyclePayload) EventName() string {
 	return NamespaceLifecycleEventName
 }
 
-func (p RemoteClusterLifecyclePayload) Attributes() []log.KeyValue {
+func (p RemoteClusterLifecyclePayload) Attributes() []attribute.KeyValue {
 	return NamespaceLifecyclePayload(p).Attributes()
 }

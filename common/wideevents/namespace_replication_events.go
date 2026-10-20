@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"maps"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -99,7 +100,7 @@ func (p NamespaceReplicationLifecyclePayload) EventName() string {
 	return NamespaceLifecycleEventName
 }
 
-func (p NamespaceReplicationLifecyclePayload) Attributes() []log.KeyValue {
+func (p NamespaceReplicationLifecyclePayload) Attributes() []attribute.KeyValue {
 	return NamespaceLifecyclePayload(p).Attributes()
 }
 

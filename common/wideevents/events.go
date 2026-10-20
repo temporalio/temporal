@@ -18,7 +18,7 @@ type Payload interface {
 	// events are easy to trace/grep by type.
 	EventName() string
 	// Attributes returns the event's fields as OTEL log key-values.
-	Attributes() []log.KeyValue
+	Attributes() []attribute.KeyValue
 }
 
 // NewLogger returns the OTEL logger used to emit events for serviceName. serviceName is attached

@@ -3,6 +3,7 @@ package wideevents
 import (
 	"maps"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/util"
@@ -268,20 +269,20 @@ type VersionHistoryEntry struct {
 
 func (p ReplicationLifecyclePayload) EventName() string { return ReplicationLifecycleEventName }
 
-func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
-	attrs := []log.KeyValue{
-		log.String("phase", string(p.Phase)),
-		log.String("task_type", p.TaskType),
-		log.Int64("shard", int64(p.Shard)),
-		log.String("namespace", p.Namespace),
-		log.String("namespace_id", p.NamespaceID),
-		log.String("workflow_id", p.WorkflowID),
-		log.String("run_id", p.RunID),
+func (p ReplicationLifecyclePayload) Attributes() []attribute.KeyValue {
+	attrs := []attribute.KeyValue{
+		attribute.String("phase", string(p.Phase)),
+		attribute.String("task_type", p.TaskType),
+		attribute.Int64("shard", int64(p.Shard)),
+		attribute.String("namespace", p.Namespace),
+		attribute.String("namespace_id", p.NamespaceID),
+		attribute.String("workflow_id", p.WorkflowID),
+		attribute.String("run_id", p.RunID),
 	}
 	if p.FailoverVersion != 0 || p.TransitionCount != 0 {
 		attrs = append(attrs,
-			log.Int64("failover_version", p.FailoverVersion),
-			log.Int64("transition_count", p.TransitionCount),
+			attribute.Int64("failover_version", p.FailoverVersion),
+			attribute.Int64("transition_count", p.TransitionCount),
 		)
 	}
 	// parent fields are phase-independent: emitted on any phase that populated them (sent +
@@ -289,21 +290,21 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 	// not a child).
 	if p.ParentWorkflowID != "" {
 		attrs = append(attrs,
-			log.String("parent_workflow_id", p.ParentWorkflowID),
-			log.String("parent_run_id", p.ParentRunID),
+			attribute.String("parent_workflow_id", p.ParentWorkflowID),
+			attribute.String("parent_run_id", p.ParentRunID),
 		)
 		if p.ParentInitiatedID != 0 {
-			attrs = append(attrs, log.Int64("parent_initiated_id", p.ParentInitiatedID))
+			attrs = append(attrs, attribute.Int64("parent_initiated_id", p.ParentInitiatedID))
 		}
 	}
 	if p.SourceCluster != "" {
-		attrs = append(attrs, log.String("source_cluster", p.SourceCluster))
+		attrs = append(attrs, attribute.String("source_cluster", p.SourceCluster))
 	}
 	if p.SourceShard != 0 {
-		attrs = append(attrs, log.Int64("source_shard", int64(p.SourceShard)))
+		attrs = append(attrs, attribute.Int64("source_shard", int64(p.SourceShard)))
 	}
 	if p.SourceTaskID != 0 {
-		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
+		attrs = append(attrs, attribute.Int64("source_task_id", p.SourceTaskID))
 	}
 	if len(p.Details) > 0 {
 		attrs = append(attrs, jsonAttr("details", p.Details))
@@ -315,7 +316,7 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 	case ReplicationSent:
 		attrs = p.appendSent(attrs)
 	case ReplicationExecuting:
-		attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
+		attrs = append(attrs, attribute.Int64("attempt", int64(p.Attempt)))
 	case ReplicationApplied:
 		attrs = p.appendApplied(attrs)
 	case ReplicationSkipped:
@@ -325,28 +326,28 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 	return attrs
 }
 
-func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyValue {
+func (p ReplicationLifecyclePayload) appendSent(attrs []attribute.KeyValue) []attribute.KeyValue {
 	if p.NewRunID != "" {
-		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
+		attrs = append(attrs, attribute.String("new_run_id", p.NewRunID))
 	}
-	attrs = append(attrs, log.Bool("is_first_sync", p.IsFirstSync))
+	attrs = append(attrs, attribute.Bool("is_first_sync", p.IsFirstSync))
 	if p.FirstEventID != 0 {
-		attrs = append(attrs, log.Int64("first_event_id", p.FirstEventID))
+		attrs = append(attrs, attribute.Int64("first_event_id", p.FirstEventID))
 	}
 	if p.NextEventID != 0 {
-		attrs = append(attrs, log.Int64("next_event_id", p.NextEventID))
+		attrs = append(attrs, attribute.Int64("next_event_id", p.NextEventID))
 	}
 	if p.TargetCluster != "" {
-		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+		attrs = append(attrs, attribute.String("target_cluster", p.TargetCluster))
 	}
 	if p.TargetShard != 0 {
-		attrs = append(attrs, log.Int64("target_shard", int64(p.TargetShard)))
+		attrs = append(attrs, attribute.Int64("target_shard", int64(p.TargetShard)))
 	}
 	if p.Priority != "" {
-		attrs = append(attrs, log.String("priority", p.Priority))
+		attrs = append(attrs, attribute.String("priority", p.Priority))
 	}
 	if p.ArtifactKind != "" {
-		attrs = append(attrs, log.String("artifact_kind", p.ArtifactKind))
+		attrs = append(attrs, attribute.String("artifact_kind", p.ArtifactKind))
 	}
 	if p.ExclusiveStartVT != nil {
 		attrs = append(attrs, jsonAttr("exclusive_start_versioned_transition", p.ExclusiveStartVT))
@@ -356,10 +357,10 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 	}
 	if p.ShippedFirstEventID != 0 {
 		attrs = append(attrs,
-			log.Int64("shipped_first_event_id", p.ShippedFirstEventID),
-			log.Int64("shipped_first_event_version", p.ShippedFirstEventVersion),
-			log.Int64("shipped_last_event_id", p.ShippedLastEventID),
-			log.Int64("shipped_last_event_version", p.ShippedLastEventVersion),
+			attribute.Int64("shipped_first_event_id", p.ShippedFirstEventID),
+			attribute.Int64("shipped_first_event_version", p.ShippedFirstEventVersion),
+			attribute.Int64("shipped_last_event_id", p.ShippedLastEventID),
+			attribute.Int64("shipped_last_event_version", p.ShippedLastEventVersion),
 		)
 	}
 	return attrs
@@ -371,66 +372,66 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 // error carries the last convert failure so an operator can investigate. The source_cluster /
 // source_shard / source_task_id join key back to the source queue is emitted by Attributes for every
 // phase, so it is not repeated here.
-func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
+func (p ReplicationLifecyclePayload) appendSkipped(attrs []attribute.KeyValue) []attribute.KeyValue {
 	if p.TargetCluster != "" {
-		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+		attrs = append(attrs, attribute.String("target_cluster", p.TargetCluster))
 	}
 	if p.TargetShard != 0 {
-		attrs = append(attrs, log.Int64("target_shard", int64(p.TargetShard)))
+		attrs = append(attrs, attribute.Int64("target_shard", int64(p.TargetShard)))
 	}
 	if p.Priority != "" {
-		attrs = append(attrs, log.String("priority", p.Priority))
+		attrs = append(attrs, attribute.String("priority", p.Priority))
 	}
-	attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
+	attrs = append(attrs, attribute.Int64("attempt", int64(p.Attempt)))
 	if p.Error != "" {
-		attrs = append(attrs, log.String("error", p.Error))
+		attrs = append(attrs, attribute.String("error", p.Error))
 	}
 	return attrs
 }
 
-func (p ReplicationLifecyclePayload) appendApplied(attrs []log.KeyValue) []log.KeyValue {
-	attrs = append(attrs, log.String("outcome", p.Outcome))
+func (p ReplicationLifecyclePayload) appendApplied(attrs []attribute.KeyValue) []attribute.KeyValue {
+	attrs = append(attrs, attribute.String("outcome", p.Outcome))
 	if p.Error != "" {
-		attrs = append(attrs, log.String("error", p.Error))
+		attrs = append(attrs, attribute.String("error", p.Error))
 	}
 	if p.NewRunID != "" {
-		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
+		attrs = append(attrs, attribute.String("new_run_id", p.NewRunID))
 	}
 	if p.State == "" {
 		return attrs
 	}
 	attrs = append(attrs,
-		log.String("state", p.State),
-		log.String("status", p.Status),
-		log.Int64("applied_next_event_id", p.AppliedNextEventID),
+		attribute.String("state", p.State),
+		attribute.String("status", p.Status),
+		attribute.Int64("applied_next_event_id", p.AppliedNextEventID),
 	)
 	if len(p.TransitionHistory) > 0 {
 		attrs = append(attrs, jsonAttr("transition_history", p.TransitionHistory))
 	}
-	attrs = append(attrs, log.Int64("last_event_id", p.LastEventID))
+	attrs = append(attrs, attribute.Int64("last_event_id", p.LastEventID))
 	if p.LastEventVersion != 0 {
-		attrs = append(attrs, log.Int64("last_event_version", p.LastEventVersion))
+		attrs = append(attrs, attribute.Int64("last_event_version", p.LastEventVersion))
 	}
 	if p.NewExecutionRunID != "" {
-		attrs = append(attrs, log.String("new_execution_run_id", p.NewExecutionRunID))
+		attrs = append(attrs, attribute.String("new_execution_run_id", p.NewExecutionRunID))
 	}
 	if p.ResetRunID != "" {
-		attrs = append(attrs, log.String("reset_run_id", p.ResetRunID))
+		attrs = append(attrs, attribute.String("reset_run_id", p.ResetRunID))
 	}
 	if p.SignalCount != 0 {
-		attrs = append(attrs, log.Int64("signal_count", p.SignalCount))
+		attrs = append(attrs, attribute.Int64("signal_count", p.SignalCount))
 	}
 	if p.ActivityCount != 0 {
-		attrs = append(attrs, log.Int64("activity_count", p.ActivityCount))
+		attrs = append(attrs, attribute.Int64("activity_count", p.ActivityCount))
 	}
 	if p.UserTimerCount != 0 {
-		attrs = append(attrs, log.Int64("user_timer_count", p.UserTimerCount))
+		attrs = append(attrs, attribute.Int64("user_timer_count", p.UserTimerCount))
 	}
 	if p.ChildExecutionCount != 0 {
-		attrs = append(attrs, log.Int64("child_execution_count", p.ChildExecutionCount))
+		attrs = append(attrs, attribute.Int64("child_execution_count", p.ChildExecutionCount))
 	}
 	if p.UpdateCount != 0 {
-		attrs = append(attrs, log.Int64("update_count", p.UpdateCount))
+		attrs = append(attrs, attribute.Int64("update_count", p.UpdateCount))
 	}
 	return attrs
 }
