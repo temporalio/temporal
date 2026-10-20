@@ -73,17 +73,12 @@ func UseChasmForWorkflow(enabled bool, rolloutPercent int, namespaceName, workfl
 	return dynamicconfig.RolloutAccepts(key, rolloutPercent)
 }
 
-var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"nexusoperation.request.timeout",
-	time.Second*10,
-	`Timeout for making a single nexus start or cancel request.`,
-)
-
 var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.request.timeout.min",
 	time.Millisecond*1500,
-	`Minimum time remaining for a request to complete for the server to make RPCs. If the remaining request timeout is
-less than this value, a non-retryable timeout error will be returned.`,
+	`Minimum time remaining for a request to complete for the server to make RPCs. If the remaining operation timeout is
+less than this value, the operation fails with a non-retryable timeout error. If the time left on the task deadline
+is less than this value, the attempt fails with a retryable request timeout error.`,
 )
 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
@@ -285,7 +280,6 @@ type Config struct {
 	NumHistoryShards                           int32
 	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	RequestTimeout                             dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -319,7 +313,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
-		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),

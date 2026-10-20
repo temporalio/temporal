@@ -43,13 +43,14 @@ import (
 
 // invocationTaskTestEnv holds the test infrastructure for invocation task handler tests.
 type invocationTaskTestEnv struct {
-	t          *testing.T
-	ctrl       *gomock.Controller
-	handler    *operationInvocationTaskHandler
-	op         *Operation
-	mockEngine *chasm.MockEngine
-	timeSource *clock.EventTimeSource
-	nsRegistry *namespace.MockRegistry
+	t           *testing.T
+	ctrl        *gomock.Controller
+	handler     *operationInvocationTaskHandler
+	op          *Operation
+	mockEngine  *chasm.MockEngine
+	timeSource  *clock.EventTimeSource
+	nsRegistry  *namespace.MockRegistry
+	taskTimeout time.Duration
 }
 
 func newInvocationTaskTestEnv(
@@ -59,7 +60,7 @@ func newInvocationTaskTestEnv(
 	endpointReg nexustest.FakeEndpointRegistry,
 	clientProvider ClientProvider,
 	metricsHandler metrics.Handler,
-	requestTimeout time.Duration,
+	taskTimeout time.Duration,
 ) *invocationTaskTestEnv {
 	t.Helper()
 
@@ -78,7 +79,6 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(requestTimeout),
 				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
@@ -127,13 +127,14 @@ func newInvocationTaskTestEnv(
 	mockEngine := chasm.NewMockEngine(ctrl)
 
 	return &invocationTaskTestEnv{
-		t:          t,
-		ctrl:       ctrl,
-		handler:    handler,
-		op:         op,
-		mockEngine: mockEngine,
-		timeSource: timeSource,
-		nsRegistry: nsRegistry,
+		t:           t,
+		ctrl:        ctrl,
+		handler:     handler,
+		op:          op,
+		mockEngine:  mockEngine,
+		timeSource:  timeSource,
+		nsRegistry:  nsRegistry,
+		taskTimeout: taskTimeout,
 	}
 }
 
@@ -203,7 +204,9 @@ func (e *invocationTaskTestEnv) execute(task *nexusoperationpb.InvocationTask) e
 		BusinessID:  "wf-id",
 		RunID:       "run-id",
 	})
-	engineCtx := chasm.NewEngineContext(context.Background(), e.mockEngine)
+	ctx, cancel := context.WithTimeout(context.Background(), e.taskTimeout)
+	defer cancel()
+	engineCtx := chasm.NewEngineContext(ctx, e.mockEngine)
 	return e.handler.Execute(engineCtx, ref, chasm.TaskAttributes{Destination: "endpoint"}, task)
 }
 
@@ -226,7 +229,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
-		requestTimeout        time.Duration
+		taskTimeout           time.Duration
 		schedToCloseTimeout   time.Duration
 		startToCloseTimeout   time.Duration
 		schedToStartTimeout   time.Duration
@@ -384,8 +387,8 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "invocation timeout by request timeout",
-			requestTimeout:        2 * time.Millisecond,
+			name:                  "invocation timeout by task deadline",
+			taskTimeout:           50 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
@@ -393,6 +396,18 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "task deadline less than MinRequestTimeout",
+			taskTimeout:           time.Nanosecond,
+			schedToCloseTimeout:   time.Hour,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation:      nil, // Should not be called.
 			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
@@ -551,7 +566,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 					Header:     tc.header,
 					NexusLinks: []nexus.Link{callerLink},
 				},
-				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
+				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
 
 			env.setupReadComponent()
 			env.setupUpdateComponent()
@@ -1135,6 +1150,30 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 						ServerFailureInfo: &failurepb.ServerFailureInfo{},
 					},
 				}, op.LastAttemptFailure)
+			},
+		},
+		{
+			// The system endpoint runs on the transfer queue, which doesn't unwrap DestinationDownError.
+			name: "history service error - retryable handler error",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"),
+				)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "handler-error:INTERNAL",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 			},
 		},
 		{
