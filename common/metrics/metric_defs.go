@@ -1027,6 +1027,7 @@ var (
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	HistoryPrincipalSize                             = NewCounterDef("history_principal_size", WithDescription("Size in bytes of principal written to history events."))
 	HistoryPrincipalSizeSkipped                      = NewCounterDef("history_principal_size_skipped", WithDescription("Size in bytes of principal that would have been written to history events if principal propagation was enabled."))
+	VisibilityCloseRecordSkipped                     = NewCounterDef("visibility_close_record_skipped", WithDescription("Close visibility re-records skipped because relocated memo and search attributes could not be fetched; the record keeps its previous values."))
 	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")

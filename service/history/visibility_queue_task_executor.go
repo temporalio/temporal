@@ -285,6 +285,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		// The close record was already written and cleanup moved memo and search attributes into
 		// it. Re-recording from mutable state would wipe them, so read them back from visibility.
 		if t.disableFetchRelocatableFromVisibility(namespaceEntry.Name().String()) {
+			metrics.VisibilityCloseRecordSkipped.With(t.metricProvider).Record(1, metrics.NamespaceTag(namespaceEntry.Name().String()))
 			t.logger.Warn("Skipping close visibility re-record: relocated attributes cannot be fetched",
 				tag.WorkflowNamespaceID(task.GetNamespaceID()),
 				tag.WorkflowID(task.GetWorkflowID()),
@@ -556,7 +557,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	)
 
 	// Derived from cluster-local state rather than stored in SearchAttributes, which replication
-	// overwrites from the source cluster.
+	// overwrites from the source cluster. Any other value (e.g. read back from visibility) is dropped.
 	if lastBranchTime := executionInfo.GetLastBranchTime(); lastBranchTime != nil {
 		if searchAttributes == nil {
 			searchAttributes = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload, 1)}
@@ -565,6 +566,8 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 			lastBranchTime.AsTime(),
 			enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		)
+	} else if searchAttributes != nil {
+		delete(searchAttributes.IndexedFields, sadefs.TemporalLastBranchTime)
 	}
 
 	var parentExecution *commonpb.WorkflowExecution

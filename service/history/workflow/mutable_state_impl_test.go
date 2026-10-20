@@ -10274,3 +10274,18 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 	s.NoError(ms.syncExecutionInfo(current, incoming, true))
 	s.Equal(localBranchTime, current.LastBranchTime)
 }
+
+func (s *mutableStateSuite) TestRecordHistoryBranch_IgnoresTimeSkipping() {
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(30 * 24 * time.Hour),
+	}
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	ms.wrapTimeSourceWithTimeSkipping()
+	s.True(ms.timeSource.Now().After(s.mockShard.GetTimeSource().Now().Add(29 * 24 * time.Hour)))
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordHistoryBranch())
+	s.WithinRange(ms.GetExecutionInfo().GetLastBranchTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+}

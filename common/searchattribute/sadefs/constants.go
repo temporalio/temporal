@@ -167,7 +167,6 @@ var (
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalLastBranchTime:     enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.

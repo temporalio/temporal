@@ -3,6 +3,7 @@ package searchattribute
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -165,6 +166,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		s.Error(err)
 		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
 	}
+
+	// Server-derived from conflict resolution; a user value would fake a branch.
+	attr.IndexedFields = map[string]*commonpb.Payload{
+		sadefs.TemporalLastBranchTime: sadefs.MustEncodeValue(time.Now(), enumspb.INDEXED_VALUE_TYPE_DATETIME),
+	}
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
+	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", sadefs.TemporalLastBranchTime), err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_EmitInvalidListValues() {

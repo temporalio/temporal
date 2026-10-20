@@ -7177,7 +7177,7 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 }
 
 func (ms *MutableStateImpl) RecordHistoryBranch() error {
-	ms.executionInfo.LastBranchTime = timestamppb.New(ms.timeSource.Now())
+	ms.executionInfo.LastBranchTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	switch ms.executionState.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return ms.taskGenerator.GenerateUpsertVisibilityTask()

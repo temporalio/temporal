@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
@@ -1104,7 +1105,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
 
 	relocatedMemo := map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoValue")}
-	relocatedSearchAttributes := map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("keep me")}
+	relocatedSearchAttributes := map[string]*commonpb.Payload{
+		"CustomKeywordField": payload.EncodeString("keep me"),
+		// Not backed by LastBranchTime on this run, so it must not be re-published.
+		sadefs.TemporalLastBranchTime: sadefs.MustEncodeValue(time.Now(), enumspb.INDEXED_VALUE_TYPE_DATETIME),
+	}
 	visibilityTask := s.closeVisibilityTaskForTest(execution)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1119,6 +1124,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
 			s.True(proto.Equal(relocatedMemo["memoKey"], request.Memo.GetFields()["memoKey"]))
 			s.True(proto.Equal(relocatedSearchAttributes["CustomKeywordField"], request.SearchAttributes.GetIndexedFields()["CustomKeywordField"]))
+			s.NotContains(request.SearchAttributes.GetIndexedFields(), sadefs.TemporalLastBranchTime)
 			return nil
 		},
 	)
@@ -1144,8 +1150,14 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// No RecordWorkflowExecutionClosed: an empty re-record would wipe the relocated attributes.
 
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.visibilityQueueTaskExecutor.(*visibilityQueueTaskExecutor).metricProvider = metricsHandler
+
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.NoError(resp.ExecutionErr)
+	s.Len(capture.Snapshot()[metrics.VisibilityCloseRecordSkipped.Name()], 1)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLastBranchTime() {
