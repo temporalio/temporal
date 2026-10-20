@@ -24,6 +24,7 @@ func validateChasmSideEffectTask(
 	ctx context.Context,
 	ms historyi.MutableState,
 	task *tasks.ChasmTask,
+	standby bool,
 ) (isTaskInTree bool, isValidByComponent bool, err error) {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
@@ -37,6 +38,9 @@ func validateChasmSideEffectTask(
 		return false, false, errNoChasmTree
 	}
 
+	if standby {
+		return tree.ValidateStandbySideEffectTask(ctx, task)
+	}
 	return tree.ValidateSideEffectTask(ctx, task)
 }
 

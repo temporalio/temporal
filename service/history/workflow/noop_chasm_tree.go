@@ -105,6 +105,13 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 	return nil
 }
 
+func (*noopChasmTree) ValidateStandbySideEffectTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) (isTaskInTree bool, isValidByComponent bool, err error) {
+	return false, false, nil
+}
+
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,

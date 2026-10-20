@@ -2391,7 +2391,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
-		chasmTree.EXPECT().ValidateSideEffectTask(
+		chasmTree.EXPECT().ValidateStandbySideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
 		).Times(1).Return(isTaskInTree, isValidByComponent, err)
@@ -2706,7 +2706,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
+		chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)
