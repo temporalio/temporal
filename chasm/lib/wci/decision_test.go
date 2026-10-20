@@ -2,6 +2,7 @@ package wci
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -135,7 +136,7 @@ func TestProcessMetricsPoll_RearmsAtEarliestAndDropsDeferral(t *testing.T) {
 		nextPoll: &next,
 	})
 
-	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}))
+	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}, nil))
 
 	require.Equal(t, testNow.Add(time.Minute), w.NextPollTime.AsTime())
 	require.Len(t, ctx.Tasks, 1, "only the re-armed timer, the nested deferral is dropped")
@@ -146,11 +147,11 @@ func TestProcessMetricsPoll_RearmsAtEarliestAndDropsDeferral(t *testing.T) {
 func TestProcessMetricsPoll_ClampsAndHandlesFailedFetch(t *testing.T) {
 	tooSoon := time.Second
 	w, _, ctx := newDecisionTest(t, fakeAlgo{nextPoll: &tooSoon})
-	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}))
+	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}, nil))
 	require.Equal(t, testNow.Add(minPollInterval), w.NextPollTime.AsTime())
 
 	w, _, ctx = newDecisionTest(t, fakeAlgo{})
-	require.NoError(t, w.ProcessMetricsPoll(ctx, nil))
+	require.NoError(t, w.ProcessMetricsPoll(ctx, nil, nil))
 	require.Equal(t, testNow.Add(maxPollInterval), w.NextPollTime.AsTime())
 	require.Nil(t, fake.seen, "a failed fetch skips the algorithms")
 }
@@ -258,4 +259,61 @@ func TestSnapshotFromDescribe(t *testing.T) {
 	require.Equal(t, time.Minute, snapshot.Workflow.LastBacklogAge)
 	require.InDelta(t, 2, snapshot.Workflow.LastArrivalRate, 1e-9)
 	require.Zero(t, snapshot.Activity.LastBacklogCount)
+}
+
+func TestProcessTaskAdd_RecordsLastTaskAdd(t *testing.T) {
+	w, group, ctx := newDecisionTest(t, fakeAlgo{})
+	event := &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, TaskQueueName: "orders", IsSyncMatch: true}
+
+	require.NoError(t, w.ProcessTaskAdd(ctx, event))
+
+	o := group.GetObservations()
+	require.Equal(t, "orders", o.GetLastTaskAdd().GetTaskQueueName())
+	require.True(t, o.GetLastTaskAdd().GetIsSyncMatch())
+	require.Equal(t, testNow, o.GetLastTaskAddTime().AsTime())
+	event.TaskQueueName = "mutated"
+	require.Equal(t, "orders", o.GetLastTaskAdd().GetTaskQueueName(), "the event is cloned, not aliased")
+}
+
+func TestProcessMetricsPoll_RecordsGroupTaskQueues(t *testing.T) {
+	w, group, ctx := newDecisionTest(t, fakeAlgo{})
+	observed := observedTaskQueuesFromDescribe(&workflowservice.DescribeWorkerDeploymentVersionResponse{
+		VersionTaskQueues: []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue{
+			{Name: "small", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 1}},
+			{Name: "acts", Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 100}},
+			{Name: "big", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 9, ApproximateBacklogAge: durationpb.New(time.Minute)}},
+			{Name: "nostats", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		},
+	})
+
+	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}, observed))
+
+	o := group.GetObservations()
+	require.Equal(t, testNow, o.GetPolledAt().AsTime())
+	var names []string
+	for _, tq := range o.GetTaskQueues() {
+		names = append(names, tq.GetName())
+	}
+	require.Equal(t, []string{"big", "small", "nostats"}, names, "only the group's types, largest backlog first")
+	require.Equal(t, time.Minute, o.GetTaskQueues()[0].GetBacklogAge().AsDuration())
+}
+
+func TestProcessMetricsPoll_FailedFetchKeepsObservations(t *testing.T) {
+	w, group, ctx := newDecisionTest(t, fakeAlgo{})
+	observed := []*wcipb.ObservedTaskQueue{{Name: "tq", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW}}
+	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}, observed))
+
+	require.NoError(t, w.ProcessMetricsPoll(ctx, nil, nil))
+
+	require.Len(t, group.GetObservations().GetTaskQueues(), 1, "polled_at shows how stale it is")
+}
+
+func TestObservePoll_Caps(t *testing.T) {
+	observed := make([]*wcipb.ObservedTaskQueue, maxObservedTaskQueues+10)
+	for i := range observed {
+		observed[i] = &wcipb.ObservedTaskQueue{Name: fmt.Sprint(i), Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW}
+	}
+	g := NewScalingGroup("g")
+	g.observePoll(testNow, observed, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW})
+	require.Len(t, g.GetObservations().GetTaskQueues(), maxObservedTaskQueues)
 }

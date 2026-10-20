@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.wci.proto.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -42,6 +43,27 @@ message ScalingGroupState {
   int32 inflight_invoke_attempt = 10;
   // Key in the root's scaling_group_specs and ScalingGroups map.
   string id = 11;
+  // Debug only; not read by any decision.
+  TaskQueueObservations observations = 12;
+}
+
+// Task queues a scaling group last saw, for debugging.
+message TaskQueueObservations {
+  // Last successful metrics poll; task_queues is from that poll.
+  google.protobuf.Timestamp polled_at = 1;
+  // The group's task queues, largest backlog first, capped.
+  repeated ObservedTaskQueue task_queues = 2;
+  TaskAddEvent last_task_add = 3;
+  google.protobuf.Timestamp last_task_add_time = 4;
+}
+
+message ObservedTaskQueue {
+  string name = 1;
+  temporal.api.enums.v1.TaskQueueType type = 2;
+  int64 backlog_count = 3;
+  google.protobuf.Duration backlog_age = 4;
+  float add_rate = 5;
+  float dispatch_rate = 6;
 }
 
 message ScalingGroupSpec {

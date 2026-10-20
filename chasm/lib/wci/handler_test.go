@@ -296,6 +296,30 @@ func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {
 	require.NotEqual(t, before, w.NextPollTime.AsTime(), "the poll re-armed the timer")
 }
 
+func TestE2E_DescribeReturnsTaskQueueObservations(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	e.frontend.resp = &workflowservice.DescribeWorkerDeploymentVersionResponse{
+		VersionTaskQueues: []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue{
+			{Name: "orders", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 5}},
+		},
+	}
+	w, _ := e.live(t)
+	_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.FetchSnapshotTask](e.lib.FetchSnapshotTaskHandler), chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: w.NextPollTime})
+	require.NoError(t, err)
+	require.NoError(t, e.recordTaskAdd())
+
+	resp, err := e.describe()
+	require.NoError(t, err)
+	o := resp.GetTaskQueueObservations()["g"]
+	require.Len(t, o.GetTaskQueues(), 1)
+	require.Equal(t, "orders", o.GetTaskQueues()[0].GetName())
+	require.EqualValues(t, 5, o.GetTaskQueues()[0].GetBacklogCount())
+	require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, o.GetLastTaskAdd().GetTaskQueueType())
+	require.NotNil(t, o.GetLastTaskAddTime())
+}
+
 func TestE2E_DeleteThenTaskAddIsClosed(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
