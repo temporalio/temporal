@@ -15,9 +15,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -32,7 +35,9 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -57,11 +62,13 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/notification"
@@ -566,6 +573,102 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 	s.EqualError(err, "No messages for speculative workflow task.")
 }
 
+func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTask() {
+	// Verify that RecordWorkflowTaskStarted persists and converts a speculative Workflow Task when
+	// starting it makes mutable state dirty. Here, assigning the initial Build ID creates persistent
+	// visibility work, so History must not return Noop.
+	const (
+		taskQueue = "testTaskQueue"
+		identity  = "testIdentity"
+		updateID  = "update-id"
+		buildID   = "1.0.0"
+	)
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, tests.Version).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+	ms := s.createExecutionStartedState(workflowExecution, taskQueue, identity, false, false)
+	// Keep the workflow at the active failover version so failover does not independently convert
+	// the speculative Workflow Task before the Build ID assignment is applied.
+	err := ms.UpdateCurrentVersion(tests.GlobalNamespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()), true)
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)},
+		nil,
+	)
+	// Capture the write made by RecordWorkflowTaskStarted. If the handler incorrectly returns Noop,
+	// this expected persistence call is never made and the test fails.
+	var persistedExecutionInfo *persistencespb.WorkflowExecutionInfo
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			persistedExecutionInfo = request.UpdateWorkflowMutation.ExecutionInfo
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchResponse{},
+		nil,
+	)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil)
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+	// Admit an Update and schedule the speculative Workflow Task that will carry it to the worker.
+	wfCtx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
+		tests.NamespaceID,
+		workflowExecution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	loadedMS, err := wfCtx.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	upd, _, err := wfCtx.UpdateRegistry(context.Background()).FindOrCreate(context.Background(), updateID)
+	s.NoError(err)
+	s.NoError(upd.Admit(
+		&updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "update"},
+		},
+		workflow.WithEffects(effect.Immediate(context.Background()), loadedMS),
+	))
+	wft, err := loadedMS.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+	s.NoError(err)
+	release(nil)
+
+	// Matching starts the speculative task with an initial Build ID assignment, which generates a
+	// visibility task and makes mutable state dirty.
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(
+		metrics.AddMetricsContext(context.Background()),
+		&historyservice.RecordWorkflowTaskStartedRequest{
+			NamespaceId:       tests.NamespaceID.String(),
+			WorkflowExecution: workflowExecution,
+			ScheduledEventId:  wft.ScheduledEventID,
+			RequestId:         "request-id",
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+				Identity:  identity,
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{ //nolint:staticcheck // SA1019: required to exercise old Build ID-based versioning.
+					UseVersioning: true,
+					BuildId:       buildID,
+				},
+			},
+		},
+	)
+	s.NoError(err)
+	s.NotNil(response)
+	// Transaction close must use the existing conversion path and persist the task as normal.
+	s.Require().NotNil(persistedExecutionInfo)
+	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, persistedExecutionInfo.GetWorkflowTaskType())
+	s.Equal(buildID, persistedExecutionInfo.GetAssignedBuildId())
+}
+
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -964,6 +1067,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 			RunID:       workflowExecution.GetRunId(),
 			EventID:     scheduledEvent.GetEventId(),
 			Version:     0,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
@@ -1030,6 +1134,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {
 			RunID:       workflowExecution.GetRunId(),
 			EventID:     scheduledEvent.GetEventId(),
 			Version:     0,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
@@ -1982,6 +2087,124 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_UseExistingNexusContextMetric() {
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	for _, tc := range []struct {
+		name            string
+		existingContext *nexuspb.PropagatedSerializationContext
+		incomingContext *nexuspb.PropagatedSerializationContext
+		attachCallback  bool
+		invalidCallback bool
+		expectedOutcome string
+	}{
+		{
+			name:            "same context",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "same_nexus_context",
+		},
+		{
+			name:            "different endpoint",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "other-endpoint", Service: "service", Operation: "operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "different service",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "other-service", Operation: "operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "different operation",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "other-operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "existing context missing",
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "existing_nexus_context_missing",
+		},
+		{
+			name:            "incoming context missing",
+			existingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "incoming_nexus_context_missing",
+		},
+		{
+			name:           "both contexts missing",
+			attachCallback: true,
+		},
+		{
+			name:            "callback not attached",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+		},
+		{
+			name:            "callback attachment failed",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			invalidCallback: true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.Require().NoError(callbacks.RegisterStateMachine(s.mockShard.StateMachineRegistry()))
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.mockShard.SetMetricsHandler(metricsHandler)
+
+			now := s.historyEngine.shardContext.GetTimeSource().Now()
+			ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-100 * time.Millisecond)))
+			ms.GetExecutionInfo().PropagatedNexusSerializationContext = tc.existingContext
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(s.T().Context(), ms)}, nil).AnyTimes()
+			if tc.attachCallback && !tc.invalidCallback {
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(tests.UpdateWorkflowExecutionResponse, nil)
+			}
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+			startRequest.StartRequest.PropagatedNexusSerializationContext = tc.incomingContext
+			if tc.attachCallback {
+				startRequest.StartRequest.OnConflictOptions = &workflowpb.OnConflictOptions{AttachCompletionCallbacks: true}
+				startRequest.StartRequest.CompletionCallbacks = []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://destination/path"}},
+				}}
+				if tc.invalidCallback {
+					startRequest.StartRequest.CompletionCallbacks = []*commonpb.Callback{{}}
+				}
+			}
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(s.T().Context()), startRequest)
+			if tc.invalidCallback {
+				s.Require().ErrorContains(err, "unknown callback variant")
+			} else {
+				s.Require().NoError(err)
+				s.Require().False(resp.GetStarted())
+			}
+			recordings := capture.SnapshotMetric(metrics.NexusWorkflowUseExisting.Name())
+			if tc.expectedOutcome == "" {
+				s.Require().Empty(recordings)
+			} else {
+				s.Require().Len(recordings, 1)
+				s.Require().Equal(tc.expectedOutcome, recordings[0].Tags["context_match"])
+			}
+		})
+	}
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.setupStartWorkflowExecutionForTerminate()
 
@@ -1992,6 +2215,107 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.NoError(err)
 	s.True(resp.Started)
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_BrandNew() {
+	for _, enabled := range []bool{false, true} {
+		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
+			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+
+			var createRequest *persistence.CreateWorkflowExecutionRequest
+			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+					createRequest = req
+					return tests.CreateWorkflowExecutionResponse, nil
+				})
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+			s.NoError(err)
+			s.Equal(enabled, createRequest.CheckRunAlreadyExists)
+			s.Equal(resp.GetRunId(), createRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
+			if enabled {
+				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
+			}
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_TerminateExisting() {
+	for _, enabled := range []bool{false, true} {
+		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
+			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			now := s.historyEngine.shardContext.GetTimeSource().Now()
+			ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+			var updateRequest *persistence.UpdateWorkflowExecutionRequest
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					updateRequest = req
+					return &persistence.UpdateWorkflowExecutionResponse{
+						UpdateMutableStateStats: persistence.MutableStateStatistics{
+							HistoryStatistics: &persistence.HistoryStatistics{SizeDiff: 1},
+						},
+					}, nil
+				})
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+			s.NoError(err)
+			s.Equal(enabled, updateRequest.CheckRunAlreadyExists)
+			s.Equal(resp.GetRunId(), updateRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
+			if enabled {
+				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
+			}
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflictIsNotDedup() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+	// The terminate-and-replace write fails on the current run's version check, not on the new run.
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.WorkflowConditionFailedError{Msg: "version mismatch"})
+
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	var conditionFailedErr *persistence.WorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailedErr)
+	s.Nil(resp)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_RunAlreadyExistsIsDedup() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	derivedRunID := s.derivedRunID(startRequest)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.WorkflowRunAlreadyExistsError{
+			Msg:    "run already exists",
+			RunID:  derivedRunID,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		})
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.Equal(derivedRunID, resp.GetRunId())
+	s.True(resp.GetStarted())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetStatus())
+}
+
+func (s *engine2Suite) derivedRunID(request *historyservice.StartWorkflowExecutionRequest) string {
+	return startworkflow.DeriveRunID(
+		request.GetNamespaceId(),
+		request.StartRequest.GetWorkflowId(),
+		chasm.WorkflowArchetypeID,
+		request.StartRequest.GetRequestId(),
+		s.historyEngine.shardContext.GetClusterMetadata().GetClusterID(),
+	)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
@@ -3979,6 +4303,155 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
 	s.Equal("sync_workflow_state", details["stage"])
 	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	_, missing := s.resendScheduler.SourceNotFound(definition.NewWorkflowKey(
+		request.NamespaceId,
+		request.ParentExecution.WorkflowId,
+		request.ParentExecution.RunId,
+	))
+	s.False(missing)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFound() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundOnPreviousSource() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// The namespace has since moved to a source that may still have the parent.
+	s.resendScheduler.MarkSourceNotFound(parentKey, "previous source")
+	syncCalled := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(syncCalled)
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	select {
+	case <-syncCalled:
+	case <-time.After(10 * time.Second):
+		s.Fail("resend did not reach the current source")
+	}
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundLocalParent() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	wt := addWorkflowTaskScheduledEvent(ms)
+	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
+	wt.StartedEventID = workflowTaskStartedEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
+		tests.ChildNamespace, tests.ChildNamespaceID, "child workflowId", "child workflow type", "child task queue", nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(2)
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      uuid.NewString(),
+		},
+		ParentInitiatedId:      initiatedEvent.GetEventId(),
+		ParentInitiatedVersion: initiatedEvent.GetVersion(),
+		ResendParent:           true,
+	}
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notReady *serviceerror.WorkflowNotReady
+	s.ErrorAs(err, &notReady)
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, tests.WorkflowID, tests.RunID)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {
@@ -4527,6 +5000,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			RunID:       execution.GetRunId(),
 			EventID:     common.FirstEventID,
 			Version:     startVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		gomock.Any(),
@@ -4540,6 +5014,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			RunID:       execution.GetRunId(),
 			EventID:     timeoutEvent.GetEventId(),
 			Version:     startVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		timeoutEvent.GetEventId(),
 		gomock.Any(),

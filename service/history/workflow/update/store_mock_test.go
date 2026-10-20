@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -28,6 +29,8 @@ type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
+	GetUpdateAcceptedEventIDFunc   func(context.Context, string) (int64, error)
+	GetUpdateNexusContextFunc      func(string) *nexuspb.PropagatedSerializationContext
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
 }
@@ -45,6 +48,25 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	updateID string,
 ) (*updatepb.Outcome, error) {
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetUpdateAcceptedEventID(
+	ctx context.Context,
+	updateID string,
+) (int64, error) {
+	if m.GetUpdateAcceptedEventIDFunc == nil {
+		return testAcceptedEventID, nil
+	}
+	return m.GetUpdateAcceptedEventIDFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetUpdateNexusSerializationContext(
+	updateID string,
+) *nexuspb.PropagatedSerializationContext {
+	if m.GetUpdateNexusContextFunc == nil {
+		return nil
+	}
+	return m.GetUpdateNexusContextFunc(updateID)
 }
 
 func (m mockUpdateStore) GetCurrentVersion() int64 {
