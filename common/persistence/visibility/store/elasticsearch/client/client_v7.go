@@ -185,14 +185,14 @@ func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
 		if f == nil {
 			continue
 		}
-		if f.Status != "TOO_MANY_REQUESTS" && f.Reason["type"] != "es_rejected_execution_exception" {
+		// Shard failures don't include a status field, so it's derived from the reason type.
+		if !isRejectedExecutionType(f.Reason["type"]) {
 			status = http.StatusServiceUnavailable
 		}
 		failedShards = append(failedShards, map[string]any{
 			"shard":  f.Shard,
 			"index":  f.Index,
 			"node":   f.Node,
-			"status": f.Status,
 			"reason": f.Reason,
 		})
 	}
@@ -204,6 +204,15 @@ func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
 			FailedShards: failedShards,
 		},
 	}
+}
+
+func isRejectedExecutionType(reasonType any) bool {
+	switch reasonType {
+	case "es_rejected_execution_exception", // Elasticsearch
+		"rejected_execution_exception": // OpenSearch
+		return true
+	}
+	return false
 }
 
 func (c *clientImpl) CountGroupBy(
