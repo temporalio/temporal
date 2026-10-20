@@ -43,6 +43,7 @@ type cancellationTaskTestEnv struct {
 	cancellation *Cancellation
 	mockEngine   *chasm.MockEngine
 	timeSource   *clock.EventTimeSource
+	taskTimeout  time.Duration
 }
 
 func newCancellationTaskTestEnv(
@@ -53,7 +54,7 @@ func newCancellationTaskTestEnv(
 	endpointReg nexustest.FakeEndpointRegistry,
 	clientProvider ClientProvider,
 	metricsHandler metrics.Handler,
-	requestTimeout time.Duration,
+	taskTimeout time.Duration,
 ) *cancellationTaskTestEnv {
 	t.Helper()
 
@@ -68,7 +69,6 @@ func newCancellationTaskTestEnv(
 	handler := &cancellationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(requestTimeout),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
@@ -99,6 +99,7 @@ func newCancellationTaskTestEnv(
 		cancellation: cancellation,
 		mockEngine:   mockEngine,
 		timeSource:   timeSource,
+		taskTimeout:  taskTimeout,
 	}
 }
 
@@ -141,7 +142,9 @@ func (e *cancellationTaskTestEnv) execute(task *nexusoperationpb.CancellationTas
 		BusinessID:  "wf-id",
 		RunID:       "run-id",
 	})
-	engineCtx := chasm.NewEngineContext(context.Background(), e.mockEngine)
+	ctx, cancel := context.WithTimeout(context.Background(), e.taskTimeout)
+	defer cancel()
+	engineCtx := chasm.NewEngineContext(ctx, e.mockEngine)
 	return e.handler.Execute(engineCtx, ref, chasm.TaskAttributes{Destination: "endpoint"}, task)
 }
 
@@ -310,7 +313,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 		onCancelOperation           func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 		expectedMetricOutcome       string
 		checkOutcome                func(t *testing.T, c *Cancellation)
-		requestTimeout              time.Duration
+		taskTimeout                 time.Duration
 		schedToCloseTimeout         time.Duration
 		startToCloseTimeout         time.Duration
 		destinationDown             bool
@@ -408,13 +411,28 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:            "invocation timeout by request timeout",
-			requestTimeout:  2 * time.Millisecond,
+			name:            "invocation timeout by task deadline",
+			taskTimeout:     50 * time.Millisecond,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return nil
 			},
+			expectedMetricOutcome: "request-timeout",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "request timed out",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, c.LastAttemptFailure)
+			},
+		},
+		{
+			name:                  "task deadline less than MinRequestTimeout",
+			taskTimeout:           time.Nanosecond,
+			onCancelOperation:     nil, // Should not be called.
 			expectedMetricOutcome: "request-timeout",
 			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
@@ -501,7 +519,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 		{
 			name:              "endpoint not found",
 			endpointNotFound:  true,
-			requestTimeout:    time.Hour,
+			taskTimeout:       time.Hour,
 			onCancelOperation: nil, // Should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
@@ -577,7 +595,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 				InvocationData{
 					Header: tc.header,
 				},
-				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
+				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
 			env.handler.config.UseNewFailureWireFormat = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(!tc.disableNewFailureWireFormat)
 
 			env.setupReadComponent()
@@ -664,6 +682,22 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 						ServerFailureInfo: &failurepb.ServerFailureInfo{},
 					},
 				}, c.LastAttemptFailure)
+			},
+		},
+		{
+			// The system endpoint runs on the transfer queue, which doesn't unwrap DestinationDownError.
+			name:              "history service error - retryable handler error",
+			registerProcessor: true,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CancelNexusOperation(gomock.Any(), gomock.Any()).
+					Return(nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+				return client
+			},
+			expectedMetricOutcome: "handler-error:INTERNAL",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				require.Equal(t, string(nexus.HandlerErrorTypeInternal), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 			},
 		},
 		{

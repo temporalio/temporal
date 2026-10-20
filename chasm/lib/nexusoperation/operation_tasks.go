@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -113,15 +112,15 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	elapsed := args.currentTime.Sub(args.scheduledTime)
-	callTimeout := h.config.RequestTimeout(ns.Name().String(), args.endpointName)
-	var timeoutType enumspb.TimeoutType
-	// Adjust timeout based on remaining operation timeouts.
+	// The request is bound by the task deadline (see setupCallContext) and by the remaining operation timeout.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
+	remainingOpTimeout := maxDuration
+	var timeoutType enumspb.TimeoutType
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-elapsed)
+		remainingOpTimeout = args.scheduleToStartTimeout - elapsed
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsed)
+		remainingOpTimeout = args.scheduleToCloseTimeout - elapsed
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 
@@ -144,11 +143,8 @@ func (h *operationInvocationTaskHandler) Execute(
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+	callCtx, cancel := h.setupCallContext(ctx, remainingOpTimeout)
 	defer cancel()
-	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot
-	// access response headers directly.
-	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	options := nexus.StartOperationOptions{
 		Header:      header,
@@ -179,7 +175,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		endpoint,
 		traceCtx.endpointName,
 		args.service,
-		callTimeout,
+		remainingOpTimeout,
 		timeoutType,
 		traceCtx,
 	)
@@ -205,7 +201,8 @@ func (h *operationInvocationTaskHandler) Execute(
 		retryPolicy: h.config.RetryPolicy(),
 	})
 
-	if callErr != nil && isDestinationDown(callErr) {
+	// Only the outbound queue unwraps DestinationDownError, other queues would treat it as a task failure.
+	if callErr != nil && taskDestination(args.endpointName) != "" && isDestinationDown(callErr) {
 		saveErr = queueserrors.NewDestinationDownError(callErr.Error(), saveErr)
 	}
 

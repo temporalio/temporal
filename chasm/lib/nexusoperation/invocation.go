@@ -103,6 +103,26 @@ func (i *invocationTimeout) Cancel(
 	return &operationTimeoutBelowMinError{timeoutType: i.timeoutType}
 }
 
+// invocationTaskDeadline fails a single attempt with a retryable request timeout, without making a request, when the
+// task deadline leaves less than MinRequestTimeout for the request.
+type invocationTaskDeadline struct{}
+
+func (invocationTaskDeadline) Start(
+	_ context.Context,
+	_ startArgs,
+	_ nexus.StartOperationOptions,
+) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error) {
+	return nil, errTaskDeadlineTooShort
+}
+
+func (invocationTaskDeadline) Cancel(
+	_ context.Context,
+	_ cancelArgs,
+	_ nexus.CancelOperationOptions,
+) error {
+	return errTaskDeadlineTooShort
+}
+
 type invocationHTTP struct {
 	client      *nexusrpc.HTTPClient
 	clientTrace *httptrace.ClientTrace
