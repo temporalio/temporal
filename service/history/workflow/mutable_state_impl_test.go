@@ -2620,6 +2620,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 			RunID:       execution.GetRunId(),
 			EventID:     workflowStartEvent.GetEventId(),
 			Version:     version,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		workflowStartEvent,
 	)
