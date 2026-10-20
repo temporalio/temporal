@@ -1043,6 +1043,15 @@ func (e *CircuitBreakerExecutable) Execute() error {
 		err = destinationDownErr.Unwrap()
 	}
 
+	// Record the outcome before completing the request: completing a failure can open the breaker, and the
+	// open transition reports the recorded failures.
+	if recorder, ok := e.cb.(circuitbreaker.FailureRecorder); ok {
+		if destinationDownErr != nil {
+			recorder.RecordFailure(destinationDownErr.Message)
+		} else {
+			recorder.RecordSuccess()
+		}
+	}
 	doneCb(destinationDownErr == nil)
 	return err
 }
