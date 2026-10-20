@@ -122,7 +122,9 @@ func (h *cancellationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	// The request is bound by the task deadline (see setupCallContext) and by the remaining operation timeout.
+	// The request is bound by RequestTimeout, the remaining operation timeout, and the task deadline (see
+	// setupCallContext).
+	requestTimeout := h.config.RequestTimeout(ns.Name().String(), args.endpointName)
 	remainingOpTimeout := maxDuration
 	var timeoutType enumspb.TimeoutType
 	if args.startToCloseTimeout > 0 {
@@ -138,7 +140,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 		}
 	}
 
-	callCtx, cancel := h.setupCallContext(ctx, remainingOpTimeout)
+	callCtx, cancel := h.setupCallContext(ctx, requestTimeout, remainingOpTimeout)
 	defer cancel()
 
 	traceCtx := invocationTraceContext{

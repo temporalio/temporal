@@ -104,8 +104,8 @@ func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespac
 // newInvocation creates an invocation for the given endpoint, selecting the appropriate implementation
 // based on the time available for the request and the endpoint type.
 //
-// ctx must be the call context returned by setupCallContext. remainingOpTimeout is the remaining operation timeout of type
-// timeoutType, or maxDuration if the operation has no timeout.
+// ctx must be the call context returned by setupCallContext. remainingOpTimeout is the remaining operation timeout of
+// type timeoutType, or maxDuration if the operation has no timeout.
 func (b *nexusTaskHandlerBase) newInvocation(
 	ctx context.Context,
 	ns *namespace.Namespace,
@@ -121,8 +121,9 @@ func (b *nexusTaskHandlerBase) newInvocation(
 		return &invocationTimeout{timeoutType}, nil
 	}
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < minRequestTimeout {
-		// The operation has enough time left but the task doesn't. Fail this attempt only and let it be retried.
-		return invocationTaskDeadline{}, nil
+		// The operation has enough time left but the request doesn't, because of the task deadline or RequestTimeout.
+		// Fail this attempt only and let it be retried.
+		return invocationRequestDeadline{}, nil
 	}
 	if endpointName == commonnexus.SystemEndpoint {
 		return b.newInvocationSystem(ns), nil
@@ -154,18 +155,16 @@ func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID n
 // setupCallContext creates the context for a single start or cancel request and attaches the failure source tracking
 // value.
 //
-// There is no separate request timeout. The request is bound by the deadline that the task executor sets on ctx,
-// which also covers loading the component and saving the result: 10s for tasks on the outbound queue and 3s for
-// system endpoint tasks, which run on the transfer queue (see taskDestination). The request is further capped by
-// remainingOpTimeout, unless it is maxDuration.
-func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, remainingOpTimeout time.Duration) (context.Context, context.CancelFunc) {
-	var callCtx context.Context
-	var cancel context.CancelFunc
-	if remainingOpTimeout == maxDuration {
-		callCtx, cancel = context.WithCancel(ctx)
-	} else {
-		callCtx, cancel = context.WithTimeout(ctx, remainingOpTimeout)
-	}
+// The request is bound by requestTimeout and remainingOpTimeout, and by the deadline that the task executor sets on
+// ctx. That deadline also covers loading the component and saving the result: 10s for tasks on the outbound queue and
+// 3s for system endpoint tasks, which run on the transfer queue (see taskDestination). requestTimeout must be shorter
+// than the task deadline to leave time to save the result.
+func (b *nexusTaskHandlerBase) setupCallContext(
+	ctx context.Context,
+	requestTimeout time.Duration,
+	remainingOpTimeout time.Duration,
+) (context.Context, context.CancelFunc) {
+	callCtx, cancel := context.WithTimeout(ctx, min(requestTimeout, remainingOpTimeout))
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 	return callCtx, cancel
 }

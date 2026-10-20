@@ -79,6 +79,7 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
+				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
@@ -229,6 +230,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
+		requestTimeout        time.Duration
 		taskTimeout           time.Duration
 		schedToCloseTimeout   time.Duration
 		startToCloseTimeout   time.Duration
@@ -384,6 +386,22 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "invocation timeout by request timeout",
+			requestTimeout:        50 * time.Millisecond,
+			schedToCloseTimeout:   time.Hour,
+			destinationDown:       true,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
+			},
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -567,6 +585,9 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 					NexusLinks: []nexus.Link{callerLink},
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			if tc.requestTimeout > 0 {
+				env.handler.config.RequestTimeout = dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout)
+			}
 
 			env.setupReadComponent()
 			env.setupUpdateComponent()

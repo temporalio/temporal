@@ -112,7 +112,9 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	elapsed := args.currentTime.Sub(args.scheduledTime)
-	// The request is bound by the task deadline (see setupCallContext) and by the remaining operation timeout.
+	// The request is bound by RequestTimeout, the remaining operation timeout, and the task deadline (see
+	// setupCallContext).
+	requestTimeout := h.config.RequestTimeout(ns.Name().String(), args.endpointName)
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
 	remainingOpTimeout := maxDuration
 	var timeoutType enumspb.TimeoutType
@@ -143,7 +145,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 
-	callCtx, cancel := h.setupCallContext(ctx, remainingOpTimeout)
+	callCtx, cancel := h.setupCallContext(ctx, requestTimeout, remainingOpTimeout)
 	defer cancel()
 
 	options := nexus.StartOperationOptions{

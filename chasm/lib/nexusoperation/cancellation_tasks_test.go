@@ -69,6 +69,7 @@ func newCancellationTaskTestEnv(
 	handler := &cancellationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
+				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
@@ -313,6 +314,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 		onCancelOperation           func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 		expectedMetricOutcome       string
 		checkOutcome                func(t *testing.T, c *Cancellation)
+		requestTimeout              time.Duration
 		taskTimeout                 time.Duration
 		schedToCloseTimeout         time.Duration
 		startToCloseTimeout         time.Duration
@@ -406,6 +408,25 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
 							Type: string(nexus.HandlerErrorTypeInternal),
 						},
+					},
+				}, c.LastAttemptFailure)
+			},
+		},
+		{
+			name:            "invocation timeout by request timeout",
+			requestTimeout:  50 * time.Millisecond,
+			destinationDown: true,
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				return nil
+			},
+			expectedMetricOutcome: "request-timeout",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "request timed out",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
 					},
 				}, c.LastAttemptFailure)
 			},
@@ -596,6 +617,9 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 					Header: tc.header,
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			if tc.requestTimeout > 0 {
+				env.handler.config.RequestTimeout = dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout)
+			}
 			env.handler.config.UseNewFailureWireFormat = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(!tc.disableNewFailureWireFormat)
 
 			env.setupReadComponent()
