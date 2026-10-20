@@ -313,6 +313,7 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 		s.Equal(12, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(0*time.Millisecond, options.StickyScheduleToStartTimeout)
+		s.Equal(time.Duration(0), options.DeadlockDetectionTimeout)
 	}).Return(wkr)
 	s.cmp1.EXPECT().Register(wkr, gomock.Any(), gomock.Any()).AnyTimes()
 	wkr.EXPECT().Start().AnyTimes()
