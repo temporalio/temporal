@@ -5453,24 +5453,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 
 				s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 				s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), uwsRes2.response.Responses[1].GetUpdateWorkflow().Outcome.String())
-				startLink := uwsRes2.response.Responses[0].GetStartWorkflow().GetLink().GetWorkflowEvent()
-				s.Require().NotNil(startLink)
-				s.Equal(env.Namespace().String(), startLink.GetNamespace())
-				s.Equal(env.Tv().WorkflowID(), startLink.GetWorkflowId())
-				s.Equal(uwsRes2.response.Responses[0].GetStartWorkflow().GetRunId(), startLink.GetRunId())
-				startedEventRef := startLink.GetEventRef()
-				s.Require().NotNil(startedEventRef)
-				s.EqualValues(1, startedEventRef.GetEventId())
-				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startedEventRef.GetEventType())
-				updateLink := uwsRes2.response.Responses[1].GetUpdateWorkflow().GetLink().GetWorkflowEvent()
-				s.Require().NotNil(updateLink)
-				s.Equal(env.Namespace().String(), updateLink.GetNamespace())
-				s.Equal(env.Tv().WorkflowID(), updateLink.GetWorkflowId())
-				s.Equal(uwsRes2.response.Responses[0].GetStartWorkflow().GetRunId(), updateLink.GetRunId())
-				acceptedEventRef := updateLink.GetEventRef()
-				s.Require().NotNil(acceptedEventRef)
-				s.Positive(acceptedEventRef.GetEventId())
-				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedEventRef.GetEventType())
+				runID := uwsRes2.response.Responses[0].GetStartWorkflow().GetRunId()
+				acceptedEvent := s.RequireHistoryEvent(
+					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: runID}),
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				)
+				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[0].GetStartWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[1].GetUpdateWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 				// poll update to ensure same outcome is returned
 				pollRes, err := pollUpdate(env, env.Tv(),

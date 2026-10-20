@@ -79,7 +79,7 @@ func TestValidateAttachedCallbacks_ReservesInFlightUpdateCallbacks(t *testing.T)
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
 
 	updateReg := update.NewRegistry(ms)
 	inFlightReq := &updatepb.Request{

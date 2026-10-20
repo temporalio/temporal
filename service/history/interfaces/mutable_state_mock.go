@@ -2854,19 +2854,19 @@ func (mr *MockMutableStateMockRecorder) GetUpdateNexusSerializationContext(updat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateNexusSerializationContext", reflect.TypeOf((*MockMutableState)(nil).GetUpdateNexusSerializationContext), updateID)
 }
 
-// GetUpdateOutcome mocks base method.
-func (m *MockMutableState) GetUpdateOutcome(ctx context.Context, updateID string) (*update.Outcome, error) {
+// GetCompletedUpdate mocks base method.
+func (m *MockMutableState) GetCompletedUpdate(ctx context.Context, updateID string) (*update0.CompletedUpdate, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpdateOutcome", ctx, updateID)
-	ret0, _ := ret[0].(*update.Outcome)
+	ret := m.ctrl.Call(m, "GetCompletedUpdate", ctx, updateID)
+	ret0, _ := ret[0].(*update0.CompletedUpdate)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetUpdateOutcome indicates an expected call of GetUpdateOutcome.
-func (mr *MockMutableStateMockRecorder) GetUpdateOutcome(ctx, updateID any) *gomock.Call {
+// GetCompletedUpdate indicates an expected call of GetCompletedUpdate.
+func (mr *MockMutableStateMockRecorder) GetCompletedUpdate(ctx, updateID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateOutcome", reflect.TypeOf((*MockMutableState)(nil).GetUpdateOutcome), ctx, updateID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCompletedUpdate", reflect.TypeOf((*MockMutableState)(nil).GetCompletedUpdate), ctx, updateID)
 }
 
 // GetUserTimerInfo mocks base method.

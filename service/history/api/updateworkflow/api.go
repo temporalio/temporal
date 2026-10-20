@@ -498,7 +498,7 @@ func (u *Updater) CreateResponse(
 	}
 }
 
-// CreateCompletedResponse creates a completed Update response linked to its acceptance event.
+// CreateCompletedResponse creates a completed Update response linked to its acceptance event when available.
 func (u *Updater) CreateCompletedResponse(
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
@@ -506,6 +506,8 @@ func (u *Updater) CreateCompletedResponse(
 	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
 ) *historyservice.UpdateWorkflowExecutionResponse {
 	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext)
-	resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	if acceptedEventID != common.EmptyEventID {
+		resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	}
 	return resp
 }
