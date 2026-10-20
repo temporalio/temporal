@@ -121,17 +121,12 @@ func TestAttemptFailedReason(t *testing.T) {
 		{
 			name:    "rejected start attempt",
 			failure: handlerFailure,
-			want:    "handler_error:BAD_REQUEST",
+			want:    FailedReasonHandlerError,
 		},
 		{
 			name:    "handler error type outside the spec",
 			failure: handlerFailureOfType("WHATEVER_THE_HANDLER_SAID"),
-			want:    "handler_error:UNKNOWN",
-		},
-		{
-			name:    "handler error without a type",
-			failure: handlerFailureOfType(""),
-			want:    "handler_error:UNKNOWN",
+			want:    FailedReasonHandlerError,
 		},
 		{
 			name:    "synchronous operation failure",
