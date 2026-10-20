@@ -58,7 +58,8 @@ func nexusStageTag(task Task) (tag.Tag, bool) {
 		return nil, false
 	}
 	switch group := grouped.OutboundTaskGroup(); {
-	case group == "nexus", strings.HasPrefix(group, "nexusoperations."):
+	case group == "nexus", // CHASM
+		strings.HasPrefix(group, "nexusoperations."): // HSM
 		return tag.NexusStageCallerOutbound, true
 	default:
 		return nil, false
