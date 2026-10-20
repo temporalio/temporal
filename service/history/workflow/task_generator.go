@@ -74,6 +74,9 @@ type (
 			event *historypb.HistoryEvent,
 		) error
 		GenerateUpsertVisibilityTask() error
+		// GenerateCloseExecutionVisibilityTask re-records the visibility record of a closed workflow,
+		// for changes that upsert tasks would drop because the workflow is no longer running.
+		GenerateCloseExecutionVisibilityTask() error
 		GenerateWorkflowResetTasks() error
 
 		// these 2 APIs should only be called when mutable state transaction is being closed
@@ -708,6 +711,20 @@ func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
+	})
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateCloseExecutionVisibilityTask() error {
+	// The executor drops close visibility tasks whose version doesn't match the close version.
+	closeVersion, err := r.mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
+	r.mutableState.AddTasks(&tasks.CloseExecutionVisibilityTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Version:     closeVersion,
 	})
 	return nil
 }

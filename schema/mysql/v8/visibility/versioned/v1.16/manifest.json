@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.16",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalLastBranchTime builtin search attribute",
+  "SchemaUpdateCqlFiles": [
+    "add_temporal_last_branch_time_search_attribute.sql"
+  ]
+}

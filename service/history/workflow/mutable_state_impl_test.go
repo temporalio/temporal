@@ -2518,6 +2518,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}}
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
+	mutableState.executionInfo.LastBranchTime = timestamppb.Now()
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2535,6 +2536,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
+	s.Nil(sanitizedMutableState.executionInfo.LastBranchTime)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -10200,4 +10202,75 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
+}
+
+func (s *mutableStateSuite) TestRecordHistoryBranch() {
+	testCases := []struct {
+		name             string
+		state            enumsspb.WorkflowExecutionState
+		status           enumspb.WorkflowExecutionStatus
+		expectVisibility func(visibilityTasks []tasks.Task)
+	}{
+		{
+			name:   "running run upserts visibility",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Len(visibilityTasks, 1)
+				s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+			},
+		},
+		{
+			name:   "closed run re-records close visibility at the close version",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Len(visibilityTasks, 1)
+				closeTask, ok := visibilityTasks[0].(*tasks.CloseExecutionVisibilityTask)
+				s.True(ok)
+				s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID), closeTask.Version)
+			},
+		},
+		{
+			name:   "zombie run has no visibility record to update",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Empty(visibilityTasks)
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			dbState := s.buildWorkflowMutableState()
+			dbState.ExecutionState.State = tc.state
+			dbState.ExecutionState.Status = tc.status
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			before := s.mockShard.GetTimeSource().Now()
+			s.NoError(ms.RecordHistoryBranch())
+			s.WithinRange(ms.GetExecutionInfo().GetLastBranchTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+			tc.expectVisibility(ms.InsertTasks[tasks.CategoryVisibility])
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	localBranchTime := timestamppb.New(time.Unix(1700000000, 0))
+	current := &persistencespb.WorkflowExecutionInfo{LastBranchTime: localBranchTime}
+	// The source's branches are its own, so its branch time must never replace the local one.
+	incoming := &persistencespb.WorkflowExecutionInfo{
+		LastBranchTime:   timestamppb.New(time.Unix(1800000000, 0)),
+		WorkflowTypeName: "synced",
+	}
+
+	s.NoError(ms.syncExecutionInfo(current, incoming, false))
+	s.Equal("synced", current.WorkflowTypeName)
+	s.Equal(localBranchTime, current.LastBranchTime)
+
+	s.NoError(ms.syncExecutionInfo(current, incoming, true))
+	s.Equal(localBranchTime, current.LastBranchTime)
 }

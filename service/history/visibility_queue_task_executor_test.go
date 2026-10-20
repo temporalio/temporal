@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -52,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -77,6 +80,7 @@ type (
 		visibilityQueueTaskExecutor queues.Executor
 
 		enableCloseWorkflowCleanup bool
+		disableFetchRelocatable    bool
 	}
 )
 
@@ -179,6 +183,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.mockShard.SetEngineForTesting(h)
 
 	s.enableCloseWorkflowCleanup = false
+	s.disableFetchRelocatable = false
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,
 		s.workflowCache,
@@ -189,6 +194,8 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
 		config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		config.ExternalPayloadsEnabled,
+		workflow.RelocatableAttributesFetcherProvider(config, s.mockVisibilityMgr),
+		func(_ string) bool { return s.disableFetchRelocatable },
 	)
 }
 
@@ -1042,6 +1049,132 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,
 	)
+}
+
+// closedMutableStateForTest returns a completed run and its close event.
+func (s *visibilityQueueTaskExecutorSuite) closedMutableStateForTest(
+	execution *commonpb.WorkflowExecution,
+	taskQueueName string,
+) (historyi.MutableState, *historypb.HistoryEvent) {
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+	return mutableState, event
+}
+
+func (s *visibilityQueueTaskExecutorSuite) closeVisibilityTaskForTest(execution *commonpb.WorkflowExecution) *tasks.CloseExecutionVisibilityTask {
+	return &tasks.CloseExecutionVisibilityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		Version:             s.version,
+		TaskID:              int64(59),
+	}
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAttributesReadFromVisibility() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
+	// Close cleanup already moved memo and search attributes into the visibility record.
+	mutableState.GetExecutionInfo().Memo = nil
+	mutableState.GetExecutionInfo().SearchAttributes = nil
+	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
+
+	relocatedMemo := map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoValue")}
+	relocatedSearchAttributes := map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("keep me")}
+	visibilityTask := s.closeVisibilityTaskForTest(execution)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&manager.GetWorkflowExecutionResponse{
+		Execution: &workflowpb.WorkflowExecutionInfo{
+			Memo:             &commonpb.Memo{Fields: relocatedMemo},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: relocatedSearchAttributes},
+		},
+	}, nil)
+	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
+			s.True(proto.Equal(relocatedMemo["memoKey"], request.Memo.GetFields()["memoKey"]))
+			s.True(proto.Equal(relocatedSearchAttributes["CustomKeywordField"], request.SearchAttributes.GetIndexedFields()["CustomKeywordField"]))
+			return nil
+		},
+	)
+
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAttributesUnavailableSkipsRecord() {
+	s.disableFetchRelocatable = true
+
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
+	mutableState.GetExecutionInfo().Memo = nil
+	mutableState.GetExecutionInfo().SearchAttributes = nil
+	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
+	visibilityTask := s.closeVisibilityTaskForTest(execution)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// No RecordWorkflowExecutionClosed: an empty re-record would wipe the relocated attributes.
+
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLastBranchTime() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
+	lastBranchTime := time.Unix(1700000000, 0).UTC()
+	mutableState.GetExecutionInfo().LastBranchTime = timestamppb.New(lastBranchTime)
+	visibilityTask := s.closeVisibilityTaskForTest(execution)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
+			value, err := sadefs.DecodeValue(
+				request.SearchAttributes.GetIndexedFields()[sadefs.TemporalLastBranchTime],
+				enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				false,
+			)
+			s.NoError(err)
+			s.Equal(lastBranchTime, value)
+			return nil
+		},
+	)
+
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestCopyMapPayload() {

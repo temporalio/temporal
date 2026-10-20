@@ -114,6 +114,7 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
+	s.mockMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -243,6 +244,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBet
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
+	s.mockMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -339,6 +341,7 @@ func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
+	s.mockMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			s.Equal(&persistence.ForkHistoryBranchRequest{

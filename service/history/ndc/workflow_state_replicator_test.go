@@ -2067,6 +2067,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	}).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: forkedBranchToken,
 	}, nil)
+	mockMutableState.EXPECT().RecordHistoryBranch().Return(nil).Times(1)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	newRunBranch, err := s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
@@ -2200,6 +2201,7 @@ func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
 	)).AnyTimes()
 	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
 	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().RecordHistoryBranch().Return(nil).Times(1)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	for _, event := range appendEvents {
 		mockMutableState.EXPECT().AddReapplyCandidateEvent(&historyEventMatcher{expected: event}).Times(1)

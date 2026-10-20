@@ -3448,6 +3448,20 @@ func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
 }
 
+// RecordHistoryBranch mocks base method.
+func (m *MockMutableState) RecordHistoryBranch() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordHistoryBranch")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordHistoryBranch indicates an expected call of RecordHistoryBranch.
+func (mr *MockMutableStateMockRecorder) RecordHistoryBranch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordHistoryBranch", reflect.TypeOf((*MockMutableState)(nil).RecordHistoryBranch))
+}
+
 // RecordLastActivityCompleteTime mocks base method.
 func (m *MockMutableState) RecordLastActivityCompleteTime(ai *persistence.ActivityInfo) {
 	m.ctrl.T.Helper()

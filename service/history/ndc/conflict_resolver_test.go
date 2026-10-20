@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -91,6 +93,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	historySize := int64(12345)
 	externalPayloadSize := int64(6789)
 	externalPayloadCount := int64(42)
+	lastBranchTime := timestamppb.New(time.Unix(1700000000, 0))
 
 	branchToken0 := []byte("some random branch token")
 	lastEventID0 := int64(5)
@@ -113,6 +116,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
+		LastBranchTime:   lastBranchTime,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -130,20 +134,20 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.runID,
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
-	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVersionHistories(
-				versionhistory.NewVersionHistory(
-					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
-				),
+	rebuiltExecutionInfo := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: versionhistory.NewVersionHistories(
+			versionhistory.NewVersionHistory(
+				branchToken1,
+				[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 			),
-		},
-	).AnyTimes()
+		),
+	}
+	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(rebuiltExecutionInfo).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
+	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,
@@ -166,6 +170,8 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())
+	// Replay doesn't restore cluster-local branch state, so rebuild carries it over.
+	s.Equal(lastBranchTime, rebuiltExecutionInfo.LastBranchTime)
 }
 
 func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_NotCurrent() {
@@ -280,6 +286,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
+	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,
@@ -387,6 +394,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
+	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,

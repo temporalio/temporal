@@ -10,6 +10,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/fx"
 )
 
@@ -24,6 +25,9 @@ type (
 		QueueFactoryBaseParams
 
 		VisibilityMgr manager.VisibilityManager
+		// RelocatableAttributesFetcher reads memo and search attributes back from visibility after
+		// close cleanup removed them from mutable state.
+		RelocatableAttributesFetcher workflow.RelocatableAttributesFetcher
 	}
 
 	visibilityQueueFactory struct {
@@ -113,6 +117,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		f.Config.ExternalPayloadsEnabled,
+		f.RelocatableAttributesFetcher,
+		f.Config.DisableFetchRelocatableAttributesFromVisibility,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)

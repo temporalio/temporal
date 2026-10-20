@@ -36,8 +36,11 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
@@ -190,8 +193,10 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
+	var lastRunID string
 	for _, version := range versions {
 		runID := uuid.NewString()
+		lastRunID = runID
 		historySize := int64(0)
 
 		var historyBatch []*historypb.History
@@ -220,6 +225,8 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 		s.verifyEventHistorySize(workflowID, runID, historySize)
 		s.verifyEventHistory(workflowID, runID, historyBatch)
 	}
+	// Only the last run is current; older ones were suppressed and are not visible.
+	s.verifyLastBranchTime(workflowID, lastRunID, false)
 }
 
 func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
@@ -236,8 +243,10 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 	versions := []int64{102, 2, 202}
 	versionIncs := [][]int64{{1, 10}, {11, 10}}
 	versionInc := versionIncs[rand.Intn(len(versionIncs))]
+	var lastRunID string
 	for _, version := range versions {
 		runID := uuid.NewString()
+		lastRunID = runID
 		historySize := int64(0)
 
 		var baseBranch []*historypb.History
@@ -352,6 +361,8 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 			branchVersionHistory3,
 		)
 	}
+	// Only the last run is current; older ones were suppressed and are not visible.
+	s.verifyLastBranchTime(workflowID, lastRunID, true)
 }
 
 func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
@@ -2315,6 +2326,44 @@ func (s *NDCFunctionalTestSuite) verifyEventHistorySize(
 	// NOTE: non current branch can contain force termination event
 	//  so calculation should be updated, for now only assert below
 	s.LessOrEqual(historySize, describeWorkflow.WorkflowExecutionInfo.HistorySizeBytes)
+}
+
+// verifyLastBranchTime waits for the run's visibility record and checks whether it carries
+// TemporalLastBranchTime.
+func (s *NDCFunctionalTestSuite) verifyLastBranchTime(
+	workflowID string,
+	runID string,
+	expectBranched bool,
+) {
+	query := fmt.Sprintf("WorkflowId = '%s' AND RunId = '%s'", workflowID, runID)
+	await.Require(testcontext.For(s.T()), s.T(), func(t *await.T) {
+		resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(
+			t.Context(),
+			&workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.namespace.String(),
+				Query:     query,
+			},
+		)
+		require.NoError(t, err)
+		require.Len(t, resp.GetExecutions(), 1)
+		_, branched := resp.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[sadefs.TemporalLastBranchTime]
+		require.Equal(t, expectBranched, branched)
+	}, 30*time.Second, 200*time.Millisecond)
+
+	if !expectBranched {
+		return
+	}
+	// The "branched since" lookup users run.
+	since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(
+		s.newContext(),
+		&workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace.String(),
+			Query:     fmt.Sprintf("%s AND TemporalLastBranchTime >= '%s'", query, since),
+		},
+	)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
 }
 
 func (s *NDCFunctionalTestSuite) verifyVersionHistory(

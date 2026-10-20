@@ -60,6 +60,7 @@ CREATE TABLE executions_visibility (
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS ((search_attributes->'TemporalExternalPayloadCount')::bigint) STORED,
   TemporalPriorityKey BIGINT GENERATED ALWAYS AS ((search_attributes->'TemporalPriorityKey')::bigint) STORED,
   TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (search_attributes->>'TemporalFairnessKey') STORED,
+  TemporalLastBranchTime TIMESTAMP GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalLastBranchTime')) STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
@@ -145,6 +146,7 @@ CREATE INDEX by_temporal_external_payload_size_bytes ON executions_visibility (n
 CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_priority_key ON executions_visibility (namespace_id, TemporalPriorityKey, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_fairness_key ON executions_visibility (namespace_id, TemporalFairnessKey, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_last_branch_time ON executions_visibility (namespace_id, TemporalLastBranchTime, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 
 -- Indexes for the pre-allocated custom search attributes
 CREATE INDEX by_bool_01         ON executions_visibility (namespace_id, Bool01,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);

@@ -68,6 +68,8 @@ func sanitizeExecutionInfo(
 	// Timer tasks are generated locally, do not sync them.
 	executionInfo.StateMachineTimers = nil
 	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+	// Branches are cluster-local; the receiving cluster records its own.
+	executionInfo.LastBranchTime = nil
 }
 
 func sanitizeChildExecutionInfo(

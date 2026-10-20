@@ -327,6 +327,11 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+
+  // Time this cluster last created or switched to a history branch for this run during conflict
+  // resolution. Branches are cluster-local, so this is never synced from another cluster.
+  // Surfaced in visibility as the TemporalLastBranchTime search attribute.
+  google.protobuf.Timestamp last_branch_time = 118;
 }
 
 message TimeSkippingInfo {

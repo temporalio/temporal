@@ -25,6 +25,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -40,6 +41,10 @@ type (
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		// Used to re-record a closed workflow after close cleanup moved its memo and search
+		// attributes out of mutable state.
+		relocatableAttributesFetcher          workflow.RelocatableAttributesFetcher
+		disableFetchRelocatableFromVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -55,6 +60,8 @@ func newVisibilityQueueTaskExecutor(
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	externalPayloadsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher,
+	disableFetchRelocatableFromVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -67,6 +74,9 @@ func newVisibilityQueueTaskExecutor(
 		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
 		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
 		externalPayloadsEnabled:       externalPayloadsEnabled,
+
+		relocatableAttributesFetcher:          relocatableAttributesFetcher,
+		disableFetchRelocatableFromVisibility: disableFetchRelocatableFromVisibility,
 	}
 }
 
@@ -269,12 +279,33 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	memo := mutableState.GetExecutionInfo().Memo
+	searchAttributes := mutableState.GetExecutionInfo().SearchAttributes
+	if mutableState.GetExecutionInfo().GetRelocatableAttributesRemoved() {
+		// The close record was already written and cleanup moved memo and search attributes into
+		// it. Re-recording from mutable state would wipe them, so read them back from visibility.
+		if t.disableFetchRelocatableFromVisibility(namespaceEntry.Name().String()) {
+			t.logger.Warn("Skipping close visibility re-record: relocated attributes cannot be fetched",
+				tag.WorkflowNamespaceID(task.GetNamespaceID()),
+				tag.WorkflowID(task.GetWorkflowID()),
+				tag.WorkflowRunID(task.GetRunID()),
+			)
+			return nil
+		}
+		relocated, err := t.relocatableAttributesFetcher.Fetch(ctx, mutableState)
+		if err != nil {
+			return err
+		}
+		memo = relocated.Memo.GetFields()
+		searchAttributes = relocated.SearchAttributes.GetIndexedFields()
+	}
+
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,
 		mutableState,
-		mutableState.GetExecutionInfo().Memo,
-		mutableState.GetExecutionInfo().SearchAttributes,
+		memo,
+		searchAttributes,
 	)
 	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
@@ -523,6 +554,18 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
 		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
 	)
+
+	// Derived from cluster-local state rather than stored in SearchAttributes, which replication
+	// overwrites from the source cluster.
+	if lastBranchTime := executionInfo.GetLastBranchTime(); lastBranchTime != nil {
+		if searchAttributes == nil {
+			searchAttributes = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload, 1)}
+		}
+		searchAttributes.IndexedFields[sadefs.TemporalLastBranchTime] = sadefs.MustEncodeValue(
+			lastBranchTime.AsTime(),
+			enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		)
+	}
 
 	var parentExecution *commonpb.WorkflowExecution
 	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {

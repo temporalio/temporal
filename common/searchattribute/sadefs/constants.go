@@ -119,6 +119,10 @@ const (
 	// TemporalExternalPayloadSizeBytes is the total size in bytes of all external payloads
 	// referenced in the entire history tree of the execution.
 	TemporalExternalPayloadSizeBytes = "TemporalExternalPayloadSizeBytes"
+
+	// TemporalLastBranchTime is the time this cluster last created or switched to a history branch
+	// for the execution during conflict resolution. Unset if the execution never branched here.
+	TemporalLastBranchTime = "TemporalLastBranchTime"
 )
 
 var (
@@ -163,6 +167,7 @@ var (
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalLastBranchTime:     enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -187,6 +192,7 @@ var (
 		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalLastBranchTime:               enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

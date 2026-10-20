@@ -7176,6 +7176,21 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
+func (ms *MutableStateImpl) RecordHistoryBranch() error {
+	ms.executionInfo.LastBranchTime = timestamppb.New(ms.timeSource.Now())
+	switch ms.executionState.State {
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		return ms.taskGenerator.GenerateUpsertVisibilityTask()
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		// Upsert tasks are dropped for closed runs, and conflict resolution often branches a run
+		// that already closed on the winning branch.
+		return ms.taskGenerator.GenerateCloseExecutionVisibilityTask()
+	default:
+		// Zombie runs have no visibility record to update.
+		return nil
+	}
+}
+
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	var reportedProblems []string
 	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
@@ -9782,6 +9797,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.CloseTransferTaskId,
 			&info.CloseVisibilityTaskId,
 			&info.RelocatableAttributesRemoved,
+			&info.LastBranchTime,
 			&info.WorkflowExecutionTimerTaskStatus,
 			&info.SubStateMachinesByType,
 			&info.StateMachineTimers,

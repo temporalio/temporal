@@ -159,6 +159,7 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
 	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = r.mutableState.GetExecutionInfo().MutableStateRebuildTime
+	rebuildMutableState.GetExecutionInfo().LastBranchTime = r.mutableState.GetExecutionInfo().LastBranchTime
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +178,9 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.AddExternalPayloadCount(externalPayloadCount)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
+	if err := rebuildMutableState.RecordHistoryBranch(); err != nil {
+		return nil, err
+	}
 
 	r.context.Clear()
 	return rebuildMutableState, nil

@@ -1458,6 +1458,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		if err != nil {
 			return newBranchToken, err
 		}
+		// createNewBranch already recorded the branch; switching to an existing one is also a branch.
+		if !isNewBranch && index != originalIndex {
+			if err := localMutableState.RecordHistoryBranch(); err != nil {
+				return newBranchToken, err
+			}
+		}
 		// LastFirstEventTxnId still points at the branch we moved off. Chain onto this branch instead.
 		if isNewBranch || index != originalIndex {
 			lastTxnID, err := r.lastTransactionID(ctx, versionHistoryToAppend.GetBranchToken(), localLastItem.GetEventId())
