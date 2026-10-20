@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -23,6 +24,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -36,6 +38,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
@@ -210,6 +213,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		nil, // wciClient
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -2893,4 +2897,39 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 		var invalidArg *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArg)
 	})
+}
+
+type fakeWCIClient struct {
+	wcipb.WorkerControllerInstanceServiceClient
+	req *wcipb.MigrateToWorkflowRequest
+	err error
+}
+
+func (f *fakeWCIClient) MigrateToWorkflow(_ context.Context, req *wcipb.MigrateToWorkflowRequest, _ ...grpc.CallOption) (*wcipb.MigrateToWorkflowResponse, error) {
+	f.req = req
+	return &wcipb.MigrateToWorkflowResponse{}, f.err
+}
+
+func (s *adminHandlerSuite) TestMigrateWorkerControllerInstance() {
+	fake := &fakeWCIClient{}
+	s.handler.wciClient = fake
+	request := &adminservice.MigrateWorkerControllerInstanceRequest{
+		Namespace: s.namespace.String(), DeploymentName: "dep", BuildId: "build", Identity: "me",
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	_, err := s.handler.MigrateWorkerControllerInstance(context.Background(), request)
+	s.NoError(err)
+	s.Equal(s.namespaceID.String(), fake.req.GetNamespaceId())
+	s.Equal(wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"}), fake.req.GetInstanceId())
+
+	fake.err = serviceerror.NewNotFound("missing")
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), &adminservice.MigrateWorkerControllerInstanceRequest{Namespace: s.namespace.String(), Identity: "me"})
+	var invalid *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalid)
 }

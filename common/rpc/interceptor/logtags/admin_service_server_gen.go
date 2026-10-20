@@ -178,6 +178,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.MigrateScheduleResponse:
 		return nil
+	case *adminservice.MigrateWorkerControllerInstanceRequest:
+		return nil
+	case *adminservice.MigrateWorkerControllerInstanceResponse:
+		return nil
 	case *adminservice.PurgeDLQMessagesRequest:
 		return nil
 	case *adminservice.PurgeDLQMessagesResponse:

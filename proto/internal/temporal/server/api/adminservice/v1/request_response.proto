@@ -722,6 +722,18 @@ message MigrateScheduleRequest {
 
 message MigrateScheduleResponse {}
 
+message MigrateWorkerControllerInstanceRequest {
+  // Namespace name.
+  string namespace = 1;
+  // Worker deployment version the instance controls.
+  string deployment_name = 2;
+  string build_id = 3;
+  // Identity of the caller.
+  string identity = 4;
+}
+
+message MigrateWorkerControllerInstanceResponse {}
+
 message ListExecutionsRequest {
   // Optional namespace name. If not set, search is made across all namespaces
   // and you cannot filter on any custom search attribute. If set, you can filter

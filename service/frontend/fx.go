@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmwci "go.temporal.io/server/chasm/lib/wci"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -861,6 +862,7 @@ func AdminHandlerProvider(
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	wciClient wcipb.WorkerControllerInstanceServiceClient,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
@@ -891,6 +893,7 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		wciClient,
 		taskCategoryRegistry,
 		matchingClient,
 	}

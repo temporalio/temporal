@@ -67,6 +67,7 @@ const (
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_MigrateWorkerControllerInstance_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/MigrateWorkerControllerInstance"
 	AdminService_ListExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
 	AdminService_CountExecutions_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
 )
@@ -166,6 +167,9 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	// MigrateWorkerControllerInstance moves a CHASM-backed worker controller instance back to its workflow.
+	// Moving to CHASM is gated by dynamic config, not this RPC.
+	MigrateWorkerControllerInstance(ctx context.Context, in *MigrateWorkerControllerInstanceRequest, opts ...grpc.CallOption) (*MigrateWorkerControllerInstanceResponse, error)
 	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
 }
@@ -623,6 +627,15 @@ func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateSch
 	return out, nil
 }
 
+func (c *adminServiceClient) MigrateWorkerControllerInstance(ctx context.Context, in *MigrateWorkerControllerInstanceRequest, opts ...grpc.CallOption) (*MigrateWorkerControllerInstanceResponse, error) {
+	out := new(MigrateWorkerControllerInstanceResponse)
+	err := c.cc.Invoke(ctx, AdminService_MigrateWorkerControllerInstance_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
 	out := new(ListExecutionsResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListExecutions_FullMethodName, in, out, opts...)
@@ -736,6 +749,9 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	// MigrateWorkerControllerInstance moves a CHASM-backed worker controller instance back to its workflow.
+	// Moving to CHASM is gated by dynamic config, not this RPC.
+	MigrateWorkerControllerInstance(context.Context, *MigrateWorkerControllerInstanceRequest) (*MigrateWorkerControllerInstanceResponse, error)
 	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
 	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
@@ -885,6 +901,9 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) MigrateWorkerControllerInstance(context.Context, *MigrateWorkerControllerInstanceRequest) (*MigrateWorkerControllerInstanceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MigrateWorkerControllerInstance not implemented")
 }
 func (UnimplementedAdminServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListExecutions not implemented")
@@ -1759,6 +1778,24 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_MigrateWorkerControllerInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MigrateWorkerControllerInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).MigrateWorkerControllerInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_MigrateWorkerControllerInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).MigrateWorkerControllerInstance(ctx, req.(*MigrateWorkerControllerInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListExecutionsRequest)
 	if err := dec(in); err != nil {
@@ -1985,6 +2022,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "MigrateWorkerControllerInstance",
+			Handler:    _AdminService_MigrateWorkerControllerInstance_Handler,
 		},
 		{
 			MethodName: "ListExecutions",

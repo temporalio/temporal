@@ -79,6 +79,8 @@ var (
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
+	FlagDeploymentName             = "deployment-name"
+	FlagBuildID                    = "build-id"
 	FlagScheduleIDAlias            = []string{"sid"}
 	FlagTarget                     = "target"
 	FlagFromVisibility             = "from-visibility"
