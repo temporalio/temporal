@@ -1558,6 +1558,10 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
 		// If WT was already started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
+		var versioningStamp *commonpb.WorkerVersionStamp
+		if wt.BuildId != "" {
+			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: wt.BuildId}
+		}
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
@@ -1566,7 +1570,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.StartedTime,
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
-			nil,
+			versioningStamp,
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
