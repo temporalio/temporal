@@ -1051,7 +1051,7 @@ var ServiceTracingModule = fx.Options(
 					otelresource.WithAttributes(attrs...),
 				)
 			},
-			fx.ParamTags(``, `optional:"true"`, ``),
+			fx.ParamTags("", `optional:"true"`, ""),
 		),
 	),
 	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
