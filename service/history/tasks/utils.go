@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"strings"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -28,7 +30,7 @@ func Tags(
 		taskEventID = common.EmptyEventID
 	}
 
-	return []tag.Tag{
+	tags := []tag.Tag{
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
@@ -36,6 +38,30 @@ func Tags(
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
 		tag.WorkflowEventID(taskEventID),
+	}
+	if stage, ok := nexusStageTag(task); ok {
+		tags = append(tags, stage)
+	}
+	return tags
+}
+
+// nexusStageTag returns the Nexus lifecycle stage of an outbound task. It keys on the outbound task
+// group rather than the task type because CHASM tasks only carry a type ID; the outbound queue resolves
+// their group when it loads them. The group names are defined by the HSM and CHASM Nexus libraries,
+// which this package cannot import.
+func nexusStageTag(task Task) (tag.Tag, bool) {
+	if task.GetCategory().ID() != CategoryIDOutbound {
+		return nil, false
+	}
+	grouped, ok := task.(HasOutboundTaskGroup)
+	if !ok {
+		return nil, false
+	}
+	switch group := grouped.OutboundTaskGroup(); {
+	case group == "nexus", strings.HasPrefix(group, "nexusoperations."):
+		return tag.NexusStageCallerOutbound, true
+	default:
+		return nil, false
 	}
 }
 
