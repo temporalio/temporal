@@ -33,6 +33,14 @@ service WorkerControllerInstanceService {
     option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
   }
 
+  rpc ActivateMigration(ActivateMigrationRequest) returns (ActivateMigrationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc AbortMigration(AbortMigrationRequest) returns (AbortMigrationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
   rpc MigrateToWorkflow(MigrateToWorkflowRequest) returns (MigrateToWorkflowResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
   }

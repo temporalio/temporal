@@ -323,6 +323,92 @@ func (c *WorkerControllerInstanceServiceLayeredClient) CreateFromMigrationState(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *WorkerControllerInstanceServiceLayeredClient) callActivateMigrationNoRetry(
+	ctx context.Context,
+	request *ActivateMigrationRequest,
+	opts ...grpc.CallOption,
+) (*ActivateMigrationResponse, error) {
+	var response *ActivateMigrationResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("WorkerControllerInstanceService.ActivateMigration"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetInstanceId(), c.numShards)
+	op := func(ctx context.Context, client WorkerControllerInstanceServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.ActivateMigration(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *WorkerControllerInstanceServiceLayeredClient) ActivateMigration(
+	ctx context.Context,
+	request *ActivateMigrationRequest,
+	opts ...grpc.CallOption,
+) (*ActivateMigrationResponse, error) {
+	call := func(ctx context.Context) (*ActivateMigrationResponse, error) {
+		return c.callActivateMigrationNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *WorkerControllerInstanceServiceLayeredClient) callAbortMigrationNoRetry(
+	ctx context.Context,
+	request *AbortMigrationRequest,
+	opts ...grpc.CallOption,
+) (*AbortMigrationResponse, error) {
+	var response *AbortMigrationResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("WorkerControllerInstanceService.AbortMigration"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetInstanceId(), c.numShards)
+	op := func(ctx context.Context, client WorkerControllerInstanceServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.AbortMigration(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *WorkerControllerInstanceServiceLayeredClient) AbortMigration(
+	ctx context.Context,
+	request *AbortMigrationRequest,
+	opts ...grpc.CallOption,
+) (*AbortMigrationResponse, error) {
+	call := func(ctx context.Context) (*AbortMigrationResponse, error) {
+		return c.callAbortMigrationNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *WorkerControllerInstanceServiceLayeredClient) callMigrateToWorkflowNoRetry(
 	ctx context.Context,
 	request *MigrateToWorkflowRequest,

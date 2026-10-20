@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
 	"go.temporal.io/api/serviceerror"
@@ -66,6 +67,9 @@ type snapshotOf struct {
 // read returns the current instance; a missing execution reads as an empty, non-existent one.
 func read(ctx context.Context, namespaceID, instanceID string) (snapshotOf, error) {
 	out, err := chasm.ReadComponent(ctx, refFor(namespaceID, instanceID), func(w *WorkerControllerInstance, cctx chasm.Context, _ any) (snapshotOf, error) {
+		if w.Status == wcipb.WCI_STATUS_PENDING_ACTIVATION {
+			return snapshotOf{}, errPendingInvisible
+		}
 		if w.LifecycleState(cctx).IsClosed() {
 			return snapshotOf{}, ErrClosed
 		}
@@ -242,6 +246,9 @@ func (h *handler) DescribeWorkerControllerInstance(ctx context.Context, req *wci
 	defer log.CapturePanic(h.logger, &err)
 
 	return chasm.ReadComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, cctx chasm.Context, _ any) (*wcipb.DescribeWorkerControllerInstanceResponse, error) {
+		if w.Status == wcipb.WCI_STATUS_PENDING_ACTIVATION {
+			return nil, errPendingInvisible
+		}
 		if w.LifecycleState(cctx).IsClosed() {
 			return nil, ErrClosed
 		}
@@ -319,8 +326,8 @@ func (h *handler) RecordTaskAdd(ctx context.Context, req *wcipb.RecordTaskAddReq
 	return &wcipb.RecordTaskAddResponse{}, nil
 }
 
-// CreateFromMigrationState is idempotent: an existing execution counts as success, so a workflow
-// that crashed after the create completes on replay.
+// CreateFromMigrationState prepares a workflow → CHASM handover: the instance is created pending.
+// Repeating it with the same token is a no-op; any other existing instance rejects it.
 func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.CreateFromMigrationStateRequest) (resp *wcipb.CreateFromMigrationStateResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
@@ -331,29 +338,91 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 	if err := h.checkSupported(spec); err != nil {
 		return nil, err
 	}
+	if req.GetMigrationToken() == "" || req.GetExpireTime() == nil {
+		return nil, serviceerror.NewInvalidArgument("migration token and expire time are required")
+	}
 
 	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetInstanceId()},
 		func(mctx chasm.MutableContext, req *wcipb.CreateFromMigrationStateRequest) (*WorkerControllerInstance, error) {
-			w := NewWorkerControllerInstanceFromMigration(mctx, req.GetState(), req.GetScalingGroups())
-			// Replay the workflow's queued task-adds exactly once, in the creating transaction.
-			for _, event := range req.GetPendingTaskAdds() {
-				if err := w.ProcessTaskAdd(mctx, event); err != nil {
-					return nil, err
-				}
-			}
-			return w, nil
+			return NewWorkerControllerInstanceFromMigration(mctx, req.GetState(), req.GetScalingGroups(), req.GetMigrationToken(), req.GetExpireTime().AsTime()), nil
 		},
 		req,
 	)
 	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
-		return &wcipb.CreateFromMigrationStateResponse{}, nil
+		return &wcipb.CreateFromMigrationStateResponse{}, h.checkSameMigration(ctx, req)
 	}
 	if err != nil {
 		return nil, err
 	}
 	return &wcipb.CreateFromMigrationStateResponse{}, nil
+}
+
+func (h *handler) checkSameMigration(ctx context.Context, req *wcipb.CreateFromMigrationStateRequest) error {
+	_, err := chasm.ReadComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, _ chasm.Context, _ any) (struct{}, error) {
+		if w.MigrationToken == req.GetMigrationToken() && (w.Status == wcipb.WCI_STATUS_PENDING_ACTIVATION || w.Status == wcipb.WCI_STATUS_RUNNING) {
+			return struct{}{}, nil
+		}
+		return struct{}{}, serviceerror.NewAlreadyExistsf("worker controller instance %q already exists", req.GetInstanceId())
+	}, nil)
+	return err
+}
+
+// ActivateMigration commits a workflow → CHASM handover and replays the queued task-adds with it.
+func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigrationRequest) (resp *wcipb.ActivateMigrationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		if w.MigrationToken != req.GetMigrationToken() {
+			return struct{}{}, ErrMigrationNotPending
+		}
+		switch w.Status {
+		case wcipb.WCI_STATUS_RUNNING:
+			// A retried activation.
+			return struct{}{}, nil
+		case wcipb.WCI_STATUS_PENDING_ACTIVATION:
+		default:
+			return struct{}{}, ErrMigrationNotPending
+		}
+		if err := TransitionMigrationActivated.Apply(w, mctx, EventMigrationActivated{}); err != nil {
+			return struct{}{}, err
+		}
+		for _, event := range req.GetPendingTaskAdds() {
+			if err := w.ProcessTaskAdd(mctx, event); err != nil {
+				return struct{}{}, err
+			}
+		}
+		return struct{}{}, nil
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &wcipb.ActivateMigrationResponse{}, nil
+}
+
+// AbortMigration closes a pending target; a missing or already aborted one is success.
+func (h *handler) AbortMigration(ctx context.Context, req *wcipb.AbortMigrationRequest) (resp *wcipb.AbortMigrationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		if w.MigrationToken != req.GetMigrationToken() {
+			return struct{}{}, ErrMigrationNotPending
+		}
+		switch w.Status {
+		case wcipb.WCI_STATUS_MIGRATION_ABORTED:
+			return struct{}{}, nil
+		case wcipb.WCI_STATUS_PENDING_ACTIVATION:
+			return struct{}{}, TransitionPendingMigrationAborted.Apply(w, mctx, EventPendingMigrationAborted{})
+		default:
+			return struct{}{}, ErrMigrationNotPending
+		}
+	}, nil)
+	var notFound *serviceerror.NotFound
+	if err != nil && !errors.As(err, &notFound) {
+		return nil, err
+	}
+	return &wcipb.AbortMigrationResponse{}, nil
 }
 
 // MigrateToWorkflow hands the WCI back to the workflow backend; repeating it while migrating is a no-op.
@@ -367,7 +436,9 @@ func (h *handler) MigrateToWorkflow(ctx context.Context, req *wcipb.MigrateToWor
 		if err := w.CheckMutable(); err != nil {
 			return struct{}{}, err
 		}
-		return struct{}{}, TransitionMigrateToWorkflow.Apply(w, mctx, EventMigrateToWorkflow{})
+		// Doubles as the workflow start request ID and the activate update ID, so retries de-duplicate.
+		token := fmt.Sprintf("chasm:%d", mctx.ExecutionInfo().StateTransitionCount+1)
+		return struct{}{}, TransitionMigrateToWorkflow.Apply(w, mctx, EventMigrateToWorkflow{Token: token})
 	}, nil)
 	if err != nil {
 		return nil, err

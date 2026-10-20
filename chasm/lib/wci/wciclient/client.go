@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/wci/migration"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var Module = fx.Options(
@@ -215,13 +217,58 @@ func (c *Client) SignalTaskAddEvent(ctx context.Context, ns *namespace.Namespace
 	return mapError(err)
 }
 
-// CreateFromWorkflowState implements the workflow-side MigrationClient.
-func (c *Client) CreateFromWorkflowState(ctx context.Context, args *iface.WorkerControllerInstanceWorkflowArgs) error {
-	id := instanceID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: args.DeploymentName, BuildId: args.BuildId})
-	req, err := migration.WorkflowStateToCHASM(id, args)
+// CreateFromWorkflowState implements the workflow-side MigrationClient: it prepares a pending target.
+func (c *Client) CreateFromWorkflowState(ctx context.Context, args *iface.WorkerControllerInstanceWorkflowArgs, token string, expireTime time.Time) error {
+	req, err := migration.WorkflowStateToCHASM(migrationInstanceID(args), args)
 	if err != nil {
 		return err
 	}
+	req.MigrationToken = token
+	req.ExpireTime = timestamppb.New(expireTime)
 	_, err = c.service.CreateFromMigrationState(ctx, req)
 	return mapError(err)
+}
+
+func (c *Client) ActivateMigration(ctx context.Context, args *iface.WorkerControllerInstanceWorkflowArgs, token string, pendingTaskAdds []*iface.SignalTaskAddRequest) error {
+	events := make([]*wcipb.TaskAddEvent, 0, len(pendingTaskAdds))
+	for _, req := range pendingTaskAdds {
+		if req != nil {
+			events = append(events, migration.TaskAddToCHASM(req))
+		}
+	}
+	_, err := c.service.ActivateMigration(ctx, &wcipb.ActivateMigrationRequest{
+		NamespaceId:     args.NamespaceId,
+		InstanceId:      migrationInstanceID(args),
+		MigrationToken:  token,
+		PendingTaskAdds: events,
+	})
+	return migrationError(err)
+}
+
+func (c *Client) AbortMigration(ctx context.Context, args *iface.WorkerControllerInstanceWorkflowArgs, token string) error {
+	_, err := c.service.AbortMigration(ctx, &wcipb.AbortMigrationRequest{
+		NamespaceId:    args.NamespaceId,
+		InstanceId:     migrationInstanceID(args),
+		MigrationToken: token,
+	})
+	return migrationError(err)
+}
+
+func migrationInstanceID(args *iface.WorkerControllerInstanceWorkflowArgs) string {
+	return instanceID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: args.DeploymentName, BuildId: args.BuildId})
+}
+
+// migrationError makes "target gone" definitive for the workflow; everything else stays ambiguous.
+func migrationError(err error) error {
+	var notFound *serviceerror.NotFound
+	var precondition *serviceerror.FailedPrecondition
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &notFound),
+		errors.As(err, &precondition) && strings.Contains(precondition.Message, wci.ErrMigrationNotPending.Error()):
+		return fmt.Errorf("%w: %w", wciclient.ErrMigrationAborted, err)
+	default:
+		return mapError(err)
+	}
 }

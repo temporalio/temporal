@@ -21,6 +21,7 @@ const (
 	backendCHASM            = "chasm"
 	migrationOutcomeSuccess = "success"
 	migrationOutcomeError   = "error"
+	migrationOutcomeAborted = "aborted"
 )
 
 // wciMetrics tags a namespace-tagged handler with one WCI and provider ("" for none).

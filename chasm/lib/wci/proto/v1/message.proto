@@ -24,6 +24,10 @@ message WorkerControllerInstanceState {
   // MetricsPollTimerTask deadline.
   google.protobuf.Timestamp next_poll_time = 9;
   google.protobuf.Timestamp next_validation_time = 10;
+  // Two-phase handover: the token of the pending or freezing migration.
+  string migration_token = 11;
+  // PENDING_ACTIVATION only: PendingExpiryTask deadline.
+  google.protobuf.Timestamp pending_expire_time = 12;
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -117,6 +121,10 @@ enum WciStatus {
   WCI_STATUS_MIGRATING_TO_WORKFLOW = 2;
   WCI_STATUS_MIGRATED = 3;
   WCI_STATUS_DELETED = 4;
+  // Created by a workflow → CHASM migration; inert and invisible until activated.
+  WCI_STATUS_PENDING_ACTIVATION = 5;
+  // A pending migration target that was aborted or expired.
+  WCI_STATUS_MIGRATION_ABORTED = 6;
 }
 
 enum ScalingGroupStatus {

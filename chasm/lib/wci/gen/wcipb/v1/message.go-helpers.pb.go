@@ -421,6 +421,8 @@ var (
 		"MigratingToWorkflow": 2,
 		"Migrated":            3,
 		"Deleted":             4,
+		"PendingActivation":   5,
+		"MigrationAborted":    6,
 	}
 )
 

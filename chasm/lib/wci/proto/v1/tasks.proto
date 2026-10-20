@@ -14,6 +14,11 @@ message MetricsPollTimerTask {
   google.protobuf.Timestamp poll_time = 1;
 }
 
+// Pure. Fires at pending_expire_time; aborts a migration that was never activated.
+message PendingExpiryTask {
+  google.protobuf.Timestamp expire_time = 1;
+}
+
 // Pure. Fires at next_validation_time; schedules ValidateSpecTask.
 message PeriodicValidationTimerTask {
   google.protobuf.Timestamp validation_time = 1;

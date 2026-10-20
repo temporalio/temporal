@@ -3,6 +3,7 @@ package wciclient
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -25,6 +26,18 @@ type fakeService struct {
 	update    *wcipb.UpdateWorkerControllerInstanceRequest
 	taskAdd   *wcipb.RecordTaskAddRequest
 	migration *wcipb.CreateFromMigrationStateRequest
+	activate  *wcipb.ActivateMigrationRequest
+	abort     *wcipb.AbortMigrationRequest
+}
+
+func (f *fakeService) ActivateMigration(_ context.Context, req *wcipb.ActivateMigrationRequest, _ ...grpc.CallOption) (*wcipb.ActivateMigrationResponse, error) {
+	f.activate = req
+	return &wcipb.ActivateMigrationResponse{}, f.err
+}
+
+func (f *fakeService) AbortMigration(_ context.Context, req *wcipb.AbortMigrationRequest, _ ...grpc.CallOption) (*wcipb.AbortMigrationResponse, error) {
+	f.abort = req
+	return &wcipb.AbortMigrationResponse{}, f.err
 }
 
 func (f *fakeService) DescribeWorkerControllerInstance(context.Context, *wcipb.DescribeWorkerControllerInstanceRequest, ...grpc.CallOption) (*wcipb.DescribeWorkerControllerInstanceResponse, error) {
@@ -123,17 +136,44 @@ func TestUpdateAndSignalAddressTheWorkflowID(t *testing.T) {
 
 func TestCreateFromWorkflowState(t *testing.T) {
 	svc := &fakeService{}
+	expire := time.Unix(1_000, 0).UTC()
 	err := New(Params{Service: svc}).CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{
 		NamespaceId: "ns-id", DeploymentName: "dep", BuildId: "build",
 		State: &iface.WorkerControllerInstanceLocalState{PendingTaskAddSignals: []*iface.SignalTaskAddRequest{{}}},
-	})
+	}, "run-1", expire)
 	require.NoError(t, err)
 	require.Equal(t, wciclient.GenerateWorkerControllerInstanceWorkflowID(testVersion), svc.migration.GetInstanceId())
-	require.Len(t, svc.migration.GetPendingTaskAdds(), 1)
+	require.Equal(t, "run-1", svc.migration.GetMigrationToken())
+	require.Equal(t, expire, svc.migration.GetExpireTime().AsTime())
 
 	svc.err = overTheWire(wci.ErrProviderNotSupportedOnCHASM)
-	err = New(Params{Service: svc}).CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{DeploymentName: "dep", BuildId: "build"})
+	err = New(Params{Service: svc}).CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{DeploymentName: "dep", BuildId: "build"}, "run-1", expire)
 	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the workflow stays a workflow")
+}
+
+func TestActivateAndAbortMigration(t *testing.T) {
+	args := &iface.WorkerControllerInstanceWorkflowArgs{NamespaceId: "ns-id", DeploymentName: "dep", BuildId: "build"}
+	svc := &fakeService{}
+	c := New(Params{Service: svc})
+
+	require.NoError(t, c.ActivateMigration(t.Context(), args, "run-1", []*iface.SignalTaskAddRequest{{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}, nil}))
+	require.Equal(t, "run-1", svc.activate.GetMigrationToken())
+	require.Equal(t, wciclient.GenerateWorkerControllerInstanceWorkflowID(testVersion), svc.activate.GetInstanceId())
+	require.Len(t, svc.activate.GetPendingTaskAdds(), 1, "nil task-adds are dropped")
+
+	require.NoError(t, c.AbortMigration(t.Context(), args, "run-1"))
+	require.Equal(t, "run-1", svc.abort.GetMigrationToken())
+
+	// Definitive: the target is gone, so the workflow keeps the WCI.
+	for _, gone := range []error{wci.ErrMigrationNotPending, serviceerror.NewNotFound("missing")} {
+		svc.err = overTheWire(gone)
+		require.ErrorIs(t, c.ActivateMigration(t.Context(), args, "run-1", nil), wciclient.ErrMigrationAborted)
+	}
+	// Ambiguous: anything else.
+	svc.err = overTheWire(serviceerror.NewUnavailable("shard moved"))
+	err := c.ActivateMigration(t.Context(), args, "run-1", nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, wciclient.ErrMigrationAborted)
 }
 
 func TestListNeedsVisibility(t *testing.T) {

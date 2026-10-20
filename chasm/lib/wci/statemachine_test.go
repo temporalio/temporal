@@ -48,7 +48,10 @@ func checkTransitions[S comparable](t *testing.T, all []S, cases []transitionCas
 }
 
 var (
-	allWciStatuses   = []wcipb.WciStatus{wcipb.WCI_STATUS_RUNNING, wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW, wcipb.WCI_STATUS_MIGRATED, wcipb.WCI_STATUS_DELETED}
+	allWciStatuses = []wcipb.WciStatus{
+		wcipb.WCI_STATUS_RUNNING, wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW, wcipb.WCI_STATUS_MIGRATED, wcipb.WCI_STATUS_DELETED,
+		wcipb.WCI_STATUS_PENDING_ACTIVATION, wcipb.WCI_STATUS_MIGRATION_ABORTED,
+	}
 	allGroupStatuses = []wcipb.ScalingGroupStatus{wcipb.SCALING_GROUP_STATUS_IDLE, wcipb.SCALING_GROUP_STATUS_SCALING, wcipb.SCALING_GROUP_STATUS_BACKING_OFF}
 )
 
@@ -76,13 +79,33 @@ func TestRootTransitions(t *testing.T) {
 			name: "migrate_to_workflow", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_RUNNING}, dest: wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW,
 			wantTasks: []string{"*wcipb.MigrateToWorkflowTask"},
 			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
-				return TransitionMigrateToWorkflow.Apply(w, ctx, EventMigrateToWorkflow{})
+				return TransitionMigrateToWorkflow.Apply(w, ctx, EventMigrateToWorkflow{Token: "chasm:1"})
 			}),
 		},
 		{
-			name: "workflow_started", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW}, dest: wcipb.WCI_STATUS_MIGRATED,
+			name: "workflow_activated", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW}, dest: wcipb.WCI_STATUS_MIGRATED,
 			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
-				return TransitionWorkflowStarted.Apply(w, ctx, EventWorkflowStarted{})
+				return TransitionWorkflowActivated.Apply(w, ctx, EventWorkflowActivated{})
+			}),
+		},
+		{
+			name: "workflow_migration_aborted", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW}, dest: wcipb.WCI_STATUS_RUNNING,
+			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.PeriodicValidationTimerTask"},
+			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
+				return TransitionWorkflowMigrationAborted.Apply(w, ctx, EventWorkflowMigrationAborted{})
+			}),
+		},
+		{
+			name: "migration_activated", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION}, dest: wcipb.WCI_STATUS_RUNNING,
+			wantTasks: []string{"*wcipb.MetricsPollTimerTask", "*wcipb.PeriodicValidationTimerTask"},
+			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
+				return TransitionMigrationActivated.Apply(w, ctx, EventMigrationActivated{})
+			}),
+		},
+		{
+			name: "pending_migration_aborted", sources: []wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION}, dest: wcipb.WCI_STATUS_MIGRATION_ABORTED,
+			apply: run(func(w *WorkerControllerInstance, ctx chasm.MutableContext) error {
+				return TransitionPendingMigrationAborted.Apply(w, ctx, EventPendingMigrationAborted{})
 			}),
 		},
 		{
