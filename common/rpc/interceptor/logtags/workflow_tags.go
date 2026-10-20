@@ -66,16 +66,3 @@ func (wt *WorkflowTags) fromTaskToken(taskTokenBytes []byte) []tag.Tag {
 	}
 	return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
 }
-
-// NexusStage returns the lifecycle phase when the request identifies one unambiguously.
-func NexusStage(req any, fullMethod string) []tag.Tag {
-	switch fullMethod {
-	case api.HistoryServicePrefix + "StartNexusOperation",
-		api.HistoryServicePrefix + "CancelNexusOperation",
-		api.NexusServicePrefix + "DispatchByEndpoint",
-		api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue":
-		return []tag.Tag{tag.NexusStageHandlerInbound}
-	default:
-	}
-	return nil
-}
