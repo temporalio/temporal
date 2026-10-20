@@ -62,7 +62,8 @@ func nexusStageTag(task Task) (tag.Tag, bool) {
 	case group == "nexus", // CHASM
 		strings.HasPrefix(group, "nexusoperations."): // HSM
 		return tag.NexusStageCallerOutbound, true
-	case group == "callback.invoke", strings.HasPrefix(group, "callbacks."):
+	case group == "callback.invoke", // CHASM
+		strings.HasPrefix(group, "callbacks."): // HSM
 		return tag.NexusStageHandlerOutbound, true
 	default:
 		return nil, false
