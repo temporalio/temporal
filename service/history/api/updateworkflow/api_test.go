@@ -84,8 +84,10 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 					})
 				})
 				if tc.stageAtResponse == completed {
-					ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(outcome, nil)
-					ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(acceptedEventID, nil)
+					ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(&update.CompletedUpdate{
+						Outcome:         outcome,
+						AcceptedEventID: acceptedEventID,
+					}, nil)
 					ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil)
 				} else {
 					ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
@@ -202,7 +204,7 @@ func TestApplyRequest_RejectsUpdateOverCallbackLimits(t *testing.T) {
 	limitErr := serviceerror.NewFailedPrecondition("cannot attach more than 1 callbacks to an execution")
 
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound("not found"))
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound("not found"))
 	ms.EXPECT().ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		UpdateID:  updateID,
 		RequestID: "test-request-id",
@@ -229,7 +231,7 @@ func TestApplyRequest_ReservesInFlightCallbacks(t *testing.T) {
 	ctx := context.Background()
 
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
 
 	updateReg := update.NewRegistry(ms)
 	inFlightReq := createUpdateRequestWithCallbacks("in-flight-update-id", "in-flight-request-id")
@@ -274,11 +276,12 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 		updateID        = "test-update-id"
 	)
 	ms := newRunningMutableStateForCallbacks(ctrl)
-	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(acceptedEventID, nil).AnyTimes()
 	ms.EXPECT().GetExecutionState().AnyTimes()
-	ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).
-		Return(&updatepb.Outcome{Value: &updatepb.Outcome_Success{}}, nil).AnyTimes()
-	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(int64(5), nil).AnyTimes()
+	ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).
+		Return(&update.CompletedUpdate{
+			Outcome:         &updatepb.Outcome{Value: &updatepb.Outcome_Success{}},
+			AcceptedEventID: acceptedEventID,
+		}, nil).AnyTimes()
 	ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil).AnyTimes()
 	ms.EXPECT().ValidateCallbackAddition(gomock.Any(), gomock.Any()).Times(0)
 

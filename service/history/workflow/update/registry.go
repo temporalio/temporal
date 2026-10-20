@@ -496,7 +496,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 
 	// Update is not found in an internal map, but could have already completed,
 	// so check in the store.
-	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
+	completedUpdate, err := r.store.GetCompletedUpdate(ctx, id)
 
 	// Swallow NotFound error because it means that Update doesn't exist.
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
@@ -506,9 +506,11 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
+	var updOutcome *updatepb.Outcome
 	acceptedEventID := common.EmptyEventID
 	if err == nil {
-		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+		updOutcome = completedUpdate.Outcome
+		acceptedEventID = completedUpdate.AcceptedEventID
 	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.

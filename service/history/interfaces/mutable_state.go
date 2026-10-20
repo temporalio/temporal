@@ -150,7 +150,7 @@ type (
 		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*update.CompletedUpdate, error)
 		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		CheckResettable() error

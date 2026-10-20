@@ -18,7 +18,7 @@ import (
 var (
 	emptyUpdateStore = mockUpdateStore{
 		VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {},
-		GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+		GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
 			return nil, serviceerror.NewNotFound("not found")
 		},
 	}
@@ -28,7 +28,7 @@ var (
 type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
+	GetCompletedUpdateFunc         func(context.Context, string) (*update.CompletedUpdate, error)
 	GetUpdateAcceptedEventIDFunc   func(context.Context, string) (int64, error)
 	GetUpdateNexusContextFunc      func(string) *nexuspb.PropagatedSerializationContext
 	GetCurrentVersionFunc          func() int64
@@ -43,11 +43,11 @@ func (m mockUpdateStore) VisitUpdates(
 	}
 }
 
-func (m mockUpdateStore) GetUpdateOutcome(
+func (m mockUpdateStore) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
-	return m.GetUpdateOutcomeFunc(ctx, updateID)
+) (*update.CompletedUpdate, error) {
+	return m.GetCompletedUpdateFunc(ctx, updateID)
 }
 
 func (m mockUpdateStore) GetUpdateAcceptedEventID(

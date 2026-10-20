@@ -1566,15 +1566,19 @@ func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *per
 	}
 }
 
-func (ms *MutableStateImpl) GetUpdateOutcome(
+func (ms *MutableStateImpl) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
+) (*update.CompletedUpdate, error) {
 	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	if err != nil {
 		return nil, err
 	}
-	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
+	attributes := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	return &update.CompletedUpdate{
+		Outcome:         attributes.GetOutcome(),
+		AcceptedEventID: attributes.GetAcceptedEventId(),
+	}, nil
 }
 
 func (ms *MutableStateImpl) GetUpdateAcceptedEventID(

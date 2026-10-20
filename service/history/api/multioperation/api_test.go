@@ -2,7 +2,6 @@ package multioperation
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"testing"
 
@@ -15,13 +14,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 )
 
@@ -114,11 +113,8 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 		Return(lease, nil)
 
 	s.currentMutableState.EXPECT().
-		GetUpdateOutcome(gomock.Any(), gomock.Any()).
-		Return(&updatepb.Outcome{}, nil)
-	s.currentMutableState.EXPECT().
-		GetUpdateAcceptedEventID(gomock.Any(), testUpdateID).
-		Return(int64(42), nil)
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: 42}, nil)
 
 	nexusSerializationContext := &nexuspb.PropagatedSerializationContext{
 		Endpoint:  "endpoint",
@@ -192,14 +188,14 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
 		Return(lease, nil)
 	s.currentMutableState.EXPECT().
-		GetUpdateOutcome(gomock.Any(), testUpdateID).
-		Return(&updatepb.Outcome{}, nil)
-	s.currentMutableState.EXPECT().
-		GetUpdateAcceptedEventID(gomock.Any(), testUpdateID).
-		Return(acceptedEventID, nil)
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: acceptedEventID}, nil)
 	s.currentMutableState.EXPECT().
 		GetExecutionState().
 		Return(executionState)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
 	s.currentContext.EXPECT().
 		GetWorkflowKey().
 		Return(tests.WorkflowKey)
@@ -221,21 +217,9 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 
 	resp, err := uws.Invoke(ctx)
 	s.NoError(err)
-	protorequire.ProtoEqual(s.T(), &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  tests.Namespace.String(),
-				WorkflowId: tests.WorkflowID,
-				RunId:      tests.RunID,
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   common.FirstEventID,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
-		},
-	}, resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	protorequire.ProtoEqual(s.T(), api.GenerateStartedEventRefLink(
+		tests.Namespace.String(), tests.WorkflowID, tests.RunID,
+	), resp.GetResponses()[0].GetStartWorkflow().GetLink())
 	protorequire.ProtoEqual(s.T(), &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -253,10 +237,13 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 
-func (s *updateWithStartSuite) TestInvokeCompletedUpdateAcceptedEventLookupError() {
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOmitsUpdateLink() {
 	ctx := testcontext.For(s.T())
-	lookupErr := errors.New("accepted event lookup failed")
 	var releaseErr error
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}
 	lease := api.NewWorkflowLease(
 		s.currentContext,
 		func(err error) { releaseErr = err },
@@ -266,11 +253,17 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateAcceptedEventLookupError
 		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
 		Return(lease, nil)
 	s.currentMutableState.EXPECT().
-		GetUpdateOutcome(gomock.Any(), testUpdateID).
-		Return(&updatepb.Outcome{}, nil)
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}}, nil)
 	s.currentMutableState.EXPECT().
-		GetUpdateAcceptedEventID(gomock.Any(), testUpdateID).
-		Return(int64(0), lookupErr)
+		GetExecutionState().
+		Return(executionState)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
+	s.currentContext.EXPECT().
+		GetWorkflowKey().
+		Return(tests.WorkflowKey)
 
 	updateReq := createUpdateRequest(testUpdateID)
 	uws := &updateWithStart{
@@ -286,9 +279,11 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateAcceptedEventLookupError
 	}
 
 	resp, err := uws.Invoke(ctx)
-	s.Nil(resp)
-	s.ErrorContains(err, lookupErr.Error())
-	s.Same(lookupErr, releaseErr)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.NoError(releaseErr)
+	s.NotNil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	s.Nil(resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 
 func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutionRequest {
