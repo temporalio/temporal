@@ -926,10 +926,14 @@ func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 	ticker := time.NewTicker(c.config.DeploymentVersionMonitorInterval())
 	defer ticker.Stop()
 	for {
-		if c.isDeploymentVersionInUserData(version) {
+		found, err := c.isDeploymentVersionInUserData(version)
+		if err != nil {
+			// Inconclusive (e.g., partition unloading); skip this tick.
+		} else if found {
 			return
+		} else {
+			metrics.DeploymentVersionMissingFromUserData.With(c.metricsHandler).Record(1)
 		}
-		metrics.DeploymentVersionMissingFromUserData.With(c.metricsHandler).Record(1)
 		select {
 		case <-c.tqCtx.Done():
 			return
@@ -939,16 +943,15 @@ func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 }
 
 // isDeploymentVersionInUserData checks whether the given deployment version is present in this
-// task queue's user data. Returns false only when the version is confirmed missing; errors
-// during lookup are treated as inconclusive and return true to avoid false positive alerts.
+// task queue's user data.
 func (c *physicalTaskQueueManagerImpl) isDeploymentVersionInUserData(
 	version *deploymentspb.WorkerDeploymentVersion,
-) bool {
+) (bool, error) {
 	userData, _, err := c.partitionMgr.getPerTypeUserData()
 	if err != nil {
-		return true // inconclusive; don't emit false positive
+		return false, err
 	}
-	return worker_versioning.HasDeploymentVersion(userData.GetDeploymentData(), version)
+	return worker_versioning.HasDeploymentVersion(userData.GetDeploymentData(), version), nil
 }
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {

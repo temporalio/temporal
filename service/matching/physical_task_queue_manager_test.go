@@ -1191,7 +1191,8 @@ func TestIsDeploymentVersionInUserData(t *testing.T) {
 			tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
 			require.NoError(t, err)
 
-			got := tqMgr.isDeploymentVersionInUserData(version)
+			got, err := tqMgr.isDeploymentVersionInUserData(version)
+			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
 	}
