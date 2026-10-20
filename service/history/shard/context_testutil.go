@@ -142,19 +142,18 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
-<<<<<<< HEAD
 	// A real shard context always has an owner unique to that instance.
 	owner := fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
 	if configured := config.ShardInfo.GetOwner(); configured != "" {
 		owner = configured
-=======
+	}
+
 	// Tests that attach completion callbacks need the shard to hand out a validator. The
 	// shared test limits apply; tests needing their own call SetCallbackValidator. Building
 	// only fails when a limit getter is unset, which the shared config never leaves nil.
 	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
 	if err != nil {
 		softassert.Fail(t.GetLogger(), "failed to build a callbacks validator for the test shard context", tag.Error(err))
->>>>>>> 2ccceea5b (Validate aggregate callback limits for workflow starts and attach-on-conflict)
 	}
 
 	ctx := &ContextImpl{
