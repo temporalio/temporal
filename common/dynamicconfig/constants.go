@@ -1156,11 +1156,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
-	MaxCallbacksPerUpdateID = NewNamespaceIntSetting(
-		"system.maxCallbacksPerUpdateID",
-		32,
-		`MaxCallbacksPerUpdateID is the maximum number of callbacks that can be attached to a single update ID.`,
-	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
@@ -1648,6 +1643,19 @@ scoped by namespace and/or task queue.`,
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
+	)
+	MatchingValidatorBatchSize = NewTaskQueueIntSetting(
+		"matching.validatorBatchSize",
+		10,
+		`MatchingValidatorBatchSize is the number of local-backlog tasks the matcher
+validator pulls and validates concurrently per batch. Values are clamped to the
+range [1, 100].`,
+	)
+	MatchingValidatorValidationThreshold = NewTaskQueueDurationSetting(
+		"matching.validatorValidationThreshold",
+		600*time.Second,
+		`MatchingValidatorValidationThreshold is the minimum time since task creation or
+the last successful validation before the backlog task validator checks task validity.`,
 	)
 	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
 		"matching.forwardPollRetryMaxInterval",
