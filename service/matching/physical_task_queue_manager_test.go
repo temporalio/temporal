@@ -1177,21 +1177,13 @@ func TestIsDeploymentVersionInUserData(t *testing.T) {
 				newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
 				deployment,
 			)
-			prtn := queueKey.Partition()
-			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
-			onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
-			udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+			partition := queueKey.Partition()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, nsName)
 
-			prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+			partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{data: tc.userData})
 			require.NoError(t, err)
 
-			// Set user data directly on the manager.
-			udMgr.lock.Lock()
-			udMgr.userData = tc.userData
-			udMgr.userDataState = userDataEnabled
-			udMgr.lock.Unlock()
-
-			tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
+			tqMgr, err := newPhysicalTaskQueueManager(partitionMgr, queueKey)
 			require.NoError(t, err)
 
 			got, err := tqMgr.isDeploymentVersionInUserData(version)
@@ -1218,16 +1210,19 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 		name               string
 		registerErr        error
 		wantMonitorRunning bool
+		wantErrContains    string
 	}{
 		{
 			name:               "registration fails - monitor not started",
 			registerErr:        errors.New("registration failed"),
 			wantMonitorRunning: false,
+			wantErrContains:    "not ready",
 		},
 		{
 			name:               "registration succeeds - monitor started",
 			registerErr:        nil,
 			wantMonitorRunning: true,
+			wantErrContains:    "deadline exceeded",
 		},
 	}
 
@@ -1239,7 +1234,7 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 				SeriesName: deploymentName,
 				BuildId:    buildID,
 			}
-			ns, tqMgr := setupVersionedTQManager(t, deployment, tc.registerErr)
+			ns, tqMgr, fakeClient := setupVersionedTQManager(t, deployment, tc.registerErr)
 
 			// Use a short-lived context so the propagation wait loop (success case)
 			// doesn't block the test.
@@ -1254,8 +1249,10 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 				},
 			}
 
-			_ = tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMeta)
+			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMeta)
 
+			require.ErrorContains(t, err, tc.wantErrContains)
+			require.True(t, fakeClient.called, "RegisterTaskQueueWorker should have been called")
 			require.Equal(t, tc.wantMonitorRunning, tqMgr.deploymentVersionMonitorRunning.Load(),
 				"monitor should only start after successful registration")
 		})
@@ -1268,7 +1265,7 @@ func setupVersionedTQManager(
 	t *testing.T,
 	deployment *deploymentpb.Deployment,
 	registerErr error,
-) (*namespace.Namespace, *physicalTaskQueueManagerImpl) {
+) (*namespace.Namespace, *physicalTaskQueueManagerImpl, *fakeDeploymentClient) {
 	t.Helper()
 
 	controller := gomock.NewController(t)
@@ -1282,8 +1279,9 @@ func setupVersionedTQManager(
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
 
+	fc := &fakeDeploymentClient{registerErr: registerErr}
 	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
-	engine.workerDeploymentClient = &fakeDeploymentClient{registerErr: registerErr}
+	engine.workerDeploymentClient = fc
 	engine.testHooks = testhooks.NewTestHooks()
 	testhooks.Set(engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff, time.Duration(0), ns.ID())
 
@@ -1303,7 +1301,7 @@ func setupVersionedTQManager(
 	// Cancel tqCtx on cleanup to stop any monitor goroutine.
 	t.Cleanup(tqMgr.tqCtxCancel)
 
-	return ns, tqMgr
+	return ns, tqMgr, fc
 }
 
 // fakeDeploymentClient implements workerdeployment.Client for testing.
@@ -1311,6 +1309,7 @@ func setupVersionedTQManager(
 type fakeDeploymentClient struct {
 	workerdeployment.Client
 	registerErr error
+	called      bool
 }
 
 func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
@@ -1321,6 +1320,7 @@ func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
 	_ enumspb.TaskQueueType,
 	_ string,
 ) error {
+	f.called = true
 	return f.registerErr
 }
 
