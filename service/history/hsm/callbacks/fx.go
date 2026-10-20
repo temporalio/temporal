@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/httpfaults"
@@ -35,6 +36,7 @@ func HTTPCallerProviderProvider(
 	testHooks testhooks.TestHooks,
 	config *Config,
 ) (HTTPCallerProvider, error) {
+	logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
