@@ -73,6 +73,15 @@ func UseChasmForWorkflow(enabled bool, rolloutPercent int, namespaceName, workfl
 	return dynamicconfig.RolloutAccepts(key, rolloutPercent)
 }
 
+var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
+	"nexusoperation.request.timeout",
+	time.Second*10,
+	`Timeout for making a single nexus start or cancel request. The request is also bound by the task executor's
+deadline, which covers loading the operation, the request, and saving the result: 10s on the outbound queue and 3s on
+the transfer queue, which runs system endpoint requests. Set this below the task deadline to leave time to save the
+result.`,
+)
+
 var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.request.timeout.min",
 	time.Millisecond*1500,
@@ -280,6 +289,7 @@ type Config struct {
 	NumHistoryShards                           int32
 	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout                             dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -313,6 +323,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
+		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),

@@ -28,10 +28,10 @@ var (
 	ErrInvalidOperationToken = errors.New("invalid operation token")
 	errRequestTimedOut       = errors.New("request timed out")
 	errOpProcessorFailed     = errors.New("nexus operation processor failed")
-	// errTaskDeadlineTooShort is returned without making a request when the task deadline leaves less than
-	// MinRequestTimeout for it. It wraps context.DeadlineExceeded so the attempt is recorded as a retryable request
-	// timeout.
-	errTaskDeadlineTooShort = fmt.Errorf("not enough time left on the task deadline to make a request: %w", context.DeadlineExceeded)
+	// errRequestDeadlineTooShort is returned without making a request when the task deadline or RequestTimeout leaves
+	// less than MinRequestTimeout for it. It wraps context.DeadlineExceeded so the attempt is recorded as a retryable
+	// request timeout.
+	errRequestDeadlineTooShort = fmt.Errorf("not enough time left to make a request: %w", context.DeadlineExceeded)
 )
 
 const maxDuration = time.Duration(1<<63 - 1)
@@ -44,7 +44,7 @@ const maxDuration = time.Duration(1<<63 - 1)
 //
 // The queue also determines the time budget of each attempt: the transfer queue executor bounds a task to 3s, compared
 // to 10s on the outbound queue. That budget covers loading the component, the request, and saving the result, so a
-// system endpoint request gets less than 3s.
+// system endpoint request gets less than 3s regardless of RequestTimeout.
 func taskDestination(endpointName string) string {
 	if endpointName == commonnexus.SystemEndpoint {
 		return ""
@@ -61,7 +61,7 @@ func (o *operationTimeoutBelowMinError) Error() string {
 }
 
 func isDestinationDown(err error) bool {
-	if errors.Is(err, errTaskDeadlineTooShort) {
+	if errors.Is(err, errRequestDeadlineTooShort) {
 		return false
 	}
 	if _, ok := errors.AsType[serviceerror.ServiceError](err); ok {
@@ -117,7 +117,7 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 		if errors.Is(callErr, errOpProcessorFailed) {
 			return "operation-processor-failed"
 		}
-		if callCtx.Err() != nil || errors.Is(callErr, errTaskDeadlineTooShort) {
+		if callCtx.Err() != nil || errors.Is(callErr, errRequestDeadlineTooShort) {
 			return "request-timeout"
 		}
 		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
@@ -146,7 +146,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
-		if callCtx.Err() != nil || errors.Is(callErr, errTaskDeadlineTooShort) {
+		if callCtx.Err() != nil || errors.Is(callErr, errRequestDeadlineTooShort) {
 			return "request-timeout"
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
