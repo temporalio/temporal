@@ -40,6 +40,8 @@ message DescribeWorkerControllerInstanceResponse {
   bytes conflict_token = 5;
   string last_modifier_identity = 6;
   ValidationStatus validation_status = 7;
+  // Keyed by scaling group ID. CHASM-only, for debugging.
+  map<string, TaskQueueObservations> task_queue_observations = 8;
 }
 
 message DeleteWorkerControllerInstanceRequest {

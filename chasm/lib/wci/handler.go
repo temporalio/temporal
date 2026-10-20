@@ -245,14 +245,21 @@ func (h *handler) DescribeWorkerControllerInstance(ctx context.Context, req *wci
 		if w.LifecycleState(cctx).IsClosed() {
 			return nil, ErrClosed
 		}
+		observations := make(map[string]*wcipb.TaskQueueObservations, len(w.ScalingGroups))
+		for id, field := range w.ScalingGroups {
+			if g, ok := field.TryGet(cctx); ok && g.Observations != nil {
+				observations[id] = g.Observations
+			}
+		}
 		return &wcipb.DescribeWorkerControllerInstanceResponse{
-			DeploymentName:       w.DeploymentName,
-			BuildId:              w.BuildId,
-			CreateTime:           w.CreateTime,
-			ScalingGroupSpecs:    w.ScalingGroupSpecs,
-			ConflictToken:        w.ConflictToken,
-			LastModifierIdentity: w.LastModifierIdentity,
-			ValidationStatus:     w.ValidationStatus,
+			DeploymentName:        w.DeploymentName,
+			BuildId:               w.BuildId,
+			CreateTime:            w.CreateTime,
+			ScalingGroupSpecs:     w.ScalingGroupSpecs,
+			ConflictToken:         w.ConflictToken,
+			LastModifierIdentity:  w.LastModifierIdentity,
+			ValidationStatus:      w.ValidationStatus,
+			TaskQueueObservations: observations,
 		}, nil
 	}, nil)
 }

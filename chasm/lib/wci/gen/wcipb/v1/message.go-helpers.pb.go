@@ -81,6 +81,80 @@ func (this *ScalingGroupState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type TaskQueueObservations to the protobuf v3 wire format
+func (val *TaskQueueObservations) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueueObservations from the protobuf v3 wire format
+func (val *TaskQueueObservations) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueueObservations) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueueObservations values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueueObservations) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueueObservations
+	switch t := that.(type) {
+	case *TaskQueueObservations:
+		that1 = t
+	case TaskQueueObservations:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ObservedTaskQueue to the protobuf v3 wire format
+func (val *ObservedTaskQueue) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ObservedTaskQueue from the protobuf v3 wire format
+func (val *ObservedTaskQueue) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ObservedTaskQueue) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ObservedTaskQueue values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ObservedTaskQueue) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ObservedTaskQueue
+	switch t := that.(type) {
+	case *ObservedTaskQueue:
+		that1 = t
+	case ObservedTaskQueue:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ScalingGroupSpec to the protobuf v3 wire format
 func (val *ScalingGroupSpec) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
