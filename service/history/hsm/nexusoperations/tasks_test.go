@@ -10,9 +10,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// tasks.Tags matches this library's task types by prefix, since it cannot import them.
+// tasks.Tags can't import this package, so it matches these task types by their "nexusoperations." prefix.
+// This test fails if they are renamed without updating tasks.Tags.
 func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
-	for _, taskType := range []string{nexusoperations.TaskTypeInvocation, nexusoperations.TaskTypeCancelation} {
+	for _, taskType := range []string{
+		nexusoperations.TaskTypeInvocation,
+		nexusoperations.TaskTypeCancelation,
+	} {
 		task := &tasks.StateMachineOutboundTask{
 			StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: taskType}},
 		}

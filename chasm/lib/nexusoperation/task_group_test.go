@@ -9,7 +9,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// tasks.Tags matches this library's task group by name, since it cannot import it.
+// tasks.Tags can't import this package, so it repeats TaskGroupName as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
 func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
 	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
 	task.SetOutboundTaskGroup(TaskGroupName)
