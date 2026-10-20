@@ -16,14 +16,13 @@ func stringSliceAttr(key string, values []string) log.KeyValue {
 	return log.Slice(key, vals...)
 }
 
-// mapSliceAttr records a slice of structs as a native OTEL slice of MapValues.
-// Each element is converted to a map of key-value pairs using the provided function.
-func mapSliceAttr[T any](key string, items []T, toKVs func(T) []log.KeyValue) log.KeyValue {
-	vals := make([]log.Value, len(items))
-	for i, item := range items {
-		vals[i] = log.MapValue(toKVs(item)...)
+// stringMapAttr records a map[string]string as a native OTEL map attribute.
+func stringMapAttr(key string, m map[string]string) log.KeyValue {
+	kvs := make([]log.KeyValue, 0, len(m))
+	for k, v := range m {
+		kvs = append(kvs, log.String(k, v))
 	}
-	return log.Slice(key, vals...)
+	return log.Map(key, kvs...)
 }
 
 // jsonAttr records v as a compact JSON string under key rather than a nested structure, so the
