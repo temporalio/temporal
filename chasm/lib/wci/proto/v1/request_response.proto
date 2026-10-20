@@ -76,11 +76,31 @@ message CreateFromMigrationStateRequest {
   string instance_id = 2;
   WorkerControllerInstanceState state = 3;
   map<string, ScalingGroupState> scaling_groups = 4;
-  // Replayed through ProcessTaskAdd at create.
+  // Ignored at prepare; ActivateMigration carries the full queue.
   repeated TaskAddEvent pending_task_adds = 5;
+  string migration_token = 6;
+  google.protobuf.Timestamp expire_time = 7;
 }
 
 message CreateFromMigrationStateResponse {}
+
+message ActivateMigrationRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  string migration_token = 3;
+  // Replayed through ProcessTaskAdd in the activating transaction.
+  repeated TaskAddEvent pending_task_adds = 4;
+}
+
+message ActivateMigrationResponse {}
+
+message AbortMigrationRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  string migration_token = 3;
+}
+
+message AbortMigrationResponse {}
 
 message MigrateToWorkflowRequest {
   string namespace_id = 1;

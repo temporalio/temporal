@@ -26,6 +26,8 @@ const (
 	WorkerControllerInstanceService_ValidateWorkerControllerInstanceSpec_FullMethodName = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/ValidateWorkerControllerInstanceSpec"
 	WorkerControllerInstanceService_RecordTaskAdd_FullMethodName                        = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/RecordTaskAdd"
 	WorkerControllerInstanceService_CreateFromMigrationState_FullMethodName             = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/CreateFromMigrationState"
+	WorkerControllerInstanceService_ActivateMigration_FullMethodName                    = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/ActivateMigration"
+	WorkerControllerInstanceService_AbortMigration_FullMethodName                       = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/AbortMigration"
 	WorkerControllerInstanceService_MigrateToWorkflow_FullMethodName                    = "/temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService/MigrateToWorkflow"
 )
 
@@ -39,6 +41,8 @@ type WorkerControllerInstanceServiceClient interface {
 	ValidateWorkerControllerInstanceSpec(ctx context.Context, in *ValidateWorkerControllerInstanceSpecRequest, opts ...grpc.CallOption) (*ValidateWorkerControllerInstanceSpecResponse, error)
 	RecordTaskAdd(ctx context.Context, in *RecordTaskAddRequest, opts ...grpc.CallOption) (*RecordTaskAddResponse, error)
 	CreateFromMigrationState(ctx context.Context, in *CreateFromMigrationStateRequest, opts ...grpc.CallOption) (*CreateFromMigrationStateResponse, error)
+	ActivateMigration(ctx context.Context, in *ActivateMigrationRequest, opts ...grpc.CallOption) (*ActivateMigrationResponse, error)
+	AbortMigration(ctx context.Context, in *AbortMigrationRequest, opts ...grpc.CallOption) (*AbortMigrationResponse, error)
 	MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error)
 }
 
@@ -104,6 +108,24 @@ func (c *workerControllerInstanceServiceClient) CreateFromMigrationState(ctx con
 	return out, nil
 }
 
+func (c *workerControllerInstanceServiceClient) ActivateMigration(ctx context.Context, in *ActivateMigrationRequest, opts ...grpc.CallOption) (*ActivateMigrationResponse, error) {
+	out := new(ActivateMigrationResponse)
+	err := c.cc.Invoke(ctx, WorkerControllerInstanceService_ActivateMigration_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workerControllerInstanceServiceClient) AbortMigration(ctx context.Context, in *AbortMigrationRequest, opts ...grpc.CallOption) (*AbortMigrationResponse, error) {
+	out := new(AbortMigrationResponse)
+	err := c.cc.Invoke(ctx, WorkerControllerInstanceService_AbortMigration_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *workerControllerInstanceServiceClient) MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error) {
 	out := new(MigrateToWorkflowResponse)
 	err := c.cc.Invoke(ctx, WorkerControllerInstanceService_MigrateToWorkflow_FullMethodName, in, out, opts...)
@@ -123,6 +145,8 @@ type WorkerControllerInstanceServiceServer interface {
 	ValidateWorkerControllerInstanceSpec(context.Context, *ValidateWorkerControllerInstanceSpecRequest) (*ValidateWorkerControllerInstanceSpecResponse, error)
 	RecordTaskAdd(context.Context, *RecordTaskAddRequest) (*RecordTaskAddResponse, error)
 	CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error)
+	ActivateMigration(context.Context, *ActivateMigrationRequest) (*ActivateMigrationResponse, error)
+	AbortMigration(context.Context, *AbortMigrationRequest) (*AbortMigrationResponse, error)
 	MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error)
 	mustEmbedUnimplementedWorkerControllerInstanceServiceServer()
 }
@@ -148,6 +172,12 @@ func (UnimplementedWorkerControllerInstanceServiceServer) RecordTaskAdd(context.
 }
 func (UnimplementedWorkerControllerInstanceServiceServer) CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateFromMigrationState not implemented")
+}
+func (UnimplementedWorkerControllerInstanceServiceServer) ActivateMigration(context.Context, *ActivateMigrationRequest) (*ActivateMigrationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActivateMigration not implemented")
+}
+func (UnimplementedWorkerControllerInstanceServiceServer) AbortMigration(context.Context, *AbortMigrationRequest) (*AbortMigrationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AbortMigration not implemented")
 }
 func (UnimplementedWorkerControllerInstanceServiceServer) MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateToWorkflow not implemented")
@@ -274,6 +304,42 @@ func _WorkerControllerInstanceService_CreateFromMigrationState_Handler(srv inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkerControllerInstanceService_ActivateMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActivateMigrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerControllerInstanceServiceServer).ActivateMigration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkerControllerInstanceService_ActivateMigration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerControllerInstanceServiceServer).ActivateMigration(ctx, req.(*ActivateMigrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkerControllerInstanceService_AbortMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AbortMigrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerControllerInstanceServiceServer).AbortMigration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkerControllerInstanceService_AbortMigration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerControllerInstanceServiceServer).AbortMigration(ctx, req.(*AbortMigrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WorkerControllerInstanceService_MigrateToWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MigrateToWorkflowRequest)
 	if err := dec(in); err != nil {
@@ -322,6 +388,14 @@ var WorkerControllerInstanceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateFromMigrationState",
 			Handler:    _WorkerControllerInstanceService_CreateFromMigrationState_Handler,
+		},
+		{
+			MethodName: "ActivateMigration",
+			Handler:    _WorkerControllerInstanceService_ActivateMigration_Handler,
+		},
+		{
+			MethodName: "AbortMigration",
+			Handler:    _WorkerControllerInstanceService_AbortMigration_Handler,
 		},
 		{
 			MethodName: "MigrateToWorkflow",

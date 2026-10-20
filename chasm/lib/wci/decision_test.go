@@ -239,9 +239,23 @@ func TestConstructorsArmTimers(t *testing.T) {
 	require.Equal(t, testNow.Add(maxPollInterval), w.NextPollTime.AsTime())
 	require.Equal(t, testNow.Add(validationInterval), w.NextValidationTime.AsTime())
 
-	// A past-due migrated poll fires now.
-	m := NewWorkerControllerInstanceFromMigration(ctx, &wcipb.WorkerControllerInstanceState{NextPollTime: timestamppb.New(testNow.Add(-time.Hour))}, nil)
+	// A migrated instance arms no cadence until activated; then a past-due poll fires now.
+	ctx.Tasks = nil
+	m := NewWorkerControllerInstanceFromMigration(ctx, &wcipb.WorkerControllerInstanceState{NextPollTime: timestamppb.New(testNow.Add(-time.Hour))}, nil, "run-1", testNow.Add(time.Minute))
+	require.Equal(t, wcipb.WCI_STATUS_PENDING_ACTIVATION, m.Status)
+	var timers []string
+	for _, task := range ctx.Tasks {
+		switch task.Payload.(type) {
+		case *wcipb.PendingExpiryTask, *wcipb.MetricsPollTimerTask, *wcipb.PeriodicValidationTimerTask:
+			timers = append(timers, fmt.Sprintf("%T", task.Payload))
+		default:
+		}
+	}
+	require.Equal(t, []string{"*wcipb.PendingExpiryTask"}, timers)
+	require.NoError(t, TransitionMigrationActivated.Apply(m, ctx, EventMigrationActivated{}))
 	require.Equal(t, testNow, m.NextPollTime.AsTime())
+	require.Equal(t, testNow.Add(validationInterval), m.NextValidationTime.AsTime())
+	require.Nil(t, m.PendingExpireTime)
 }
 
 func TestSnapshotFromDescribe(t *testing.T) {

@@ -5,11 +5,14 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
@@ -26,6 +29,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -79,6 +83,22 @@ type fakeHistory struct {
 
 	startErr error
 	starts   []*historyservice.StartWorkflowExecutionRequest
+	// Activation outcome: nil accepts; updateErr is returned as the call error.
+	rejectActivation *failurepb.Failure
+	updateErr        error
+	updates          []*updatepb.Request
+}
+
+func (f *fakeHistory) UpdateWorkflowExecution(_ context.Context, req *historyservice.UpdateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+	f.updates = append(f.updates, req.GetRequest().GetRequest())
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	outcome := &updatepb.Outcome{Value: &updatepb.Outcome_Success{}}
+	if f.rejectActivation != nil && req.GetRequest().GetRequest().GetInput().GetName() == iface.UpdateActivateMigration {
+		outcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: f.rejectActivation}}
+	}
+	return &historyservice.UpdateWorkflowExecutionResponse{Response: &workflowservice.UpdateWorkflowExecutionResponse{Outcome: outcome}}, nil
 }
 
 func (f *fakeHistory) StartWorkflowExecution(_ context.Context, req *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
@@ -363,25 +383,87 @@ func TestE2E_ConflictTokenMismatch(t *testing.T) {
 	require.ErrorAs(t, err, &precondition)
 }
 
-func TestE2E_CreateFromMigrationReplaysOnceAndIsIdempotent(t *testing.T) {
-	e := newE2E(t, fakeAlgo{})
-	req := &wcipb.CreateFromMigrationStateRequest{
+const testToken = "run-1"
+
+func (e *e2e) prepare(token string, expireIn time.Duration) error {
+	_, err := e.handler.CreateFromMigrationState(e.ctx, &wcipb.CreateFromMigrationStateRequest{
 		NamespaceId: testNamespaceID, InstanceId: testInstanceID,
 		State: &wcipb.WorkerControllerInstanceState{
 			DeploymentName: "dep", BuildId: "build",
 			ScalingGroupSpecs: groupUpsertSpecs("test-invoke"),
 		},
 		ScalingGroups:   map[string]*wcipb.ScalingGroupState{"g": NewScalingGroup("g").ScalingGroupState},
-		PendingTaskAdds: []*wcipb.TaskAddEvent{{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}, {TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
+		PendingTaskAdds: []*wcipb.TaskAddEvent{{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
+		MigrationToken:  token,
+		ExpireTime:      timestamppb.New(time.Now().Add(expireIn)),
+	})
+	return err
+}
+
+func (e *e2e) activate(token string, taskAdds int) error {
+	events := make([]*wcipb.TaskAddEvent, taskAdds)
+	for i := range events {
+		events[i] = &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}
 	}
+	_, err := e.handler.ActivateMigration(e.ctx, &wcipb.ActivateMigrationRequest{
+		NamespaceId: testNamespaceID, InstanceId: testInstanceID, MigrationToken: token, PendingTaskAdds: events,
+	})
+	return err
+}
 
-	_, err := e.handler.CreateFromMigrationState(e.ctx, req)
-	require.NoError(t, err)
-	require.Equal(t, 2, fake.taskAddCalls, "queued task-adds replayed exactly once")
+func (e *e2e) abort(token string) error {
+	_, err := e.handler.AbortMigration(e.ctx, &wcipb.AbortMigrationRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID, MigrationToken: token})
+	return err
+}
 
-	_, err = e.handler.CreateFromMigrationState(e.ctx, req)
-	require.NoError(t, err, "already exists counts as success")
+func TestE2E_PreparedTargetIsInertAndInvisible(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	require.NoError(t, e.prepare(testToken, time.Minute))
+	require.NoError(t, e.prepare(testToken, time.Minute), "a repeated prepare is a no-op")
+	require.Zero(t, fake.taskAddCalls, "nothing replays at prepare")
+
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_PENDING_ACTIVATION, w.Status)
+	var notFound *serviceerror.NotFound
+	_, err := e.describe()
+	require.ErrorAs(t, err, &notFound, "the router keeps using the frozen workflow")
+	require.ErrorAs(t, e.recordTaskAdd(), &notFound)
+
+	var exists *serviceerror.AlreadyExists
+	require.ErrorAs(t, e.prepare("run-2", time.Minute), &exists, "another migration cannot take over")
+}
+
+func TestE2E_ActivateCommitsAndReplaysOnce(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	require.NoError(t, e.prepare(testToken, time.Minute))
+	require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending, "the token must match")
+
+	require.NoError(t, e.activate(testToken, 2))
+	require.Equal(t, 2, fake.taskAddCalls, "queued task-adds replay in the activating transaction")
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status)
+	require.NotNil(t, w.NextPollTime, "the cadence starts at activation")
+
+	require.NoError(t, e.activate(testToken, 2), "a retried activation is a no-op")
 	require.Equal(t, 2, fake.taskAddCalls)
+	require.ErrorIs(t, e.abort(testToken), ErrMigrationNotPending, "an activated target cannot be aborted")
+}
+
+func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	require.NoError(t, e.prepare(testToken, time.Minute))
+	require.NoError(t, e.abort(testToken))
+	require.NoError(t, e.abort(testToken), "a repeated abort is a no-op")
+	require.ErrorIs(t, e.activate(testToken, 0), ErrMigrationNotPending)
+	require.NoError(t, e.prepare("run-2", time.Minute), "an aborted target does not block the next migration")
+
+	w, _ := e.live(t)
+	dropped, err := chasmtest.ExecutePureTask(e.ctx, e.engine, w, &PendingExpiryTaskHandler{}, chasm.TaskAttributes{}, &wcipb.PendingExpiryTask{ExpireTime: w.PendingExpireTime})
+	require.NoError(t, err)
+	require.False(t, dropped)
+	w, _ = e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATION_ABORTED, w.Status, "an unactivated target expires")
+	require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
 }
 
 func groupUpsertSpecs(provider string) map[string]*wcipb.ScalingGroupSpec {
@@ -426,6 +508,11 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 	require.Contains(t, args.State.Spec.ScalingGroupSpecs, "g")
 	require.Equal(t, nextPoll, args.State.NextPollTime.AsTime(), "the poll cadence carries over")
 
+	require.NotNil(t, args.PendingMigration, "the workflow starts pending")
+	require.Equal(t, args.PendingMigration.Token, start.GetRequestId(), "the token de-duplicates a retried start")
+	require.Len(t, e.history.updates, 1)
+	require.Equal(t, iface.UpdateActivateMigration, e.history.updates[0].GetInput().GetName())
+
 	w, _ = e.live(t)
 	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
 	require.ErrorIs(t, e.recordTaskAdd(), ErrClosed, "the router falls back to the workflow")
@@ -433,17 +520,53 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 	require.ErrorIs(t, err, ErrClosed)
 }
 
-func TestE2E_MigrateToWorkflowAlreadyStarted(t *testing.T) {
+func TestE2E_MigrateToWorkflowAborts(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*fakeHistory)
+	}{
+		{name: "another_run_owns_the_id", setup: func(h *fakeHistory) {
+			h.startErr = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "req", "run")
+		}},
+		{name: "activation_rejected", setup: func(h *fakeHistory) { h.rejectActivation = &failurepb.Failure{Message: "token mismatch"} }},
+		{name: "workflow_expired", setup: func(h *fakeHistory) { h.updateErr = serviceerror.NewNotFound("workflow execution already completed") }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2E(t, fakeAlgo{})
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+			tc.setup(e.history)
+
+			require.NoError(t, e.migrateToWorkflow())
+			e.runMigrateTask(t)
+
+			w, _ := e.live(t)
+			require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status, "CHASM keeps the WCI")
+			require.Empty(t, w.MigrationToken)
+			require.NoError(t, e.recordTaskAdd(), "scaling resumes")
+		})
+	}
+}
+
+func TestE2E_MigrateToWorkflowRetriesAmbiguousActivation(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
 	require.NoError(t, err)
-	e.history.startErr = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "req", "run")
+	e.history.updateErr = serviceerror.NewUnavailable("shard moved")
 
 	require.NoError(t, e.migrateToWorkflow())
-	e.runMigrateTask(t)
-
 	w, _ := e.live(t)
-	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status, "already started counts as success")
+	_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.MigrateToWorkflowTask](e.lib.MigrateToWorkflowTaskHandler), chasm.TaskAttributes{}, &wcipb.MigrateToWorkflowTask{})
+	require.Error(t, err, "the task retries")
+	w, _ = e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW, w.Status, "still frozen")
+
+	e.history.updateErr = nil
+	e.runMigrateTask(t)
+	w, _ = e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
+	require.Equal(t, e.history.starts[0].GetStartRequest().GetRequestId(), e.history.starts[1].GetStartRequest().GetRequestId(), "the retried start is a duplicate")
 }
 
 func TestE2E_MigrateToWorkflowOnMissing(t *testing.T) {

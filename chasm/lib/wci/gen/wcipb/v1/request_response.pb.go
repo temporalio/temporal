@@ -640,8 +640,10 @@ type CreateFromMigrationStateRequest struct {
 	InstanceId    string                         `protobuf:"bytes,2,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	State         *WorkerControllerInstanceState `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
 	ScalingGroups map[string]*ScalingGroupState  `protobuf:"bytes,4,rep,name=scaling_groups,json=scalingGroups,proto3" json:"scaling_groups,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Replayed through ProcessTaskAdd at create.
-	PendingTaskAdds []*TaskAddEvent `protobuf:"bytes,5,rep,name=pending_task_adds,json=pendingTaskAdds,proto3" json:"pending_task_adds,omitempty"`
+	// Ignored at prepare; ActivateMigration carries the full queue.
+	PendingTaskAdds []*TaskAddEvent        `protobuf:"bytes,5,rep,name=pending_task_adds,json=pendingTaskAdds,proto3" json:"pending_task_adds,omitempty"`
+	MigrationToken  string                 `protobuf:"bytes,6,opt,name=migration_token,json=migrationToken,proto3" json:"migration_token,omitempty"`
+	ExpireTime      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -711,6 +713,20 @@ func (x *CreateFromMigrationStateRequest) GetPendingTaskAdds() []*TaskAddEvent {
 	return nil
 }
 
+func (x *CreateFromMigrationStateRequest) GetMigrationToken() string {
+	if x != nil {
+		return x.MigrationToken
+	}
+	return ""
+}
+
+func (x *CreateFromMigrationStateRequest) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
 type CreateFromMigrationStateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -747,6 +763,207 @@ func (*CreateFromMigrationStateResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
 }
 
+type ActivateMigrationRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	InstanceId     string                 `protobuf:"bytes,2,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	MigrationToken string                 `protobuf:"bytes,3,opt,name=migration_token,json=migrationToken,proto3" json:"migration_token,omitempty"`
+	// Replayed through ProcessTaskAdd in the activating transaction.
+	PendingTaskAdds []*TaskAddEvent `protobuf:"bytes,4,rep,name=pending_task_adds,json=pendingTaskAdds,proto3" json:"pending_task_adds,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ActivateMigrationRequest) Reset() {
+	*x = ActivateMigrationRequest{}
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivateMigrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivateMigrationRequest) ProtoMessage() {}
+
+func (x *ActivateMigrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivateMigrationRequest.ProtoReflect.Descriptor instead.
+func (*ActivateMigrationRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ActivateMigrationRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *ActivateMigrationRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *ActivateMigrationRequest) GetMigrationToken() string {
+	if x != nil {
+		return x.MigrationToken
+	}
+	return ""
+}
+
+func (x *ActivateMigrationRequest) GetPendingTaskAdds() []*TaskAddEvent {
+	if x != nil {
+		return x.PendingTaskAdds
+	}
+	return nil
+}
+
+type ActivateMigrationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivateMigrationResponse) Reset() {
+	*x = ActivateMigrationResponse{}
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivateMigrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivateMigrationResponse) ProtoMessage() {}
+
+func (x *ActivateMigrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivateMigrationResponse.ProtoReflect.Descriptor instead.
+func (*ActivateMigrationResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{13}
+}
+
+type AbortMigrationRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	InstanceId     string                 `protobuf:"bytes,2,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	MigrationToken string                 `protobuf:"bytes,3,opt,name=migration_token,json=migrationToken,proto3" json:"migration_token,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AbortMigrationRequest) Reset() {
+	*x = AbortMigrationRequest{}
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AbortMigrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AbortMigrationRequest) ProtoMessage() {}
+
+func (x *AbortMigrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AbortMigrationRequest.ProtoReflect.Descriptor instead.
+func (*AbortMigrationRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AbortMigrationRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *AbortMigrationRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *AbortMigrationRequest) GetMigrationToken() string {
+	if x != nil {
+		return x.MigrationToken
+	}
+	return ""
+}
+
+type AbortMigrationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AbortMigrationResponse) Reset() {
+	*x = AbortMigrationResponse{}
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AbortMigrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AbortMigrationResponse) ProtoMessage() {}
+
+func (x *AbortMigrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AbortMigrationResponse.ProtoReflect.Descriptor instead.
+func (*AbortMigrationResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{15}
+}
+
 type MigrateToWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -757,7 +974,7 @@ type MigrateToWorkflowRequest struct {
 
 func (x *MigrateToWorkflowRequest) Reset() {
 	*x = MigrateToWorkflowRequest{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[12]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -769,7 +986,7 @@ func (x *MigrateToWorkflowRequest) String() string {
 func (*MigrateToWorkflowRequest) ProtoMessage() {}
 
 func (x *MigrateToWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[12]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -782,7 +999,7 @@ func (x *MigrateToWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateToWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*MigrateToWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *MigrateToWorkflowRequest) GetNamespaceId() string {
@@ -807,7 +1024,7 @@ type MigrateToWorkflowResponse struct {
 
 func (x *MigrateToWorkflowResponse) Reset() {
 	*x = MigrateToWorkflowResponse{}
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[13]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +1036,7 @@ func (x *MigrateToWorkflowResponse) String() string {
 func (*MigrateToWorkflowResponse) ProtoMessage() {}
 
 func (x *MigrateToWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[13]
+	mi := &file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +1049,7 @@ func (x *MigrateToWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateToWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*MigrateToWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{13}
+	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescGZIP(), []int{17}
 }
 
 var File_temporal_server_chasm_lib_wci_proto_v1_request_response_proto protoreflect.FileDescriptor
@@ -901,18 +1118,34 @@ const file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
 	"instanceId\x12J\n" +
 	"\x05event\x18\x03 \x01(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x05event\"\x17\n" +
-	"\x15RecordTaskAddResponse\"\xa5\x04\n" +
+	"\x15RecordTaskAddResponse\"\x8b\x05\n" +
 	"\x1fCreateFromMigrationStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
 	"instanceId\x12[\n" +
 	"\x05state\x18\x03 \x01(\v2E.temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceStateR\x05state\x12\x81\x01\n" +
 	"\x0escaling_groups\x18\x04 \x03(\v2Z.temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntryR\rscalingGroups\x12`\n" +
-	"\x11pending_task_adds\x18\x05 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x0fpendingTaskAdds\x1a{\n" +
+	"\x11pending_task_adds\x18\x05 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x0fpendingTaskAdds\x12'\n" +
+	"\x0fmigration_token\x18\x06 \x01(\tR\x0emigrationToken\x12;\n" +
+	"\vexpire_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x1a{\n" +
 	"\x12ScalingGroupsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupStateR\x05value:\x028\x01\"\"\n" +
-	" CreateFromMigrationStateResponse\"^\n" +
+	" CreateFromMigrationStateResponse\"\xe9\x01\n" +
+	"\x18ActivateMigrationRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vinstance_id\x18\x02 \x01(\tR\n" +
+	"instanceId\x12'\n" +
+	"\x0fmigration_token\x18\x03 \x01(\tR\x0emigrationToken\x12`\n" +
+	"\x11pending_task_adds\x18\x04 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x0fpendingTaskAdds\"\x1b\n" +
+	"\x19ActivateMigrationResponse\"\x84\x01\n" +
+	"\x15AbortMigrationRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vinstance_id\x18\x02 \x01(\tR\n" +
+	"instanceId\x12'\n" +
+	"\x0fmigration_token\x18\x03 \x01(\tR\x0emigrationToken\"\x18\n" +
+	"\x16AbortMigrationResponse\"^\n" +
 	"\x18MigrateToWorkflowRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
@@ -931,7 +1164,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescG
 	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_goTypes = []any{
 	(*UpdateWorkerControllerInstanceRequest)(nil),        // 0: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest
 	(*UpdateWorkerControllerInstanceResponse)(nil),       // 1: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
@@ -945,46 +1178,52 @@ var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_goTypes =
 	(*RecordTaskAddResponse)(nil),                        // 9: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse
 	(*CreateFromMigrationStateRequest)(nil),              // 10: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest
 	(*CreateFromMigrationStateResponse)(nil),             // 11: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse
-	(*MigrateToWorkflowRequest)(nil),                     // 12: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
-	(*MigrateToWorkflowResponse)(nil),                    // 13: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
-	nil,                                                  // 14: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
-	nil,                                                  // 15: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	nil,                                                  // 16: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	nil,                                                  // 17: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
-	nil,                                                  // 18: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
-	nil,                                                  // 19: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
-	(*timestamppb.Timestamp)(nil),                        // 20: google.protobuf.Timestamp
-	(*ValidationStatus)(nil),                             // 21: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
-	(*TaskAddEvent)(nil),                                 // 22: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	(*WorkerControllerInstanceState)(nil),                // 23: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
-	(*ScalingGroupSpecUpdate)(nil),                       // 24: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	(*ScalingGroupSpec)(nil),                             // 25: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	(*TaskQueueObservations)(nil),                        // 26: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
-	(*ScalingGroupState)(nil),                            // 27: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
+	(*ActivateMigrationRequest)(nil),                     // 12: temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationRequest
+	(*ActivateMigrationResponse)(nil),                    // 13: temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationResponse
+	(*AbortMigrationRequest)(nil),                        // 14: temporal.server.chasm.lib.wci.proto.v1.AbortMigrationRequest
+	(*AbortMigrationResponse)(nil),                       // 15: temporal.server.chasm.lib.wci.proto.v1.AbortMigrationResponse
+	(*MigrateToWorkflowRequest)(nil),                     // 16: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
+	(*MigrateToWorkflowResponse)(nil),                    // 17: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
+	nil,                                                  // 18: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
+	nil,                                                  // 19: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
+	nil,                                                  // 20: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
+	nil,                                                  // 21: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
+	nil,                                                  // 22: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
+	nil,                                                  // 23: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
+	(*timestamppb.Timestamp)(nil),                        // 24: google.protobuf.Timestamp
+	(*ValidationStatus)(nil),                             // 25: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
+	(*TaskAddEvent)(nil),                                 // 26: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	(*WorkerControllerInstanceState)(nil),                // 27: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
+	(*ScalingGroupSpecUpdate)(nil),                       // 28: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	(*ScalingGroupSpec)(nil),                             // 29: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	(*TaskQueueObservations)(nil),                        // 30: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
+	(*ScalingGroupState)(nil),                            // 31: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_depIdxs = []int32{
-	14, // 0: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
-	15, // 1: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	20, // 2: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.create_time:type_name -> google.protobuf.Timestamp
-	16, // 3: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	21, // 4: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.validation_status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
-	17, // 5: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.task_queue_observations:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
-	18, // 6: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
-	22, // 7: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest.event:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	23, // 8: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.state:type_name -> temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
-	19, // 9: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
-	22, // 10: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.pending_task_adds:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	24, // 11: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	25, // 12: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	25, // 13: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	26, // 14: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
-	24, // 15: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	27, // 16: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	18, // 0: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
+	19, // 1: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
+	24, // 2: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.create_time:type_name -> google.protobuf.Timestamp
+	20, // 3: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
+	25, // 4: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.validation_status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
+	21, // 5: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.task_queue_observations:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
+	22, // 6: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
+	26, // 7: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest.event:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	27, // 8: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.state:type_name -> temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
+	23, // 9: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
+	26, // 10: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.pending_task_adds:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	24, // 11: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.expire_time:type_name -> google.protobuf.Timestamp
+	26, // 12: temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationRequest.pending_task_adds:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	28, // 13: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	29, // 14: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	29, // 15: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	30, // 16: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
+	28, // 17: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	31, // 18: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_init() }
@@ -999,7 +1238,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
