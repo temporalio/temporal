@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/consts"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -126,13 +125,13 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	startTime := time.Now()
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
-		h.Logger.Error("failed to decode callback token", tag.Error(err))
+		nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, h.Logger)("failed to decode callback token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
 	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
 	if err != nil {
-		h.Logger.Error("failed to decode completion from token", tag.Error(err))
+		nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, h.Logger)("failed to decode completion from token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
@@ -141,7 +140,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	// with the system-callback router via commonnexus.CompletionTarget so the two can't drift.
 	targetNamespaceID, targetBusinessID, targetRunID, err := commonnexus.CompletionTarget(completion)
 	if err != nil {
-		h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
+		nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, h.Logger)("failed to unmarshal CHASM component ref", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
@@ -185,12 +184,12 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 		nsName, err := url.PathUnescape(nsNameEscaped)
 		if err != nil {
-			logger.Error("failed to extract namespace from request", tag.Error(err))
+			nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, logger)("failed to extract namespace from request", tag.Error(err))
 			h.preProcessErrorsCounter.Record(1)
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
 		}
 		if nsName != ns.Name().String() {
-			logger.Error(
+			nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, logger)(
 				"namespace in callback URL doesn't match the completion token",
 				tag.String("url-namespace", nsName),
 			)
@@ -218,7 +217,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
-			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
+			nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, logger)("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
@@ -228,7 +227,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		successPayload = result
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
-		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)))
+		nexusRejectionLog(h.AuthInterceptor, r.HTTPRequest, logger)("invalid operation state in completion request", tag.String("state", string(r.State)))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
@@ -573,15 +572,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 
 // TODO(bergundy): Merge this with the interceptRequest method in nexus_handler.go.
 func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc.CompletionRequest) error {
-	var tlsInfo *credentials.TLSInfo
-	if request.HTTPRequest.TLS != nil {
-		tlsInfo = &credentials.TLSInfo{
-			State:          *request.HTTPRequest.TLS,
-			CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.PrivacyAndIntegrity},
-		}
-	}
-
-	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
+	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfoFromRequest(request.HTTPRequest), request.HTTPRequest.Header, func() string {
 		return "" // TODO: support audience getter
 	})
 

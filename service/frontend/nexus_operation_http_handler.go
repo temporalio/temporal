@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -162,17 +161,17 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
-		logger.Error("invalid URL", tag.Error(err))
+		nexusRejectionLog(h.auth, r, logger)("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexusPreprocessErrorURLInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
 	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
-		logger.Error("invalid URL", tag.Error(err))
+		nexusRejectionLog(h.auth, r, logger)("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexusPreprocessErrorURLInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
 	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
-		logger.Error("invalid namespace name", tag.Error(err))
+		nexusRejectionLog(h.auth, r, logger)("invalid namespace name", tag.Error(err))
 		h.writeFailure(w, r, nexusPreprocessErrorNamespaceNameInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "%v", err.Error()))
 		return
 	}
@@ -202,19 +201,19 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {
-		logger.Error("invalid URL", tag.Error(err))
+		nexusRejectionLog(h.auth, r, logger)("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexusPreprocessErrorURLInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
 	endpointEntry, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
 	if err != nil {
-		logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 		s, ok := status.FromError(err)
 		if !ok {
 			s = serviceerror.ToStatus(err)
 		}
 		switch s.Code() {
 		case codes.NotFound:
+			nexusRejectionLog(h.auth, r, logger)("invalid Nexus endpoint ID", tag.Error(err))
 			retryBehavior := nexus.HandlerErrorRetryBehaviorNonRetryable
 			if r, ok := (err.(interface{ Retryable() bool })); ok && r.Retryable() {
 				retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
@@ -225,8 +224,10 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 				RetryBehavior: retryBehavior,
 			})
 		case codes.DeadlineExceeded:
+			logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 			h.writeFailure(w, r, nexusPreprocessErrorEndpointLookupTimeout, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeRequestTimeout, "request timed out"))
 		default:
+			logger.Error("invalid Nexus endpoint ID", tag.Error(err))
 			h.writeFailure(w, r, nexusPreprocessErrorEndpointLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 		}
 		return
@@ -308,7 +309,7 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 		nc.endpointID = entry.Id
 		return nc, true
 	default:
-		logger.Error("unsupported Nexus endpoint target type", tag.NewStringTag("target-type", fmt.Sprintf("%T", v)))
+		nexusRejectionLog(h.auth, r, logger)("unsupported Nexus endpoint target type", tag.NewStringTag("target-type", fmt.Sprintf("%T", v)))
 		h.writeFailure(w, r, nexusPreprocessErrorTargetTypeUnsupported, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid endpoint target"))
 		return nil, false
 	}
@@ -325,15 +326,7 @@ func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *htt
 }
 
 func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
-	var tlsInfo *credentials.TLSInfo
-	if r.TLS != nil {
-		tlsInfo = &credentials.TLSInfo{
-			State:          *r.TLS,
-			CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.PrivacyAndIntegrity},
-		}
-	}
-
-	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
+	authInfo := h.auth.GetAuthInfo(tlsInfoFromRequest(r), r.Header, func() string {
 		return "" // TODO: support audience getter
 	})
 
