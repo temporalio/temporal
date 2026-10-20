@@ -3738,7 +3738,12 @@ The configured value will be divided by the number of worker hosts to get the pe
 	WorkerPerNamespaceWorkerOptions = NewNamespaceTypedSetting(
 		"worker.perNamespaceWorkerOptions",
 		sdkworker.Options{},
-		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers`,
+		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers. Only these
+fields are honored: MaxConcurrentActivityExecutionSize, WorkerActivitiesPerSecond,
+MaxConcurrentLocalActivityExecutionSize, WorkerLocalActivitiesPerSecond,
+MaxConcurrentActivityTaskPollers, MaxConcurrentWorkflowTaskExecutionSize,
+MaxConcurrentWorkflowTaskPollers, StickyScheduleToStartTimeout, DeadlockDetectionTimeout.
+Changing this setting restarts the namespace's per-namespace worker.`,
 	)
 	WorkerPerNamespaceWorkerStartRate = NewGlobalFloatSetting(
 		"worker.perNamespaceWorkerStartRate",

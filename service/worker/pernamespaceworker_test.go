@@ -123,6 +123,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 					return sdkworker.Options{
 						WorkerLocalActivitiesPerSecond: 200.0,
 						StickyScheduleToStartTimeout:   7500 * time.Millisecond,
+						DeadlockDetectionTimeout:       5 * time.Second,
 					}, func() {}
 				default:
 					return sdkworker.Options{}, func() {}
@@ -294,6 +295,7 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 		s.Equal(100, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(2, options.MaxConcurrentActivityTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
+		s.Equal(time.Duration(0), options.DeadlockDetectionTimeout)
 	}).Return(wkr)
 
 	cli2 := mocksdk.NewMockClient(s.controller)
@@ -302,6 +304,7 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(200.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(7500*time.Millisecond, options.StickyScheduleToStartTimeout)
+		s.Equal(5*time.Second, options.DeadlockDetectionTimeout)
 	}).Return(wkr)
 
 	cli3 := mocksdk.NewMockClient(s.controller)
