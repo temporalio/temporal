@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"errors"
+
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -31,6 +34,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -1196,6 +1200,139 @@ func TestIsDeploymentVersionInUserData(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// TestDeploymentVersionMonitorStartConditions verifies that the deployment version
+// monitor goroutine is only started after a successful RegisterTaskQueueWorker call,
+// not when registration itself fails. This is important because the monitor emits
+// deployment_version_missing_from_user_data — if it started on registration failure,
+// it would emit false positives for expected cases like version limits or transient errors.
+func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		deploymentName = "my-deployment"
+		buildID        = "build-1"
+	)
+
+	deployment := &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}
+
+	tests := []struct {
+		name               string
+		registerErr        error
+		wantMonitorRunning bool
+	}{
+		{
+			// When registration fails, the monitor should NOT start because the version
+			// was never accepted by the deployment workflow. The missing-from-user-data
+			// metric would be a false positive in this case.
+			name:               "registration fails - monitor not started",
+			registerErr:        errors.New("registration failed"),
+			wantMonitorRunning: false,
+		},
+		{
+			// When registration succeeds but the version hasn't propagated to user data
+			// yet, the monitor SHOULD start to detect if propagation never completes.
+			name:               "registration succeeds - monitor started",
+			registerErr:        nil,
+			wantMonitorRunning: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			// Allow expected error logs from the registration and propagation paths.
+			logger.Expect(testlogger.Error, "error while registering version")
+			logger.Expect(testlogger.Error, "timed out waiting for worker deployment version to appear in user data")
+			config := defaultTestConfig()
+			// Enable deployment versions so ensureRegisteredInDeploymentVersion doesn't bail early.
+			config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+			nsName := namespace.Name("ns-name")
+			ns, registry := createMockNamespaceCache(controller, nsName)
+
+			engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+			// Install a fake deployment client that returns the configured error.
+			engine.workerDeploymentClient = &fakeDeploymentClient{registerErr: tc.registerErr}
+			// Use real test hooks so we can set the registration error backoff to zero,
+			// avoiding a 5-second sleep in the error path.
+			engine.testHooks = testhooks.NewTestHooks()
+			testhooks.Set(engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff, time.Duration(0), ns.ID())
+
+			queueKey := DeploymentQueueKey(
+				newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
+				deployment,
+			)
+			prtn := queueKey.Partition()
+			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+			onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+			udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+
+			prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+			require.NoError(t, err)
+
+			// Set user data WITHOUT the deployment version so the function doesn't
+			// take the early return at the HasDeploymentVersion check.
+			udMgr.lock.Lock()
+			udMgr.userData = &persistencespb.VersionedTaskQueueUserData{
+				Data: &persistencespb.TaskQueueUserData{},
+			}
+			udMgr.userDataState = userDataEnabled
+			udMgr.lock.Unlock()
+
+			tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
+			require.NoError(t, err)
+
+			// The registration lock channel is already seeded in the constructor
+			// (newPhysicalTaskQueueManager), so ensureRegisteredInDeploymentVersion
+			// can acquire it without blocking.
+
+			// Use a short-lived context. For the success case, the function will enter
+			// the propagation wait loop and block until context expires. For the failure
+			// case, it returns the registration error immediately.
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+
+			pollMeta := &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+					DeploymentName:       deploymentName,
+					BuildId:              buildID,
+				},
+			}
+
+			_ = tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMeta)
+
+			// Check whether the monitor goroutine was started.
+			require.Equal(t, tc.wantMonitorRunning, tqMgr.deploymentVersionMonitorRunning.Load(),
+				"monitor running state should match expectation after ensureRegisteredInDeploymentVersion")
+		})
+	}
+}
+
+// fakeDeploymentClient implements workerdeployment.Client for testing.
+// Only RegisterTaskQueueWorker is exercised; all other methods panic if called.
+type fakeDeploymentClient struct {
+	workerdeployment.Client // embed interface to satisfy compiler; nil-panics on unimplemented methods
+	registerErr             error
+}
+
+func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
+	_ context.Context,
+	_ *namespace.Namespace,
+	_, _ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+) error {
+	return f.registerErr
 }
 
 func userDataWithDeploymentVersion(deploymentName, buildID string) *persistencespb.VersionedTaskQueueUserData {
