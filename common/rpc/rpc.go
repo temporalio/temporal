@@ -74,6 +74,11 @@ type RPCFactory struct {
 	// must not block lookups for another.
 	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
+	// Guards closed. Connections are cached while holding the read lock, so once Close has
+	// taken the write lock, no new connection can be cached after its sweep.
+	closeMu sync.RWMutex
+	closed  bool
+
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
@@ -249,6 +254,12 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		return nil
 	}
 
+	d.closeMu.RLock()
+	defer d.closeMu.RUnlock()
+	if d.closed {
+		return closedConn(conn)
+	}
+
 	// Dialed outside the lock, so concurrent callers can race; the loser closes its own.
 	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
 	if loaded {
@@ -340,6 +351,12 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		return nil
 	}
 
+	d.closeMu.RLock()
+	defer d.closeMu.RUnlock()
+	if d.closed {
+		return closedConn(newConn)
+	}
+
 	d.internodeGRPCConnections.Lock()
 	defer d.internodeGRPCConnections.Unlock()
 	if existing, ok := d.internodeGRPCConnections.conns[hostName]; ok && existing.GetState() != connectivity.Shutdown {
@@ -389,7 +406,20 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	return connection
 }
 
+// closedConn shuts down a connection dialed after Close, so that it doesn't leak. It is still
+// returned rather than nil, because callers cache and use it without nil checks; its RPCs fail.
+func closedConn(conn *grpc.ClientConn) *grpc.ClientConn {
+	_ = conn.Close()
+	return conn
+}
+
+// Close shuts down every connection the factory has handed out. Connections requested after
+// Close are returned already shut down.
 func (d *RPCFactory) Close() {
+	d.closeMu.Lock()
+	d.closed = true
+	d.closeMu.Unlock()
+
 	d.internodeConnCleanupTicker.Stop()
 
 	d.internodeGRPCConnections.Lock()
