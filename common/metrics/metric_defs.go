@@ -1474,10 +1474,9 @@ var (
 	DeploymentVersionMissingFromUserData = NewCounterDef(
 		"deployment_version_missing_from_user_data",
 		WithDescription(
-			"Emitted when a loaded deployment version is not found in its task queue's user data "+
-				"after a 5-minute grace period. Indicates broken or lagging user data replication, "+
-				"which prevents task dispatch to workers on this version. "+
-				"Dimensions: namespace, taskqueue, task_type"),
+			"Emitted when a deployment version that was successfully registered is not found in its "+
+				"task queue's user data after a configurable grace period. Indicates broken or lagging "+
+				"user data replication, which prevents task dispatch to workers on this version."),
 	)
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 

@@ -799,8 +799,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return nil
 	}
 
-	c.maybeStartDeploymentVersionMonitor()
-
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -871,6 +869,9 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return err
 	}
 
+	// Registration succeeded. Start a monitor to alert if the version never propagates to user data.
+	c.maybeStartDeploymentVersionMonitor()
+
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
 	for {
@@ -887,7 +888,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		case <-ctx.Done():
 			c.logger.Error("timed out waiting for worker deployment version to appear in user data",
 				tag.Deployment(workerDeployment.SeriesName),
-				tag.NewStringTag("build_id", workerDeployment.BuildId),
+				tag.BuildId(workerDeployment.BuildId),
 			)
 			return ctx.Err()
 		}
@@ -918,17 +919,17 @@ func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 	select {
 	case <-c.tqCtx.Done():
 		return
-	case <-time.After(5 * time.Minute):
+	case <-time.After(c.config.DeploymentVersionMonitorGracePeriod()):
 	}
 
 	version := worker_versioning.DeploymentVersionFromDeployment(c.queue.Version().Deployment())
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(c.config.DeploymentVersionMonitorInterval())
 	defer ticker.Stop()
 	for {
 		if c.isDeploymentVersionInUserData(version) {
 			return
 		}
-		c.metricsHandler.Counter(metrics.DeploymentVersionMissingFromUserData.Name()).Record(1)
+		metrics.DeploymentVersionMissingFromUserData.With(c.metricsHandler).Record(1)
 		select {
 		case <-c.tqCtx.Done():
 			return
@@ -938,13 +939,14 @@ func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 }
 
 // isDeploymentVersionInUserData checks whether the given deployment version is present in this
-// task queue's user data.
+// task queue's user data. Returns false only when the version is confirmed missing; errors
+// during lookup are treated as inconclusive and return true to avoid false positive alerts.
 func (c *physicalTaskQueueManagerImpl) isDeploymentVersionInUserData(
 	version *deploymentspb.WorkerDeploymentVersion,
 ) bool {
 	userData, _, err := c.partitionMgr.getPerTypeUserData()
 	if err != nil {
-		return false
+		return true // inconclusive; don't emit false positive
 	}
 	return worker_versioning.HasDeploymentVersion(userData.GetDeploymentData(), version)
 }
