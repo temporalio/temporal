@@ -483,7 +483,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				protorequire.ProtoEqual(t, handlerFailure, operation.LastAttemptFailure)
 			},
-			wantReason: "handler_error:NOT_FOUND",
+			wantReason: "handler_error",
 		},
 		{
 			name:       "from non-scheduled with handler error tags operation failed reason",
