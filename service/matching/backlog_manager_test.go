@@ -504,59 +504,55 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 }
 
 func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
+	s.testSetReadLevelAfterGapExpiredTail(2)
+}
+
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTailWithGap() {
+	s.testSetReadLevelAfterGapExpiredTail(100)
+}
+
+func (s *BacklogManagerTestSuite) testSetReadLevelAfterGapExpiredTail(maxReadLevelOffset int64) {
 	if s.fairness {
 		s.T().Skip("this test is only for priority backlog manager")
 	}
-	for _, tc := range []struct {
-		name               string
-		maxReadLevelOffset int64
-	}{
-		{name: "no_gap", maxReadLevelOffset: 2},
-		{name: "with_gap", maxReadLevelOffset: 100},
-	} {
-		s.Run(tc.name, func() {
-			s.SetupTest()
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
 
-			s.setupToCaptureTasks()
-			blm, tr, start := s.initPriReaderAtEnd()
+	tr.signalNewTasks(s.createTasksAt(blm, start+1))
+	_, err := blm.db.CreateTasks(blm.tqCtx, []*writeTaskRequest{{
+		subqueue:  subqueueZero,
+		fairLevel: fairLevel{id: start + 2},
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+		},
+	}})
+	s.Require().NoError(err)
+	maxReadLevel := start + maxReadLevelOffset
+	blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
 
-			tr.signalNewTasks(s.createTasksAt(blm, start+1))
-			_, err := blm.db.CreateTasks(blm.tqCtx, []*writeTaskRequest{{
-				subqueue:  subqueueZero,
-				fairLevel: fairLevel{id: start + 2},
-				taskInfo: &persistencespb.TaskInfo{
-					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
-					ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				},
-			}})
-			s.Require().NoError(err)
-			maxReadLevel := start + tc.maxReadLevelOffset
-			blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+	// Complete the valid task before the reader scans the expired tail.
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 1)
+	tasks[0].finish(taskFinishResult{consumedToken: true})
+	s.Require().Equal(start+1, s.dbAckLevel(blm))
 
-			// Complete the valid task before the reader scans the expired tail.
-			tasks := s.capturedTasks()
-			s.Require().Len(tasks, 1)
-			tasks[0].finish(taskFinishResult{consumedToken: true})
-			s.Require().Equal(start+1, s.dbAckLevel(blm))
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Len(batch.tasks, 1)
+	tr.processTaskBatch(batch.tasks)
 
-			batch, err := tr.getTaskBatch(blm.tqCtx)
-			s.Require().NoError(err)
-			s.Require().Len(batch.tasks, 1)
-			tr.processTaskBatch(batch.tasks)
+	batch, err = tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	tr.setReadLevelAfterGap(batch.readLevel)
 
-			batch, err = tr.getTaskBatch(blm.tqCtx)
-			s.Require().NoError(err)
-			s.Require().Empty(batch.tasks)
-			s.Require().True(batch.isReadBatchDone)
-			tr.setReadLevelAfterGap(batch.readLevel)
-
-			readLevel, ackLevel := tr.getLevels()
-			s.Require().Equal(maxReadLevel, readLevel)
-			s.Require().Equal(maxReadLevel, ackLevel)
-			s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
-			s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
-		})
-	}
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(maxReadLevel, readLevel)
+	s.Require().Equal(maxReadLevel, ackLevel)
+	s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
+	s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
 }
 
 // TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
