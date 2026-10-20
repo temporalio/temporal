@@ -2594,13 +2594,13 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		)
 
 		for _, buildId := range buildIdsToRevive {
-			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedVersioningData, buildId)
+			setIdx, buildIDIdx := worker_versioning.FindBuildId(mergedVersioningData, buildId)
 			if setIdx == -1 {
 				continue
 			}
 			set := mergedVersioningData.VersionSets[setIdx]
-			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
-			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIdIdx].StateUpdateTimestamp)
+			set.BuildIds[buildIDIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIDIdx])
+			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIDIdx].StateUpdateTimestamp)
 
 			setDefault := set.BuildIds[len(set.BuildIds)-1]
 			if setDefault.State == persistencespb.STATE_DELETED {

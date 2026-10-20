@@ -54,6 +54,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdentica
 	)
 	currentPerType := current.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
 	currentPerType.Config = &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"tenant": 2}}
+	//nolint:staticcheck // Verifies compatibility for the deprecated fairness state.
 	currentPerType.FairnessState = enumsspb.FAIRNESS_STATE_V2
 	incoming := common.CloneProto(current)
 	taskQueue := uuid.NewString()
