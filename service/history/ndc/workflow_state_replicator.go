@@ -2272,6 +2272,7 @@ func (r *WorkflowStateReplicatorImpl) addEventToCache(
 				RunID:       workflowKey.RunID,
 				EventID:     event.GetEventId(),
 				Version:     event.GetVersion(),
+				ShardUUID:   r.shardContext.GetOwner(),
 			},
 			event,
 		)

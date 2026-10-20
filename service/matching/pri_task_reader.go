@@ -493,13 +493,12 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		tr.SignalTaskLoading()
 		return
 	}
-	if tr.ackLevel == tr.readLevel {
-		// This is called after we read a range and find no tasks. The range we read was tr.readLevel to newReadLevel.
-		// (We know this because nothing should change tr.readLevel except the getTasksPump loop itself, after initialization.
-		// And getTasksPump doesn't start until it gets a signal from taskWriter that it's initialized the levels.)
-		// If we've acked all tasks up to tr.readLevel, and there are no tasks between that and newReadLevel, then we've
-		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
-		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
+	if tr.outstandingTasks.Empty() {
+		// The scan found no tasks in (tr.readLevel, newReadLevel]. The stale-read guard above
+		// handles signalNewTasks advancing readLevel during that scan. Tasks through readLevel
+		// are already acked, expired, or in outstandingTasks, so an empty map means everything
+		// through newReadLevel can be acknowledged. This also advances idle queues over gaps
+		// left by range ID changes.
 		tr.ackLevel = newReadLevel
 		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
 		// wouldn't reach the db until another task is written and acked, which could be far in the

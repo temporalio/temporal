@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;
 
+import "chasm/lib/callback/proto/v1/message.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/activity/v1/message.proto";
@@ -165,6 +166,9 @@ message ActivityState {
 
   // Indicates that eager execution was accepted for this activity's first task.
   bool eager_execution_accepted = 24;
+
+  // Metadata about attached completion callbacks.
+  temporal.server.chasm.lib.callbacks.proto.v1.CallbackMetadata callback_metadata = 25;
 }
 
 message ActivityCancelState {

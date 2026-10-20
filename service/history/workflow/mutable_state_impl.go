@@ -725,6 +725,17 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
 }
 
+// attachesCallbacksToChasm reports whether the completion callbacks for updateID, or the
+// workflow's own when updateID is empty, are attached to the CHASM tree. Update callbacks that
+// are not attached to CHASM are dropped. Attaching and ValidateCallbackAddition both route on
+// this, so that validation covers exactly the callbacks that get attached.
+func (ms *MutableStateImpl) attachesCallbacksToChasm(updateID string) bool {
+	if !ms.chasmCallbacksEnabled() {
+		return false
+	}
+	return updateID == "" || ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
+}
+
 // ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.
 func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
@@ -1013,6 +1024,17 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 	}
 
 	return common.CloneProto(msProto)
+}
+
+func (ms *MutableStateImpl) eventKey(eventID int64, version int64) events.EventKey {
+	return events.EventKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		WorkflowID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		EventID:     eventID,
+		Version:     version,
+		ShardUUID:   ms.shard.GetOwner(),
+	}
 }
 
 func (ms *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -1441,14 +1463,7 @@ func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) 
 	if err != nil {
 		return nil, err
 	}
-	wfKey := ms.GetWorkflowKey()
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(wfKey.NamespaceID),
-		WorkflowID:  wfKey.WorkflowID,
-		RunID:       wfKey.RunID,
-		EventID:     ref.EventId,
-		Version:     version,
-	}
+	eventKey := ms.eventKey(ref.EventId, version)
 
 	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
 }
@@ -1602,13 +1617,7 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	if err != nil {
 		return nil, err
 	}
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-		WorkflowID:  ms.executionInfo.WorkflowId,
-		RunID:       ms.executionState.RunId,
-		EventID:     completion.EventId,
-		Version:     version,
-	}
+	eventKey := ms.eventKey(completion.EventId, version)
 	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
@@ -1635,13 +1644,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ai.ScheduledEventId,
-			Version:     version,
-		},
+		ms.eventKey(ai.ScheduledEventId, version),
 		ai.ScheduledEventBatchId,
 		currentBranchToken,
 	)
@@ -1732,13 +1735,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ci.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(ci.InitiatedEventId, version),
 		ci.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1778,13 +1775,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ri.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(ri.InitiatedEventId, version),
 		ri.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1854,13 +1845,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     si.InitiatedEventId,
-			Version:     version,
-		},
+		ms.eventKey(si.InitiatedEventId, version),
 		si.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1906,13 +1891,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     completionEventID,
-			Version:     version,
-		},
+		ms.eventKey(completionEventID, version),
 		firstEventID,
 		currentBranchToken,
 	)
@@ -2004,13 +1983,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     common.FirstEventID,
-			Version:     startVersion,
-		},
+		ms.eventKey(common.FirstEventID, startVersion),
 		common.FirstEventID,
 		currentBranchToken,
 	)
@@ -2119,13 +2092,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// during the processing of DeleteTransferTask without loading this event from database.
 	// For Update events: store it here so that Update disposition lookups can be fast.
 	ms.eventsCache.PutEvent(
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     event.GetEventId(),
-			Version:     event.GetVersion(),
-		},
+		ms.eventKey(event.GetEventId(), event.GetVersion()),
 		event,
 	)
 }
@@ -3564,10 +3531,9 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 	if len(updateCallbacks) == 0 {
 		return nil
 	}
-	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
+	if ms.attachesCallbacksToChasm(updateID) {
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
-
 	return nil
 }
 
@@ -3582,10 +3548,7 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 		return err
 	}
 
-	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
-	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3596,7 +3559,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-	if ms.chasmCallbacksEnabled() {
+	if ms.attachesCallbacksToChasm("") {
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -3611,6 +3574,14 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	// BUG: This limit is checked from an Apply* function, which MutableStateRebuilder also
+	// drives during NDC replication, history import, and reset. If the check fails there (say
+	// MaxCallbacksPerWorkflow was lowered after the callbacks were attached) it rejects an
+	// event another cluster already committed, stalling the replication task or failing the
+	// reapply rather than protecting anything.
+	//
+	// The newer CHASM path only validates in request handlers instead; see [ValidateCallbackAddition].
+	// This HSM path is kept as-is to avoid churn as we work on removing it.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
@@ -3662,8 +3633,48 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks)
+}
+
+// ValidateCallbackAddition checks that addition can be attached to this execution without
+// breaching its aggregate callback limits; see chasmworkflow.Workflow.ValidateCallbackAddition
+// for why this is left to request handlers rather than done where callbacks are attached.
+//
+// inFlight holds the callbacks of Updates admitted but not yet accepted, which are reserved
+// against the limits. (So a Workflow cannot exceed callback limits if multiple updates are
+// accepted at the same time.)
+//
+// It is a no-op unless the callbacks would be attached to the CHASM tree (see
+// attachesCallbacksToChasm): the HSM path enforces its own limit while attaching. It only reads
+// the CHASM tree, so it is safe to call before deciding whether to write anything at all.
+func (ms *MutableStateImpl) ValidateCallbackAddition(
+	inFlight []chasmworkflow.CallbackAddition,
+	addition chasmworkflow.CallbackAddition,
+) error {
+	if !ms.attachesCallbacksToChasm(addition.UpdateID) {
+		return nil
+	}
+	// In-flight callbacks that will be dropped rather than attached take up none of the limits.
+	attachedInFlight := make([]chasmworkflow.CallbackAddition, 0, len(inFlight))
+	for _, held := range inFlight {
+		if ms.attachesCallbacksToChasm(held.UpdateID) {
+			attachedInFlight = append(attachedInFlight, held)
+		}
+	}
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	// The aggregate callback validation is ultimately checked within the CHASM component,
+	// which also keeps track of denormalizing callback-related state.
+	// (Since we are intentionally trying to not churn any HSM-code for now.)
+	return wf.ValidateCallbackAddition(
+		ctx,
+		attachedInFlight,
+		addition,
+		ms.shard.CallbackValidator(),
+	)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -5924,7 +5935,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	// present in the normal flow. The exception is the reset/reapply case where
 	// callbacks are registered at admission time instead (because the
 	// UpdateAccepted event has a nil AcceptedRequest after reset). In that case,
-	// addCallbacksToMap is a no-op since the requestID-indexed keys already
+	// attaching is a no-op since the requestID-indexed keys already
 	// exist from the admitted event.
 	if attrs.GetAcceptedRequest() != nil {
 		requestID := attrs.GetAcceptedRequest().GetRequestId()
