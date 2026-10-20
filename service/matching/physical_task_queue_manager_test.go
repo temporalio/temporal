@@ -1210,19 +1210,19 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 		name               string
 		registerErr        error
 		wantMonitorRunning bool
-		wantErrContains    string
+		wantErr            error
 	}{
 		{
 			name:               "registration fails - monitor not started",
 			registerErr:        errors.New("registration failed"),
 			wantMonitorRunning: false,
-			wantErrContains:    "not ready",
+			wantErr:            errDeploymentVersionNotReady,
 		},
 		{
 			name:               "registration succeeds - monitor started",
 			registerErr:        nil,
 			wantMonitorRunning: true,
-			wantErrContains:    "deadline exceeded",
+			wantErr:            context.DeadlineExceeded,
 		},
 	}
 
@@ -1234,14 +1234,14 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 				SeriesName: deploymentName,
 				BuildId:    buildID,
 			}
-			ns, tqMgr, fakeClient := setupVersionedTQManager(t, deployment, tc.registerErr)
+			ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, tc.registerErr)
 
 			// Use a short-lived context so the propagation wait loop (success case)
 			// doesn't block the test.
 			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 			defer cancel()
 
-			pollMeta := &pollMetadata{
+			pollMetadata := &pollMetadata{
 				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 					DeploymentName:       deploymentName,
@@ -1249,10 +1249,10 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 				},
 			}
 
-			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMeta)
+			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, pollMetadata)
 
-			require.ErrorContains(t, err, tc.wantErrContains)
-			require.True(t, fakeClient.called, "RegisterTaskQueueWorker should have been called")
+			require.ErrorIs(t, err, tc.wantErr)
+			require.True(t, deploymentClient.called, "RegisterTaskQueueWorker should have been called")
 			require.Equal(t, tc.wantMonitorRunning, tqMgr.deploymentVersionMonitorRunning.Load(),
 				"monitor should only start after successful registration")
 		})
@@ -1279,9 +1279,9 @@ func setupVersionedTQManager(
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
 
-	fc := &fakeDeploymentClient{registerErr: registerErr}
+	deploymentClient := &fakeDeploymentClient{registerErr: registerErr}
 	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
-	engine.workerDeploymentClient = fc
+	engine.workerDeploymentClient = deploymentClient
 	engine.testHooks = testhooks.NewTestHooks()
 	testhooks.Set(engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff, time.Duration(0), ns.ID())
 
@@ -1289,19 +1289,19 @@ func setupVersionedTQManager(
 		newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
 		deployment,
 	)
-	prtn := queueKey.Partition()
-	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+	partition := queueKey.Partition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, nsName)
 
-	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{})
 	require.NoError(t, err)
 
-	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
+	tqMgr, err := newPhysicalTaskQueueManager(partitionMgr, queueKey)
 	require.NoError(t, err)
 
 	// Cancel tqCtx on cleanup to stop any monitor goroutine.
 	t.Cleanup(tqMgr.tqCtxCancel)
 
-	return ns, tqMgr, fc
+	return ns, tqMgr, deploymentClient
 }
 
 // fakeDeploymentClient implements workerdeployment.Client for testing.
