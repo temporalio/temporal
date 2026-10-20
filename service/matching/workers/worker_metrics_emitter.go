@@ -105,26 +105,17 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
-	var runtimes []wideevents.RuntimeInfo
+	runtimes := make(map[string]string)
 	for _, rt := range hb.GetEnvironment().GetRuntimes() {
-		runtimes = append(runtimes, wideevents.RuntimeInfo{
-			Type:    runtimeTypeName(rt.GetType()),
-			Version: rt.GetVersion(),
-		})
+		runtimes[runtimeTypeName(rt.GetType())] = rt.GetVersion()
 	}
-	var hostingEnvs []wideevents.HostingEnvironmentInfo
+	hostingEnvs := make(map[string]string)
 	for _, he := range hb.GetEnvironment().GetHostingEnvironments() {
-		hostingEnvs = append(hostingEnvs, wideevents.HostingEnvironmentInfo{
-			Type:    hostingEnvironmentTypeName(he.GetType()),
-			Version: he.GetVersion(),
-		})
+		hostingEnvs[hostingEnvironmentTypeName(he.GetType())] = he.GetVersion()
 	}
-	var plugins []wideevents.PluginInfo
+	plugins := make(map[string]string)
 	for _, p := range hb.GetPlugins() {
-		plugins = append(plugins, wideevents.PluginInfo{
-			Name:    p.GetName(),
-			Version: p.GetVersion(),
-		})
+		plugins[p.GetName()] = p.GetVersion()
 	}
 	var drivers []string
 	for _, d := range hb.GetDrivers() {

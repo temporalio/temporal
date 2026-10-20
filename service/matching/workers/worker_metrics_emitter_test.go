@@ -230,28 +230,19 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	require.False(t, attrs["activity_poller_autoscaling"].AsBool())
 	require.False(t, attrs["nexus_poller_autoscaling"].AsBool())
 
-	// Runtimes: structured array with type and version
-	runtimes := attrs["runtimes"].AsSlice()
-	require.Len(t, runtimes, 2)
-	rt0 := mapValueToMap(runtimes[0])
-	require.Equal(t, "go", rt0["type"].AsString())
-	require.Equal(t, "go1.23.0", rt0["version"].AsString())
-	rt1 := mapValueToMap(runtimes[1])
-	require.Equal(t, "roadrunner", rt1["type"].AsString())
-	require.Equal(t, "v2024.3", rt1["version"].AsString())
+	// Runtimes: map of type → version
+	runtimes := otelMapToStringMap(attrs["runtimes"])
+	require.Equal(t, "go1.23.0", runtimes["go"])
+	require.Equal(t, "v2024.3", runtimes["roadrunner"])
 
-	// Hosting environments: structured array
-	hostingEnvs := attrs["hosting_environments"].AsSlice()
-	require.Len(t, hostingEnvs, 2)
-	require.Equal(t, "docker", mapValueToMap(hostingEnvs[0])["type"].AsString())
-	require.Equal(t, "k8s", mapValueToMap(hostingEnvs[1])["type"].AsString())
+	// Hosting environments: map of type → version
+	hostingEnvs := otelMapToStringMap(attrs["hosting_environments"])
+	require.Contains(t, hostingEnvs, "docker")
+	require.Contains(t, hostingEnvs, "k8s")
 
-	// Plugins: structured array with name and version
-	plugins := attrs["plugins"].AsSlice()
-	require.Len(t, plugins, 1)
-	p0 := mapValueToMap(plugins[0])
-	require.Equal(t, "my-plugin", p0["name"].AsString())
-	require.Equal(t, "1.0.0", p0["version"].AsString())
+	// Plugins: map of name → version
+	pluginMap := otelMapToStringMap(attrs["plugins"])
+	require.Equal(t, "1.0.0", pluginMap["my-plugin"])
 
 	// Drivers: string array
 	drivers := attrs["drivers"].AsSlice()
@@ -259,11 +250,11 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	require.Equal(t, "s3", drivers[0].AsString())
 }
 
-// mapValueToMap converts an OTEL MapValue to a map for test assertions.
-func mapValueToMap(v otellog.Value) map[string]otellog.Value {
-	m := map[string]otellog.Value{}
+// otelMapToStringMap converts an OTEL MapValue to a map[string]string for test assertions.
+func otelMapToStringMap(v otellog.Value) map[string]string {
+	m := map[string]string{}
 	for _, kv := range v.AsMap() {
-		m[kv.Key] = kv.Value
+		m[kv.Key] = kv.Value.AsString()
 	}
 	return m
 }
@@ -365,11 +356,8 @@ func TestEmitWorkerConfigEventHostingEnvironmentVersion(t *testing.T) {
 		attrs[kv.Key] = kv.Value
 		return true
 	})
-	envs := attrs["hosting_environments"].AsSlice()
-	require.Len(t, envs, 1)
-	env0 := mapValueToMap(envs[0])
-	require.Equal(t, "azure_functions", env0["type"].AsString())
-	require.Equal(t, "~4", env0["version"].AsString())
+	envs := otelMapToStringMap(attrs["hosting_environments"])
+	require.Equal(t, "~4", envs["azure_functions"])
 }
 
 func TestUnknownEnumValues(t *testing.T) {
