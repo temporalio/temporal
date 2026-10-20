@@ -1,9 +1,7 @@
 package interceptor
 
 import (
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -85,110 +83,6 @@ func TestRecordErrorMetricsConcurrentLimitGroup(t *testing.T) {
 			require.Equal(t, map[string]string{
 				"namespace": "test-namespace", "operation": "PollWorkflowTaskQueue", "service_name": "frontend",
 				"resource_exhausted_cause": tc.err.Cause.String(), "resource_exhausted_scope": tc.err.Scope.String(),
-				"concurrency_limit_group": tc.wantGroup,
-			}, recordings[0].Tags)
-		})
-	}
-}
-
-func TestRecordErrorMetricsFlooredConcurrentLimitGroup(t *testing.T) {
-	t.Parallel()
-
-	internalPoll := &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: "test-namespace", TaskQueue: &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-	}
-	clonedConcurrent := *ErrNamespaceCountLimitServerBusy
-	messageMismatch := *ErrNamespaceCountLimitServerBusy
-	messageMismatch.Message = "another resource limit exceeded"
-	causeMismatch := *ErrNamespaceCountLimitServerBusy
-	causeMismatch.Cause = enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT
-	scopeMismatch := *ErrNamespaceCountLimitServerBusy
-	scopeMismatch.Scope = enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
-	flooredConcurrent := addRetryInfo(t, ErrNamespaceCountLimitServerBusy, 2*time.Second)
-	for _, tc := range []struct {
-		name      string
-		request   *workflowservice.PollWorkflowTaskQueueRequest
-		err       error
-		cause     enumspb.ResourceExhaustedCause
-		scope     enumspb.ResourceExhaustedScope
-		wantGroup string
-	}{
-		{
-			name:      "floored concurrent limit",
-			request:   internalPoll,
-			err:       flooredConcurrent,
-			cause:     ErrNamespaceCountLimitServerBusy.Cause,
-			scope:     ErrNamespaceCountLimitServerBusy.Scope,
-			wantGroup: "internal_per_ns",
-		},
-		{
-			name:      "wrapped floored concurrent limit",
-			request:   internalPoll,
-			err:       fmt.Errorf("wrapped concurrent limit: %w", flooredConcurrent),
-			cause:     ErrNamespaceCountLimitServerBusy.Cause,
-			scope:     ErrNamespaceCountLimitServerBusy.Scope,
-			wantGroup: "internal_per_ns",
-		},
-		{
-			name:      "identical fields without retry info",
-			request:   internalPoll,
-			err:       &clonedConcurrent,
-			cause:     clonedConcurrent.Cause,
-			scope:     clonedConcurrent.Scope,
-			wantGroup: "not_applicable",
-		},
-		{
-			name:      "different message",
-			request:   internalPoll,
-			err:       addRetryInfo(t, &messageMismatch, 2*time.Second),
-			cause:     messageMismatch.Cause,
-			scope:     messageMismatch.Scope,
-			wantGroup: "not_applicable",
-		},
-		{
-			name:      "different cause",
-			request:   internalPoll,
-			err:       addRetryInfo(t, &causeMismatch, 2*time.Second),
-			cause:     causeMismatch.Cause,
-			scope:     causeMismatch.Scope,
-			wantGroup: "not_applicable",
-		},
-		{
-			name:      "different scope",
-			request:   internalPoll,
-			err:       addRetryInfo(t, &scopeMismatch, 2*time.Second),
-			cause:     scopeMismatch.Cause,
-			scope:     scopeMismatch.Scope,
-			wantGroup: "not_applicable",
-		},
-		{
-			name: "floored concurrent limit for regular poll",
-			request: &workflowservice.PollWorkflowTaskQueueRequest{
-				Namespace: "test-namespace", TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
-			},
-			err:       flooredConcurrent,
-			cause:     ErrNamespaceCountLimitServerBusy.Cause,
-			scope:     ErrNamespaceCountLimitServerBusy.Scope,
-			wantGroup: "default",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			mh := metricstest.NewCaptureHandler()
-			capture := mh.StartCapture()
-			defer mh.StopCapture(capture)
-			recordErrorMetrics(tc.request, mh.WithTags(
-				metrics.NamespaceTag("test-namespace"),
-				metrics.OperationTag("PollWorkflowTaskQueue"),
-				metrics.ServiceNameTag(primitives.FrontendService),
-			), tc.err, false)
-
-			recordings := capture.SnapshotMetric(metrics.ServiceErrResourceExhaustedCounter.Name())
-			require.Len(t, recordings, 1)
-			require.Equal(t, map[string]string{
-				"namespace": "test-namespace", "operation": "PollWorkflowTaskQueue", "service_name": "frontend",
-				"resource_exhausted_cause": tc.cause.String(), "resource_exhausted_scope": tc.scope.String(),
 				"concurrency_limit_group": tc.wantGroup,
 			}, recordings[0].Tags)
 		})

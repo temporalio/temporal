@@ -9,8 +9,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/api"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -30,8 +28,7 @@ type (
 		internalQuotaCalculator calculator.NamespaceCalculator
 		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
 		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
-		tokens          map[string]int
-		retryDelayFloor dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		tokens map[string]int
 
 		sync.Mutex
 		activeTokensCount map[concurrentRequestCounterKey]*int32
@@ -68,16 +65,13 @@ func NewConcurrentRequestLimitInterceptor(
 	defaultQuotas ConcurrentRequestQuotas,
 	internalPerNSQuotas ConcurrentRequestQuotas,
 	tokens map[string]int,
-	options ...LimitInterceptorOption,
 ) *ConcurrentRequestLimitInterceptor {
-	interceptorOptions := newLimitInterceptorOptions(options...)
 	return &ConcurrentRequestLimitInterceptor{
 		namespaceRegistry:       namespaceRegistry,
 		logger:                  logger,
 		quotaCalculator:         newNamespaceCountQuotaCalculator(memberCounter, logger, defaultQuotas),
 		internalQuotaCalculator: newNamespaceCountQuotaCalculator(memberCounter, logger, internalPerNSQuotas),
 		tokens:                  tokens,
-		retryDelayFloor:         interceptorOptions.retryDelayFloor,
 		activeTokensCount:       make(map[concurrentRequestCounterKey]*int32),
 	}
 }
@@ -108,15 +102,6 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)
 	defer cleanup()
 	if err != nil {
-		if err == ErrNamespaceCountLimitServerBusy {
-			err = withResourceExhaustedRetryDelayFloor(
-				ErrNamespaceCountLimitServerBusy,
-				nsName,
-				ni.retryDelayFloor,
-				mh,
-				api.MethodName(info.FullMethod),
-			)
-		}
 		return nil, err
 	}
 

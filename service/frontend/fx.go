@@ -112,6 +112,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
+	fx.Provide(RetryDelayFloorInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -255,6 +256,7 @@ func GrpcServerOptionsProvider(
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
+	retryDelayFloorInterceptor *interceptor.RetryDelayFloorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -314,6 +316,8 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Keep this outside telemetry so error metrics see the original limiter errors.
+		retryDelayFloorInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -696,7 +700,20 @@ func NamespaceRateLimitInterceptorProvider(
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
-		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
+	)
+}
+
+func RetryDelayFloorInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) *interceptor.RetryDelayFloorInterceptor {
+	return interceptor.NewRetryDelayFloorInterceptor(
+		namespaceRegistry,
+		serviceConfig.ResourceExhaustedRetryDelayFloor,
+		metricsHandler,
+		interceptor.ErrNamespaceRateLimitServerBusy,
+		interceptor.ErrNamespaceCountLimitServerBusy,
 	)
 }
 
@@ -719,7 +736,6 @@ func NamespaceCountLimitInterceptorProvider(
 			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
 		},
 		configs.ExecutionAPICountLimitOverride,
-		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
 	)
 }
 

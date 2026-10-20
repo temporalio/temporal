@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 )
 
@@ -102,7 +101,7 @@ func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isEx
 
 	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		limitGroup := ""
-		if errors.Is(err, ErrNamespaceCountLimitServerBusy) || isFlooredNamespaceCountLimitError(err) {
+		if errors.Is(err, ErrNamespaceCountLimitServerBusy) {
 			limitGroup = concurrencyLimitGroup(isInternalPerNSPoll(req))
 		}
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
@@ -118,33 +117,6 @@ func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isEx
 	}
 
 	metrics.ServiceFailures.With(metricsHandler).Record(1)
-}
-
-// isFlooredNamespaceCountLimitError recognizes only concurrent namespace limit errors carrying RetryInfo. This helper
-// is used for metric value grouping so unrelated errors with matching fields are not grouped as concurrency limits.
-func isFlooredNamespaceCountLimitError(err error) bool {
-	resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err)
-	if !ok ||
-		resourceExhaustedErr.Cause != ErrNamespaceCountLimitServerBusy.Cause ||
-		resourceExhaustedErr.Scope != ErrNamespaceCountLimitServerBusy.Scope ||
-		resourceExhaustedErr.Message != ErrNamespaceCountLimitServerBusy.Message {
-		return false
-	}
-	return hasRetryInfo(err)
-}
-
-func hasRetryInfo(err error) bool {
-	for _, detail := range serviceerror.ToStatus(err).Details() {
-		retryInfo, ok := detail.(*errdetails.RetryInfo)
-		if !ok {
-			continue
-		}
-		retryDelay := retryInfo.GetRetryDelay()
-		if retryDelay != nil && retryDelay.CheckValid() == nil && retryDelay.AsDuration() > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 //nolint:revive // explicit cases in switch for documentation purposes

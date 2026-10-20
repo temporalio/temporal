@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -23,146 +21,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
-
-func TestConcurrentRequestLimitInterceptorRetryDelayFloor(t *testing.T) {
-	t.Parallel()
-
-	const method = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
-	registry := namespace.NewMockRegistry(gomock.NewController(t))
-	registry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(&namespace.Namespace{}, nil).AnyTimes()
-	quota := ConcurrentRequestQuotas{
-		PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
-		Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
-	}
-	mh := metricstest.NewCaptureHandler()
-	capture := mh.StartCapture()
-	defer mh.StopCapture(capture)
-	interceptor := NewConcurrentRequestLimitInterceptor(
-		registry,
-		quotastest.NewFakeMemberCounter(1),
-		log.NewNoopLogger(),
-		quota,
-		quota,
-		map[string]int{method: 1},
-		WithResourceExhaustedRetryDelayFloor(func(string) time.Duration { return 2 * time.Second }),
-	)
-	request := &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: "test-namespace", TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
-	}
-	cleanup, err := interceptor.Allow("test-namespace", method, mh, request)
-	require.NoError(t, err)
-	defer cleanup()
-
-	cleanupRejected, directErr := interceptor.Allow("test-namespace", method, mh, request)
-	require.Same(t, ErrNamespaceCountLimitServerBusy, directErr)
-	cleanupRejected()
-	require.Nil(t, retryInfoDetail(directErr))
-
-	handlerCalled := false
-	_, err = interceptor.Intercept(AddTelemetryContext(context.Background(), mh), request, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
-		handlerCalled = true
-		return nil, nil
-	})
-	retryInfo := retryInfoDetail(err)
-	require.NotNil(t, retryInfo)
-	require.Equal(t, 2*time.Second, retryInfo.GetRetryDelay().AsDuration())
-	require.False(t, handlerCalled)
-	require.Nil(t, retryInfoDetail(ErrNamespaceCountLimitServerBusy))
-	recordings := capture.SnapshotMetric(metrics.ResourceExhaustedRetryDelayFloorEmitted.Name())
-	require.Len(t, recordings, 1)
-	require.Equal(t, map[string]string{
-		"namespace": "test-namespace",
-		"operation": "PollWorkflowTaskQueue",
-	}, recordings[0].Tags)
-}
-
-func TestConcurrentRequestLimitInterceptorRetryDelayFloorDisabled(t *testing.T) {
-	t.Parallel()
-
-	const method = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
-	for _, tc := range []struct {
-		name    string
-		options []LimitInterceptorOption
-	}{
-		{name: "unset"},
-		{
-			name: "zero",
-			options: []LimitInterceptorOption{
-				WithResourceExhaustedRetryDelayFloor(func(string) time.Duration { return 0 }),
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			registry := namespace.NewMockRegistry(gomock.NewController(t))
-			registry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(&namespace.Namespace{}, nil)
-			quota := ConcurrentRequestQuotas{
-				PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
-				Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
-			}
-			interceptor := NewConcurrentRequestLimitInterceptor(
-				registry,
-				quotastest.NewFakeMemberCounter(1),
-				log.NewNoopLogger(),
-				quota,
-				quota,
-				map[string]int{method: 1},
-				tc.options...,
-			)
-			request := &workflowservice.PollWorkflowTaskQueueRequest{
-				Namespace: "test-namespace", TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
-			}
-			cleanup, err := interceptor.Allow("test-namespace", method, metrics.NoopMetricsHandler, request)
-			require.NoError(t, err)
-			defer cleanup()
-
-			_, err = interceptor.Intercept(AddTelemetryContext(context.Background(), metrics.NoopMetricsHandler), request,
-				&grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
-					t.Fatal("handler should not be called when the concurrency limit is reached")
-					return nil, nil
-				})
-			require.Same(t, ErrNamespaceCountLimitServerBusy, err)
-			require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
-			require.Len(t, serviceerror.ToStatus(err).Proto().GetDetails(), 1)
-			require.Nil(t, retryInfoDetail(err))
-		})
-	}
-}
-
-func TestConcurrentRequestLimitInterceptorDoesNotDecorateHandlerError(t *testing.T) {
-	t.Parallel()
-
-	const method = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
-	registry := namespace.NewMockRegistry(gomock.NewController(t))
-	registry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(&namespace.Namespace{}, nil)
-	quota := ConcurrentRequestQuotas{
-		PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
-		Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
-	}
-	mh := metricstest.NewCaptureHandler()
-	capture := mh.StartCapture()
-	defer mh.StopCapture(capture)
-	interceptor := NewConcurrentRequestLimitInterceptor(
-		registry,
-		quotastest.NewFakeMemberCounter(1),
-		log.NewNoopLogger(),
-		quota,
-		quota,
-		map[string]int{method: 1},
-		WithResourceExhaustedRetryDelayFloor(func(string) time.Duration { return 2 * time.Second }),
-	)
-	request := &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: "test-namespace", TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
-	}
-
-	_, err := interceptor.Intercept(AddTelemetryContext(context.Background(), mh), request,
-		&grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) {
-			return nil, ErrNamespaceCountLimitServerBusy
-		})
-	require.Same(t, ErrNamespaceCountLimitServerBusy, err)
-	require.Nil(t, retryInfoDetail(err))
-	require.Empty(t, capture.SnapshotMetric(metrics.ResourceExhaustedRetryDelayFloorEmitted.Name()))
-}
 
 type nsCountLimitTestCase struct {
 	// name of the test case

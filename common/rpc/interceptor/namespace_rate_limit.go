@@ -7,7 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
@@ -84,7 +83,6 @@ type (
 		pollMethods                       map[string]struct{}
 		pollWaitForToken                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                    metrics.Handler
-		retryDelayFloor                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -97,16 +95,13 @@ func NewNamespaceRateLimitInterceptor(
 	pollMethods map[string]struct{},
 	pollWaitForToken dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
-	options ...LimitInterceptorOption,
 ) NamespaceRateLimitInterceptor {
-	interceptorOptions := newLimitInterceptorOptions(options...)
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
 		rateLimiter:       rateLimiter,
 		pollMethods:       pollMethods,
 		pollWaitForToken:  pollWaitForToken,
 		metricsHandler:    metricsHandler,
-		retryDelayFloor:   interceptorOptions.retryDelayFloor,
 	}
 }
 
@@ -135,33 +130,16 @@ func (ni *NamespaceRateLimitInterceptorImpl) InterceptN(
 		}
 		if _, ok := ni.pollMethods[info.FullMethod]; ok && ni.pollWaitForToken(ns.String()) {
 			if err := ni.WaitN(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx), numToken); err != nil {
-				return nil, ni.withRetryDelayFloor(err, ns, api.MethodName(info.FullMethod))
+				return nil, err
 			}
 			return handler(ctx, req)
 		}
 		if err := ni.AllowN(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx), numToken); err != nil {
-			return nil, ni.withRetryDelayFloor(err, ns, api.MethodName(info.FullMethod))
+			return nil, err
 		}
 	}
 
 	return handler(ctx, req)
-}
-
-func (ni *NamespaceRateLimitInterceptorImpl) withRetryDelayFloor(
-	err error,
-	namespaceName namespace.Name,
-	operation string,
-) error {
-	if err != ErrNamespaceRateLimitServerBusy {
-		return err
-	}
-	return withResourceExhaustedRetryDelayFloor(
-		ErrNamespaceRateLimitServerBusy,
-		namespaceName,
-		ni.retryDelayFloor,
-		ni.metricsHandler,
-		operation,
-	)
 }
 
 func (ni *NamespaceRateLimitInterceptorImpl) Wait(
