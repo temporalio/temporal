@@ -77,7 +77,6 @@ func newTestHandler(t *testing.T, captureHandler *metricstest.CaptureHandler) (*
 		config:                   NewConfig(dynamicconfig.NewNoopCollection()),
 		metricsHandler:           captureHandler,
 		logger:                   log.NewNoopLogger(),
-		nexusTaskLogger:          log.NewNoopLogger(),
 		throttledLogger:          log.NewNoopLogger(),
 		nexusTaskThrottledLogger: log.NewNoopLogger(),
 		namespaceRegistry:        nsRegistry,
