@@ -32,7 +32,8 @@ func NewWorkflowTags(
 // Extract returns the workflow tags of the request and, for Nexus RPCs, their Nexus lifecycle stage.
 func (wt *WorkflowTags) Extract(req any, fullMethod string) []tag.Tag {
 	tags := wt.extractWorkflowTags(req, fullMethod)
-	return append(tags, NexusStage(req, fullMethod)...)
+	tags = append(tags, NexusStage(req, fullMethod)...)
+	return tags
 }
 
 func (wt *WorkflowTags) extractWorkflowTags(req any, fullMethod string) []tag.Tag {
