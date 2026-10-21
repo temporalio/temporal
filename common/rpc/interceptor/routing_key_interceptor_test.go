@@ -10,12 +10,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
@@ -660,6 +662,7 @@ func TestMethodToPatternMapping(t *testing.T) {
 		"RespondActivityTaskFailedById":    PatternWorkflowID,
 
 		// PatternTaskToken
+		"RespondActivityTaskHandoff":   PatternActivityTaskToken,
 		"RecordActivityTaskHeartbeat":  PatternTaskToken,
 		"RespondActivityTaskCompleted": PatternTaskToken,
 		"RespondActivityTaskCanceled":  PatternTaskToken,
@@ -678,4 +681,43 @@ func TestMethodToPatternMapping(t *testing.T) {
 	}
 
 	require.Equal(t, expectedMappings, methodToPattern)
+}
+
+func TestActivityHandoffRouting(t *testing.T) {
+	t.Parallel()
+
+	ref, err := proto.Marshal(&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id", BusinessId: "activity-id"})
+	require.NoError(t, err)
+	missingNamespace, err := proto.Marshal(&persistencespb.ChasmComponentRef{BusinessId: "activity-id"})
+	require.NoError(t, err)
+	missingBusinessID, err := proto.Marshal(&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id"})
+	require.NoError(t, err)
+
+	serializer := tasktoken.NewSerializer()
+	for _, tc := range []struct {
+		name       string
+		token      *tokenspb.Task
+		resourceID string
+		want       string
+	}{
+		{name: "standalone token", token: &tokenspb.Task{NamespaceId: "namespace-id", ComponentRef: ref}, want: "activity-id"},
+		{name: "workflow token", token: &tokenspb.Task{NamespaceId: "namespace-id", WorkflowId: "workflow-id"}, want: "workflow-id"},
+		{name: "resource ID takes precedence", token: &tokenspb.Task{WorkflowId: "workflow-id"}, resourceID: "activity:explicit-id", want: "explicit-id"},
+		{name: "malformed component never falls back to workflow", token: &tokenspb.Task{ComponentRef: []byte("bad-ref"), WorkflowId: "wrong-workflow"}},
+		{name: "invalid component", token: &tokenspb.Task{ComponentRef: []byte{0x08, 1}, WorkflowId: "wrong-workflow"}},
+		{name: "missing component namespace never falls back to workflow", token: &tokenspb.Task{ComponentRef: missingNamespace, WorkflowId: "wrong-workflow"}},
+		{name: "missing component business ID never falls back to workflow", token: &tokenspb.Task{ComponentRef: missingBusinessID, WorkflowId: "wrong-workflow"}},
+		{name: "empty token", token: &tokenspb.Task{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b, err := serializer.Serialize(tc.token)
+			require.NoError(t, err)
+			extract := WorkflowServiceExtractor(NewRoutingKeyExtractor())
+			got := extract(t.Context(), &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: b, ResourceId: tc.resourceID,
+			}, api.WorkflowServicePrefix+"RespondActivityTaskHandoff")
+			require.Equal(t, namespace.RoutingKey{ID: tc.want}, got)
+		})
+	}
 }

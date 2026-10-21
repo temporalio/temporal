@@ -23,7 +23,6 @@ package activity
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,7 +33,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	commonfailure "go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -257,15 +255,6 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 		return enumspb.RETRY_STATE_TIMEOUT, retryInterval
 	}
 	return enumspb.RETRY_STATE_IN_PROGRESS, retryInterval
-}
-
-// timeoutRetryable reports whether a StartToClose or Heartbeat timeout may be retried under the retry
-// policy.
-func (a *Activity) timeoutRetryable(timeoutType enumspb.TimeoutType) bool {
-	return !slices.Contains(
-		a.GetRetryPolicy().GetNonRetryableErrorTypes(),
-		retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-	)
 }
 
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time

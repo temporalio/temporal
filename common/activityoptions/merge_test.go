@@ -199,7 +199,18 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		"taskQueue.normalName": {},
 		// non_retryable_error_types is a repeated field; set/clear semantics
 		// do not map cleanly onto a single field-mask path (no append/remove).
-		"retryPolicy.nonRetryableErrorTypes": {},
+		"retryPolicy.nonRetryableErrorTypes":                     {},
+		"asyncHandoffOptions.retryPolicy.nonRetryableErrorTypes": {},
+		// TODO: Cover these paths when handoff option merging is implemented.
+		"asyncHandoffOptions":                                {},
+		"asyncHandoffOptions.startToHandoffTimeout":          {},
+		"asyncHandoffOptions.handoffToCloseTimeout":          {},
+		"asyncHandoffOptions.heartbeatTimeout":               {},
+		"asyncHandoffOptions.retryPolicy":                    {},
+		"asyncHandoffOptions.retryPolicy.initialInterval":    {},
+		"asyncHandoffOptions.retryPolicy.backoffCoefficient": {},
+		"asyncHandoffOptions.retryPolicy.maximumInterval":    {},
+		"asyncHandoffOptions.retryPolicy.maximumAttempts":    {},
 	}
 
 	// Enumerate all valid field-mask paths for ActivityOptions via protoreflect.
@@ -215,9 +226,10 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		require.True(t, exists, "notOfferedPaths entry %q does not correspond to any proto field path", p)
 	}
 
-	// populatedOptions has a distinct non-zero value for every possible field so
+	// populatedOptions has a distinct non-zero value for every supported field so
 	// the per-path mutation check below can detect whether the field was actually set.
 	populatedOptions := &activitypb.ActivityOptions{
+		StartDelay:             durationpb.New(2 * time.Second),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-queue"},
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(5 * time.Second),
@@ -249,12 +261,15 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 
 			fromVal, fd := getValueAtProtoPath(populatedOptions.ProtoReflect(), path)
 			intoVal, _ := getValueAtProtoPath(mergeInto.ProtoReflect(), path)
+			require.True(t, fromVal.IsValid(), "populate fixture for path %q", path)
 
 			switch fd.Kind() {
 			case protoreflect.MessageKind:
+				require.True(t, fromVal.Message().IsValid(), "populate fixture for path %q", path)
 				require.True(t, proto.Equal(safeProtoMessage(fromVal), safeProtoMessage(intoVal)),
 					"MergeActivityOptions did not update message field %q", path)
 			default:
+				require.NotEqual(t, fd.Default().Interface(), fromVal.Interface(), "populate fixture for path %q", path)
 				require.Equal(t, fromVal.Interface(), intoVal.Interface(),
 					"MergeActivityOptions did not update scalar field %q", path)
 			}

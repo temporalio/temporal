@@ -349,3 +349,22 @@ func ActivityRetryIntervalSourceFromString(s string) (ActivityRetryIntervalSourc
 	}
 	return ActivityRetryIntervalSource(0), fmt.Errorf("%s is not a valid ActivityRetryIntervalSource", s)
 }
+
+var (
+	ActivityRetryType_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Activity":    1,
+		"Handoff":     2,
+	}
+)
+
+// ActivityRetryTypeFromString parses a ActivityRetryType value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ActivityRetryType
+func ActivityRetryTypeFromString(s string) (ActivityRetryType, error) {
+	if v, ok := ActivityRetryType_value[s]; ok {
+		return ActivityRetryType(v), nil
+	} else if v, ok := ActivityRetryType_shorthandValue[s]; ok {
+		return ActivityRetryType(v), nil
+	}
+	return ActivityRetryType(0), fmt.Errorf("%s is not a valid ActivityRetryType", s)
+}

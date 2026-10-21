@@ -104,6 +104,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById":  1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompletedById": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskHandoff":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        1,
