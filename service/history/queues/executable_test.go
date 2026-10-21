@@ -1166,15 +1166,13 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 
 // CHASM task logs name the task by its fully qualified CHASM task type.
 func (s *executableSuite) TestHandleErr_ChasmTask_LogsChasmTaskType() {
-	s.NoError(s.chasmRegistry.Register(&testTaskLibrary{
-		handler: chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask](s.controller),
-	}))
+	s.NoError(s.chasmRegistry.Register(&chasm.CoreLibrary{}))
 
 	executable := s.newTestExecutable(func(p *params) {
 		p.task = &tasks.ChasmTask{
 			WorkflowKey: definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
 			Category:    tasks.CategoryTransfer,
-			Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("TestLib.MyTask")},
+			Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("core.visTask")},
 		}
 	})
 	logCapture := s.logger.StartCapture()
@@ -1184,22 +1182,8 @@ func (s *executableSuite) TestHandleErr_ChasmTask_LogsChasmTaskType() {
 	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Warn,
 		Message: "Fail to process task",
-		Tags:    map[string]any{"chasm-task-type": "TestLib.MyTask"},
+		Tags:    map[string]any{"chasm-task-type": "core.visTask"},
 	})
-}
-
-type testTask struct{}
-
-// testTaskLibrary is a minimal CHASM library that registers one side-effect task, "TestLib.MyTask".
-type testTaskLibrary struct {
-	chasm.UnimplementedLibrary
-	handler chasm.SideEffectTaskHandler[*chasm.MockComponent, testTask]
-}
-
-func (l *testTaskLibrary) Name() string { return "TestLib" }
-
-func (l *testTaskLibrary) Tasks() []*chasm.RegistrableTask {
-	return []*chasm.RegistrableTask{chasm.NewRegistrableSideEffectTask("MyTask", l.handler)}
 }
 
 // Non-CHASM task logs carry no CHASM task type.
