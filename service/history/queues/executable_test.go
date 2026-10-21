@@ -1164,42 +1164,43 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	s.Equal([]int32{1, 2, 3}, loggedAttempts)
 }
 
-// CHASM task logs name the task by its fully qualified CHASM task type.
-func (s *executableSuite) TestHandleErr_ChasmTask_LogsChasmTaskType() {
+// Logs name CHASM tasks by their fully qualified CHASM task type, and only CHASM tasks.
+func (s *executableSuite) TestHandleErr_LogsChasmTaskType() {
 	s.NoError(s.chasmRegistry.Register(&chasm.CoreLibrary{}))
 
-	executable := s.newTestExecutable(func(p *params) {
-		p.task = &tasks.ChasmTask{
-			WorkflowKey: definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
-			Category:    tasks.CategoryTransfer,
-			Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("core.visTask")},
+	s.Run("CHASM task", func() {
+		executable := s.newTestExecutable(func(p *params) {
+			p.task = &tasks.ChasmTask{
+				WorkflowKey: definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+				Category:    tasks.CategoryTransfer,
+				Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("core.visTask")},
+			}
+		})
+		logCapture := s.logger.StartCapture()
+
+		s.Error(executable.HandleErr(errors.New("random error")))
+
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Warn,
+			Message: "Fail to process task",
+			Tags:    map[string]any{"chasm-task-type": "core.visTask"},
+		})
+	})
+
+	s.Run("non-CHASM task", func() {
+		executable := s.newTestExecutable()
+		logCapture := s.logger.StartCapture()
+
+		s.Error(executable.HandleErr(errors.New("random error")))
+
+		records := logCapture.Snapshot()
+		s.NotEmpty(records)
+		for _, record := range records {
+			for _, t := range record.Tags {
+				s.NotEqual("chasm-task-type", t.Key())
+			}
 		}
 	})
-	logCapture := s.logger.StartCapture()
-
-	s.Error(executable.HandleErr(errors.New("random error")))
-
-	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-		Level:   testlogger.Warn,
-		Message: "Fail to process task",
-		Tags:    map[string]any{"chasm-task-type": "core.visTask"},
-	})
-}
-
-// Non-CHASM task logs carry no CHASM task type.
-func (s *executableSuite) TestHandleErr_NonChasmTask_OmitsChasmTaskType() {
-	executable := s.newTestExecutable()
-	logCapture := s.logger.StartCapture()
-
-	s.Error(executable.HandleErr(errors.New("random error")))
-
-	records := logCapture.Snapshot()
-	s.NotEmpty(records)
-	for _, record := range records {
-		for _, t := range record.Tags {
-			s.NotEqual("chasm-task-type", t.Key())
-		}
-	}
 }
 
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
