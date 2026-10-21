@@ -1144,6 +1144,7 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 
 	logCapture := s.logger.StartCapture()
 	s.T().Cleanup(func() { s.logger.StopCapture(logCapture) })
+
 	executable := s.newTestExecutable()
 	for range numAttempts {
 		s.Error(executable.HandleErr(errors.New("random error")))
