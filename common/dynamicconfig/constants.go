@@ -1697,6 +1697,11 @@ an optional feature and also requires a metrics collection system that can handl
 		false,
 		`MatchingEnableWorkerConfigEvents controls whether to emit worker_config wide events when a worker first registers.`,
 	)
+	MatchingEnableWorkerMetricsEvents = NewNamespaceBoolSetting(
+		"matching.enableWorkerMetricsEvents",
+		false,
+		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events on every heartbeat.`,
+	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
 		false,

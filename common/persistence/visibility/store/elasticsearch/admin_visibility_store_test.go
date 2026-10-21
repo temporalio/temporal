@@ -11,10 +11,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -38,8 +38,8 @@ func (s *ESVisibilitySuite) TestListExecutions() {
 
 	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{
-			Namespace: testNamespace,
+		&adminservice.ListExecutionsRequest{
+			Namespace: testNamespace.String(),
 			Query:     `ExecutionStatus = "Terminated"`,
 			PageSize:  10,
 		},
@@ -67,7 +67,7 @@ func (s *ESVisibilitySuite) TestListExecutions_AllNamespaces() {
 
 	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{
+		&adminservice.ListExecutionsRequest{
 			Query:    `ExecutionStatus = "Terminated"`,
 			PageSize: 10,
 		},
@@ -92,7 +92,7 @@ func (s *ESVisibilitySuite) TestListExecutions_AllNamespacesNoMapper() {
 			return testSearchResult, nil
 		})
 
-	request := &manager.AdminListExecutionsRequest{
+	request := &adminservice.ListExecutionsRequest{
 		Query:    `CustomKeywordField = "foo"`,
 		PageSize: 10,
 	}
@@ -153,7 +153,7 @@ func (s *ESVisibilitySuite) TestListExecutions_OrQueryPagination() {
 
 	_, err = s.visibilityStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{
+		&adminservice.ListExecutionsRequest{
 			Query:         `WorkflowId = "wid-1" OR WorkflowId = "wid-2"`,
 			PageSize:      10,
 			NextPageToken: pageToken,
@@ -254,13 +254,13 @@ func (s *ESVisibilitySuite) TestListExecutions_NamespaceNotFound() {
 
 	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{Namespace: testNamespace, PageSize: 10},
+		&adminservice.ListExecutionsRequest{Namespace: testNamespace.String(), PageSize: 10},
 	)
 	s.ErrorIs(err, nsNotFoundErr)
 }
 
 func (s *ESVisibilitySuite) TestListExecutions_Error() {
-	request := &manager.AdminListExecutionsRequest{
+	request := &adminservice.ListExecutionsRequest{
 		Query:    `ExecutionStatus = "Terminated"`,
 		PageSize: 10,
 	}
@@ -298,8 +298,8 @@ func (s *ESVisibilitySuite) TestCountExecutions() {
 
 	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{
-			Namespace: testNamespace,
+		&adminservice.CountExecutionsRequest{
+			Namespace: testNamespace.String(),
 			Query:     `ExecutionStatus = "Terminated"`,
 		},
 	)
@@ -324,7 +324,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_AllNamespaces() {
 
 	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{Query: `ExecutionStatus = "Terminated"`},
+		&adminservice.CountExecutionsRequest{Query: `ExecutionStatus = "Terminated"`},
 	)
 	s.NoError(err)
 	s.Equal(&store.InternalCountExecutionsResponse{Count: 1}, resp)
@@ -357,7 +357,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_GroupBy() {
 
 	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{Query: "GROUP BY ExecutionStatus"},
+		&adminservice.CountExecutionsRequest{Query: "GROUP BY ExecutionStatus"},
 	)
 	s.NoError(err)
 	expectedResp := &store.InternalCountExecutionsResponse{
@@ -388,7 +388,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_NamespaceNotFound() {
 
 	_, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{Namespace: testNamespace},
+		&adminservice.CountExecutionsRequest{Namespace: testNamespace.String()},
 	)
 	s.ErrorIs(err, nsNotFoundErr)
 }
@@ -399,7 +399,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_Error() {
 		Return(s.mockMetricsHandler).
 		AnyTimes()
 
-	request := &manager.AdminCountExecutionsRequest{Query: `ExecutionStatus = "Terminated"`}
+	request := &adminservice.CountExecutionsRequest{Query: `ExecutionStatus = "Terminated"`}
 
 	s.mockESClient.EXPECT().
 		Count(gomock.Any(), testIndex, gomock.Any()).
