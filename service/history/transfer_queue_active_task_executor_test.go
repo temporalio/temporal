@@ -890,9 +890,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		Version:             s.version,
-		TaskID:              taskID,
-		VisibilityTimestamp: time.Now().UTC(),
+		SkipParentVerification: true,
+		Version:                s.version,
+		TaskID:                 taskID,
+		VisibilityTimestamp:    time.Now().UTC(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
