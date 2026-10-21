@@ -1,4 +1,5 @@
-package tests
+// Package querytest provides the query converter test cases shared by every visibility store.
+package querytest
 
 import (
 	"strings"
@@ -6,29 +7,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	vissql "go.temporal.io/server/common/persistence/visibility/store/sql"
-	"go.temporal.io/server/common/searchattribute"
 )
+
+// Dialect selects the expected results of the store under test.
+type Dialect int
 
 const (
-	testNamespaceName = namespace.Name("test-namespace")
+	MySQL Dialect = iota
+	PostgreSQL
+	SQLite
+	Elasticsearch
 )
-
-var sqlPlugins = []string{
-	mysql.PluginName,
-	postgresql.PluginName,
-	postgresql.PluginNamePGX,
-	sqlite.PluginName,
-}
 
 type queryConverterTestCase struct {
 	name string
@@ -60,21 +50,21 @@ type queryConverterTestCase struct {
 	orderBy string
 }
 
-func (tc *queryConverterTestCase) expected(store string) (out string, errMsg string) {
+func (tc *queryConverterTestCase) expected(dialect Dialect) (out string, errMsg string) {
 	if tc.err != "" {
 		return "", tc.err
 	}
-	if store == elasticsearch.PersistenceName {
+	if dialect == Elasticsearch {
 		return tc.es, tc.esErr
 	}
 
 	var outOverride, errOverride string
-	switch store {
-	case mysql.PluginName:
+	switch dialect {
+	case MySQL:
 		outOverride, errOverride = tc.mysql, tc.mysqlErr
-	case postgresql.PluginName, postgresql.PluginNamePGX:
+	case PostgreSQL:
 		outOverride, errOverride = tc.postgres, tc.postgresErr
-	case sqlite.PluginName:
+	case SQLite:
 		outOverride, errOverride = tc.sqlite, tc.sqliteErr
 	default:
 		// no-op
@@ -1408,16 +1398,18 @@ var queryConverterTestCases = []queryConverterTestCase{
 	},
 }
 
-func runQueryConverterTest[T any](
+// Run converts every test case with a new query converter, and checks the serialized query
+// against the expected results of dialect.
+func Run[T any](
 	t *testing.T,
-	store string,
+	dialect Dialect,
 	newQueryConverter func() *query.QueryConverter[T],
 	serialize func(T) (string, error),
 ) {
 	for _, tc := range queryConverterTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			expectedOut, expectedErr := tc.expected(store)
+			expectedOut, expectedErr := tc.expected(dialect)
 			// The query converter is stateful (e.g. it tracks if the query filtered by
 			// namespace division), thus each test case requires a new instance.
 			queryParams, err := newQueryConverter().Convert(tc.in)
@@ -1440,39 +1432,6 @@ func runQueryConverterTest[T any](
 			}
 			r.Equal(tc.groupBy, groupBy)
 			r.Equal(tc.orderBy, strings.TrimSpace(sqlparser.String(queryParams.OrderBy)))
-		})
-	}
-}
-
-func serializeSQLQuery(expr sqlparser.Expr) (string, error) {
-	if expr == nil {
-		return "", nil
-	}
-	return sqlparser.String(expr), nil
-}
-
-func TestSQLQueryConverter(t *testing.T) {
-	t.Parallel()
-	for _, plugin := range sqlPlugins {
-		t.Run(plugin, func(t *testing.T) {
-			t.Parallel()
-			pluginVisQC, err := sql.GetPluginVisibilityQueryConverter(plugin)
-			require.NoError(t, err)
-			runQueryConverterTest(
-				t,
-				plugin,
-				func() *query.QueryConverter[sqlparser.Expr] {
-					return query.NewQueryConverter(
-						&vissql.SQLQueryConverter{VisibilityQueryConverter: pluginVisQC},
-						testNamespaceName,
-						searchattribute.TestNameTypeMap(),
-						&searchattribute.TestMapper{},
-						metrics.NoopMetricsHandler,
-						log.NewNoopLogger(),
-					)
-				},
-				serializeSQLQuery,
-			)
 		})
 	}
 }
