@@ -4,7 +4,12 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 
 	junitxml "github.com/jstemmer/go-junit-report/v2/junit"
 )
@@ -22,6 +27,8 @@ type Testcase = junitxml.Testcase
 type Result = junitxml.Result
 
 var errRead = errors.New("failed to read JUnit report file")
+
+var retrySuffixRe = regexp.MustCompile(` \(retry \d+\)$`)
 
 // Read reads a JUnit XML file with either a testsuites or testsuite root.
 func Read(path string) (*Testsuites, error) {
@@ -75,6 +82,41 @@ func ReadTestcases(path string) ([]Testcase, error) {
 		cases = append(cases, suite.Testcases...)
 	}
 	return cases, nil
+}
+
+// LeafTestDurations returns the longest observed duration for each non-skipped leaf test. Retry
+// suffixes are removed, and parent durations are omitted because they include their subtests.
+func LeafTestDurations(cases []Testcase) map[string]float64 {
+	observed := make(map[string]float64, len(cases))
+	for _, tc := range cases {
+		if tc.Skipped != nil {
+			continue
+		}
+		name := normalizeTestName(tc.Name)
+		if name == "" {
+			continue
+		}
+		seconds, err := strconv.ParseFloat(tc.Time, 64)
+		if err != nil || seconds < 0 {
+			seconds = 0
+		}
+		observed[name] = max(observed[name], seconds)
+	}
+
+	names := slices.Sorted(maps.Keys(observed))
+	durations := make(map[string]float64, len(observed))
+	for i, name := range names {
+		if i+1 < len(names) && strings.HasPrefix(names[i+1], name+"/") {
+			continue
+		}
+		durations[name] = observed[name]
+	}
+	return durations
+}
+
+func normalizeTestName(name string) string {
+	name = strings.TrimSuffix(name, " (final)")
+	return retrySuffixRe.ReplaceAllString(name, "")
 }
 
 // Write writes a JUnit XML file.
