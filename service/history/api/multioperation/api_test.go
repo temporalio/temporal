@@ -237,6 +237,78 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestIDLink() {
+	ctx := testcontext.For(s.T())
+	const (
+		acceptedEventID int64 = 42
+		callbackEventID int64 = 43
+		requestID             = "request-id"
+	)
+
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			requestID: {
+				EventId:   callbackEventID,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
+	}
+	lease := api.NewWorkflowLease(s.currentContext, func(error) {}, s.currentMutableState)
+	s.consistencyChecker.EXPECT().
+		GetWorkflowLease(gomock.Any(), nil, gomock.Any(), gomock.Any()).
+		Return(lease, nil)
+	s.currentMutableState.EXPECT().
+		GetCompletedUpdate(gomock.Any(), testUpdateID).
+		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: acceptedEventID}, nil)
+	s.currentMutableState.EXPECT().
+		GetExecutionState().
+		Return(executionState).
+		Times(2)
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nil)
+	s.currentContext.EXPECT().
+		GetWorkflowKey().
+		Return(tests.WorkflowKey)
+
+	updateReq := createUpdateRequest(testUpdateID)
+	updateReq.Request.Namespace = tests.Namespace.String()
+	updateReq.Request.Request.RequestId = requestID
+	updateReq.Request.Request.CompletionCallbacks = []*commonpb.Callback{{}}
+	uws := &updateWithStart{
+		namespaceId:        tests.NamespaceID,
+		consistencyChecker: s.consistencyChecker,
+		updateReq:          updateReq,
+		startReq: &historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+			},
+		},
+		updater: updateworkflow.NewUpdater(nil, nil, nil, updateReq),
+	}
+
+	resp, err := uws.Invoke(ctx)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: requestID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			},
+		},
+	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
+}
+
 func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOmitsUpdateLink() {
 	ctx := testcontext.For(s.T())
 	var releaseErr error
