@@ -246,13 +246,9 @@ func NewExecutable(
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
-				return append(tasks.Tags(task), tag.TaskTypeName(taskTypeTagValue(
-					task,
-					namespaceRegistry,
-					clusterMetadata.GetCurrentClusterName(),
-					chasmRegistry,
-					taskTypeTagProvider,
-				)))
+				tags := tasks.Tags(task)
+				taskType := taskTypeTagValue(task, namespaceRegistry, clusterMetadata.GetCurrentClusterName(), chasmRegistry, taskTypeTagProvider)
+				return append(tags, tag.TaskTypeName(taskType))
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
