@@ -19,6 +19,8 @@ type executionInfoLegacyJSON struct {
 
 func (e *ExecutionInfo) UnmarshalJSON(data []byte) error {
 	// For backward compatibility, support both workflow_id and business_id here.
+	// TODO: Remove workflow_id support once migration workflow histories and activity heartbeats
+	// written by OSS v1.30 and earlier no longer need to be decoded.
 	var legacy executionInfoLegacyJSON
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return err

@@ -162,6 +162,9 @@ message ActivityState {
 
   // Used to de-dupe update requests.
   string last_update_options_request_id = 23;
+
+  // Indicates that eager execution was accepted for this activity's first task.
+  bool eager_execution_accepted = 24;
 }
 
 message ActivityCancelState {

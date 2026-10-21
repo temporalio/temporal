@@ -1521,6 +1521,7 @@ func (s *ContextImpl) handleWriteErrorLocked(
 
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
+		*persistence.WorkflowRunAlreadyExistsError,
 		*persistence.ConditionFailedError,
 		*persistence.InvalidPersistenceRequestError,
 		*persistence.TransactionSizeLimitError,

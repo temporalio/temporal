@@ -39,6 +39,16 @@ func (c *clientImpl) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,

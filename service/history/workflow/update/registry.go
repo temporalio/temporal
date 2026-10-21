@@ -201,6 +201,7 @@ func NewRegistry(
 				nil,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			u := newAccepted(
@@ -208,6 +209,7 @@ func NewRegistry(
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
 				// If the Workflow is completed, accepted Update will never be completed
@@ -274,6 +276,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		reqAny,
 		r.remover(updateID),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(reqMsg.GetPropagatedNexusSerializationContext()),
 	)
 	upd.originalReqID = reqMsg.RequestId
 	r.updates[updateID] = upd
@@ -482,6 +485,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 		acceptedEventID,
 		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(r.store.GetUpdateNexusSerializationContext(id)),
 	)
 }
 

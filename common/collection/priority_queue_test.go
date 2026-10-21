@@ -5,6 +5,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -25,6 +26,75 @@ func testPriorityQueueItemCompareLess(this *testPriorityQueueItem, that *testPri
 
 func TestPriorityQueueSuite(t *testing.T) {
 	suite.Run(t, new(PriorityQueueSuite))
+}
+
+func TestPriorityQueueRemoveReleasesItems(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		preloaded bool
+		values    []int
+	}{
+		{name: "added single item", values: []int{1}},
+		{name: "added multiple items", values: []int{3, 1, 2}},
+		{name: "preloaded single item", preloaded: true, values: []int{1}},
+		{name: "preloaded multiple items", preloaded: true, values: []int{3, 1, 2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			items := make([]*testPriorityQueueItem, len(tc.values))
+			for i, value := range tc.values {
+				items[i] = &testPriorityQueueItem{value: value}
+			}
+			queue := NewPriorityQueue(testPriorityQueueItemCompareLess)
+			if tc.preloaded {
+				queue = NewPriorityQueueWithItems(testPriorityQueueItemCompareLess, items)
+			} else {
+				for _, item := range items {
+					queue.Add(item)
+				}
+			}
+			pq := queue.(*priorityQueueImpl[*testPriorityQueueItem])
+			for i := range len(tc.values) {
+				require.Equal(t, &testPriorityQueueItem{value: i + 1}, queue.Remove())
+				require.Equal(t, make([]*testPriorityQueueItem, cap(pq.items)-pq.Len()), pq.items[:cap(pq.items)][pq.Len():])
+			}
+			item := &testPriorityQueueItem{value: 4}
+			queue.Add(item)
+			require.Same(t, item, queue.Remove())
+			require.Equal(t, make([]*testPriorityQueueItem, cap(pq.items)), pq.items[:cap(pq.items)])
+		})
+	}
+}
+
+func TestPriorityQueueRemoveReleasesInterfaceItems(t *testing.T) {
+	t.Parallel()
+	for _, preloaded := range []bool{false, true} {
+		name := "added items"
+		if preloaded {
+			name = "preloaded items"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			compareLess := func(a, b any) bool {
+				return a.(*testPriorityQueueItem).value < b.(*testPriorityQueueItem).value
+			}
+			items := []any{&testPriorityQueueItem{value: 2}, &testPriorityQueueItem{value: 1}}
+			queue := NewPriorityQueue(compareLess)
+			if preloaded {
+				queue = NewPriorityQueueWithItems(compareLess, items)
+			} else {
+				for _, item := range items {
+					queue.Add(item)
+				}
+			}
+			pq := queue.(*priorityQueueImpl[any])
+			for i := range len(items) {
+				require.Equal(t, &testPriorityQueueItem{value: i + 1}, queue.Remove())
+				require.Equal(t, make([]any, cap(pq.items)-pq.Len()), pq.items[:cap(pq.items)][pq.Len():])
+			}
+		})
+	}
 }
 
 func (s *PriorityQueueSuite) SetupTest() {

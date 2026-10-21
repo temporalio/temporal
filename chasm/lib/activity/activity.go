@@ -165,11 +165,14 @@ func NewStandaloneActivity(
 	ctx chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
 ) (*Activity, error) {
-	visibility := chasm.NewVisibilityWithData(
+	visibility, err := chasm.NewVisibilityWithData(
 		ctx,
 		request.GetSearchAttributes().GetIndexedFields(),
 		nil,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{

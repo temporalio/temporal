@@ -62,6 +62,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				chasm.SearchAttributeExecutionTime,
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
+			chasm.WithRecordPrincipals(),
 			chasm.WithContextValues(map[any]any{
 				ctxKeyActivityContext: &activityContext{
 					config: l.config,

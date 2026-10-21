@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -180,6 +181,90 @@ func TestFind(t *testing.T) {
 		_, err := upd.WaitLifecycleStage(
 			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 1*time.Second)
 		require.Equal(t, internalErr, err)
+	})
+}
+
+func TestNexusSerializationContext(t *testing.T) {
+	tv := testvars.New(t)
+	nsCtx := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
+	t.Run("admitted request sets context and duplicates keep the original", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
+		upd, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+		require.NoError(t, upd.Admit(&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input:                               &updatepb.Input{Name: "not_empty"},
+			PropagatedNexusSerializationContext: nsCtx,
+		}, evStore))
+		require.Same(t, nsCtx, upd.NexusSerializationContext())
+
+		// A duplicate request (same Update ID, different context) gets the existing Update, and its Admit
+		// is a no-op, so the Update keeps the first request's context.
+		dup, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		require.True(t, existed)
+		require.NoError(t, dup.Admit(&updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input: &updatepb.Input{Name: "not_empty"},
+			PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+				Endpoint: "other-endpoint",
+			},
+		}, evStore))
+		require.Same(t, upd, dup)
+		require.Same(t, nsCtx, dup.NexusSerializationContext())
+	})
+
+	for _, tc := range []struct {
+		name string
+		info *persistencespb.UpdateInfo
+	}{
+		{
+			name: "admitted update loaded from store",
+			info: &persistencespb.UpdateInfo{
+				Value:                     &persistencespb.UpdateInfo_Admission{Admission: &persistencespb.UpdateAdmissionInfo{}},
+				NexusSerializationContext: nsCtx,
+			},
+		},
+		{
+			name: "accepted update loaded from store",
+			info: &persistencespb.UpdateInfo{
+				Value:                     &persistencespb.UpdateInfo_Acceptance{Acceptance: &persistencespb.UpdateAcceptanceInfo{}},
+				NexusSerializationContext: nsCtx,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := update.NewRegistry(&mockUpdateStore{
+				VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+					visitor(tv.UpdateID(), tc.info)
+				},
+			})
+			upd := reg.Find(context.Background(), tv.UpdateID())
+			require.NotNil(t, upd)
+			require.Same(t, nsCtx, upd.NexusSerializationContext())
+		})
+	}
+
+	t.Run("completed update found in store", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}}, nil
+			},
+			GetUpdateNexusContextFunc: func(updateID string) *nexuspb.PropagatedSerializationContext {
+				require.Equal(t, tv.UpdateID(), updateID)
+				return nsCtx
+			},
+		})
+		upd := reg.Find(context.Background(), tv.UpdateID())
+		require.NotNil(t, upd)
+		require.Same(t, nsCtx, upd.NexusSerializationContext())
 	})
 }
 

@@ -82,6 +82,7 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 				if tc.stageAtResponse == completed {
 					ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(outcome, nil)
 					ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(acceptedEventID, nil)
+					ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil)
 				} else {
 					ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 				}

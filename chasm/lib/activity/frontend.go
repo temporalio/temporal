@@ -391,7 +391,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
 		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
 	}
-	// TODO(saa): when eager start is supported, deny it if start delay > 0 (same as workflow behavior).
+	if req.GetRequestEagerExecution() &&
+		(!h.config.EnableEagerStart(req.GetNamespace()) || req.GetStartDelay().AsDuration() > 0) {
+		req.RequestEagerExecution = false
+	}
 
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
