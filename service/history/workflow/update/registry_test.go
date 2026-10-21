@@ -137,15 +137,20 @@ func TestFind(t *testing.T) {
 	tv := testvars.New(t)
 
 	t.Run("return update when found in registry", func(t *testing.T) {
+		acceptedEventID := testAcceptedEventID
 		reg := update.NewRegistry(&mockUpdateStore{
 			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
 				return &update.CompletedUpdate{
 					Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}},
 				}, nil
 			},
+			GetUpdateAcceptedEventIDFunc: func(context.Context, string) (int64, error) {
+				return acceptedEventID, nil
+			},
 		})
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
+		require.Equal(t, acceptedEventID, upd.AcceptedEventID())
 	})
 
 	t.Run("return update when found in store", func(t *testing.T) {
