@@ -656,6 +656,11 @@ func TaskType(taskType enumsspb.TaskType) ZapTag {
 	return NewStringTag("queue-task-type", taskType.String())
 }
 
+// TaskTypeName returns tag for the task type that task metrics are tagged with, e.g. "TransferActive.ActivityTask".
+func TaskTypeName(name string) ZapTag {
+	return NewStringTag("queue-task-type-name", name)
+}
+
 func TaskCategoryID(taskCategoryID int) ZapTag {
 	return NewInt("queue-task-category-id", taskCategoryID)
 }

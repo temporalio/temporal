@@ -246,7 +246,13 @@ func NewExecutable(
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
-				return tasks.Tags(task)
+				return append(tasks.Tags(task), tag.TaskTypeName(taskTypeTagValue(
+					task,
+					namespaceRegistry,
+					clusterMetadata.GetCurrentClusterName(),
+					chasmRegistry,
+					taskTypeTagProvider,
+				)))
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
@@ -951,6 +957,21 @@ func taskBaseMetricTags(
 ) []metrics.Tag {
 	tags := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
 	return append(tags, getArchetypeTag(task, chasmRegistry))
+}
+
+// taskTypeTagValue returns the task type that task metrics are tagged with, so logs can name the task the same way.
+func taskTypeTagValue(
+	task tasks.Task,
+	namespaceRegistry namespace.Registry,
+	currentClusterName string,
+	chasmRegistry *chasm.Registry,
+	taskTypeTagProvider TaskTypeTagProvider,
+) string {
+	isActive := true
+	if ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID())); err == nil {
+		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
+	}
+	return taskTypeTagProvider(task, isActive, chasmRegistry)
 }
 
 func taskBaseMetricTagsWithoutArchetype(

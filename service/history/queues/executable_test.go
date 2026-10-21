@@ -1161,6 +1161,29 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	s.Equal([]int32{1, 2, 3}, loggedAttempts)
 }
 
+// Logs name the task with the same task type value as its metrics.
+func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
+	var loggedTaskTypeName any
+	logger := log.NewMockLogger(s.controller)
+	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
+		for _, t := range tags {
+			if t.Key() == "queue-task-type-name" {
+				loggedTaskTypeName = t.Value()
+			}
+		}
+	})
+	executable := s.newTestExecutable(func(p *params) {
+		p.logger = logger
+	})
+	capture := s.metricsHandler.StartCapture()
+
+	s.Error(executable.HandleErr(errors.New("random error")))
+
+	failures := capture.Snapshot()[metrics.TaskFailures.Name()]
+	s.Len(failures, 1)
+	s.Equal(failures[0].Tags["task_type"], loggedTaskTypeName)
+}
+
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
 	executable := s.newTestExecutable()
 
