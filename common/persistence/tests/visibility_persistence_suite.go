@@ -1366,12 +1366,12 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 
 	// Single namespace: only that namespace's executions are returned.
 	s.assertListExecutions(
-		&manager.AdminListExecutionsRequest{
-			Namespace: ns1Name,
+		&adminservice.ListExecutionsRequest{
+			Namespace: ns1Name.String(),
 			Query:     typeQuery,
 			PageSize:  10,
 		},
-		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.ListExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Len(t, resp.Executions, 2)
 			for _, exec := range resp.Executions {
@@ -1390,12 +1390,12 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 	)
 
 	s.assertListExecutions(
-		&manager.AdminListExecutionsRequest{
-			Namespace: ns2Name,
+		&adminservice.ListExecutionsRequest{
+			Namespace: ns2Name.String(),
 			Query:     typeQuery,
 			PageSize:  10,
 		},
-		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.ListExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Len(t, resp.Executions, 1)
 			require.Equal(t, ns2ID.String(), resp.Executions[0].GetNamespaceId())
@@ -1407,11 +1407,11 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 	// All namespaces: an empty namespace spans both, and each execution still carries the
 	// namespace it belongs to.
 	s.assertListExecutions(
-		&manager.AdminListExecutionsRequest{
+		&adminservice.ListExecutionsRequest{
 			Query:    typeQuery,
 			PageSize: 10,
 		},
-		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.ListExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Len(t, resp.Executions, 3)
 			require.ElementsMatch(
@@ -1460,11 +1460,11 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 
 	// All namespaces, paginated: the page token carries across namespaces.
 	s.assertListExecutions(
-		&manager.AdminListExecutionsRequest{
+		&adminservice.ListExecutionsRequest{
 			Query:    typeQuery,
 			PageSize: 2,
 		},
-		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.ListExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Len(t, resp.Executions, 2)
 			require.NotEmpty(t, resp.NextPageToken)
@@ -1472,7 +1472,7 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 			runIDs := runIDsOf(resp.Executions)
 			next, err := s.adminVisibilityMgr().AdminListExecutions(
 				s.ctx,
-				&manager.AdminListExecutionsRequest{
+				&adminservice.ListExecutionsRequest{
 					Query:         typeQuery,
 					PageSize:      2,
 					NextPageToken: resp.NextPageToken,
@@ -1520,8 +1520,8 @@ func (s *VisibilityPersistenceSuite) TestCountExecutions() {
 
 	// Single namespace.
 	s.assertCountExecutions(
-		&manager.AdminCountExecutionsRequest{Namespace: ns1Name, Query: typeQuery},
-		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+		&adminservice.CountExecutionsRequest{Namespace: ns1Name.String(), Query: typeQuery},
+		func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Equal(t, int64(2), resp.Count)
 			require.Empty(t, resp.Groups)
@@ -1529,8 +1529,8 @@ func (s *VisibilityPersistenceSuite) TestCountExecutions() {
 	)
 
 	s.assertCountExecutions(
-		&manager.AdminCountExecutionsRequest{Namespace: ns2Name, Query: typeQuery},
-		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+		&adminservice.CountExecutionsRequest{Namespace: ns2Name.String(), Query: typeQuery},
+		func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Equal(t, int64(2), resp.Count)
 		},
@@ -1538,8 +1538,8 @@ func (s *VisibilityPersistenceSuite) TestCountExecutions() {
 
 	// All namespaces: the counts of both namespaces are summed.
 	s.assertCountExecutions(
-		&manager.AdminCountExecutionsRequest{Query: typeQuery},
-		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+		&adminservice.CountExecutionsRequest{Query: typeQuery},
+		func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Equal(t, int64(4), resp.Count)
 		},
@@ -1549,10 +1549,10 @@ func (s *VisibilityPersistenceSuite) TestCountExecutions() {
 	// suppressed by the GROUP BY and there is no namespace to filter on, leaving no query
 	// at all, which must count every execution rather than failing.
 	s.assertCountExecutions(
-		&manager.AdminCountExecutionsRequest{
+		&adminservice.CountExecutionsRequest{
 			Query: "GROUP BY " + sadefs.TemporalNamespaceDivision,
 		},
-		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error) {
 			require.NoError(t, err)
 			// Other tests in this suite share the database, so this count is not exact.
 			require.GreaterOrEqual(t, resp.Count, int64(4))
@@ -1562,10 +1562,10 @@ func (s *VisibilityPersistenceSuite) TestCountExecutions() {
 
 	// All namespaces, grouped by status: 3 running (2 in ns1, 1 in ns2) and 1 completed.
 	s.assertCountExecutions(
-		&manager.AdminCountExecutionsRequest{
+		&adminservice.CountExecutionsRequest{
 			Query: typeQuery + " GROUP BY " + sadefs.ExecutionStatus,
 		},
-		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+		func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error) {
 			require.NoError(t, err)
 			require.Equal(t, int64(4), resp.Count)
 			require.ElementsMatch(
@@ -1792,8 +1792,8 @@ func (s *VisibilityPersistenceSuite) registerTestNamespace() (namespace.Name, na
 }
 
 func (s *VisibilityPersistenceSuite) assertListExecutions(
-	request *manager.AdminListExecutionsRequest,
-	assertFn func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error),
+	request *adminservice.ListExecutionsRequest,
+	assertFn func(t require.TestingT, resp *adminservice.ListExecutionsResponse, err error),
 ) {
 	await.Require(
 		s.ctx,
@@ -1808,8 +1808,8 @@ func (s *VisibilityPersistenceSuite) assertListExecutions(
 }
 
 func (s *VisibilityPersistenceSuite) assertCountExecutions(
-	request *manager.AdminCountExecutionsRequest,
-	assertFn func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error),
+	request *adminservice.CountExecutionsRequest,
+	assertFn func(t require.TestingT, resp *adminservice.CountExecutionsResponse, err error),
 ) {
 	await.Require(
 		s.ctx,
