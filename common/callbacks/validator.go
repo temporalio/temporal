@@ -24,15 +24,31 @@ type ValidatorOptions struct {
 	EnabledKinds []Kind
 }
 
+// CurrentCallbacksInfo describes the callbacks already attached to an execution, so that
+// aggregate limits (max callbacks, total max size of callbacks) can be enforced.
+type CurrentCallbacksInfo struct {
+	Count     int
+	TotalSize int // Size of all attached callbacks in bytes.
+}
+
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
 	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
 	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
+
+	// ValidateAdditions enforces aggregate limits like the total number of callbacks that can be attached
+	// to an execution. Relies on denormalized [CurrentCallbacksInfo] to avoid deserializing all existing
+	// callbacks whenever a new one is added.
+	//
+	// This is the cumulative counterpart to Validate. And should always be called, even on Start- paths.
+	// (Since the request to start an execution could potentially contain too many or too large of callbacks.)
+	ValidateAdditions(namespaceName string, newCBs []*commonpb.Callback, existing CurrentCallbacksInfo) error
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
+	TotalCallbacksMaxSize    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit         dynamicconfig.IntPropertyFn // All ID types use the same global setting.
 
@@ -55,6 +71,7 @@ func (vc *ValidatorConfig) Validate() error {
 		}
 	}
 
+	assertGetterIsSet("TotalCallbacksMaxSize", vc.TotalCallbacksMaxSize)
 	assertGetterIsSet("MaxCallbacksPerExecution", vc.MaxCallbacksPerExecution)
 	if vc.MaxIDLengthLimit == nil {
 		missingFields = append(missingFields, "MaxIDLengthLimit")
@@ -108,6 +125,43 @@ func (v *validator) Validate(
 			return err
 		}
 	}
+	return nil
+}
+
+// ValidateAdditions checks the count and total size the execution would reach once newCBs are
+// attached. Errors are FailedPrecondition rather than InvalidArgument: the request may be
+// perfectly well-formed and only fail because of what the execution already holds.
+func (v *validator) ValidateAdditions(
+	namespaceName string,
+	newCBs []*commonpb.Callback,
+	existing CurrentCallbacksInfo,
+) error {
+	// Check aggregate callback count.
+	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
+	if existing.Count+len(newCBs) > maxCount {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
+			maxCount,
+			existing.Count,
+		)
+	}
+
+	// Check aggregate callback size.
+	var addedBytes int
+	for _, cb := range newCBs {
+		addedBytes += cb.Size()
+	}
+	maxSize := v.config.TotalCallbacksMaxSize(namespaceName)
+	if existing.TotalSize+addedBytes > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of callbacks to an execution "+
+				"(%d bytes already attached, %d more requested)",
+			maxSize,
+			existing.TotalSize,
+			addedBytes,
+		)
+	}
+
 	return nil
 }
 
