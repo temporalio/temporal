@@ -25,7 +25,7 @@ func NewRetryDelayFloorInterceptor(
 	namespaceRegistry namespace.Registry,
 	floor dynamicconfig.DurationPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
-	errs ...*serviceerror.ResourceExhausted,
+	errs []*serviceerror.ResourceExhausted,
 ) *RetryDelayFloorInterceptor {
 	return &RetryDelayFloorInterceptor{
 		namespaceRegistry: namespaceRegistry,
@@ -81,7 +81,7 @@ func withResourceExhaustedRetryDelayFloor(
 	if !ok {
 		return base
 	}
-	metrics.ResourceExhaustedRetryDelayFloorEmitted.With(metricsHandler).Record(
+	metrics.ResourceExhaustedRetryDelayFloorCounter.With(metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(namespaceName.String()),
 		metrics.OperationTag(operation),

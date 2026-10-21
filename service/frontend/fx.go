@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -712,8 +713,10 @@ func RetryDelayFloorInterceptorProvider(
 		namespaceRegistry,
 		serviceConfig.ResourceExhaustedRetryDelayFloor,
 		metricsHandler,
-		interceptor.ErrNamespaceRateLimitServerBusy,
-		interceptor.ErrNamespaceCountLimitServerBusy,
+		[]*serviceerror.ResourceExhausted{
+			interceptor.ErrNamespaceRateLimitServerBusy,
+			interceptor.ErrNamespaceCountLimitServerBusy,
+		},
 	)
 }
 

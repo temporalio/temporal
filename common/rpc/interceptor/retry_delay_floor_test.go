@@ -109,8 +109,7 @@ func TestRetryDelayFloorInterceptorIntercept(t *testing.T) {
 				registry,
 				func(string) time.Duration { return tc.floor },
 				mh,
-				ErrNamespaceRateLimitServerBusy,
-				ErrNamespaceCountLimitServerBusy,
+				[]*serviceerror.ResourceExhausted{ErrNamespaceRateLimitServerBusy, ErrNamespaceCountLimitServerBusy},
 			)
 			request := &workflowservice.StartWorkflowExecutionRequest{Namespace: namespaceName}
 			response, err := interceptor.Intercept(context.Background(), request,
@@ -138,7 +137,7 @@ func TestRetryDelayFloorInterceptorIntercept(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			recordings := capture.SnapshotMetric(metrics.ResourceExhaustedRetryDelayFloorEmitted.Name())
+			recordings := capture.SnapshotMetric(metrics.ResourceExhaustedRetryDelayFloorCounter.Name())
 			if tc.wantMetric {
 				require.Len(t, recordings, 1)
 				require.Equal(t, map[string]string{
