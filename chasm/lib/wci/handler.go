@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -16,7 +15,6 @@ import (
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/wci/migration"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
@@ -28,7 +26,6 @@ type HandlerOptions struct {
 	ComputeClient     ComputeClient
 	FrontendClient    workflowservice.WorkflowServiceClient
 	NamespaceRegistry namespace.Registry
-	DynamicConfig     *dynamicconfig.Collection
 	Logger            log.Logger
 }
 
@@ -38,7 +35,6 @@ type handler struct {
 	compute    ComputeClient
 	frontend   workflowservice.WorkflowServiceClient
 	namespaces namespace.Registry
-	inProcess  dynamicconfig.TypedPropertyFn[[]string]
 	logger     log.Logger
 }
 
@@ -47,7 +43,6 @@ func newHandler(opts HandlerOptions) *handler {
 		compute:    opts.ComputeClient,
 		frontend:   opts.FrontendClient,
 		namespaces: opts.NamespaceRegistry,
-		inProcess:  InProcessComputeProviders.Get(opts.DynamicConfig),
 		logger:     opts.Logger,
 	}
 }
@@ -107,7 +102,7 @@ func (h *handler) algorithmContext(ctx context.Context) context.Context {
 // checkSupported rejects provider types CHASM cannot run, so the caller keeps the WCI a workflow.
 func (h *handler) checkSupported(spec *iface.WorkerControllerInstanceSpec) error {
 	for _, group := range spec.ScalingGroupSpecs {
-		if !slices.Contains(h.inProcess(), string(group.Compute.ProviderType)) {
+		if !h.compute.Supports(string(group.Compute.ProviderType)) {
 			return ErrProviderNotSupportedOnCHASM
 		}
 	}

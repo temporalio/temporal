@@ -3,6 +3,7 @@ package wci
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -44,6 +45,13 @@ type fakeCompute struct {
 	sizes      []int32
 	requestIDs []string
 	callErr    error
+	// Provider types the WCI process serves, on top of the in-process defaults.
+	remote []string
+}
+
+func (f *fakeCompute) Supports(providerType string) bool {
+	return slices.Contains(InProcessComputeProviders.Get(dynamicconfig.NewNoopCollection())(), providerType) ||
+		slices.Contains(f.remote, providerType)
 }
 
 func (f *fakeCompute) record(call string) error {
@@ -139,7 +147,6 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 		ComputeClient:     computeClient,
 		FrontendClient:    frontend,
 		NamespaceRegistry: registry,
-		DynamicConfig:     dynamicconfig.NewNoopCollection(),
 		Logger:            log.NewNoopLogger(),
 	})
 	metricsHandler := metricstest.NewCaptureHandler()
@@ -243,6 +250,18 @@ func TestE2E_UnsupportedProviderStaysWorkflow(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("aws-lambda"))
 	require.ErrorIs(t, err, ErrProviderNotSupportedOnCHASM)
+}
+
+func TestE2E_RemoteProviderRunsOnCHASM(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	e.compute.remote = []string{"aws-lambda"}
+
+	_, err := e.update(groupUpsert("aws-lambda"))
+	require.NoError(t, err, "served by the WCI process, so it no longer stays a workflow")
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status)
+	require.Contains(t, e.compute.calls, "validate", "the provider config is validated through the compute service")
+	require.NoError(t, e.recordTaskAdd(), "task-adds reach the CHASM instance")
 }
 
 func TestE2E_TaskAddThenResizeEndToEnd(t *testing.T) {

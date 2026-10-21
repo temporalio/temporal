@@ -25,9 +25,11 @@ const workerControllerService primitives.ServiceName = "worker-controller-worker
 // RemoteClient calls the compute service on the WCI process. Any host can serve any call, since
 // the cloud identity is process-wide, so it round-robins over the members.
 type RemoteClient struct {
-	hosts func() ([]membership.HostInfo, error)
-	dial  func(address string) (*grpc.ClientConn, error)
-	next  atomic.Uint64
+	// configured is false while history's services config doesn't list the WCI service.
+	configured func() bool
+	hosts      func() ([]membership.HostInfo, error)
+	dial       func(address string) (*grpc.ClientConn, error)
+	next       atomic.Uint64
 
 	connsMu sync.Mutex
 	conns   map[string]*grpc.ClientConn
@@ -47,6 +49,10 @@ type remoteClientParams struct {
 
 func NewRemoteClient(p remoteClientParams) *RemoteClient {
 	c := newRemoteClient(
+		func() bool {
+			_, err := p.Monitor.GetResolver(workerControllerService)
+			return err == nil
+		},
 		func() ([]membership.HostInfo, error) {
 			resolver, err := p.Monitor.GetResolver(workerControllerService)
 			if err != nil {
@@ -69,8 +75,12 @@ func NewRemoteClient(p remoteClientParams) *RemoteClient {
 	return c
 }
 
-func newRemoteClient(hosts func() ([]membership.HostInfo, error), dial func(string) (*grpc.ClientConn, error)) *RemoteClient {
-	return &RemoteClient{hosts: hosts, dial: dial, conns: map[string]*grpc.ClientConn{}}
+func newRemoteClient(configured func() bool, hosts func() ([]membership.HostInfo, error), dial func(string) (*grpc.ClientConn, error)) *RemoteClient {
+	return &RemoteClient{configured: configured, hosts: hosts, dial: dial, conns: map[string]*grpc.ClientConn{}}
+}
+
+func (c *RemoteClient) Configured() bool {
+	return c.configured()
 }
 
 func (c *RemoteClient) ValidateConfig(ctx context.Context, req *workercontrollerservice.ValidateConfigRequest, opts ...grpc.CallOption) (*workercontrollerservice.ValidateConfigResponse, error) {

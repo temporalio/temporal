@@ -79,6 +79,9 @@
 ### History-side settings (defaults shown).
 #workercontroller.chasm.in_process_compute_providers:
 # - value: ["test-invoke", "test-worker-set"]
+### Served by the WCI process (default none; example below); needs worker-controller-workers in history's services config.
+#workercontroller.chasm.remote_compute_providers:
+# - value: ["aws-lambda", "aws-ecs", "aws-agentcore", "gcp-cloud-run", "k8s"]
 #workercontroller.chasm.compute_concurrency_per_namespace:
 # - value: 10
 ### Must match the WCI client's task queue; cloud uses temporal-sys-worker-controller-per-ns-tq.
