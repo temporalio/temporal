@@ -1143,7 +1143,6 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	const numAttempts = 3
 
 	logCapture := s.logger.StartCapture()
-	s.T().Cleanup(func() { s.logger.StopCapture(logCapture) })
 
 	executable := s.newTestExecutable()
 	for range numAttempts {
@@ -1167,7 +1166,6 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 // Logs name the task with the same task type value as its metrics.
 func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
 	logCapture := s.logger.StartCapture()
-	s.T().Cleanup(func() { s.logger.StopCapture(logCapture) })
 
 	executable := s.newTestExecutable()
 	metricsCapture := s.metricsHandler.StartCapture()
