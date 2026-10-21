@@ -150,7 +150,7 @@ func TestAttemptFailedReason(t *testing.T) {
 					ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: true},
 				},
 			},
-			want: FailedReasonServerError,
+			want: FailedReasonCallerError,
 		},
 		{
 			name: "HSM call error",
@@ -159,7 +159,7 @@ func TestAttemptFailedReason(t *testing.T) {
 					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "CallError", NonRetryable: true},
 				},
 			},
-			want: FailedReasonServerError,
+			want: FailedReasonCallerError,
 		},
 		{
 			name:    "nil failure",

@@ -611,7 +611,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
 				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
 				require.Len(t, failedCount, 1)
-				require.Equal(t, "server_error", failedCount[0].Tags["reason"])
+				require.Equal(t, "caller_error", failedCount[0].Tags["reason"])
 			},
 		},
 	}
