@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -9,7 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/persistence/visibility/store/query/querytest"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func TestQueryConverter_GetDatetimeFormat(t *testing.T) {
@@ -746,4 +752,39 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestElasticsearchQueryConverter(t *testing.T) {
+	t.Parallel()
+	querytest.Run(
+		t,
+		querytest.Elasticsearch,
+		newESQueryConverter,
+		serializeESQuery,
+	)
+}
+
+func newESQueryConverter() *query.QueryConverter[elastic.Query] {
+	return NewQueryConverter(
+		namespace.Name("test-namespace"),
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
+}
+
+func serializeESQuery(q elastic.Query) (string, error) {
+	if q == nil {
+		return "", nil
+	}
+	source, err := q.Source()
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(source)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
