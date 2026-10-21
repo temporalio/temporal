@@ -686,7 +686,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
 			tag.URL(httpClient.BaseURL()),
 			tag.WorkflowNamespace(oc.namespaceName),
-			tag.WorkflowTaskQueueName(oc.taskQueue),
+			tag.NexusTaskQueueName(oc.taskQueue),
 			tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
