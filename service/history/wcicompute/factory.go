@@ -14,7 +14,7 @@ import (
 // Factory picks where a provider type runs: in history, on the WCI process, or nowhere yet.
 type Factory struct {
 	local     workercontrollerservice.WorkerControllerComputeServiceClient
-	remote    workercontrollerservice.WorkerControllerComputeServiceClient
+	remote    remoteService
 	inProcess dynamicconfig.TypedPropertyFn[[]string]
 	remoteFor dynamicconfig.TypedPropertyFn[[]string]
 }
@@ -26,6 +26,21 @@ func NewFactory(dc *dynamicconfig.Collection, remote *RemoteClient) *Factory {
 		inProcess: wci.InProcessComputeProviders.Get(dc),
 		remoteFor: wci.RemoteComputeProviders.Get(dc),
 	}
+}
+
+// remoteService is the WCI process's compute service, plus whether history can reach it at all.
+type remoteService interface {
+	workercontrollerservice.WorkerControllerComputeServiceClient
+	Configured() bool
+}
+
+// Supports matches For: a remote type counts only while history can resolve the WCI service, so a
+// WCI that could never be served stays a workflow instead of retrying forever on CHASM.
+func (f *Factory) Supports(providerType string) bool {
+	if slices.Contains(f.inProcess(), providerType) {
+		return true
+	}
+	return slices.Contains(f.remoteFor(), providerType) && f.remote.Configured()
 }
 
 // For returns the client for providerType; in-process takes precedence over remote.

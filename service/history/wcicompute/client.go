@@ -43,6 +43,10 @@ func NewClient(dc *dynamicconfig.Collection, factory *Factory) wci.ComputeClient
 	}
 }
 
+func (c *Client) Supports(providerType string) bool {
+	return c.factory.Supports(providerType)
+}
+
 func (c *Client) ValidateSpec(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error {
 	for id, group := range spec.ScalingGroupSpecs {
 		err := c.call(ctx, rc, &group.Compute, func(svc workercontrollerservice.WorkerControllerComputeServiceClient, req *workercontrollerservice.ComputeRequestContext, provider *workercontrollerservice.ComputeProviderConfig) (*workercontrollerservice.ComputeFailure, error) {
