@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	adminservice "go.temporal.io/server/api/adminservice/v1"
 	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	manager "go.temporal.io/server/common/persistence/visibility/manager"
 	gomock "go.uber.org/mock/gomock"
@@ -267,7 +268,7 @@ func (mr *MockAdminVisibilityStoreMockRecorder) AddSearchAttributes(ctx, request
 }
 
 // AdminCountExecutions mocks base method.
-func (m *MockAdminVisibilityStore) AdminCountExecutions(ctx context.Context, request *manager.AdminCountExecutionsRequest) (*InternalCountExecutionsResponse, error) {
+func (m *MockAdminVisibilityStore) AdminCountExecutions(ctx context.Context, request *adminservice.CountExecutionsRequest) (*InternalCountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AdminCountExecutions", ctx, request)
 	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
@@ -282,7 +283,7 @@ func (mr *MockAdminVisibilityStoreMockRecorder) AdminCountExecutions(ctx, reques
 }
 
 // AdminListExecutions mocks base method.
-func (m *MockAdminVisibilityStore) AdminListExecutions(ctx context.Context, request *manager.AdminListExecutionsRequest) (*InternalListExecutionsResponse, error) {
+func (m *MockAdminVisibilityStore) AdminListExecutions(ctx context.Context, request *adminservice.ListExecutionsRequest) (*InternalListExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AdminListExecutions", ctx, request)
 	ret0, _ := ret[0].(*InternalListExecutionsResponse)
