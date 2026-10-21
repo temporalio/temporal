@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +49,7 @@ type (
 		mockClusterMetadata   *cluster.MockMetadata
 		chasmRegistry         *chasm.Registry
 		metricsHandler        *metricstest.CaptureHandler
+		logger                *testlogger.TestLogger
 
 		timeSource *clock.EventTimeSource
 	}
@@ -60,7 +60,6 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
-		logger                     log.Logger
 	}
 	option func(*params)
 )
@@ -80,6 +79,7 @@ func (s *executableSuite) SetupTest() {
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metricsHandler = metricstest.NewCaptureHandler()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
@@ -1142,35 +1142,33 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	const numAttempts = 3
 
-	var loggedAttempts []int32
-	logger := log.NewMockLogger(s.controller)
-	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
-		for _, t := range tags {
-			if t.Key() == "attempt" {
-				loggedAttempts = append(loggedAttempts, t.Value().(int32))
-			}
-		}
-	}).Times(numAttempts)
-
-	executable := s.newTestExecutable(func(p *params) {
-		p.logger = logger
-	})
+	logCapture := s.logger.StartCapture()
+	s.T().Cleanup(func() { s.logger.StopCapture(logCapture) })
+	executable := s.newTestExecutable()
 	for range numAttempts {
 		s.Error(executable.HandleErr(errors.New("random error")))
 	}
 
-	s.Equal([]int32{1, 2, 3}, loggedAttempts)
+	var loggedAttempts []any
+	for _, record := range logCapture.Snapshot() {
+		if record.Message != "Fail to process task" {
+			continue
+		}
+		for _, t := range record.Tags {
+			if t.Key() == "attempt" {
+				loggedAttempts = append(loggedAttempts, t.Value())
+			}
+		}
+	}
+	s.Equal([]any{int32(1), int32(2), int32(3)}, loggedAttempts)
 }
 
 // Logs name the task with the same task type value as its metrics.
 func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
-	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
-	logCapture := logger.StartCapture()
-	s.T().Cleanup(func() { logger.StopCapture(logCapture) })
+	logCapture := s.logger.StartCapture()
+	s.T().Cleanup(func() { s.logger.StopCapture(logCapture) })
 
-	executable := s.newTestExecutable(func(p *params) {
-		p.logger = logger
-	})
+	executable := s.newTestExecutable()
 	metricsCapture := s.metricsHandler.StartCapture()
 
 	s.Error(executable.HandleErr(errors.New("random error")))
@@ -1548,7 +1546,6 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqErrorPattern: func() string {
 			return ""
 		},
-		logger: log.NewTestLogger(),
 	}
 	for _, opt := range opts {
 		opt(&p)
@@ -1573,7 +1570,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
-		p.logger,
+		s.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {
