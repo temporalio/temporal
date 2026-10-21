@@ -59,7 +59,9 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	"RespondActivityTaskFailedById":    PatternWorkflowID,
 
 	// Pattern: TaskToken deserialization
-	"RespondActivityTaskHandoff":   PatternActivityTaskToken,
+	"RespondActivityTaskHandoff": PatternActivityTaskToken,
+	// TODO: Use PatternActivityTaskToken for the four activity APIs below so multicell
+	// routing can select the owning cell by activity ID when resource_id is absent.
 	"RecordActivityTaskHeartbeat":  PatternTaskToken,
 	"RespondActivityTaskCompleted": PatternTaskToken,
 	"RespondActivityTaskCanceled":  PatternTaskToken,
