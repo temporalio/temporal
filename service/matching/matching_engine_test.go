@@ -699,6 +699,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	expectedResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
 		TaskToken:              resp.TaskToken,
+		ScheduledEventId:       scheduledEventID + 1,
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
 		PreviousStartedEventId: scheduledEventID,

@@ -111,14 +111,15 @@ type (
 	}
 
 	pollMetadata struct {
-		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
-		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
-		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
-		conditions                *matchingservice.PollConditions
-		forwardedFrom             string
-		localPollStartTime        time.Time
-		workerInstanceKey         string
-		workerControlTaskQueue    string
+		taskQueueMetadata                         *taskqueuepb.TaskQueueMetadata
+		workerVersionCapabilities                 *commonpb.WorkerVersionCapabilities
+		deploymentOptions                         *deploymentpb.WorkerDeploymentOptions
+		conditions                                *matchingservice.PollConditions
+		forwardedFrom                             string
+		localPollStartTime                        time.Time
+		workerInstanceKey                         string
+		workerControlTaskQueue                    string
+		supportsWorkflowTaskHeartbeatNotification bool
 	}
 
 	userDataUpdate struct {
@@ -810,12 +811,13 @@ pollLoop:
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
-			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			workerVersionCapabilities: request.WorkerVersionCapabilities, //nolint:staticcheck // SA1019: Retain legacy build ID versioning metadata.
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			supportsWorkflowTaskHeartbeatNotification: request.GetSupportsWorkflowTaskHeartbeatNotification(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -3479,6 +3481,7 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 		WorkflowType:               resp.WorkflowType,
 		PreviousStartedEventId:     resp.PreviousStartedEventId,
 		StartedEventId:             resp.StartedEventId,
+		ScheduledEventId:           resp.ScheduledEventId,
 		Attempt:                    resp.Attempt,
 		NextEventId:                resp.NextEventId,
 		BacklogCountHint:           resp.BacklogCountHint,

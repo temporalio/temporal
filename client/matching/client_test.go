@@ -239,8 +239,10 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 	request := &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: testNamespaceID,
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{Name: testTaskQueueName},
-			Identity:  "worker",
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: testTaskQueueName},
+			Identity:               "worker",
+			WorkerControlTaskQueue: "worker-control",
+			SupportsWorkflowTaskHeartbeatNotification: true,
 		},
 	}
 	response := &matchingservice.PollWorkflowTaskQueueResponse{}
@@ -249,6 +251,8 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 		func(_ context.Context, outgoing *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetPollRequest().GetTaskQueue().GetName())
 			require.Equal(t, "worker", outgoing.GetPollRequest().GetIdentity())
+			require.Equal(t, "worker-control", outgoing.GetPollRequest().GetWorkerControlTaskQueue())
+			require.True(t, outgoing.GetPollRequest().GetSupportsWorkflowTaskHeartbeatNotification())
 			return response, nil
 		},
 	)

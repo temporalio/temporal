@@ -145,9 +145,10 @@ type PollWorkflowTaskQueueResponse struct {
 	PollerScalingDecision *v14.PollerScalingDecision `protobuf:"bytes,21,opt,name=poller_scaling_decision,json=pollerScalingDecision,proto3" json:"poller_scaling_decision,omitempty"`
 	// Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
 	// Matching client will deserialize this to History when it receives the response.
-	RawHistory    *v16.History `protobuf:"bytes,22,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RawHistory       *v16.History `protobuf:"bytes,22,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	ScheduledEventId int64        `protobuf:"varint,23,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PollWorkflowTaskQueueResponse) Reset() {
@@ -327,6 +328,13 @@ func (x *PollWorkflowTaskQueueResponse) GetRawHistory() *v16.History {
 	return nil
 }
 
+func (x *PollWorkflowTaskQueueResponse) GetScheduledEventId() int64 {
+	if x != nil {
+		return x.ScheduledEventId
+	}
+	return 0
+}
+
 // PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
 //
 // WIRE COMPATIBILITY PATTERN:
@@ -374,9 +382,10 @@ type PollWorkflowTaskQueueResponseWithRawHistory struct {
 	// Raw history bytes. Each element is a proto-encoded batch of history events.
 	// When matching client deserializes this to PollWorkflowTaskQueueResponse, this field
 	// will be automatically deserialized to the raw_history field as History.
-	RawHistory    [][]byte `protobuf:"bytes,22,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RawHistory       [][]byte `protobuf:"bytes,22,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	ScheduledEventId int64    `protobuf:"varint,23,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PollWorkflowTaskQueueResponseWithRawHistory) Reset() {
@@ -554,6 +563,13 @@ func (x *PollWorkflowTaskQueueResponseWithRawHistory) GetRawHistory() [][]byte {
 		return x.RawHistory
 	}
 	return nil
+}
+
+func (x *PollWorkflowTaskQueueResponseWithRawHistory) GetScheduledEventId() int64 {
+	if x != nil {
+		return x.ScheduledEventId
+	}
+	return 0
 }
 
 type PollActivityTaskQueueRequest struct {
@@ -6294,7 +6310,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x10forwarded_source\x18\x04 \x01(\tR\x0fforwardedSource\x12V\n" +
 	"\n" +
 	"conditions\x18\x05 \x01(\v26.temporal.server.api.matchingservice.v1.PollConditionsR\n" +
-	"conditions\"\xd1\v\n" +
+	"conditions\"\xff\v\n" +
 	"\x1dPollWorkflowTaskQueueResponse\x12\x1d\n" +
 	"\n" +
 	"task_token\x18\x01 \x01(\fR\ttaskToken\x12X\n" +
@@ -6319,10 +6335,11 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x0fnext_page_token\x18\x14 \x01(\fR\rnextPageToken\x12h\n" +
 	"\x17poller_scaling_decision\x18\x15 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12A\n" +
 	"\vraw_history\x18\x16 \x01(\v2 .temporal.api.history.v1.HistoryR\n" +
-	"rawHistory\x1a`\n" +
+	"rawHistory\x12,\n" +
+	"\x12scheduled_event_id\x18\x17 \x01(\x03R\x10scheduledEventId\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
-	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\r\x10\x0e\"\xcb\v\n" +
+	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\r\x10\x0e\"\xf9\v\n" +
 	"+PollWorkflowTaskQueueResponseWithRawHistory\x12\x1d\n" +
 	"\n" +
 	"task_token\x18\x01 \x01(\fR\ttaskToken\x12X\n" +
@@ -6347,7 +6364,8 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x0fnext_page_token\x18\x14 \x01(\fR\rnextPageToken\x12h\n" +
 	"\x17poller_scaling_decision\x18\x15 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12\x1f\n" +
 	"\vraw_history\x18\x16 \x03(\fR\n" +
-	"rawHistory\x1a`\n" +
+	"rawHistory\x12,\n" +
+	"\x12scheduled_event_id\x18\x17 \x01(\x03R\x10scheduledEventId\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\r\x10\x0e\"\xc3\x02\n" +
