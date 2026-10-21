@@ -188,6 +188,9 @@ func (ds *DataStore) Validate() error {
 		}
 	}
 	if ds.Elasticsearch != nil {
+		if err := validateElasticsearch(ds.Elasticsearch); err != nil {
+			return err
+		}
 		if err := ds.Elasticsearch.Validate(); err != nil {
 			return err
 		}

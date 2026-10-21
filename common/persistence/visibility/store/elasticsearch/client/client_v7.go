@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_elasticsearch
+
 package client
 
 import (

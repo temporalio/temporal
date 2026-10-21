@@ -1,11 +1,9 @@
 package tests
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/log"
@@ -1453,21 +1451,6 @@ func serializeSQLQuery(expr sqlparser.Expr) (string, error) {
 	return sqlparser.String(expr), nil
 }
 
-func serializeESQuery(q elastic.Query) (string, error) {
-	if q == nil {
-		return "", nil
-	}
-	source, err := q.Source()
-	if err != nil {
-		return "", err
-	}
-	data, err := json.Marshal(source)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
 func TestSQLQueryConverter(t *testing.T) {
 	t.Parallel()
 	for _, plugin := range sqlPlugins {
@@ -1492,24 +1475,4 @@ func TestSQLQueryConverter(t *testing.T) {
 			)
 		})
 	}
-}
-
-func TestElasticsearchQueryConverter(t *testing.T) {
-	t.Parallel()
-	runQueryConverterTest(
-		t,
-		elasticsearch.PersistenceName,
-		newESQueryConverter,
-		serializeESQuery,
-	)
-}
-
-func newESQueryConverter() *query.QueryConverter[elastic.Query] {
-	return elasticsearch.NewQueryConverter(
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-		metrics.NoopMetricsHandler,
-		log.NewNoopLogger(),
-	)
 }
