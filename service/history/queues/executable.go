@@ -135,7 +135,7 @@ type (
 		clusterMetadata       cluster.Metadata
 		chasmRegistry         *chasm.Registry
 		taskTypeTagProvider   TaskTypeTagProvider
-		taskType              string // the task type metrics are tagged with, also logged
+		taskType              string
 		logger                log.Logger
 		baseMetricsHandler    metrics.Handler
 		defaultMetricsHandler metrics.Handler
