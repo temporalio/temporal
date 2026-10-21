@@ -334,6 +334,7 @@ type (
 		// scheduled time of the task is adjusted to wall-clock time, as the dispatch queues run
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
+		HasStateMachineTimerTask(deadline time.Time, version int64) bool
 		PopTasks() map[tasks.Category][]tasks.Task
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 
