@@ -372,9 +372,9 @@ func TestUnknownEnumValues(t *testing.T) {
 func TestEmitWorkerMetricsEvent(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
-		handler:                     metricstest.NewCaptureHandler(),
-		config:                      WorkerMetricsConfig{},
-		eventLogger:                 eventLogger,
+		handler:                   metricstest.NewCaptureHandler(),
+		config:                    WorkerMetricsConfig{},
+		eventLogger:               eventLogger,
 		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
@@ -439,9 +439,9 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
-		handler:                     metricstest.NewCaptureHandler(),
-		config:                      WorkerMetricsConfig{},
-		eventLogger:                 eventLogger,
+		handler:                   metricstest.NewCaptureHandler(),
+		config:                    WorkerMetricsConfig{},
+		eventLogger:               eventLogger,
 		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
@@ -468,9 +468,9 @@ func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
 func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
-		handler:                     metricstest.NewCaptureHandler(),
-		config:                      WorkerMetricsConfig{},
-		eventLogger:                 eventLogger,
+		handler:                   metricstest.NewCaptureHandler(),
+		config:                    WorkerMetricsConfig{},
+		eventLogger:               eventLogger,
 		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
@@ -497,9 +497,9 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
-		handler:                     metricstest.NewCaptureHandler(),
-		config:                      WorkerMetricsConfig{},
-		eventLogger:                 eventLogger,
+		handler:                   metricstest.NewCaptureHandler(),
+		config:                    WorkerMetricsConfig{},
+		eventLogger:               eventLogger,
 		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 

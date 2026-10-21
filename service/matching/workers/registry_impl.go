@@ -72,14 +72,14 @@ type (
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets               dynamicconfig.IntPropertyFn
-		TTL                      dynamicconfig.DurationPropertyFn
-		MinEvictAge              dynamicconfig.DurationPropertyFn
-		MaxItems                 dynamicconfig.IntPropertyFn
-		EvictionInterval         dynamicconfig.DurationPropertyFn
-		MetricsHandler           metrics.Handler
-		MetricsConfig            WorkerMetricsConfig
-		EventLogger              otellog.Logger
+		NumBuckets                dynamicconfig.IntPropertyFn
+		TTL                       dynamicconfig.DurationPropertyFn
+		MinEvictAge               dynamicconfig.DurationPropertyFn
+		MaxItems                  dynamicconfig.IntPropertyFn
+		EvictionInterval          dynamicconfig.DurationPropertyFn
+		MetricsHandler            metrics.Handler
+		MetricsConfig             WorkerMetricsConfig
+		EventLogger               otellog.Logger
 		EnableWorkerConfigEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -255,9 +255,9 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		eventLogger:              params.EventLogger,
 		enableWorkerConfigEvents: params.EnableWorkerConfigEvents,
 		metricsEmitter: &workerMetricsEmitter{
-			handler:                     params.MetricsHandler,
-			config:                      params.MetricsConfig,
-			eventLogger:                 params.EventLogger,
+			handler:                   params.MetricsHandler,
+			config:                    params.MetricsConfig,
+			eventLogger:               params.EventLogger,
 			enableWorkerMetricsEvents: params.EnableWorkerMetricsEvents,
 		},
 	}

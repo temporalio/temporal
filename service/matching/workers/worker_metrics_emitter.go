@@ -23,9 +23,9 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler                     metrics.Handler
-	config                      WorkerMetricsConfig
-	eventLogger                 otellog.Logger
+	handler                   metrics.Handler
+	config                    WorkerMetricsConfig
+	eventLogger               otellog.Logger
 	enableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
