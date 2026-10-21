@@ -13,13 +13,14 @@ type (
 		config  *Config
 		handler *handler
 
-		SchedulerIdleTaskHandler        *SchedulerIdleTaskHandler
-		SchedulerCallbacksTaskHandler   *SchedulerCallbacksTaskHandler
-		GeneratorTaskHandler            *GeneratorTaskHandler
-		InvokerExecuteTaskHandler       *InvokerExecuteTaskHandler
-		InvokerProcessBufferTaskHandler *InvokerProcessBufferTaskHandler
-		BackfillerTaskHandler           *BackfillerTaskHandler
-		MigrateToWorkflowTaskHandler    *SchedulerMigrateToWorkflowTaskHandler
+		SchedulerIdleTaskHandler              *SchedulerIdleTaskHandler
+		SchedulerVisibilityRefreshTaskHandler *SchedulerVisibilityRefreshTaskHandler
+		SchedulerCallbacksTaskHandler         *SchedulerCallbacksTaskHandler
+		GeneratorTaskHandler                  *GeneratorTaskHandler
+		InvokerExecuteTaskHandler             *InvokerExecuteTaskHandler
+		InvokerProcessBufferTaskHandler       *InvokerProcessBufferTaskHandler
+		BackfillerTaskHandler                 *BackfillerTaskHandler
+		MigrateToWorkflowTaskHandler          *SchedulerMigrateToWorkflowTaskHandler
 	}
 )
 
@@ -41,15 +42,16 @@ func NewLibrary(
 	MigrateToWorkflowTaskHandler *SchedulerMigrateToWorkflowTaskHandler,
 ) *Library {
 	return &Library{
-		config:                          config,
-		handler:                         handler,
-		SchedulerIdleTaskHandler:        SchedulerIdleTaskHandler,
-		SchedulerCallbacksTaskHandler:   SchedulerCallbacksTaskHandler,
-		GeneratorTaskHandler:            GeneratorTaskHandler,
-		InvokerExecuteTaskHandler:       InvokerExecuteTaskHandler,
-		InvokerProcessBufferTaskHandler: InvokerProcessBufferTaskHandler,
-		BackfillerTaskHandler:           BackfillerTaskHandler,
-		MigrateToWorkflowTaskHandler:    MigrateToWorkflowTaskHandler,
+		config:                                config,
+		handler:                               handler,
+		SchedulerIdleTaskHandler:              SchedulerIdleTaskHandler,
+		SchedulerVisibilityRefreshTaskHandler: &SchedulerVisibilityRefreshTaskHandler{},
+		SchedulerCallbacksTaskHandler:         SchedulerCallbacksTaskHandler,
+		GeneratorTaskHandler:                  GeneratorTaskHandler,
+		InvokerExecuteTaskHandler:             InvokerExecuteTaskHandler,
+		InvokerProcessBufferTaskHandler:       InvokerProcessBufferTaskHandler,
+		BackfillerTaskHandler:                 BackfillerTaskHandler,
+		MigrateToWorkflowTaskHandler:          MigrateToWorkflowTaskHandler,
 	}
 }
 
@@ -85,6 +87,10 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"idle",
 			l.SchedulerIdleTaskHandler,
+		),
+		chasm.NewRegistrablePureTask(
+			"visibilityRefresh",
+			l.SchedulerVisibilityRefreshTaskHandler,
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"callbacks",
