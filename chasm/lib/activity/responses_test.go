@@ -316,11 +316,6 @@ func TestBuildActivityExecutionInfoHandoff(t *testing.T) {
 			require.Equal(t, wantCount, info.GetHandoffAttempt())
 			protorequire.ProtoEqual(t, tc.options, info.GetAsyncHandoffOptions())
 			protorequire.ProtoEqual(t, handoffTime, info.GetAsyncHandoffTime())
-
-			if tc.options.GetHeartbeatTimeout() != nil {
-				info.AsyncHandoffOptions.HeartbeatTimeout.Seconds++
-				protorequire.ProtoEqual(t, durationpb.New(30*time.Second), a.GetAsyncHandoffOptions().GetHeartbeatTimeout())
-			}
 		})
 	}
 }

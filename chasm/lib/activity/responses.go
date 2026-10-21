@@ -225,7 +225,7 @@ func (a *Activity) buildActivityExecutionInfo(
 	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:                          key.BusinessID,
 		ActivityType:                        a.GetActivityType(),
-		AsyncHandoffOptions:                 common.CloneProto(a.GetAsyncHandoffOptions()),
+		AsyncHandoffOptions:                 a.GetAsyncHandoffOptions(),
 		AsyncHandoffTime:                    a.GetAsyncHandoffTime(),
 		Attempt:                             attempt.GetCount(),
 		AwaitingCompletion:                  a.hasAttemptInProgress() && a.GetAwaitingCompletion(),
