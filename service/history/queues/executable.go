@@ -248,7 +248,9 @@ func NewExecutable(
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
-				return append(tasks.Tags(task), tag.TaskTypeName(e.taskType))
+				tags := tasks.Tags(task)
+				tags = append(tags, tag.TaskTypeName(e.taskType))
+				return tags
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
