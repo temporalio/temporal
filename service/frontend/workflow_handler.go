@@ -1134,7 +1134,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	if request.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
 		wh.logger.Warn("Unspecified task queue kind",
-			tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
+			tag.TaskQueueName(request.TaskQueue.GetName()),
 			tag.WorkflowNamespace(namespace.Name(request.GetNamespace()).String()),
 		)
 	}
@@ -1191,7 +1191,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 		return nil, err
@@ -1445,7 +1445,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
@@ -3136,7 +3136,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat during shutdown.",
-					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+					tag.TaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
 					tag.Error(err))
 			}
 		})
@@ -3185,7 +3185,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
-			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.TaskQueueName(taskQueueName),
 			tag.Error(err))
 		return
 	}
@@ -3207,7 +3207,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 			})
 			if err != nil {
 				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-					tag.WorkflowTaskQueueName(rootPartition.RpcName()),
+					tag.TaskQueueName(rootPartition.RpcName()),
 					tag.String("worker-instance-key", workerInstanceKey),
 					tag.Error(err))
 			} else {
@@ -3249,7 +3249,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
-			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.TaskQueueName(taskQueueName),
 			tag.Error(err))
 		return
 	}
@@ -3281,7 +3281,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 				if err != nil {
 					wh.logger.Warn("Failed to resolve matching host for poll cancellation dedup, sending RPC anyway.",
 						tag.WorkflowNamespaceID(namespaceID),
-						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.TaskQueueName(partition.RpcName()),
 						tag.Error(err))
 				} else if seenHosts[host] {
 					continue
@@ -3304,7 +3304,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 				if err != nil {
 					failedPartitions.Add(1)
 					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.TaskQueueName(partition.RpcName()),
 						tag.String("worker-instance-key", workerInstanceKey),
 						tag.Error(err))
 				} else {
@@ -6512,7 +6512,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.TaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
 		}()
@@ -6556,7 +6556,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
@@ -6991,7 +6991,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
 		wh.logger.Warn("Failed to cancel outstanding poller.",
-			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
+			tag.TaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 
 	return true
