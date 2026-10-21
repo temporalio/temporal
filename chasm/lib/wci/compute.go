@@ -17,6 +17,8 @@ import (
 
 // ComputeClient runs provider operations; history provides an in-process or delegated implementation.
 type ComputeClient interface {
+	// Supports reports whether CHASM can drive providerType at all; unsupported WCIs stay workflows.
+	Supports(providerType string) bool
 	// ValidateSpec checks provider configs only; algorithm configs are validated in history.
 	ValidateSpec(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error
 	// requestID is stable across retries of one invoke; "" when there is nothing to de-duplicate.

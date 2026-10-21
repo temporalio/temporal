@@ -36,7 +36,7 @@ func newTestClient(t *testing.T, settings dynamicconfig.StaticClient, remote *Re
 	t.Helper()
 	dc := testDC(settings)
 	if remote == nil {
-		remote = newRemoteClient(func() ([]membership.HostInfo, error) { return nil, nil }, nil)
+		remote = newRemoteClient(func() bool { return true }, func() ([]membership.HostInfo, error) { return nil, nil }, nil)
 	}
 	return NewClient(dc, NewFactory(dc, remote)).(*Client)
 }
@@ -52,6 +52,7 @@ func serveRemote(t *testing.T, dc *dynamicconfig.Collection) *RemoteClient {
 	t.Cleanup(server.Stop)
 
 	remote := newRemoteClient(
+		func() bool { return true },
 		func() ([]membership.HostInfo, error) {
 			return []membership.HostInfo{membership.NewHostInfoFromAddress(listener.Addr().String())}, nil
 		},
@@ -88,6 +89,18 @@ func TestFactoryRouting(t *testing.T) {
 
 	_, err = c.factory.For("gcp-cloud-run")
 	require.ErrorIs(t, err, wci.ErrProviderNotSupportedOnCHASM, "in neither list: stays a workflow")
+}
+
+func TestSupports(t *testing.T) {
+	settings := dynamicconfig.StaticClient{wci.RemoteComputeProviders.Key(): []string{"aws-lambda"}}
+	configured := newTestClient(t, settings, nil)
+	require.True(t, configured.Supports("test-invoke"), "in process")
+	require.True(t, configured.Supports("aws-lambda"), "served by the WCI process")
+	require.False(t, configured.Supports("gcp-cloud-run"), "in neither list")
+
+	notReachable := newTestClient(t, settings, newRemoteClient(func() bool { return false }, nil, nil))
+	require.False(t, notReachable.Supports("aws-lambda"), "history can't resolve the WCI service, so it stays a workflow")
+	require.True(t, notReachable.Supports("test-invoke"), "in-process types don't depend on it")
 }
 
 func TestInProcessAllowList(t *testing.T) {
@@ -153,7 +166,7 @@ func TestRemoteUnavailableIsRetryable(t *testing.T) {
 	var pErr *compute.ProviderError
 	require.NotErrorAs(t, err, &pErr, "an unknown outcome is not a provider failure")
 
-	unresolvable := newTestClient(t, settings, newRemoteClient(func() ([]membership.HostInfo, error) {
+	unresolvable := newTestClient(t, settings, newRemoteClient(func() bool { return false }, func() ([]membership.HostInfo, error) {
 		return nil, membership.ErrUnknownService
 	}, nil))
 	require.ErrorAs(t, unresolvable.InvokeWorker(t.Context(), rc, spec(t, "test-invoke", map[string]any{}), "1"), &unavailable,
@@ -165,6 +178,8 @@ type recordingService struct {
 	invoke *workercontrollerservice.InvokeWorkerRequest
 	resize *workercontrollerservice.UpdateWorkerSetSizeRequest
 }
+
+func (*recordingService) Configured() bool { return true }
 
 func (r *recordingService) InvokeWorker(_ context.Context, req *workercontrollerservice.InvokeWorkerRequest, _ ...grpc.CallOption) (*workercontrollerservice.InvokeWorkerResponse, error) {
 	r.invoke = req
