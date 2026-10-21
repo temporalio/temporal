@@ -59,7 +59,8 @@ func registerTaskQueues(
 		for _, action := range resp.Actions {
 			switch action.Action {
 			case scalingalgorithm.ActionTypeInvokeWorker:
-				err = client.InvokeWorker(ctx, rc, &group.Compute)
+				// Registration happens before the instance is written, so there is no request ID yet.
+				err = client.InvokeWorker(ctx, rc, &group.Compute, "")
 			case scalingalgorithm.ActionTypeUpdateWorkerSetSize:
 				if action.Count == nil {
 					return nil, serviceerror.NewInternalf("%s: registration action missing count", id)

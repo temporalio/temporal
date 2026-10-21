@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package temporal.server.api.workercontrollerservice.v1;
+
+import "temporal/server/api/workercontrollerservice/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/workercontrollerservice/v1;workercontrollerservice";
+
+message ValidateConfigRequest {
+  ComputeRequestContext context = 1;
+  ComputeProviderConfig provider = 2;
+}
+
+message ValidateConfigResponse {
+  ComputeFailure failure = 1;
+}
+
+message InvokeWorkerRequest {
+  ComputeRequestContext context = 1;
+  ComputeProviderConfig provider = 2;
+  // Stable across retries of one invoke, so the provider side can de-duplicate.
+  string request_id = 3;
+}
+
+message InvokeWorkerResponse {
+  ComputeFailure failure = 1;
+}
+
+// (-- api-linter: core::0134=disabled
+//     aip.dev/not-precedent: This service does not follow the update method AIP --)
+message UpdateWorkerSetSizeRequest {
+  ComputeRequestContext context = 1;
+  ComputeProviderConfig provider = 2;
+  // Target size; the call is convergent ("be N"), so a retry needs no de-duplication.
+  int32 worker_set_size = 3;
+}
+
+message UpdateWorkerSetSizeResponse {
+  ComputeFailure failure = 1;
+}

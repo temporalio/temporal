@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package temporal.server.api.workercontrollerservice.v1;
+
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/workercontrollerservice/v1;workercontrollerservice";
+
+// Mirrors compute.RequestContext; identifies whose compute is being driven.
+message ComputeRequestContext {
+  string namespace_id = 1;
+  string namespace_name = 2;
+  string deployment_name = 3;
+  string deployment_build_id = 4;
+}
+
+// One scaling group's provider: same shape as iface.ComputeProviderSpec.
+message ComputeProviderConfig {
+  // Registry key, e.g. "aws-lambda"; a string so new providers need no proto change.
+  string provider_type = 1;
+  // Provider-specific config, opaque here.
+  temporal.api.common.v1.Payload config = 2;
+}
+
+// Set on a response when the provider rejected or failed the call. An RPC error instead
+// means the outcome is unknown, so the caller treats it as retryable.
+message ComputeFailure {
+  FailureClass failure_class = 1;
+  string message = 2;
+}
+
+// Mirrors compute.FailureClass; UNSPECIFIED is compute.FailureUnclassified.
+enum FailureClass {
+  FAILURE_CLASS_UNSPECIFIED = 0;
+  FAILURE_CLASS_REJECTED = 1;
+  FAILURE_CLASS_NOT_FOUND = 2;
+  FAILURE_CLASS_ACCESS_DENIED = 3;
+  FAILURE_CLASS_UNAVAILABLE = 4;
+  FAILURE_CLASS_THROTTLED = 5;
+  FAILURE_CLASS_INTERNAL = 6;
+  FAILURE_CLASS_CONFLICT = 7;
+  // The provider type is not registered or not enabled for the namespace here.
+  FAILURE_CLASS_UNSUPPORTED = 8;
+}

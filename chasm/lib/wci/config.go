@@ -12,6 +12,12 @@ var (
 		`InProcessComputeProviders are the provider types a CHASM WCI runs inside history. They must need no
 assumed identity; "subprocess" executes on the history host and is for local development only.`,
 	)
+	RemoteComputeProviders = dynamicconfig.NewGlobalTypedSetting(
+		"workercontroller.chasm.remote_compute_providers",
+		[]string(nil),
+		`RemoteComputeProviders are the provider types a CHASM WCI calls on the WCI process, under its
+cloud identity. In-process providers take precedence; a type in neither list stays a workflow.`,
+	)
 	ComputeConcurrencyPerNamespace = dynamicconfig.NewNamespaceIntSetting(
 		"workercontroller.chasm.compute_concurrency_per_namespace",
 		10,
