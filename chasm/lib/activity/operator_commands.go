@@ -280,6 +280,10 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		a.addWorkerCommandDispatchTask(ctx, &activitypb.WorkerCommandDispatchTask{
+			Command: &activitypb.WorkerCommandDispatchTask_Cancel{},
+		})
 	}
 
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil

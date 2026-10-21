@@ -427,6 +427,111 @@ func (x *HeartbeatTimeoutTask) GetStamp() int32 {
 	return 0
 }
 
+// WorkerCommandDispatchTask is a side-effect task that dispatches a worker command
+// (e.g. cancel, pause, resume) via the worker control queue.
+type WorkerCommandDispatchTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Command:
+	//
+	//	*WorkerCommandDispatchTask_Cancel
+	Command       isWorkerCommandDispatchTask_Command `protobuf_oneof:"command"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerCommandDispatchTask) Reset() {
+	*x = WorkerCommandDispatchTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerCommandDispatchTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerCommandDispatchTask) ProtoMessage() {}
+
+func (x *WorkerCommandDispatchTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerCommandDispatchTask.ProtoReflect.Descriptor instead.
+func (*WorkerCommandDispatchTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *WorkerCommandDispatchTask) GetCommand() isWorkerCommandDispatchTask_Command {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *WorkerCommandDispatchTask) GetCancel() *CancelCommand {
+	if x != nil {
+		if x, ok := x.Command.(*WorkerCommandDispatchTask_Cancel); ok {
+			return x.Cancel
+		}
+	}
+	return nil
+}
+
+type isWorkerCommandDispatchTask_Command interface {
+	isWorkerCommandDispatchTask_Command()
+}
+
+type WorkerCommandDispatchTask_Cancel struct {
+	Cancel *CancelCommand `protobuf:"bytes,1,opt,name=cancel,proto3,oneof"`
+}
+
+func (*WorkerCommandDispatchTask_Cancel) isWorkerCommandDispatchTask_Command() {}
+
+// CancelCommand requests the worker to cancel the running activity.
+type CancelCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelCommand) Reset() {
+	*x = CancelCommand{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelCommand) ProtoMessage() {}
+
+func (x *CancelCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelCommand.ProtoReflect.Descriptor instead.
+func (*CancelCommand) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{6}
+}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
@@ -443,7 +548,11 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x17StartToCloseTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\",\n" +
 	"\x14HeartbeatTimeoutTask\x12\x14\n" +
-	"\x05stamp\x18\x01 \x01(\x05R\x05stamp*\x8c\x01\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"|\n" +
+	"\x19WorkerCommandDispatchTask\x12T\n" +
+	"\x06cancel\x18\x01 \x01(\v2:.temporal.server.chasm.lib.activity.proto.v1.CancelCommandH\x00R\x06cancelB\t\n" +
+	"\acommand\"\x0f\n" +
+	"\rCancelCommand*\x8c\x01\n" +
 	"\x0eDispatchReason\x12\x1f\n" +
 	"\x1bDISPATCH_REASON_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DISPATCH_REASON_IMMEDIATE\x10\x01\x12\x1f\n" +
@@ -474,7 +583,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
 	(DispatchReason)(0),                // 0: temporal.server.chasm.lib.activity.proto.v1.DispatchReason
 	(StartDelayBucket)(0),              // 1: temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
@@ -483,15 +592,18 @@ var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any
 	(*ScheduleToCloseTimeoutTask)(nil), // 4: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
 	(*StartToCloseTimeoutTask)(nil),    // 5: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
 	(*HeartbeatTimeoutTask)(nil),       // 6: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
+	(*WorkerCommandDispatchTask)(nil),  // 7: temporal.server.chasm.lib.activity.proto.v1.WorkerCommandDispatchTask
+	(*CancelCommand)(nil),              // 8: temporal.server.chasm.lib.activity.proto.v1.CancelCommand
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.dispatch_reason:type_name -> temporal.server.chasm.lib.activity.proto.v1.DispatchReason
 	1, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.start_delay_bucket:type_name -> temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 2: temporal.server.chasm.lib.activity.proto.v1.WorkerCommandDispatchTask.cancel:type_name -> temporal.server.chasm.lib.activity.proto.v1.CancelCommand
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() }
@@ -499,13 +611,16 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() {
 	if File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto != nil {
 		return
 	}
+	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[5].OneofWrappers = []any{
+		(*WorkerCommandDispatchTask_Cancel)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
