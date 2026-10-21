@@ -97,7 +97,7 @@ func (h *handler) requestContext(namespaceID, deploymentName, buildID string) (c
 	if err != nil {
 		return compute.RequestContext{}, err
 	}
-	return compute.RequestContext{NamespaceName: name.String(), DeploymentName: deploymentName, DeploymentBuildID: buildID}, nil
+	return compute.RequestContext{NamespaceID: namespaceID, NamespaceName: name.String(), DeploymentName: deploymentName, DeploymentBuildID: buildID}, nil
 }
 
 func (h *handler) algorithmContext(ctx context.Context) context.Context {
