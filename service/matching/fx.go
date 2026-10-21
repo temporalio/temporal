@@ -233,13 +233,13 @@ func WorkersRegistryProvider(
 	eventLogger otellog.Logger,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
-		NumBuckets:                  serviceConfig.WorkerRegistryNumBuckets,
-		TTL:                         serviceConfig.WorkerRegistryEntryTTL,
-		MinEvictAge:                 serviceConfig.WorkerRegistryMinEvictAge,
-		MaxItems:                    serviceConfig.WorkerRegistryMaxEntries,
-		EvictionInterval:            serviceConfig.WorkerRegistryEvictionInterval,
-		MetricsHandler:              metricsHandler,
-		EventLogger:                 eventLogger,
+		NumBuckets:                serviceConfig.WorkerRegistryNumBuckets,
+		TTL:                       serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:               serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:                  serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval:          serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:            metricsHandler,
+		EventLogger:               eventLogger,
 		EnableWorkerConfigEvents:  serviceConfig.EnableWorkerConfigEvents,
 		EnableWorkerMetricsEvents: serviceConfig.EnableWorkerMetricsEvents,
 		MetricsConfig: workers.WorkerMetricsConfig{
