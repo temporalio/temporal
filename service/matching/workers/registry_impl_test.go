@@ -913,15 +913,16 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:               dynamicconfig.GetIntPropertyFn(1),
-		TTL:                      dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:              dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:                 dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval:         dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:           metricstest.NewCaptureHandler(),
-		MetricsConfig:            WorkerMetricsConfig{},
-		EventLogger:              eventLogger,
-		EnableWorkerConfigEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		NumBuckets:                dynamicconfig.GetIntPropertyFn(1),
+		TTL:                       dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:               dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                  dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:          dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:            metricstest.NewCaptureHandler(),
+		MetricsConfig:             WorkerMetricsConfig{},
+		EventLogger:               eventLogger,
+		EnableWorkerConfigEvents:  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 
@@ -931,25 +932,29 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 	}
 
 	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
-	require.Len(t, eventLogger.records, 1)
+	// First heartbeat: worker_config + worker_metrics
+	require.Len(t, eventLogger.records, 2)
 	require.Equal(t, "worker_config", eventLogger.records[0].EventName())
+	require.Equal(t, "worker_metrics", eventLogger.records[1].EventName())
 
-	// Second heartbeat — should not emit again
+	// Second heartbeat — only worker_metrics, no second worker_config
 	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
-	require.Len(t, eventLogger.records, 1)
+	require.Len(t, eventLogger.records, 3)
+	require.Equal(t, "worker_metrics", eventLogger.records[2].EventName())
 }
 
 func TestWorkerConfigEventNilLogger(t *testing.T) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:               dynamicconfig.GetIntPropertyFn(1),
-		TTL:                      dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:              dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:                 dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval:         dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:           metricstest.NewCaptureHandler(),
-		MetricsConfig:            WorkerMetricsConfig{},
-		EventLogger:              nil,
-		EnableWorkerConfigEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		NumBuckets:                dynamicconfig.GetIntPropertyFn(1),
+		TTL:                       dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:               dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                  dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:          dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:            metricstest.NewCaptureHandler(),
+		MetricsConfig:             WorkerMetricsConfig{},
+		EventLogger:               nil,
+		EnableWorkerConfigEvents:  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 

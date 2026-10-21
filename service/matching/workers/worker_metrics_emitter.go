@@ -23,8 +23,10 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler metrics.Handler
-	config  WorkerMetricsConfig
+	handler                   metrics.Handler
+	config                    WorkerMetricsConfig
+	eventLogger               otellog.Logger
+	enableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -36,6 +38,7 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
+	enableWorkerMetricsEvents := e.enableWorkerMetricsEvents != nil && e.enableWorkerMetricsEvents(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
 	recordedDrivers := make(map[string]bool)
@@ -75,6 +78,10 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 					recordedDrivers[driverType] = true
 				}
 			}
+		}
+
+		if enableWorkerMetricsEvents {
+			e.emitWorkerMetricsEvent(nsName, hb)
 		}
 	}
 }
@@ -147,6 +154,61 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
 		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
 		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
+	})
+}
+
+func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	type taskEntry struct {
+		taskType   string
+		slots      *workerpb.WorkerSlotsInfo
+		pollerInfo *workerpb.WorkerPollerInfo
+		stickyInfo *workerpb.WorkerPollerInfo
+	}
+	entries := []taskEntry{
+		{"workflow", hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()},
+		{"activity", hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil},
+		{"nexus", hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil},
+		{"local_activity", hb.GetLocalActivitySlotsInfo(), nil, nil}, // local activities run in-process, no pollers
+	}
+
+	stats := make(map[string]wideevents.WorkerTaskTypeStats)
+	for _, te := range entries {
+		// Only include task types that have at least one source message present.
+		if te.slots == nil && te.pollerInfo == nil && te.stickyInfo == nil {
+			continue
+		}
+		s := wideevents.WorkerTaskTypeStats{}
+		if te.pollerInfo != nil {
+			s.CurrentPollers = new(te.pollerInfo.GetCurrentPollers())
+		}
+		if te.stickyInfo != nil {
+			s.CurrentStickyPollers = new(te.stickyInfo.GetCurrentPollers())
+		}
+		if te.slots != nil {
+			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
+			if te.slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
+				totalSlots = -1
+			}
+			s.TotalSlots = new(totalSlots)
+			s.UsedSlots = new(te.slots.GetCurrentUsedSlots())
+			s.TotalProcessedTasks = new(te.slots.GetTotalProcessedTasks())
+			s.TotalFailedTasks = new(te.slots.GetTotalFailedTasks())
+			s.LastIntervalProcessedTasks = new(te.slots.GetLastIntervalProcessedTasks())
+			s.LastIntervalFailureTasks = new(te.slots.GetLastIntervalFailureTasks())
+		}
+		stats[te.taskType] = s
+	}
+
+	wideevents.Emit(e.eventLogger, wideevents.WorkerMetricsPayload{
+		Namespace:         nsName.String(),
+		TaskQueue:         hb.GetTaskQueue(),
+		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
+		TaskTypeStats:     stats,
+		Details: map[string]any{
+			"sticky_cache_size": hb.GetCurrentStickyCacheSize(),
+			"sticky_cache_hit":  hb.GetTotalStickyCacheHit(),
+			"sticky_cache_miss": hb.GetTotalStickyCacheMiss(),
+		},
 	})
 }
 
