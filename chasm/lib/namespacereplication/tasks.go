@@ -1087,7 +1087,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				firstAt = peer.GetFirstAttemptAt().AsTime()
 			}
 
-			// Retriable failure: keep the peer PENDING and reschedule with capped
+			// Retriable failure: wait in FAILED_RETRIABLE and reschedule with capped
 			// exponential backoff until the total retry budget (measured from the
 			// first failed attempt) is exhausted. This lets the mutation converge
 			// once a temporarily-unreachable peer recovers. Only after the budget
@@ -1230,7 +1230,7 @@ func (h *applyPeerBackoffTaskHandler) Validate(
 		return false, nil
 	}
 	peer := c.GetPeerApply()[task.GetTargetCell()]
-	if peer == nil || peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING {
+	if peer == nil || peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
 		return false, nil
 	}
 	return peer.GetAttemptCount() == task.GetAttempt(), nil

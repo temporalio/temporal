@@ -241,11 +241,7 @@ func (h *applyPeerTaskHandler) observePeerApply(
 			details["apply_error"] = applyErr.Error()
 		}
 	} else if recorded.stateUpdated {
-		persistedOutcome := recorded.outcome
-		if recorded.retryScheduled {
-			persistedOutcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
-		}
-		details["persisted_peer_outcome"] = persistedOutcome.String()
+		details["persisted_peer_outcome"] = recorded.outcome.String()
 	} else {
 		details["state_update_skipped"] = true
 	}
