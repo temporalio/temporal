@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -27,7 +28,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -37,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -672,6 +676,75 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WorkflowMissin
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestHistoryConversion_HighPriorityLock() {
+	ctx := withWorkflowLockPriority(context.Background(), locks.PriorityHigh)
+	key := definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)
+	for _, tc := range []struct {
+		name     string
+		backfill bool
+	}{
+		{name: "history"},
+		{name: "backfill", backfill: true},
+	} {
+		s.Run(tc.name, func() {
+			cache := wcache.NewMockCache(gomock.NewController(s.T()))
+			cache.EXPECT().GetOrCreateWorkflowExecution(
+				gomock.Any(), s.shardContext, namespace.ID(s.namespaceID),
+				&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+				locks.PriorityHigh,
+			).Return(nil, nil, consts.ErrResourceExhaustedBusyWorkflow)
+
+			var err error
+			if tc.backfill {
+				converter := &syncVersionedTransitionTaskConverter{
+					shardContext: s.shardContext, shardID: 12, workflowCache: cache,
+				}
+				_, err = converter.generateBackfillHistoryTask(ctx, &tasks.SyncVersionedTransitionTask{
+					WorkflowKey: key, FirstEventID: 10, NextEventID: 11, FirstEventVersion: 100,
+				}, 3)
+			} else {
+				_, err = convertHistoryReplicationTask(ctx, s.shardContext, &tasks.HistoryReplicationTask{
+					WorkflowKey: key, FirstEventID: 10, NextEventID: 11, Version: 100,
+				}, 12, cache, nil, s.executionManager, s.logger, s.shardContext.GetConfig())
+			}
+			s.Require().ErrorIs(err, consts.ErrResourceExhaustedBusyWorkflow)
+			s.Require().False(isSkippable(&convertError{err: err}))
+		})
+	}
+}
+
+func (s *rawTaskConverterSuite) TestSourceTaskConverter_MissingHistoryItemSkippable() {
+	task := &tasks.HistoryReplicationTask{
+		WorkflowKey:  definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+		FirstEventID: 10, NextEventID: 11, Version: 1002189,
+	}
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(), s.shardContext, namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
+	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories: &historyspb.VersionHistories{Histories: []*historyspb.VersionHistory{
+			{Items: []*historyspb.VersionHistoryItem{{EventId: 9, Version: task.Version}}},
+		}},
+	})
+	ackMgr := &ackMgrImpl{shardContext: s.shardContext, workflowCache: s.workflowCache}
+	s.mockEngine.EXPECT().ConvertReplicationTask(gomock.Any(), task, int32(3)).DoAndReturn(ackMgr.ConvertTaskByCluster)
+	serializer := serialization.NewSerializer()
+	converter := NewSourceTaskConverter(s.mockEngine, s.shardContext.Resource.NamespaceCache, serializer, serializer, s.shardContext.GetConfig())
+
+	result, err := converter.Convert(task, 3, enumsspb.TASK_PRIORITY_HIGH, locks.PriorityLow)
+	s.Require().Nil(result)
+	s.Require().ErrorContains(err, "version histories does not contains given item:")
+	_, internal := errors.AsType[*serviceerror.Internal](err)
+	s.Require().True(internal)
+	s.Require().True(isSkippable(&convertError{err: err}))
+	s.Require().Equal(codes.Internal, serviceerror.ToStatus(err).Code())
+	s.Require().Equal(err.Error(), serviceerror.ToStatus(err).Message())
+	s.Require().True(s.lockReleased)
 }
 
 func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
