@@ -24,7 +24,7 @@ make temporal-server BUILD_TAG=temporal_minimal
 # Without optional integrations, except Google Cloud Storage archival.
 make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
 
-# Unit tests of the packages that temporal_minimal changes.
+# Unit tests of the packages with a temporal_minimal variant.
 make unit-test-build-tags
 ```
 

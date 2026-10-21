@@ -137,8 +137,9 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
 
-# Packages with a file constrained by temporal_minimal.
-MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
+# Packages with a temporal_minimal variant: a file built only with temporal_minimal, which replaces
+# the files of an integration. Packages that temporal_minimal compiles out entirely aren't included.
+MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -l '^//go:build temporal_minimal &&' -- '*.go'))))
 # The unit test packages among MINIMAL_DIRS.
 MINIMAL_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
@@ -648,7 +649,7 @@ unit-test-coverage: prepare-coverage-test
 
 # Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
 unit-test-build-tags:
-	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a temporal_minimal variant))
 	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
