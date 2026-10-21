@@ -18,6 +18,7 @@ ci-build-misc: \
 	shell-check \
 	goimports \
 	gomodtidy \
+	build-tags-check \
 	ensure-no-changes
 
 # Delete all build artifacts
@@ -49,8 +50,10 @@ VISIBILITY_DB ?= temporal_visibility
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
+MINIMAL_TEST_TAGS = $(ALL_TEST_TAGS),temporal_minimal
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
+
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -133,6 +136,11 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 # Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
+
+# Packages with a file constrained by temporal_minimal.
+MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
+# The unit test packages among MINIMAL_DIRS.
+MINIMAL_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 PINNED_DEPENDENCIES := \
@@ -423,17 +431,24 @@ lint-code-fast:
 		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
 	fi
 
-lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
-	@printf $(COLOR) "Linting code..."
+# Lints the Go packages $(2) with the build tags $(1).
+define lint-go
 	@$(GOLANGCI_LINT) run \
 		--verbose \
-		--build-tags $(ALL_TEST_TAGS) \
+		--build-tags $(1) \
 		--timeout 10m \
 		--fix=$(GOLANGCI_LINT_FIX) \
 		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
 		--config=.github/.golangci.yml \
-		$(LINT_CODE_TARGETS)
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+		$(2)
+	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
+endef
+
+lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
+	@printf $(COLOR) "Linting code..."
+	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
+	@printf $(COLOR) "Linting code with temporal_minimal..."
+	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_DIRS))
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
@@ -522,6 +537,39 @@ workflowcheck: $(WORKFLOWCHECK)
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
 
+comma := ,
+
+# Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
+# end of the variable name is set. Each temporal_with_* tag needs one.
+EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
+
+# $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
+server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
+
+# $(call expect-deps,<tags>,<packages>): fails unless the server built with <tags> depends on all <packages>.
+expect-deps = $(if $(filter-out $(call server-deps,$(1)),$(2)),\
+	$(error Server built with tags "$(1)" doesn't depend on: $(filter-out $(call server-deps,$(1)),$(2))))
+
+# $(call reject-deps,<tags>,<packages>): fails if the server built with <tags> depends on any of <packages>.
+reject-deps = $(if $(filter $(2),$(call server-deps,$(1))),\
+	$(error Server built with tags "$(1)" depends on: $(filter $(2),$(call server-deps,$(1)))))
+
+# $(call check-build-tag,<tag>): temporal_minimal must compile the packages of <tag> out of the server,
+# and adding <tag> must bring them back.
+define check-build-tag
+$(if $(EXCLUDED_PACKAGES_$(1)),,$(error EXCLUDED_PACKAGES_$(1) is not set))
+$(call expect-deps,,$(EXCLUDED_PACKAGES_$(1)))
+$(call reject-deps,temporal_minimal,$(EXCLUDED_PACKAGES_$(1)))
+$(call expect-deps,temporal_minimal$(comma)$(1),$(EXCLUDED_PACKAGES_$(1)))
+endef
+
+# Compiles every package with temporal_minimal, and checks the packages each temporal_with_* tag
+# compiles out of the server.
+build-tags-check:
+	@printf $(COLOR) "Check build tags..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
+	$(foreach tag,$(sort $(shell git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go')),$(call check-build-tag,$(tag)))
+
 check: lint shell-check
 
 ##### Tests #####
@@ -596,6 +644,11 @@ unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
+
+# Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
+unit-test-build-tags:
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
