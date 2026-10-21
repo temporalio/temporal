@@ -719,8 +719,8 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 			tag.Error(err),
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.TaskID(exclusiveMaxTaskID),
-			tag.WorkflowTaskQueueType(db.queue.TaskType()),
-			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
+			tag.TaskQueueType(db.queue.TaskType()),
+			tag.TaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return n, err
@@ -761,8 +761,8 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 			tag.Error(err),
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.AckLevel(exclusiveMaxLevel),
-			tag.WorkflowTaskQueueType(db.queue.TaskType()),
-			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
+			tag.TaskQueueType(db.queue.TaskType()),
+			tag.TaskQueueName(db.queue.PersistenceName()),
 		)
 	}
 	return n, err

@@ -99,7 +99,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 		return
 	}
 	atomic.AddInt64(&s.stats.taskqueue.nDeleted, 1)
-	s.logger.Info("taskqueue deleted", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.TaskQueueName), tag.WorkflowTaskQueueType(key.TaskQueueType))
+	s.logger.Info("taskqueue deleted", tag.WorkflowNamespaceID(key.NamespaceID), tag.TaskQueueName(key.TaskQueueName), tag.TaskQueueType(key.TaskQueueType))
 }
 
 func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState, nProcessed int, nDeleted int, err error) {
@@ -107,11 +107,11 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
 		s.logger.Error("scavenger.deleteHandler processed.",
-			tag.Error(err), tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.TaskQueueName), tag.WorkflowTaskQueueType(key.TaskQueueType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.Error(err), tag.WorkflowNamespaceID(key.NamespaceID), tag.TaskQueueName(key.TaskQueueName), tag.TaskQueueType(key.TaskQueueType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
 		s.logger.Info("scavenger.deleteHandler processed.",
-			tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.TaskQueueName), tag.WorkflowTaskQueueType(key.TaskQueueType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.WorkflowNamespaceID(key.NamespaceID), tag.TaskQueueName(key.TaskQueueName), tag.TaskQueueType(key.TaskQueueType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
