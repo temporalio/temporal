@@ -247,8 +247,8 @@ func NewExecutable(
 			logger,
 			func() []tag.Tag {
 				tags := tasks.Tags(task)
-				taskType := taskTypeTagValue(task, namespaceRegistry, clusterMetadata.GetCurrentClusterName(), chasmRegistry, taskTypeTagProvider)
-				return append(tags, tag.TaskTypeName(taskType))
+				_, isActive := taskNamespace(task, namespaceRegistry, clusterMetadata.GetCurrentClusterName())
+				return append(tags, tag.TaskTypeName(taskTypeTagProvider(task, isActive, chasmRegistry)))
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
@@ -953,18 +953,6 @@ func taskBaseMetricTags(
 ) []metrics.Tag {
 	tags := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
 	return append(tags, getArchetypeTag(task, chasmRegistry))
-}
-
-// taskTypeTagValue returns the task type that task metrics are tagged with, so logs can name the task the same way.
-func taskTypeTagValue(
-	task tasks.Task,
-	namespaceRegistry namespace.Registry,
-	currentClusterName string,
-	chasmRegistry *chasm.Registry,
-	taskTypeTagProvider TaskTypeTagProvider,
-) string {
-	_, isActive := taskNamespace(task, namespaceRegistry, currentClusterName)
-	return taskTypeTagProvider(task, isActive, chasmRegistry)
 }
 
 // taskNamespace returns the task's namespace, or nil if it can't be loaded, and whether the namespace is active in

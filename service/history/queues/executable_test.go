@@ -1167,6 +1167,7 @@ func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	logCapture := logger.StartCapture()
 	s.T().Cleanup(func() { logger.StopCapture(logCapture) })
+
 	executable := s.newTestExecutable(func(p *params) {
 		p.logger = logger
 	})
