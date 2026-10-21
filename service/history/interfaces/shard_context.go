@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -121,6 +122,10 @@ type (
 
 		StateMachineRegistry() *hsm.Registry
 		GetFinalizer() *finalizer.Finalizer
+
+		// CallbackValidator returns the validator used to bound completion callbacks attached
+		// to executions owned by this shard.
+		CallbackValidator() callbacks.Validator
 
 		ChasmRegistry() *chasm.Registry
 		// ChasmWorkflowRegistry returns the CHASM workflow library's event/command registry.

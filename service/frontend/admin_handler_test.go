@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mockapi/operatorservicemock/v1"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -3028,13 +3029,8 @@ func (s *adminHandlerSuite) TestListExecutions() {
 
 	s.Run("success", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
-				Namespace:     s.namespace,
-				Query:         request.GetQuery(),
-				PageSize:      int(request.GetPageSize()),
-				NextPageToken: request.GetNextPageToken(),
-			}).
-			Return(&manager.AdminListExecutionsResponse{
+			AdminListExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.ListExecutionsResponse{
 				Executions:    executions,
 				NextPageToken: []byte("next-page-token"),
 			}, nil)
@@ -3047,11 +3043,11 @@ func (s *adminHandlerSuite) TestListExecutions() {
 
 	s.Run("all namespaces", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
+			AdminListExecutions(ctx, protomock.Eq(&adminservice.ListExecutionsRequest{
 				Query:    request.GetQuery(),
-				PageSize: int(request.GetPageSize()),
-			}).
-			Return(&manager.AdminListExecutionsResponse{}, nil)
+				PageSize: request.GetPageSize(),
+			})).
+			Return(&adminservice.ListExecutionsResponse{}, nil)
 
 		resp, err := s.handler.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
 			Query:    request.GetQuery(),
@@ -3091,11 +3087,8 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 
 	s.Run("success", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{
-				Namespace: s.namespace,
-				Query:     request.GetQuery(),
-			}).
-			Return(&manager.AdminCountExecutionsResponse{Count: 100, Groups: groups}, nil)
+			AdminCountExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.CountExecutionsResponse{Count: 100, Groups: groups}, nil)
 
 		resp, err := s.handler.CountExecutions(ctx, request)
 		s.NoError(err)
@@ -3105,8 +3098,8 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 
 	s.Run("all namespaces", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{Query: request.GetQuery()}).
-			Return(&manager.AdminCountExecutionsResponse{Count: 100}, nil)
+			AdminCountExecutions(ctx, protomock.Eq(&adminservice.CountExecutionsRequest{Query: request.GetQuery()})).
+			Return(&adminservice.CountExecutionsResponse{Count: 100}, nil)
 
 		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
 			Query: request.GetQuery(),
