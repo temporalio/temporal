@@ -59,6 +59,16 @@ func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, pa
 	)
 }
 
+func (i *instrumentation) logCallbacksNotAttached(updateID, requestID, state string, callbackCount int) {
+	i.log.Info("update completion callbacks were not attached",
+		tag.String("update-id", updateID),
+		tag.RequestID(requestID),
+		tag.String("update-state", state),
+		tag.Int("callback-count", callbackCount),
+		tag.String("namespace", i.namespace),
+	)
+}
+
 func (i *instrumentation) countTooMany() {
 	i.oneOf(metrics.WorkflowExecutionUpdateTooMany.Name())
 }

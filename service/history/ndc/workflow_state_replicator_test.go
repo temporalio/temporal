@@ -1285,6 +1285,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetOwner().Return("test-shard-owner").AnyTimes()
 	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
@@ -1449,6 +1450,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetOwner().Return("test-shard-owner").AnyTimes()
 	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
@@ -1638,6 +1640,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetOwner().Return("test-shard-owner").AnyTimes()
 	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
@@ -2362,10 +2365,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GenerateTaskID().Return(taskID, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetOwner().Return("test-shard-owner").AnyTimes()
 	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	mockEventsCache := events.NewMockCache(s.controller)
-	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	// Assert the key is shard-scoped; an unscoped key would be rejected by the cache.
+	mockEventsCache.EXPECT().PutEvent(gomock.Cond(func(k events.EventKey) bool {
+		return k.ShardUUID == "test-shard-owner"
+	}), gomock.Any()).AnyTimes()
 	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 
@@ -2383,4 +2390,49 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 		[]*commonpb.DataBlob{eventBlobs},
 		true)
 	s.NoError(err)
+}
+
+func (s *workflowReplicatorSuite) TestApplySnapshotHistorySwitchKeepsParentVerification() {
+	localInfo := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				versionhistory.NewVersionHistory([]byte("local"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 2}}),
+				versionhistory.NewVersionHistory([]byte("source"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 3}}),
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 2, TransitionCount: 3}},
+	}
+	snapshot := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories:  versionhistory.NewVersionHistories(localInfo.VersionHistories.Histories[1]),
+			TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 3, TransitionCount: 4}},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED},
+	}
+	mutableState := historyi.NewMockMutableState(s.controller)
+	mutableState.EXPECT().GetExecutionInfo().Return(localInfo).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(snapshot.ExecutionState)
+	mutableState.EXPECT().IsWorkflow().Return(true)
+	mutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+	mutableState.EXPECT().GetPendingChildIds().Return(nil)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchByBatchResponse{TransactionIDs: []int64{1}}, nil,
+	)
+	mutableState.EXPECT().ApplySnapshot(snapshot).DoAndReturn(func(*persistencespb.WorkflowMutableState) error {
+		localHistory, err := versionhistory.GetCurrentVersionHistory(localInfo.VersionHistories)
+		s.Require().NoError(err)
+		s.True(versionhistory.IsEqualVersionHistoryItems(localHistory.Items, snapshot.ExecutionInfo.VersionHistories.Histories[0].Items))
+		return nil
+	})
+	refresher := workflow.NewMockTaskRefresher(s.controller)
+	refresher.EXPECT().Refresh(gomock.Any(), mutableState, false).Return(nil)
+	transactionManager := NewMockTransactionManager(s.controller)
+	transactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil)
+	s.workflowStateReplicator.taskRefresher = refresher
+	s.workflowStateReplicator.transactionMgr = transactionManager
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
+	s.Require().NoError(s.workflowStateReplicator.applySnapshotWhenWorkflowExist(
+		s.T().Context(), tests.NamespaceID, s.workflowID, s.runID, chasm.WorkflowArchetypeID,
+		workflowContext, wcache.NoopReleaseFn, mutableState, snapshot, nil, nil, "source",
+	))
 }
