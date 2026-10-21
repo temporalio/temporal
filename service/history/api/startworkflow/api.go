@@ -363,14 +363,6 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 	if err != nil {
 		return nil, err
 	}
-	if len(eventBatches) != 1 {
-		return nil, softassert.UnexpectedInternalErr(
-			s.shardContext.GetLogger(),
-			"unable to create 1st event batch",
-			nil,
-		)
-	}
-
 	return &creationParams{
 		workflowID:           workflowID,
 		runID:                runID,

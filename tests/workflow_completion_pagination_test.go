@@ -271,6 +271,98 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 }
 
+// TestStartWithSplitFirstBatch verifies that StartWorkflowExecution and SignalWithStartWorkflowExecution
+// whose first transaction is split into several history batches succeeds and workflow finishes successfully.
+func (s *WorkflowCompletionPaginationTestSuite) TestStartWithSplitFirstBatch() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.MaximumEventBatchSizeInBytes, 1),
+	)
+
+	for _, tc := range []struct {
+		name            string
+		start           func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string
+		expectedHistory string
+	}{
+		{
+			name: "StartWorkflowExecution",
+			start: func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string {
+				resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+					RequestId:    uuid.NewString(),
+					Namespace:    env.Namespace().String(),
+					WorkflowId:   id,
+					WorkflowType: &commonpb.WorkflowType{Name: "functional-split-first-batch"},
+					TaskQueue:    taskQueue,
+					Identity:     "worker1",
+				})
+				s.NoError(err)
+				return resp.RunId
+			},
+			expectedHistory: `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`,
+		},
+		{
+			name: "SignalWithStartWorkflowExecution",
+			start: func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string {
+				resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+					RequestId:    uuid.NewString(),
+					Namespace:    env.Namespace().String(),
+					WorkflowId:   id,
+					WorkflowType: &commonpb.WorkflowType{Name: "functional-split-first-batch"},
+					TaskQueue:    taskQueue,
+					SignalName:   "signal",
+					Identity:     "worker1",
+				})
+				s.NoError(err)
+				s.True(resp.Started)
+				return resp.RunId
+			},
+			expectedHistory: `
+  1 WorkflowExecutionStarted
+  2 WorkflowExecutionSignaled
+  3 WorkflowTaskScheduled
+  4 WorkflowTaskStarted
+  5 WorkflowTaskCompleted
+  6 WorkflowExecutionCompleted`,
+		},
+	} {
+		s.Run(tc.name, func(s *WorkflowCompletionPaginationTestSuite) {
+			id := uuid.NewString()
+			taskQueue := &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			runID := tc.start(s, id, taskQueue)
+
+			pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: taskQueue,
+				Identity:  "worker1",
+			})
+			s.NoError(err)
+			s.NotEmpty(pollResp.TaskToken)
+
+			_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp.TaskToken,
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+					},
+				}},
+				Identity: "worker1",
+			})
+			s.NoError(err)
+
+			s.EqualHistoryEvents(tc.expectedHistory, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      runID,
+			}))
+		})
+	}
+}
+
 // TestPaginationDisabledRejected verifies that a paginated request is rejected with
 // FailedPrecondition when the feature is disabled for the namespace.
 func (s *WorkflowCompletionPaginationTestSuite) TestPaginationDisabledRejected() {

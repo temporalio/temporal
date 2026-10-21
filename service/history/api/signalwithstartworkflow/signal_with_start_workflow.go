@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -316,10 +315,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	if err != nil {
 		return startOutcome{}, err
 	}
-	if len(newWorkflowEventsSeq) != 1 {
-		return startOutcome{}, serviceerror.NewInternal("unable to create 1st event batch")
-	}
-
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
