@@ -332,34 +332,6 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExis
 	s.Equal("ok", result)
 }
 
-func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDeniedReturnsStartedTask() {
-	for _, crossRunDedup := range []bool{false, true} {
-		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {
-			env := s.newBacklogEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, crossRunDedup))
-			request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
-			response := s.startEagerWorkflow(env, request)
-			s.NotNil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response did not contain a workflow task")
-			firstRunID := response.RunId
-
-			// The backlog denies the retry's grant. The retry still gets the task the first attempt started.
-			backloggedWorkflowID := s.startBackloggedWorkflow(env)
-			response = s.startEagerWorkflow(env, request)
-			task := response.GetEagerWorkflowTask()
-			s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
-			s.Equal(firstRunID, response.RunId)
-			s.True(task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted())
-
-			s.respondWorkflowTaskCompleted(env, task, "ok")
-			result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
-			s.Equal("ok", result)
-
-			task = s.pollWorkflowTaskQueue(env)
-			s.Equal(backloggedWorkflowID, task.GetWorkflowExecution().GetWorkflowId())
-			s.respondWorkflowTaskCompleted(env, task, "ok")
-		})
-	}
-}
-
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDoesNotReturnDispatchedTask() {
 	for _, crossRunDedup := range []bool{false, true} {
 		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {

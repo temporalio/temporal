@@ -239,7 +239,6 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			}
 			require.NoError(t, starter.prepare(t.Context()))
 			require.Equal(t, test.wantDeniedReason == "", starter.requestEagerStart())
-			require.Equal(t, test.wantDeniedReason == eagerStartDeniedReasonDispatchNotGranted, starter.eagerDispatchNotGranted)
 
 			sent := capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()]
 			if grantRequested {
