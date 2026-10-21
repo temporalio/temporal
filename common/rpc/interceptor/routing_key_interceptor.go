@@ -66,6 +66,7 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	"RespondActivityTaskCompleted": PatternTaskToken,
 	"RespondActivityTaskCanceled":  PatternTaskToken,
 	"RespondActivityTaskFailed":    PatternTaskToken,
+
 	"RespondWorkflowTaskCompleted": PatternTaskToken,
 	"RespondWorkflowTaskFailed":    PatternTaskToken,
 

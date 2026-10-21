@@ -583,6 +583,7 @@ func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
 // with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
 // only if the activity has never started.
 func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
+	// TODO: Restore AsyncHandoffOptions when handoff option support is implemented.
 	og := a.GetOriginalOptions()
 	a.TaskQueue = common.CloneProto(og.GetTaskQueue())
 	a.ScheduleToCloseTimeout = common.CloneProto(og.GetScheduleToCloseTimeout())

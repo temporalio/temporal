@@ -174,6 +174,8 @@ func NewStandaloneActivity(
 		return nil, err
 	}
 
+	// TODO: Store AsyncHandoffOptions in ActivityState and OriginalOptions when handoff
+	// option support is implemented.
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
 			ActivityType:           request.ActivityType,
