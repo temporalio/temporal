@@ -20,10 +20,12 @@ func TestNexusStage(t *testing.T) {
 		req    any
 		want   []tag.Tag
 	}{
+		// Handler Inbound
 		{method: api.HistoryServicePrefix + "StartNexusOperation", want: []tag.Tag{tag.NexusStageHandlerInbound}},
 		{method: api.HistoryServicePrefix + "CancelNexusOperation", want: []tag.Tag{tag.NexusStageHandlerInbound}},
 		{method: api.NexusServicePrefix + "DispatchByEndpoint", want: []tag.Tag{tag.NexusStageHandlerInbound}},
 		{method: api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue", want: []tag.Tag{tag.NexusStageHandlerInbound}},
+		// No stage
 		{method: api.WorkflowServicePrefix + "StartWorkflowExecution"},
 		// Standalone operation APIs are client RPCs, not part of a Nexus call's lifecycle.
 		{method: api.WorkflowServicePrefix + "StartNexusOperationExecution"},
