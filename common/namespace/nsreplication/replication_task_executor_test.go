@@ -131,10 +131,11 @@ func (s *namespaceReplicationTaskExecutorSuite) replicationEventContext(
 		},
 	)
 	s.Require().True(ok)
+	sourceTaskID := int64(42)
 	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
 		SourceCluster: "source-cluster",
 		TargetCluster: "target-cluster",
-		SourceTaskID:  42,
+		SourceTaskID:  &sourceTaskID,
 		AttemptCount:  2,
 		EventData:     eventData,
 	})
@@ -229,6 +230,58 @@ func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedRequiresExplici
 		nil,
 	)
 	s.Len(s.eventLogger.records, 1)
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedCarriesCHASMCorrelationAndMutationDetails() {
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:                 "namespace-id",
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+		Info:               &namespacepb.NamespaceInfo{Name: "namespace-name"},
+	}
+	eventData, ok := CHASMAuthoritativeApplyEventData(CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               CHASMApplyStageReceive,
+		ComponentBusinessID: "business-id",
+		ComponentRunID:      "run-id",
+	})
+	s.Require().True(ok)
+	ctx := wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
+		SourceCluster: "source-cluster",
+		TargetCluster: "target-cluster",
+		AttemptCount:  2,
+		EventData:     eventData,
+	})
+	preMutation := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}}
+	request := &persistence.UpdateNamespaceRequest{
+		Namespace:           &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+		NotificationVersion: 7,
+		IsGlobalNamespace:   true,
+	}
+
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeUpdated,
+		preMutation,
+		nil,
+		request,
+	)
+
+	s.Require().Len(s.eventLogger.records, 1)
+	values := make(map[string]otellog.Value)
+	s.eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		values[kv.Key] = kv.Value
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(values["details"].AsString()), &details))
+	s.Equal(CHASMReplicationTransport, details["transport"])
+	s.Equal("authoritative", details["mode"])
+	s.Equal(CHASMApplyStageReceive, details["apply_stage"])
+	s.Equal("business-id", details["component_business_id"])
+	s.Equal("run-id", details["component_run_id"])
+	s.NotNil(details["local_namespace_pre_mutation"])
+	s.NotNil(details["persistence_request"])
+	s.NotContains(details, "source_task_id")
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {

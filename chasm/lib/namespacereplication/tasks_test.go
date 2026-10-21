@@ -2,11 +2,14 @@ package namespacereplication
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
@@ -20,11 +23,17 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
+	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/wideevents"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -239,6 +248,19 @@ type nsreplTestEnv struct {
 	engineCtx      context.Context
 }
 
+type nsreplEventCaptureLogger struct {
+	embedded.Logger
+	records []otellog.Record
+}
+
+func (l *nsreplEventCaptureLogger) Emit(_ context.Context, record otellog.Record) {
+	l.records = append(l.records, record)
+}
+
+func (l *nsreplEventCaptureLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
+
 func newNsreplTestEnv(t *testing.T) *nsreplTestEnv {
 	return newNsreplTestEnvWithOptions(t)
 }
@@ -285,6 +307,88 @@ func newNsreplTestEnvWithOptions(t *testing.T, opts ...chasmtest.EngineOption) *
 		engine:         engine,
 		engineCtx:      chasm.NewEngineContext(context.Background(), engine),
 	}
+}
+
+func (env *nsreplTestEnv) enableObservability() (*metricstest.Capture, *nsreplEventCaptureLogger) {
+	env.t.Helper()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	env.t.Cleanup(func() { metricsHandler.StopCapture(capture) })
+	eventLogger := &nsreplEventCaptureLogger{}
+	env.localHandler.metricsHandler = metricsHandler
+	env.localHandler.eventLogger = eventLogger
+	env.localHandler.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	env.peerHandler.metricsHandler = metricsHandler
+	env.peerHandler.eventLogger = eventLogger
+	env.peerHandler.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	return capture, eventLogger
+}
+
+func requireAuthoritativeObservation(
+	t *testing.T,
+	capture *metricstest.Capture,
+	eventLogger *nsreplEventCaptureLogger,
+	stage string,
+	outcome string,
+) map[string]any {
+	t.Helper()
+	requireAuthoritativeMetric(t, capture, stage, outcome)
+	return requireAuthoritativeEvent(t, eventLogger, stage, outcome)
+}
+
+func requireAuthoritativeEvent(
+	t *testing.T,
+	eventLogger *nsreplEventCaptureLogger,
+	stage string,
+	outcome string,
+) map[string]any {
+	t.Helper()
+	matches := authoritativeEventMatches(t, eventLogger, stage, outcome)
+	require.Len(t, matches, 1)
+	require.Equal(t, "chasm", matches[0]["transport"])
+	require.Equal(t, "authoritative", matches[0]["mode"])
+	return matches[0]
+}
+
+func authoritativeEventMatches(
+	t *testing.T,
+	eventLogger *nsreplEventCaptureLogger,
+	stage string,
+	outcome string,
+) []map[string]any {
+	t.Helper()
+	var matches []map[string]any
+	for _, record := range eventLogger.records {
+		require.Equal(t, wideevents.NamespaceLifecycleEventName, record.EventName())
+		attributes := make(map[string]string)
+		record.WalkAttributes(func(kv otellog.KeyValue) bool {
+			if kv.Value.Kind() == otellog.KindString {
+				attributes[kv.Key] = kv.Value.AsString()
+			}
+			return true
+		})
+		require.Equal(t, string(wideevents.NamespaceReplicationProcessed), attributes["phase"])
+		var details map[string]any
+		require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
+		if details["apply_stage"] == stage && details["outcome"] == outcome {
+			matches = append(matches, details)
+		}
+	}
+	return matches
+}
+
+func requireAuthoritativeMetric(
+	t *testing.T,
+	capture *metricstest.Capture,
+	stage string,
+	outcome string,
+) {
+	t.Helper()
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, stage, recordings[0].Tags["apply_stage"])
+	require.Equal(t, outcome, recordings[0].Tags[metrics.OutcomeTag("").Key])
+	require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyLatency.Name()), 1)
 }
 
 // start creates a NamespaceMutationComponent execution and returns its root ref.
@@ -376,6 +480,7 @@ func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationp
 
 func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	ref := env.start(env.mutationUpdate("cellB", "cellC"), nil)
 
 	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -394,10 +499,49 @@ func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageLocal,
+		nsreplicationcommon.CHASMApplyOutcomeApplied,
+	)
+	require.Equal(t, ref.BusinessID, details["component_business_id"])
+	require.Equal(t, ref.RunID, details["component_run_id"])
+}
+
+func TestApplyLocalTask_Execute_MetadataWriteCommitFailureObserved(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.start(env.mutationUpdate("cellB"), nil)
+	hooks := testhooks.NewTestHooks()
+	env.localHandler.testHooks = hooks
+	commitErr := errors.New("chasm commit unavailable")
+	cleanup := testhooks.Set(
+		hooks,
+		testhooks.NamespaceReplicationBeforeLocalCommit,
+		func(context.Context) error { return commitErr },
+		namespace.Name("ns"),
+	)
+	t.Cleanup(cleanup)
+
+	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+	err := env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{})
+	require.ErrorIs(t, err, commitErr)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, env.read(ref).GetLocalApply().GetOutcome())
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageLocal,
+		nsreplicationcommon.CHASMApplyOutcomeStateTransitionError,
+	)
+	require.Equal(t, commitErr.Error(), details["error"])
 }
 
 func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	mutation := env.mutationUpdate("cellB")
 	mutation.Shadow = true
 	ref := env.start(mutation, nil)
@@ -407,10 +551,13 @@ func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name()))
+	require.Empty(t, eventLogger.records)
 }
 
 func TestApplyLocalTask_Execute_ReplicateOnlySkipsLocalWriteAndSchedulesPeers(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	mutation := env.mutationUpdate("cellB")
 	mutation.ReplicateOnly = true
 	ref := env.start(mutation, nil)
@@ -422,6 +569,14 @@ func TestApplyLocalTask_Execute_ReplicateOnlySkipsLocalWriteAndSchedulesPeers(t 
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
 	require.False(t, component.GetMutation().GetShadow(), "peer apply must remain authoritative")
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageLocal,
+		nsreplicationcommon.CHASMApplyOutcomeNoChange,
+	)
+	require.Equal(t, true, details["replicate_only"])
 }
 
 func TestApplyLocalTask_Execute_ClonesDetailForMetadataManager(t *testing.T) {
@@ -451,6 +606,7 @@ func TestApplyLocalTask_Execute_ClonesDetailForMetadataManager(t *testing.T) {
 // fan out to and must complete immediately.
 func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	_, eventLogger := env.enableObservability()
 	ref := env.start(env.mutationUpdate(), nil) // no peer cells
 
 	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
@@ -460,6 +616,17 @@ func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus(),
 		"a zero-peer mutation has no fan-out and must reach COMPLETED, not linger RUNNING")
+	details := requireAuthoritativeEvent(
+		t,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageComponent,
+		nsreplicationcommon.CHASMApplyOutcomeCompleted,
+	)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED.String(), details["component_status"])
+	require.InDelta(t, 0, details["peer_count"], 0)
+	require.Equal(t, map[string]any{}, details["peer_outcomes"])
+	require.Equal(t, map[string]any{}, details["peer_attempt_counts"])
+	require.Equal(t, map[string]any{}, details["peer_outcome_counts"])
 }
 
 func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
@@ -1062,7 +1229,25 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		wantStatus       namespacereplicationpb.ComponentStatus
 		wantTimerDelay   time.Duration
 		wantNewTimerTask int
+		wantThreshold    bool
 	}{
+		{
+			name:             "below one-minute pending alert threshold retries",
+			elapsed:          time.Minute - time.Nanosecond,
+			wantOutcome:      namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantTimerDelay:   4 * time.Second,
+			wantNewTimerTask: 1,
+		},
+		{
+			name:             "at one-minute pending alert threshold retries and emits threshold metric",
+			elapsed:          time.Minute,
+			wantOutcome:      namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantTimerDelay:   4 * time.Second,
+			wantNewTimerTask: 1,
+			wantThreshold:    true,
+		},
 		{
 			name:             "below budget schedules another attempt",
 			elapsed:          retryExpiration - 10*time.Second,
@@ -1070,6 +1255,7 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantTimerDelay:   4 * time.Second,
 			wantNewTimerTask: 1,
+			wantThreshold:    true,
 		},
 		{
 			name:             "next attempt is clamped to deadline",
@@ -1078,6 +1264,7 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantTimerDelay:   500 * time.Millisecond,
 			wantNewTimerTask: 1,
+			wantThreshold:    true,
 		},
 		{
 			name:        "at budget is indeterminate",
@@ -1095,6 +1282,7 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			timeSource := clock.NewEventTimeSource().Update(now)
 			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			metricsCapture, eventLogger := env.enableObservability()
 			env.localHandler.config = &config{
 				localRetryExpirationInterval: func() time.Duration { return retryExpiration },
 			}
@@ -1134,6 +1322,41 @@ func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			afterTasks, err := env.engine.Tasks(ref)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+			wantMetricOutcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
+			if tc.wantOutcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE {
+				wantMetricOutcome = nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
+				details := requireAuthoritativeObservation(
+					t,
+					metricsCapture,
+					eventLogger,
+					nsreplicationcommon.CHASMApplyStageLocal,
+					wantMetricOutcome,
+				)
+				require.Equal(t, true, details["retry_exhausted"])
+				require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE.String(), details["persisted_local_outcome"])
+			} else {
+				requireAuthoritativeMetric(
+					t,
+					metricsCapture,
+					nsreplicationcommon.CHASMApplyStageLocal,
+					wantMetricOutcome,
+				)
+				require.Empty(t, eventLogger.records)
+			}
+			pendingAge := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMLocalPendingAge.Name())
+			thresholdExceeded := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.Name())
+			if tc.wantOutcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE {
+				require.Empty(t, pendingAge)
+				require.Empty(t, thresholdExceeded)
+			} else {
+				require.Len(t, pendingAge, 1)
+				require.Equal(t, max(tc.elapsed, 0), pendingAge[0].Value)
+				if tc.wantThreshold {
+					require.Len(t, thresholdExceeded, 1)
+				} else {
+					require.Empty(t, thresholdExceeded)
+				}
+			}
 			if tc.wantNewTimerTask > 0 {
 				timerTasks := afterTasks[historytasks.CategoryTimer]
 				require.Equal(t, now.Add(tc.wantTimerDelay), timerTasks[len(timerTasks)-1].GetVisibilityTime())
@@ -1181,6 +1404,7 @@ func TestApplyLocalTask_Execute_FencedMissingNamespaceFails(t *testing.T) {
 // this component as an indeterminate outcome and make the ambiguity observable.
 func TestApplyLocalTask_Execute_SupersededUpdateIsIndeterminate(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	mutation := env.mutationUpdate("cellB", "cellC")
 	ref := env.start(mutation, nil)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
@@ -1229,6 +1453,34 @@ func TestApplyLocalTask_Execute_SupersededUpdateIsIndeterminate(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageLocal,
+		nsreplicationcommon.CHASMApplyOutcomeTerminalError,
+	)
+	require.Equal(t, "fenced_ambiguous", details["resolution"])
+	componentDetails := requireAuthoritativeEvent(
+		t,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageComponent,
+		nsreplicationcommon.CHASMApplyOutcomeFailed,
+	)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED.String(), componentDetails["component_status"])
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE.String(), componentDetails["local_apply_outcome"])
+	require.InDelta(t, 2, componentDetails["peer_count"], 0)
+	require.Equal(t, map[string]any{
+		namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING.String(): float64(2),
+	}, componentDetails["peer_outcome_counts"])
+	require.Equal(t, map[string]any{
+		"cellB": namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING.String(),
+		"cellC": namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING.String(),
+	}, componentDetails["peer_outcomes"])
+	require.Equal(t, map[string]any{
+		"cellB": float64(0),
+		"cellC": float64(0),
+	}, componentDetails["peer_attempt_counts"])
 }
 
 func TestApplyLocalTask_ResolveLocalIgnoresResolvedLocalApply(t *testing.T) {
@@ -1240,12 +1492,13 @@ func TestApplyLocalTask_ResolveLocalIgnoresResolvedLocalApply(t *testing.T) {
 		c.PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
 	})
 
-	require.NoError(t, env.localHandler.resolveLocal(
+	_, err := env.localHandler.resolveLocal(
 		env.engineCtx,
 		ref,
 		&namespacereplicationpb.ApplyLocalTask{},
 		false,
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
@@ -1261,13 +1514,14 @@ func TestApplyLocalTask_RecordLocalFailureIgnoresResolvedLocalApply(t *testing.T
 		}
 	})
 
-	require.NoError(t, env.localHandler.recordLocalFailure(
+	_, err := env.localHandler.recordLocalFailure(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		&namespacereplicationpb.ApplyLocalTask{},
 		serviceerror.NewUnavailable("stale task result"),
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
@@ -1281,21 +1535,24 @@ func TestApplyLocalTask_StateUpdatesIgnoreStaleAttempt(t *testing.T) {
 	})
 	staleTask := &namespacereplicationpb.ApplyLocalTask{Attempt: 1}
 
-	require.NoError(t, env.localHandler.resolveLocal(env.engineCtx, ref, staleTask, false))
-	require.NoError(t, env.localHandler.recordLocalFailure(
+	_, err := env.localHandler.resolveLocal(env.engineCtx, ref, staleTask, false)
+	require.NoError(t, err)
+	_, err = env.localHandler.recordLocalFailure(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		staleTask,
 		serviceerror.NewUnavailable("stale failure"),
-	))
-	require.NoError(t, env.localHandler.recordLocalRetry(
+	)
+	require.NoError(t, err)
+	_, err = env.localHandler.recordLocalRetry(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		staleTask,
 		serviceerror.NewUnavailable("stale unresolved result"),
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
@@ -1320,14 +1577,15 @@ func TestApplyPeerTask_RecordOutcomeIgnoresStaleAttempt(t *testing.T) {
 		c.PeerApply["cellB"].AttemptCount = 2
 	})
 
-	require.NoError(t, env.peerHandler.recordPeerOutcome(
+	_, err := env.peerHandler.recordPeerOutcome(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 1},
 		namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 		serviceerror.NewUnavailable("stale result"),
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	peer := component.GetPeerApply()["cellB"]
@@ -1340,6 +1598,7 @@ func TestApplyPeerTask_RecordOutcomeIgnoresStaleAttempt(t *testing.T) {
 
 func TestApplyPeerTask_Execute_Applied(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	ref := env.startCommitted("cellB")
 
 	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
@@ -1352,6 +1611,181 @@ func TestApplyPeerTask_Execute_Applied(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED, c.GetPeerApply()["cellB"].GetOutcome())
 	// Only peer is now terminal -> component completes.
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeApplied,
+	)
+	require.Equal(t, "cellA", details["source_cluster"])
+	require.Equal(t, "cellB", details["target_cluster"])
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(), details["attempted_peer_outcome"])
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(), details["persisted_peer_outcome"])
+	require.Len(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()), 1)
+	componentDetails := requireAuthoritativeEvent(
+		t,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageComponent,
+		nsreplicationcommon.CHASMApplyOutcomeCompleted,
+	)
+	require.InDelta(t, 1, componentDetails["peer_count"], 0)
+	require.InDelta(t, 1, componentDetails["peer_attempt_count"], 0)
+	require.Equal(t, map[string]any{
+		namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(): float64(1),
+	}, componentDetails["peer_outcome_counts"])
+	require.Equal(t, map[string]any{
+		"cellB": namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(),
+	}, componentDetails["peer_outcomes"])
+	require.Equal(t, map[string]any{"cellB": float64(1)}, componentDetails["peer_attempt_counts"])
+}
+
+func TestApplyPeerTask_Execute_ComponentEventWaitsForAllPeers(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	_, eventLogger := env.enableObservability()
+	ref := env.start(env.mutationUpdate("cellB", "cellC"), func(c *NamespaceMutationComponent) {
+		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
+			Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+		}
+	})
+
+	for _, cell := range []string{"cellB", "cellC"} {
+		env.clientBean.EXPECT().GetRemoteAdminClient(cell).Return(env.adminClient, nil)
+		env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+			&adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			}, nil)
+		require.NoError(t, env.peerHandler.Execute(
+			env.engineCtx,
+			ref,
+			chasm.TaskAttributes{Destination: cell},
+			&namespacereplicationpb.ApplyPeerTask{TargetCell: cell},
+		))
+
+		component := env.read(ref)
+		if cell == "cellB" {
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+			require.Empty(t, authoritativeEventMatches(
+				t,
+				eventLogger,
+				nsreplicationcommon.CHASMApplyStageComponent,
+				nsreplicationcommon.CHASMApplyOutcomeCompleted,
+			))
+		} else {
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, component.GetStatus())
+		}
+	}
+
+	details := requireAuthoritativeEvent(
+		t,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageComponent,
+		nsreplicationcommon.CHASMApplyOutcomeCompleted,
+	)
+	require.InDelta(t, 2, details["peer_count"], 0)
+	require.Equal(t, map[string]any{
+		namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(): float64(2),
+	}, details["peer_outcome_counts"])
+	require.Equal(t, map[string]any{
+		"cellB": namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(),
+		"cellC": namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(),
+	}, details["peer_outcomes"])
+	require.Equal(t, map[string]any{
+		"cellB": float64(1),
+		"cellC": float64(1),
+	}, details["peer_attempt_counts"])
+}
+
+func TestApplyPeerTask_Execute_ConcurrentCompletionSkipsStateUpdate(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.startCommitted("cellB")
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			}, nil
+		},
+	)
+
+	err := env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	)
+	require.NoError(t, err)
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeApplied,
+	)
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(), details["attempted_peer_outcome"])
+	require.NotContains(t, details, "persisted_peer_outcome")
+	require.Equal(t, true, details["state_update_skipped"])
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, env.read(ref).GetStatus())
+	require.Equal(
+		t,
+		namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+		env.read(ref).GetPeerApply()["cellB"].GetOutcome(),
+	)
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()))
+}
+
+func TestApplyPeerTask_Execute_ConcurrentCompletionDoesNotScheduleRetry(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.startCommitted("cellB")
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return nil, serviceerror.NewUnavailable("peer down")
+		},
+	)
+
+	err := env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	)
+	require.Error(t, err)
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeRetryableError,
+	)
+	require.Equal(t, false, details["retry_scheduled"])
+	require.NotContains(t, details, "retry_requested")
+	require.Equal(t, true, details["state_update_skipped"])
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, env.read(ref).GetStatus())
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name()))
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
 }
 
 func TestApplyPeerTask_Execute_ShadowOutcome(t *testing.T) {
@@ -1373,6 +1807,7 @@ func TestApplyPeerTask_Execute_ShadowOutcome(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newNsreplTestEnv(t)
+			metricsCapture, eventLogger := env.enableObservability()
 			mutation := env.mutationUpdate("cellB")
 			mutation.Shadow = true
 			ref := env.start(mutation, func(c *NamespaceMutationComponent) {
@@ -1388,6 +1823,8 @@ func TestApplyPeerTask_Execute_ShadowOutcome(t *testing.T) {
 			c := env.read(ref)
 			require.Equal(t, tc.wantOutcome, c.GetPeerApply()["cellB"].GetOutcome())
 			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+			require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name()))
+			require.Empty(t, eventLogger.records)
 		})
 	}
 }
@@ -1409,6 +1846,7 @@ func TestApplyPeerTask_Execute_NoOpStale(t *testing.T) {
 
 func TestApplyPeerTask_Execute_TerminalError(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	ref := env.startCommitted("cellB")
 
 	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
@@ -1422,12 +1860,33 @@ func TestApplyPeerTask_Execute_TerminalError(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL, peer.GetOutcome())
 	require.NotNil(t, peer.GetLastFailure())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+	requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeTerminalError,
+	)
+	componentDetails := requireAuthoritativeEvent(
+		t,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStageComponent,
+		nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures,
+	)
+	require.Equal(t, map[string]any{
+		namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String(): float64(1),
+	}, componentDetails["peer_outcome_counts"])
+	require.Equal(t, map[string]any{
+		"cellB": namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String(),
+	}, componentDetails["peer_outcomes"])
+	require.Equal(t, map[string]any{"cellB": float64(1)}, componentDetails["peer_attempt_counts"])
 }
 
-// A retriable peer error keeps the peer PENDING, bumps the attempt, and does not
+// A retriable peer error marks the peer FAILED_RETRIABLE, bumps the attempt, and does not
 // complete the component — a later attempt within the retry budget can converge.
 func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
 	ref := env.startCommitted("cellB")
 
 	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
@@ -1440,9 +1899,21 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "retriable failure keeps peer pending")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome())
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus(), "component not complete while a peer is still retrying")
+	requireAuthoritativeMetric(
+		t,
+		metricsCapture,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeRetryableError,
+	)
+	require.Empty(t, eventLogger.records)
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()))
+	pendingAge := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name())
+	require.Len(t, pendingAge, 1)
+	require.Equal(t, time.Duration(0), pendingAge[0].Value)
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
 }
 
 func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
@@ -1454,13 +1925,30 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		wantOutcome      namespacereplicationpb.PeerApplyOutcome
 		wantStatus       namespacereplicationpb.ComponentStatus
 		wantNewTimerTask int
+		wantThreshold    bool
 	}{
+		{
+			name:             "below one-minute pending alert threshold retries",
+			elapsed:          time.Minute - time.Nanosecond,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantNewTimerTask: 1,
+		},
+		{
+			name:             "at one-minute pending alert threshold retries and emits threshold metric",
+			elapsed:          time.Minute,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantNewTimerTask: 1,
+			wantThreshold:    true,
+		},
 		{
 			name:             "below budget retries",
 			elapsed:          retryExpiration - time.Nanosecond,
-			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
+			wantThreshold:    true,
 		},
 		{
 			name:        "at budget is terminal",
@@ -1480,6 +1968,7 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			timeSource := clock.NewEventTimeSource().Update(now)
 			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			metricsCapture, eventLogger := env.enableObservability()
 			env.peerHandler.config = &config{
 				peerRetryInitialInterval:    func() time.Duration { return 3 * time.Second },
 				peerRetryMaximumInterval:    func() time.Duration { return 20 * time.Second },
@@ -1518,6 +2007,47 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			afterTasks, err := env.engine.Tasks(ref)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+			wantMetricOutcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
+			if tc.wantOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL {
+				wantMetricOutcome = nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
+			}
+			if tc.wantOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL {
+				details := requireAuthoritativeObservation(
+					t,
+					metricsCapture,
+					eventLogger,
+					nsreplicationcommon.CHASMApplyStagePeer,
+					wantMetricOutcome,
+				)
+				require.Equal(t, true, details["retry_exhausted"])
+				require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE.String(), details["attempted_peer_outcome"])
+				require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String(), details["persisted_peer_outcome"])
+			} else {
+				requireAuthoritativeMetric(
+					t,
+					metricsCapture,
+					nsreplicationcommon.CHASMApplyStagePeer,
+					wantMetricOutcome,
+				)
+				require.Empty(t, eventLogger.records)
+			}
+			pendingLatency := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name())
+			pendingAge := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name())
+			thresholdExceeded := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name())
+			if tc.wantOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL {
+				require.Len(t, pendingLatency, 1)
+				require.Empty(t, pendingAge)
+				require.Empty(t, thresholdExceeded)
+			} else {
+				require.Empty(t, pendingLatency)
+				require.Len(t, pendingAge, 1)
+				require.Equal(t, max(tc.elapsed, 0), pendingAge[0].Value)
+				if tc.wantThreshold {
+					require.Len(t, thresholdExceeded, 1)
+				} else {
+					require.Empty(t, thresholdExceeded)
+				}
+			}
 			if tc.wantNewTimerTask > 0 {
 				timerTasks := afterTasks[historytasks.CategoryTimer]
 				require.Equal(t, now.Add(12*time.Second), timerTasks[len(timerTasks)-1].GetVisibilityTime())
@@ -1690,7 +2220,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 					require.True(t, request.GetShadow())
 					payload := request.GetNamespaceTaskPayload()
 					require.NotEmpty(t, payload)
-					require.Equal(t, nsreplication.NamespaceTaskFingerprintFromPayload(payload), request.GetFingerprint())
+					require.Equal(t, nsreplicationcommon.NamespaceTaskFingerprintFromPayload(payload), request.GetFingerprint())
 					payloadTask := &replicationspb.NamespaceTaskAttributes{}
 					require.NoError(t, proto.Unmarshal(payload, payloadTask))
 					require.True(t, proto.Equal(payloadTask, request.GetNamespaceTask()))
@@ -1899,7 +2429,7 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 	require.Equal(t, []string{"cellB"}, applier.cells)
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "an unknown result must not be recorded as applied")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome(), "an unknown result must not be recorded as applied")
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Contains(t, peer.GetLastFailure().GetMessage(), "unknown peer apply result: 999")
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())
