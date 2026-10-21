@@ -309,7 +309,7 @@ func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (
 	if !ok {
 		return false, serviceerror.NewInvalidArgumentf("invalid value: %s", sqlparser.String(expr.Right))
 	}
-	valStr := sqlparser.String(valExpr)
+	valStr := sqlquery.SQLValString(valExpr)
 
 	// First check if the column name is a valid property function.
 	if propertyFunc, ok := propertyMapFuncs[colName]; ok {

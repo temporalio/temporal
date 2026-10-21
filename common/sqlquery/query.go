@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -30,6 +31,15 @@ func ConvertToTime(timeStr string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return parsedTime, nil
+}
+
+// SQLValString returns the SQL literal of val. Unlike sqlparser.String, it does not escape special
+// characters in string values, so ExtractStringValue returns the string exactly as given in the query.
+func SQLValString(val *sqlparser.SQLVal) string {
+	if val.Type == sqlparser.StrVal {
+		return "'" + string(val.Val) + "'"
+	}
+	return sqlparser.String(val)
 }
 
 func ExtractStringValue(s string) (string, error) {

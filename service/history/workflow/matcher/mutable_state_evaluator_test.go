@@ -308,3 +308,36 @@ func TestAdvancedMutableStateMatchEvaluator(t *testing.T) {
 		})
 	}
 }
+
+func TestMutableStateMatchEvaluator_StringValueWithSpecialCharacters(t *testing.T) {
+	ws := &persistencespb.WorkflowExecutionState{}
+	we := &persistencespb.WorkflowExecutionInfo{
+		WorkflowId:       `order-o'brien`,
+		WorkflowTypeName: `C:\workflows`,
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "workflow id",
+			query:         fmt.Sprintf(`%s = 'order-o''brien'`, workflowIDColName),
+			expectedMatch: true,
+		},
+		{
+			name:          "workflow type",
+			query:         fmt.Sprintf(`%s = 'C:\\workflows'`, workflowTypeNameColName),
+			expectedMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := MatchMutableState(we, ws, tt.query)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedMatch, match)
+		})
+	}
+}
