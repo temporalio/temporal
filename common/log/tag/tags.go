@@ -658,7 +658,7 @@ func TaskType(taskType enumsspb.TaskType) ZapTag {
 
 // TaskTypeName returns tag for the task type name, e.g. "TransferActiveTaskActivity".
 func TaskTypeName(name string) ZapTag {
-	return NewStringTag("task-type", name)
+	return NewStringTag("queue-task-type-name", name)
 }
 
 func TaskCategoryID(taskCategoryID int) ZapTag {
