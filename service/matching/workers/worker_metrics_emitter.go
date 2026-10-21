@@ -186,7 +186,7 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		}
 		if te.slots != nil {
 			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
-			if te.slots.GetCurrentAvailableSlots() < 0 {
+			if te.slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
 				totalSlots = -1
 			}
 			s.TotalSlots = int32Ptr(totalSlots)
