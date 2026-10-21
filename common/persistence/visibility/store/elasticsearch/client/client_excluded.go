@@ -9,19 +9,13 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-// Elasticsearch support is compiled out of this build. The client types remain so that
-// configuration and dependency wiring compile unchanged, but no client can be created.
+// Client is a placeholder: Elasticsearch support is compiled out of this build.
+type Client interface{}
 
-type (
-	Client                 interface{}
-	CLIClient              interface{}
-	IntegrationTestsClient interface{}
-)
-
-// errElasticsearchExcluded is returned by every client constructor, since Elasticsearch visibility is
-// excluded from this build.
+// errElasticsearchExcluded is returned by NewClient, since Elasticsearch visibility is excluded from this build.
 var errElasticsearchExcluded = errors.New("elasticsearch visibility is not compiled into this server; rebuild with the temporal_with_elasticsearch build tag")
 
-func newClient(*Config, *http.Client, log.Logger) (any, error) {
+// NewClient fails, since Elasticsearch visibility is excluded from this build.
+func NewClient(*Config, *http.Client, log.Logger) (Client, error) {
 	return nil, errElasticsearchExcluded
 }
