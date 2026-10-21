@@ -1175,7 +1175,7 @@ func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
 	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Warn,
 		Message: "Fail to process task",
-		Tags:    map[string]any{"queue-task-type-name": failures[0].Tags["task_type"]},
+		Tags:    map[string]any{"task-type": failures[0].Tags["task_type"]},
 	})
 }
 
