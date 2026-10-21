@@ -173,7 +173,11 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
-		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
+		}
+
+		// Ask matching last, so a grant is only spent if nothing above denied eager start.
+		if request.RequestEagerExecution &&
+			s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
 			!s.grantEagerWorkflowDispatch(ctx) {
 			// Grants are best-effort: on a denial or a failed call, start the workflow normally.
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
