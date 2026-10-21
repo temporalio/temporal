@@ -4,8 +4,6 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -13,7 +11,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
@@ -101,26 +98,6 @@ func Invoke(
 				mutableState.AddSignalRequested(request.GetRequestId())
 			}
 
-			var notificationCommand *workerpb.WorkerCommand
-			controlQueue := executionInfo.GetWorkflowTaskWorkerControlTaskQueue()
-			if shard.GetConfig().EnableWorkflowTaskHeartbeatNotification(namespaceEntry.Name().String()) &&
-				controlQueue != "" && !mutableState.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-				return event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED
-			}) {
-				if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-					notificationCommand = &workerpb.WorkerCommand{
-						Type: &workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification{
-							WorkflowTaskHeartbeatNotification: &workerpb.WorkflowTaskHeartbeatNotificationCommand{
-								RunId:            runID,
-								ScheduledEventId: workflowTask.ScheduledEventID,
-								StartedEventId:   workflowTask.StartedEventID,
-								Attempt:          workflowTask.Attempt,
-								StartedTime:      timestamppb.New(workflowTask.StartedTime),
-							},
-						},
-					}
-				}
-			}
 			_, err := mutableState.AddWorkflowExecutionSignaledEvent(
 				request.GetSignalName(),
 				request.GetInput(),
@@ -133,12 +110,6 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			if notificationCommand != nil {
-				if err := mutableState.AddWorkerCommandsTasks([]*workerpb.WorkerCommand{notificationCommand}, controlQueue); err != nil {
-					return nil, err
-				}
-			}
-
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: createWorkflowTask,

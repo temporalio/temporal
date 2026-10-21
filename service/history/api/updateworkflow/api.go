@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -187,10 +188,20 @@ func (u *Updater) applyRequest(
 		alreadyExisted bool
 		err            error
 	)
+	notificationEnabled := u.shardCtx.GetConfig().EnableWorkflowTaskHeartbeatNotification(u.req.Request.Namespace)
+	hadOutgoingMessages := false
+	if notificationEnabled {
+		hadOutgoingMessages = updateReg.HasOutgoingMessages(false)
+	}
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		return nil, err
+	}
+
+	notified, err := notifyForAdmittedUpdate(ms, notificationEnabled && !alreadyExisted && !hadOutgoingMessages)
+	if err != nil {
 		return nil, err
 	}
 
@@ -209,8 +220,9 @@ func (u *Updater) applyRequest(
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
+		// Persist the outbound notification even when Update admission needs no other write.
 		return &api.UpdateWorkflowAction{
-			Noop:               true,
+			Noop:               !notified,
 			CreateWorkflowTask: false,
 		}, nil
 	}
@@ -251,6 +263,22 @@ func (u *Updater) applyRequest(
 		Noop:               true,
 		CreateWorkflowTask: false,
 	}, nil
+}
+
+func notifyForAdmittedUpdate(ms historyi.MutableState, shouldNotify bool) (bool, error) {
+	if !shouldNotify {
+		return false, nil
+	}
+	controlQueue := ms.GetExecutionInfo().GetWorkflowTaskWorkerControlTaskQueue()
+	task := ms.GetStartedWorkflowTask()
+	if task == nil || controlQueue == "" {
+		return false, nil
+	}
+	command := workflow.NewWorkflowTaskHeartbeatNotificationCommand(ms.GetExecutionState().GetRunId(), task)
+	if err := ms.AddWorkerCommandsTasks([]*workerpb.WorkerCommand{command}, controlQueue); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // captureRequestIDLink returns a RequestIdRef link if this request's requestID has, or will have, its own event in history.

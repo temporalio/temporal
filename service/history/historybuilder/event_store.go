@@ -143,6 +143,16 @@ func (b *EventStore) HasAnyBufferedEvent(predicate BufferedEventFilter) bool {
 	return slices.ContainsFunc(b.dbBufferBatch, predicate)
 }
 
+// HasNewBufferedEvent reports whether this transaction added a matching buffered event.
+func (b *EventStore) HasNewBufferedEvent(predicate BufferedEventFilter) bool {
+	return slices.ContainsFunc(b.memBufferBatch, predicate)
+}
+
+// HasPersistedBufferedEvent reports whether a prior transaction buffered a matching event.
+func (b *EventStore) HasPersistedBufferedEvent(predicate BufferedEventFilter) bool {
+	return slices.ContainsFunc(b.dbBufferBatch, predicate)
+}
+
 func (b *EventStore) NumBufferedEvents() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
 }

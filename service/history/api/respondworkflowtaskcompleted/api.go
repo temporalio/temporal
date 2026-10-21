@@ -986,6 +986,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		WorkflowType:               matchingResp.WorkflowType,
 		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
 		StartedEventId:             matchingResp.StartedEventId,
+		ScheduledEventId:           matchingResp.ScheduledEventId,
 		Query:                      matchingResp.Query,
 		BacklogCountHint:           matchingResp.BacklogCountHint,
 		Attempt:                    matchingResp.Attempt,
