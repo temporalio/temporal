@@ -1,6 +1,7 @@
 package namespacereplication
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -744,9 +745,10 @@ func (h *applyPeerTaskHandler) Execute(
 ) error {
 	// Load the mutation payload from component state.
 	type loadResult struct {
-		Operation enumsspb.NamespaceOperation
-		Detail    *persistencespb.NamespaceDetail
-		Shadow    bool
+		Operation               enumsspb.NamespaceOperation
+		Detail                  *persistencespb.NamespaceDetail
+		Shadow                  bool
+		ShadowLegacyTaskPayload []byte
 	}
 	loaded, readErr := chasm.ReadComponent(
 		ctx,
@@ -754,9 +756,10 @@ func (h *applyPeerTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation: m.GetOperation(),
-				Detail:    common.CloneProto(m.GetNamespaceDetail()),
-				Shadow:    m.GetShadow(),
+				Operation:               m.GetOperation(),
+				Detail:                  common.CloneProto(m.GetNamespaceDetail()),
+				Shadow:                  m.GetShadow(),
+				ShadowLegacyTaskPayload: bytes.Clone(m.GetShadowLegacyTaskPayload()),
 			}, nil
 		},
 		nil,
@@ -769,7 +772,13 @@ func (h *applyPeerTaskHandler) Execute(
 	// (dial failure or apply failure) is classified here into retriable vs
 	// terminal, so the retry/gating policy stays in this package regardless of
 	// which transport the deployment injected.
-	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail, loaded.Shadow)
+	result, applyErr := applyPeer(ctx, h.peerApplier, PeerApplyRequest{
+		TargetCluster:           task.GetTargetCell(),
+		Operation:               loaded.Operation,
+		Detail:                  loaded.Detail,
+		Shadow:                  loaded.Shadow,
+		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
+	})
 	if applyErr != nil {
 		saveErr := h.recordPeerOutcome(
 			ctx,

@@ -12,6 +12,16 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 )
 
+// PeerApplyRequest carries the independently built namespace snapshot and the
+// original legacy reference used only for shadow validation.
+type PeerApplyRequest struct {
+	TargetCluster           string
+	Operation               enumsspb.NamespaceOperation
+	Detail                  *persistencespb.NamespaceDetail
+	Shadow                  bool
+	ShadowLegacyTaskPayload []byte
+}
+
 // PeerApplyResult is the transport-neutral terminal, non-error outcome of
 // processing a namespace mutation at a peer cell. Failures are returned as
 // errors and classified by the task handler (see classifyPeerErr), not modeled
@@ -26,11 +36,11 @@ const (
 	// (created or updated). Collapses the admin RPC's Applied / Created / Duplicate.
 	PeerApplyResultApplied
 	// PeerApplyResultShadowMatch means the peer processed a shadow request without
-	// writing receiver state and the received payload matched its fingerprint.
+	// writing receiver state and the payload matched the original legacy reference.
 	PeerApplyResultShadowMatch
 	// PeerApplyResultShadowMismatch means the peer processed a shadow request
-	// without writing receiver state and the received payload did not match its
-	// fingerprint.
+	// without writing receiver state and the payload failed integrity validation
+	// or differed from the original legacy reference.
 	PeerApplyResultShadowMismatch
 	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
 	// (apply-if-higher no-op). A success, not a failure.
@@ -62,6 +72,26 @@ type PeerApplier interface {
 	) (PeerApplyResult, error)
 }
 
+// RequestPeerApplier is an optional extension for transports that can carry the
+// legacy task reference required by shadow validation. Existing authoritative
+// transports can continue implementing only PeerApplier.
+type RequestPeerApplier interface {
+	ApplyWithRequest(
+		ctx context.Context,
+		request PeerApplyRequest,
+	) (PeerApplyResult, error)
+}
+
+func applyPeer(ctx context.Context, applier PeerApplier, request PeerApplyRequest) (PeerApplyResult, error) {
+	if withRequest, ok := applier.(RequestPeerApplier); ok {
+		return withRequest.ApplyWithRequest(ctx, request)
+	}
+	if request.Shadow {
+		return PeerApplyResultUnspecified, serviceerror.NewUnimplemented("peer transport does not support shadow legacy references")
+	}
+	return applier.Apply(ctx, request.TargetCluster, request.Operation, request.Detail, request.Shadow)
+}
+
 // adminClientPeerApplier is the default PeerApplier: it sends the full namespace
 // snapshot to the peer cell's ApplyNamespaceMutation admin RPC, reusing the same
 // NamespaceTaskAttributes wire shape and apply-if-higher receiver logic as the
@@ -81,7 +111,19 @@ func (a *adminClientPeerApplier) Apply(
 	detail *persistencespb.NamespaceDetail,
 	shadow bool,
 ) (PeerApplyResult, error) {
-	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
+	return a.ApplyWithRequest(ctx, PeerApplyRequest{
+		TargetCluster: targetCell,
+		Operation:     operation,
+		Detail:        detail,
+		Shadow:        shadow,
+	})
+}
+
+func (a *adminClientPeerApplier) ApplyWithRequest(
+	ctx context.Context,
+	request PeerApplyRequest,
+) (PeerApplyResult, error) {
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(request.Operation, request.Detail)
 	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	if err != nil {
 		return PeerApplyResultUnspecified, serviceerror.NewInvalidArgument(
@@ -89,20 +131,21 @@ func (a *adminClientPeerApplier) Apply(
 		)
 	}
 	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
-	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
+	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Shadow:               shadow,
-		Fingerprint:          fingerprint,
-		NamespaceTaskPayload: namespaceTaskPayload,
+		NamespaceTask:           namespaceTask,
+		Shadow:                  request.Shadow,
+		Fingerprint:             fingerprint,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: request.ShadowLegacyTaskPayload,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
-	return peerApplyResultFromOutcome(targetCell, shadow, resp.GetOutcome())
+	return peerApplyResultFromOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 }
 
 func peerApplyResultFromOutcome(

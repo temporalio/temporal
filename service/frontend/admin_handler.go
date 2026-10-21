@@ -1039,43 +1039,56 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 func (adh *AdminHandler) ApplyNamespaceMutation(
 	_ context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
-) (*adminservice.ApplyNamespaceMutationResponse, error) {
-	if request == nil || request.GetNamespaceTask() == nil {
-		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
 	if !request.GetShadow() {
 		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}
-	if request.NamespaceTaskPayload == nil {
+	if len(request.GetNamespaceTaskPayload()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if len(request.GetShadowLegacyTaskPayload()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	legacyTask := &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
 	}
 
 	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
-	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
+	reason := "integrity"
+	var differingFields []string
 	if bytes.Equal(request.GetFingerprint(), actualFingerprint) {
 		payloadTask := &replicationspb.NamespaceTaskAttributes{}
 		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
 			return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 		}
-		if proto.Equal(payloadTask, request.GetNamespaceTask()) {
-			return &adminservice.ApplyNamespaceMutationResponse{Outcome: outcome}, nil
+		// Compare the byte payloads after decoding with the same schema. The typed
+		// gRPC field can encode unknown map fields in a different order.
+		if proto.Equal(legacyTask, payloadTask) {
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+			}, nil
 		}
-		var err error
-		actualFingerprint, err = nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
-		}
+		reason = "legacy_payload_mismatch"
+		differingFields = nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)
 	}
 	adh.logger.Warn(
 		"namespace replication shadow receive mismatch",
-		tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", reason),
+		tag.NewStringsTag("differing_fields", differingFields),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
 		tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
 		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
 	)
-	outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
 
 	return &adminservice.ApplyNamespaceMutationResponse{
-		Outcome: outcome,
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
 	}, nil
 }
 
