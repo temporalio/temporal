@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -1163,25 +1164,23 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 
 // Logs name the task with the same task type value as its metrics.
 func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
-	var loggedTaskTypeName any
-	logger := log.NewMockLogger(s.controller)
-	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
-		for _, t := range tags {
-			if t.Key() == "queue-task-type-name" {
-				loggedTaskTypeName = t.Value()
-			}
-		}
-	})
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	logCapture := logger.StartCapture()
+	s.T().Cleanup(func() { logger.StopCapture(logCapture) })
 	executable := s.newTestExecutable(func(p *params) {
 		p.logger = logger
 	})
-	capture := s.metricsHandler.StartCapture()
+	metricsCapture := s.metricsHandler.StartCapture()
 
 	s.Error(executable.HandleErr(errors.New("random error")))
 
-	failures := capture.Snapshot()[metrics.TaskFailures.Name()]
+	failures := metricsCapture.Snapshot()[metrics.TaskFailures.Name()]
 	s.Len(failures, 1)
-	s.Equal(failures[0].Tags["task_type"], loggedTaskTypeName)
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "Fail to process task",
+		Tags:    map[string]any{"queue-task-type-name": failures[0].Tags["task_type"]},
+	})
 }
 
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {

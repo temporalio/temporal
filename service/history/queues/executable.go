@@ -963,11 +963,22 @@ func taskTypeTagValue(
 	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 ) string {
-	isActive := true
-	if ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID())); err == nil {
-		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
-	}
+	_, isActive := taskNamespace(task, namespaceRegistry, currentClusterName)
 	return taskTypeTagProvider(task, isActive, chasmRegistry)
+}
+
+// taskNamespace returns the task's namespace, or nil if it can't be loaded, and whether the namespace is active in
+// the current cluster. A namespace that can't be loaded is treated as active.
+func taskNamespace(
+	task tasks.Task,
+	namespaceRegistry namespace.Registry,
+	currentClusterName string,
+) (*namespace.Namespace, bool) {
+	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return nil, true
+	}
+	return ns, ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
 }
 
 func taskBaseMetricTagsWithoutArchetype(
@@ -978,12 +989,9 @@ func taskBaseMetricTagsWithoutArchetype(
 	taskTypeTagProvider TaskTypeTagProvider,
 ) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
-	isActive := true
-
-	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err == nil {
+	ns, isActive := taskNamespace(task, namespaceRegistry, currentClusterName)
+	if ns != nil {
 		namespaceTag = metrics.NamespaceTag(ns.Name().String())
-		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
 	}
 
 	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)
