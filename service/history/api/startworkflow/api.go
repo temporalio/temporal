@@ -191,8 +191,8 @@ func (s *Starter) prepare(ctx context.Context) error {
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	request := s.request.StartRequest
 	// Pinned and pending one-time overrides route the first workflow task to their target version.
-	// TODO: Send the worker's deployment version when there's no override, once the SDK sends deployment options on
-	// eager start, so Matching also checks the versioned queue's backlog.
+	// TODO: When there's no override, send the version from EagerWorkerDeploymentOptions (sent by the Go SDK since
+	// sdk-go#2075), so Matching also checks the versioned queue's backlog.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
