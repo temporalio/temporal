@@ -1149,18 +1149,18 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 		s.Error(executable.HandleErr(errors.New("random error")))
 	}
 
-	var loggedAttempts []any
+	var loggedAttempts []int32
 	for _, record := range logCapture.Snapshot() {
 		if record.Message != "Fail to process task" {
 			continue
 		}
 		for _, t := range record.Tags {
 			if t.Key() == "attempt" {
-				loggedAttempts = append(loggedAttempts, t.Value())
+				loggedAttempts = append(loggedAttempts, t.Value().(int32))
 			}
 		}
 	}
-	s.Equal([]any{int32(1), int32(2), int32(3)}, loggedAttempts)
+	s.Equal([]int32{1, 2, 3}, loggedAttempts)
 }
 
 // Logs name the task with the same task type value as its metrics.
