@@ -29,7 +29,6 @@ type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 	GetCompletedUpdateFunc         func(context.Context, string) (*update.CompletedUpdate, error)
-	GetUpdateAcceptedEventIDFunc   func(context.Context, string) (int64, error)
 	GetUpdateNexusContextFunc      func(string) *nexuspb.PropagatedSerializationContext
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
@@ -48,16 +47,6 @@ func (m mockUpdateStore) GetCompletedUpdate(
 	updateID string,
 ) (*update.CompletedUpdate, error) {
 	return m.GetCompletedUpdateFunc(ctx, updateID)
-}
-
-func (m mockUpdateStore) GetUpdateAcceptedEventID(
-	ctx context.Context,
-	updateID string,
-) (int64, error) {
-	if m.GetUpdateAcceptedEventIDFunc == nil {
-		return testAcceptedEventID, nil
-	}
-	return m.GetUpdateAcceptedEventIDFunc(ctx, updateID)
 }
 
 func (m mockUpdateStore) GetUpdateNexusSerializationContext(
