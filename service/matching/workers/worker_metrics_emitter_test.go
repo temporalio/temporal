@@ -375,7 +375,7 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		handler:                     metricstest.NewCaptureHandler(),
 		config:                      WorkerMetricsConfig{},
 		eventLogger:                 eventLogger,
-		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
 	hb := &workerpb.WorkerHeartbeat{
@@ -442,7 +442,7 @@ func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
 		handler:                     metricstest.NewCaptureHandler(),
 		config:                      WorkerMetricsConfig{},
 		eventLogger:                 eventLogger,
-		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
@@ -471,7 +471,7 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 		handler:                     metricstest.NewCaptureHandler(),
 		config:                      WorkerMetricsConfig{},
 		eventLogger:                 eventLogger,
-		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
@@ -500,7 +500,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		handler:                     metricstest.NewCaptureHandler(),
 		config:                      WorkerMetricsConfig{},
 		eventLogger:                 eventLogger,
-		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		enableWorkerMetricsEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	}
 
 	// Worker has pollers but no slot info for activity

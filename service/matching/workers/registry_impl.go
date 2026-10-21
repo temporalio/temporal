@@ -80,7 +80,8 @@ type (
 		MetricsHandler           metrics.Handler
 		MetricsConfig            WorkerMetricsConfig
 		EventLogger              otellog.Logger
-		EnableWorkerConfigEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerConfigEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -257,7 +258,7 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 			handler:                     params.MetricsHandler,
 			config:                      params.MetricsConfig,
 			eventLogger:                 params.EventLogger,
-			enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
+			enableWorkerMetricsEvents: params.EnableWorkerMetricsEvents,
 		},
 	}
 

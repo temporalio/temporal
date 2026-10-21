@@ -240,7 +240,8 @@ func WorkersRegistryProvider(
 		EvictionInterval:            serviceConfig.WorkerRegistryEvictionInterval,
 		MetricsHandler:              metricsHandler,
 		EventLogger:                 eventLogger,
-		EnableWorkerConfigEvents: serviceConfig.EnableWorkerConfigEvents,
+		EnableWorkerConfigEvents:  serviceConfig.EnableWorkerConfigEvents,
+		EnableWorkerMetricsEvents: serviceConfig.EnableWorkerMetricsEvents,
 		MetricsConfig: workers.WorkerMetricsConfig{
 			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
 			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
