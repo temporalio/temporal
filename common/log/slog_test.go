@@ -3,7 +3,9 @@ package log
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -38,7 +40,12 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	l := NewSlogLogger(NewThrottledLogger(With(NewZapLogger(zap.New(core)), tag.ClusterName("corn")), quotas.InfDuration.Hours))
 	require.True(t, l.Enabled(context.Background(), slog.LevelInfo))
 	require.False(t, l.Enabled(context.Background(), slog.LevelDebug))
+	// Derive the expected call site rather than hardcoding it, so that editing anything above
+	// this point does not require updating the assertion below.
+	_, _, callerLine, ok := runtime.Caller(0)
 	l.With("a", "b").WithGroup("hey").With("ho", "lets").WithGroup("go").With("c", 4).Info("wow", "gg", "wp")
+	require.True(t, ok, "runtime.Caller failed")
+	wantCallSite := fmt.Sprintf("slog_test.go:%d", callerLine+1) // the Info call is one line below
 	var record map[string]any
 	err := json.Unmarshal(buffer.buf, &record)
 	require.NoError(t, err)
@@ -48,7 +55,7 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	require.Equal(t, "wp", record["hey.go.gg"])
 	require.Equal(t, "wow", record["msg"])
 	require.Equal(t, "corn", record["cluster-name"])
-	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), "slog_test.go:41"), "%q doesn't end with %q", record["logging-call-at"], "slog_test.go:41")
+	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), wantCallSite), "%q doesn't end with %q", record["logging-call-at"], wantCallSite)
 }
 
 // TestSlogLevelMapping pins Handle's level mapping to the one Enabled already uses
