@@ -165,6 +165,17 @@ message ActivityState {
 
   // Indicates that eager execution was accepted for this activity's first task.
   bool eager_execution_accepted = 24;
+
+  // Present when the activity uses separate handoff and external-completion timeout/retry settings.
+  temporal.api.activity.v1.AsyncHandoffOptions async_handoff_options = 25;
+
+  // The current activity task has durably handed off to external completion.
+  // Remains true while a pause, cancellation, or reset request is pending.
+  bool awaiting_completion = 26;
+
+  // Last accepted handoff time. Retained through ordinary retry backoff and terminal closure;
+  // cleared on applied reset or the next worker pickup.
+  google.protobuf.Timestamp async_handoff_time = 27;
 }
 
 message ActivityCancelState {
@@ -195,6 +206,16 @@ enum ActivityRetryIntervalSource {
   // current_retry_interval was set from a worker-provided NextRetryDelay override on a retryable
   // application failure, overriding the retry-policy-derived backoff for this attempt only.
   ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE = 2;
+}
+
+// Identifies the retry policy and attempt counter governing a scheduled retry.
+enum ActivityRetryType {
+  // Existing records without an explicit type use the activity retry policy when a retry is pending.
+  ACTIVITY_RETRY_TYPE_UNSPECIFIED = 0;
+  // Uses ActivityOptions.retry_policy and advances the activity attempt.
+  ACTIVITY_RETRY_TYPE_ACTIVITY = 1;
+  // Uses AsyncHandoffOptions.retry_policy and advances only the handoff attempt.
+  ACTIVITY_RETRY_TYPE_HANDOFF = 2;
 }
 
 message ActivityAttemptState {
@@ -267,6 +288,26 @@ message ActivityAttemptState {
   // worker-provided NextRetryDelay override. Retry policy updates only recompute
   // current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
   ActivityRetryIntervalSource current_retry_interval_source = 13;
+
+  message AsyncHandoffState {
+    // Handoff attempt within the current activity attempt. Defaults to zero when options are absent.
+    int32 count = 1;
+
+    // Start of the current start-to-close window, retained across handoff retries.
+    // Independent of the most recent worker pickup in ActivityAttemptState.started_time.
+    google.protobuf.Timestamp start_to_close_started_time = 2;
+
+    // Independent generation for the carried start-to-close timer. Never rewound with visible retry counters.
+    int32 start_to_close_stamp = 3;
+  }
+
+  // State for handoff retries and their shared start-to-close window.
+  // Retained when handoff options are removed.
+  AsyncHandoffState async_handoff_state = 15;
+
+  // Retry type selected when the retry was scheduled.
+  // Retained across option updates.
+  ActivityRetryType pending_retry_type = 18;
 }
 
 message ActivityHeartbeatState {

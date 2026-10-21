@@ -1286,6 +1286,21 @@ func (c *retryableClient) RespondActivityTaskFailedById(
 	return resp, err
 }
 
+func (c *retryableClient) RespondActivityTaskHandoff(
+	ctx context.Context,
+	request *workflowservice.RespondActivityTaskHandoffRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskHandoffResponse, error) {
+	var resp *workflowservice.RespondActivityTaskHandoffResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RespondActivityTaskHandoff(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RespondNexusTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondNexusTaskCompletedRequest,

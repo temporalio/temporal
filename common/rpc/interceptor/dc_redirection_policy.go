@@ -94,6 +94,7 @@ var selectedAPIsForwardingRedirectionPolicyAllowedAPIs = map[string]struct{}{
 	wfMethod("UnpauseActivityExecution"):       {},
 	wfMethod("ResetActivityExecution"):         {},
 	wfMethod("UpdateActivityExecutionOptions"): {},
+	wfMethod("RespondActivityTaskHandoff"):     {},
 
 	// Standalone Nexus Operation APIs
 	wfMethod("StartNexusOperationExecution"):         {},

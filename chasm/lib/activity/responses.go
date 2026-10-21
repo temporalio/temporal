@@ -161,6 +161,9 @@ func (a *Activity) runState() enumspb.PendingActivityState {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		if a.GetAwaitingCompletion() {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
+		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		// The worker is still executing under its existing task token; the public PendingActivityState
@@ -168,6 +171,9 @@ func (a *Activity) runState() enumspb.PendingActivityState {
 		// ActivityReset=true on its next heartbeat response.
 		if a.isPaused() {
 			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
+		if a.GetAwaitingCompletion() {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
 		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
@@ -219,7 +225,10 @@ func (a *Activity) buildActivityExecutionInfo(
 	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:                          key.BusinessID,
 		ActivityType:                        a.GetActivityType(),
+		AsyncHandoffOptions:                 common.CloneProto(a.GetAsyncHandoffOptions()),
+		AsyncHandoffTime:                    a.GetAsyncHandoffTime(),
 		Attempt:                             attempt.GetCount(),
+		AwaitingCompletion:                  a.hasAttemptInProgress() && a.GetAwaitingCompletion(),
 		CanceledReason:                      a.CancelState.GetReason(),
 		CloseTime:                           closeTime,
 		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
@@ -255,6 +264,9 @@ func (a *Activity) buildActivityExecutionInfo(
 		Status:                              status,
 		TaskQueue:                           a.GetTaskQueue().GetName(),
 		UserMetadata:                        a.effectiveUserMetadata(ctx),
+	}
+	if a.GetAsyncHandoffOptions() != nil {
+		info.HandoffAttempt = attempt.GetAsyncHandoffState().GetCount()
 	}
 	if request.GetIncludeHeartbeatDetails() {
 		info.HeartbeatDetails = heartbeat.GetDetails()

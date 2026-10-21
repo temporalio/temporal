@@ -144,6 +144,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
 		api.AdminServicePrefix + "DeleteWorkflowExecution": {},
 
 		// Standalone Activity APIs
+		wfMethod("RespondActivityTaskHandoff"):     {},
 		wfMethod("StartActivityExecution"):         {},
 		wfMethod("RequestCancelActivityExecution"): {},
 		wfMethod("TerminateActivityExecution"):     {},

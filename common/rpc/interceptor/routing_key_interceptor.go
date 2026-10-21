@@ -42,6 +42,8 @@ const (
 	PatternMultiOperation
 	// PatternNamespace indicates extraction via GetNamespace() - used when we want to send all calls to a particular api and namespace to a single cell at a time.
 	PatternNamespace
+	// PatternActivityTaskToken supports both component-reference and workflow activity tokens.
+	PatternActivityTaskToken
 )
 
 // methodToPattern maps API method names to their expected routing key
@@ -57,6 +59,7 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	"RespondActivityTaskFailedById":    PatternWorkflowID,
 
 	// Pattern: TaskToken deserialization
+	"RespondActivityTaskHandoff":   PatternActivityTaskToken,
 	"RecordActivityTaskHeartbeat":  PatternTaskToken,
 	"RespondActivityTaskCompleted": PatternTaskToken,
 	"RespondActivityTaskCanceled":  PatternTaskToken,

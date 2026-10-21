@@ -69,6 +69,7 @@ var (
 		"RespondActivityTaskCanceled":        func() any { return &workflowservice.RespondActivityTaskCanceledResponse{} },
 		"RespondActivityTaskCanceledById":    func() any { return &workflowservice.RespondActivityTaskCanceledByIdResponse{} },
 		"RespondActivityTaskCompleted":       func() any { return &workflowservice.RespondActivityTaskCompletedResponse{} },
+		"RespondActivityTaskHandoff":         func() any { return &workflowservice.RespondActivityTaskHandoffResponse{} },
 		"RespondActivityTaskCompletedById":   func() any { return &workflowservice.RespondActivityTaskCompletedByIdResponse{} },
 		"RespondActivityTaskFailed":          func() any { return &workflowservice.RespondActivityTaskFailedResponse{} },
 		"RespondActivityTaskFailedById":      func() any { return &workflowservice.RespondActivityTaskFailedByIdResponse{} },

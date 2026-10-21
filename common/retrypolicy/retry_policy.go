@@ -34,16 +34,7 @@ func IsRetryableFailure(failure *failurepb.Failure, nonRetryableTypes []string) 
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
+		return IsRetryableTimeout(failure.GetTimeoutFailureInfo().GetTimeoutType(), nonRetryableTypes)
 	}
 
 	if failure.GetServerFailureInfo() != nil {
@@ -138,4 +129,15 @@ func Validate(policy *commonpb.RetryPolicy) error {
 	}
 
 	return nil
+}
+
+// IsRetryableTimeout reports whether the timeout type permits retry under the policy's exclusions.
+func IsRetryableTimeout(timeoutType enumspb.TimeoutType, nonRetryableTypes []string) bool {
+	switch timeoutType {
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE, enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
+		return !slices.Contains(nonRetryableTypes, TimeoutFailureTypePrefix+timeoutType.String())
+	default:
+		return false
+	}
 }

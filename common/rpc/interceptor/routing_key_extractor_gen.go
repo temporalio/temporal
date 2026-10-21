@@ -102,6 +102,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.RespondActivityTaskFailedRequest:
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
+	case *workflowservice.RespondActivityTaskHandoffRequest:
+		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.RespondNexusTaskCompletedRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
 	case *workflowservice.RespondNexusTaskFailedRequest:

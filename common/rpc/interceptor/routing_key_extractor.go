@@ -8,6 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
@@ -88,6 +89,22 @@ func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespa
 			if exec := getter.GetExecution(); exec != nil {
 				return namespace.RoutingKey{ID: exec.GetWorkflowId()}
 			}
+		}
+
+	case PatternActivityTaskToken:
+		if getter, ok := req.(taskTokenGetter); ok {
+			token, err := e.serializer.Deserialize(getter.GetTaskToken())
+			if err != nil {
+				return namespace.RoutingKey{}
+			}
+			if len(token.GetComponentRef()) > 0 {
+				var ref persistencespb.ChasmComponentRef
+				if err := ref.Unmarshal(token.GetComponentRef()); err != nil || ref.GetBusinessId() == "" || ref.GetNamespaceId() == "" {
+					return namespace.RoutingKey{}
+				}
+				return namespace.RoutingKey{ID: ref.GetBusinessId()}
+			}
+			return namespace.RoutingKey{ID: token.GetWorkflowId()}
 		}
 
 	case PatternTaskToken:

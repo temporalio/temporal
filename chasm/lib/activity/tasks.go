@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 )
@@ -232,7 +233,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 ) error {
 	retryState, err := activity.tryReschedule(
 		ctx,
-		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		retrypolicy.IsRetryableTimeout(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, activity.GetRetryPolicy().GetNonRetryableErrorTypes()),
 		0,
 		createStartToCloseTimeoutFailure(),
 	)
@@ -312,7 +313,7 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 ) error {
 	retryState, err := activity.tryReschedule(
 		ctx,
-		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_HEARTBEAT),
+		retrypolicy.IsRetryableTimeout(enumspb.TIMEOUT_TYPE_HEARTBEAT, activity.GetRetryPolicy().GetNonRetryableErrorTypes()),
 		0,
 		createHeartbeatTimeoutFailure(),
 	)
