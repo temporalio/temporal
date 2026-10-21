@@ -84,8 +84,8 @@ type WorkerTaskTypeStats struct {
 }
 
 // WorkerMetricsPayload is a point-in-time snapshot of a worker's capacity.
-// To compute aggregate capacity for a task queue, take the latest row per
-// worker and sum.
+// To aggregate capacity for a task queue, take recent snapshots per worker,
+// exclude stale workers, and handle unknown total_slots (-1) separately.
 type WorkerMetricsPayload struct {
 	Namespace         string
 	TaskQueue         string
