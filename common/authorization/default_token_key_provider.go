@@ -39,10 +39,12 @@ var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 // connection and never responded blocked updateKeys indefinitely - including the synchronous
 // call from initialize, which runs inside NewDefaultTokenKeyProvider.
 //
-// 30s matches the dial timeout in common.NewHTTPTransport and leaves room for the 10s TLS
-// handshake budget there, so a legitimately slow connection is not cut off mid-handshake. The
-// refresh goroutine fetches sequentially, so a slow fetch delays the next tick rather than
-// overlapping with it. A var rather than a const so tests can shorten it.
+// No Transport is set, so this uses http.DefaultTransport, whose dial timeout is 30s and TLS
+// handshake budget 10s; 30s overall therefore does not cut off a legitimately slow connection
+// mid-handshake. Client.Timeout also covers reading the response body, which openURI returns to
+// updateKeysFromURI, so a slow-trickling body is bounded too. The refresh goroutine fetches
+// sequentially, so a slow fetch delays the next tick rather than overlapping with it. A var
+// rather than a const so tests can shorten it.
 var jwksHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *defaultTokenKeyProvider {
