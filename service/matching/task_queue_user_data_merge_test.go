@@ -15,16 +15,16 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
-// The higher parent HLC supplies the base snapshot. A present clock beats a missing clock.
+// The higher parent HLC supplies the base user data. A present clock beats a missing clock.
 // Equal or both-missing clocks select incoming; logical counters break equal wall times.
-func TestSelectTaskQueueUserDataSnapshots(t *testing.T) {
+func TestSelectTaskQueueUserData(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name                string
 		currentClock        *clockspb.HybridLogicalClock
 		incomingClock       *clockspb.HybridLogicalClock
-		wantSelectionReason taskQueueUserDataSnapshotSelectionReason
+		wantSelectionReason taskQueueUserDataSelectionReason
 	}{
 		{
 			name:                "current_higher_parent_clock",
@@ -79,15 +79,15 @@ func TestSelectTaskQueueUserDataSnapshots(t *testing.T) {
 			current := &persistencespb.TaskQueueUserData{Clock: test.currentClock}
 			incoming := &persistencespb.TaskQueueUserData{Clock: test.incomingClock}
 
-			baseSnapshot, mergeSourceSnapshot, selectionReason := selectTaskQueueUserDataSnapshots(current, incoming)
+			baseUserData, otherUserData, selectionReason := selectTaskQueueUserData(current, incoming)
 
 			require.Equal(t, test.wantSelectionReason, selectionReason)
 			if test.wantSelectionReason == taskQueueUserDataSelectionReasonCurrentParentClock {
-				require.Same(t, current, baseSnapshot)
-				require.Same(t, incoming, mergeSourceSnapshot)
+				require.Same(t, current, baseUserData)
+				require.Same(t, incoming, otherUserData)
 			} else {
-				require.Same(t, incoming, baseSnapshot)
-				require.Same(t, current, mergeSourceSnapshot)
+				require.Same(t, incoming, baseUserData)
+				require.Same(t, current, otherUserData)
 			}
 		})
 	}
@@ -98,7 +98,7 @@ func TestSelectTaskQueueUserDataSnapshots(t *testing.T) {
 func TestMergeTaskQueueUserDataDeploymentsRoutingRevisionSelection(t *testing.T) {
 	t.Parallel()
 
-	snapshot := func(routingConfig *deploymentpb.RoutingConfig) *persistencespb.TaskQueueUserData {
+	newUserData := func(routingConfig *deploymentpb.RoutingConfig) *persistencespb.TaskQueueUserData {
 		return taskQueueUserDataWithDeployment(
 			nil,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -110,28 +110,28 @@ func TestMergeTaskQueueUserDataDeploymentsRoutingRevisionSelection(t *testing.T)
 	}
 
 	tests := []struct {
-		name                     string
-		baseRoutingConfig        *deploymentpb.RoutingConfig
-		mergeSourceRoutingConfig *deploymentpb.RoutingConfig
-		wantRoutingConfig        *deploymentpb.RoutingConfig
+		name               string
+		baseRoutingConfig  *deploymentpb.RoutingConfig
+		otherRoutingConfig *deploymentpb.RoutingConfig
+		wantRoutingConfig  *deploymentpb.RoutingConfig
 	}{
 		{
-			name:                     "base_higher_revision_wins",
-			baseRoutingConfig:        newTestRoutingConfig(6, "base-build"),
-			mergeSourceRoutingConfig: newTestRoutingConfig(5, "merge-source-build"),
-			wantRoutingConfig:        newTestRoutingConfig(6, "base-build"),
+			name:               "base_higher_revision_wins",
+			baseRoutingConfig:  newTestRoutingConfig(6, "base-build"),
+			otherRoutingConfig: newTestRoutingConfig(5, "other-build"),
+			wantRoutingConfig:  newTestRoutingConfig(6, "base-build"),
 		},
 		{
-			name:                     "merge_source_higher_revision_wins",
-			baseRoutingConfig:        newTestRoutingConfig(5, "base-build"),
-			mergeSourceRoutingConfig: newTestRoutingConfig(6, "merge-source-build"),
-			wantRoutingConfig:        newTestRoutingConfig(6, "merge-source-build"),
+			name:               "other_higher_revision_wins",
+			baseRoutingConfig:  newTestRoutingConfig(5, "base-build"),
+			otherRoutingConfig: newTestRoutingConfig(6, "other-build"),
+			wantRoutingConfig:  newTestRoutingConfig(6, "other-build"),
 		},
 		{
-			name:                     "identical_routing_config_has_no_conflict",
-			baseRoutingConfig:        newTestRoutingConfig(5, "build"),
-			mergeSourceRoutingConfig: newTestRoutingConfig(5, "build"),
-			wantRoutingConfig:        newTestRoutingConfig(5, "build"),
+			name:               "identical_routing_config_has_no_conflict",
+			baseRoutingConfig:  newTestRoutingConfig(5, "build"),
+			otherRoutingConfig: newTestRoutingConfig(5, "build"),
+			wantRoutingConfig:  newTestRoutingConfig(5, "build"),
 		},
 	}
 
@@ -139,10 +139,10 @@ func TestMergeTaskQueueUserDataDeploymentsRoutingRevisionSelection(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			baseSnapshot := snapshot(test.baseRoutingConfig)
-			mergeSourceSnapshot := snapshot(test.mergeSourceRoutingConfig)
+			baseUserData := newUserData(test.baseRoutingConfig)
+			otherUserData := newUserData(test.otherRoutingConfig)
 
-			merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+			merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 			require.Empty(t, conflicts)
 			mergedDeployment := merged.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
@@ -157,7 +157,7 @@ func TestMergeTaskQueueUserDataDeploymentsRoutingRevisionSelection(t *testing.T)
 func TestMergeTaskQueueUserDataDeploymentsVersionRevisionSelection(t *testing.T) {
 	t.Parallel()
 
-	snapshot := func(version *deploymentspb.WorkerDeploymentVersionData) *persistencespb.TaskQueueUserData {
+	newUserData := func(version *deploymentspb.WorkerDeploymentVersionData) *persistencespb.TaskQueueUserData {
 		return taskQueueUserDataWithDeployment(
 			nil,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -171,28 +171,28 @@ func TestMergeTaskQueueUserDataDeploymentsVersionRevisionSelection(t *testing.T)
 	}
 
 	tests := []struct {
-		name               string
-		baseVersion        *deploymentspb.WorkerDeploymentVersionData
-		mergeSourceVersion *deploymentspb.WorkerDeploymentVersionData
-		wantVersion        *deploymentspb.WorkerDeploymentVersionData
+		name         string
+		baseVersion  *deploymentspb.WorkerDeploymentVersionData
+		otherVersion *deploymentspb.WorkerDeploymentVersionData
+		wantVersion  *deploymentspb.WorkerDeploymentVersionData
 	}{
 		{
-			name:               "base_higher_revision_wins",
-			baseVersion:        newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
-			mergeSourceVersion: newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
-			wantVersion:        newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			name:         "base_higher_revision_wins",
+			baseVersion:  newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			otherVersion: newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+			wantVersion:  newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
 		},
 		{
-			name:               "merge_source_higher_revision_wins",
-			baseVersion:        newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
-			mergeSourceVersion: newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
-			wantVersion:        newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+			name:         "other_higher_revision_wins",
+			baseVersion:  newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			otherVersion: newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+			wantVersion:  newTestWorkerDeploymentVersionData(6, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
 		},
 		{
-			name:               "identical_version_data_has_no_conflict",
-			baseVersion:        newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
-			mergeSourceVersion: newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
-			wantVersion:        newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			name:         "identical_version_data_has_no_conflict",
+			baseVersion:  newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			otherVersion: newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
+			wantVersion:  newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
 		},
 	}
 
@@ -200,10 +200,10 @@ func TestMergeTaskQueueUserDataDeploymentsVersionRevisionSelection(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			baseSnapshot := snapshot(test.baseVersion)
-			mergeSourceSnapshot := snapshot(test.mergeSourceVersion)
+			baseUserData := newUserData(test.baseVersion)
+			otherUserData := newUserData(test.otherVersion)
 
-			merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+			merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 			require.Empty(t, conflicts)
 			mergedDeployment := merged.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
@@ -213,44 +213,44 @@ func TestMergeTaskQueueUserDataDeploymentsVersionRevisionSelection(t *testing.T)
 	}
 }
 
-// Base {A} and merge source {B} produce {A, B}, preserving both deployments' contents.
+// Base {A} and other user data {B} produce {A, B}, preserving both deployments' contents.
 func TestMergeTaskQueueUserDataDeploymentsUnionsDeployments(t *testing.T) {
 	t.Parallel()
 
 	baseDeployment := &persistencespb.WorkerDeploymentData{RoutingConfig: newTestRoutingConfig(0, "base-build")}
-	mergeSourceDeployment := &persistencespb.WorkerDeploymentData{RoutingConfig: newTestRoutingConfig(0, "merge-source-build")}
-	baseSnapshot := taskQueueUserDataWithDeployment(
+	otherDeployment := &persistencespb.WorkerDeploymentData{RoutingConfig: newTestRoutingConfig(0, "other-build")}
+	baseUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"base-deployment",
 		baseDeployment,
 	)
-	mergeSourceSnapshot := taskQueueUserDataWithDeployment(
+	otherUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		"merge-source-deployment",
-		mergeSourceDeployment,
+		"other-deployment",
+		otherDeployment,
 	)
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
 	protorequire.ProtoEqual(t, &persistencespb.DeploymentData{
 		DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-			"base-deployment":         baseDeployment,
-			"merge-source-deployment": mergeSourceDeployment,
+			"base-deployment":  baseDeployment,
+			"other-deployment": otherDeployment,
 		},
 	}, merged.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData())
 }
 
-// Within one deployment, base {build-A} and merge source {build-B} retain both versions.
+// Within one deployment, base {build-A} and other user data {build-B} retain both versions.
 // Versions with revision zero are retained.
 func TestMergeTaskQueueUserDataDeploymentsUnionsVersions(t *testing.T) {
 	t.Parallel()
 
 	baseVersion := newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
-	mergeSourceVersion := newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
-	baseSnapshot := taskQueueUserDataWithDeployment(
+	otherVersion := newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
+	baseUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
@@ -260,39 +260,39 @@ func TestMergeTaskQueueUserDataDeploymentsUnionsVersions(t *testing.T) {
 			},
 		},
 	)
-	mergeSourceSnapshot := taskQueueUserDataWithDeployment(
+	otherUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"merge-source-build": mergeSourceVersion,
+				"other-build": otherVersion,
 			},
 		},
 	)
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
 	protorequire.ProtoEqual(t, &persistencespb.WorkerDeploymentData{
 		Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"base-build":         baseVersion,
-			"merge-source-build": mergeSourceVersion,
+			"base-build":  baseVersion,
+			"other-build": otherVersion,
 		},
 	}, merged.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()["deployment"])
 }
 
-// An existing deployment with a nil version map accepts source versions, including revision zero.
+// An existing deployment with a nil version map accepts versions from the other user data, including revision zero.
 func TestMergeTaskQueueUserDataDeploymentsInitializesVersionMap(t *testing.T) {
 	t.Parallel()
 
-	baseSnapshot := taskQueueUserDataWithDeployment(
+	baseUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{},
 	)
-	mergeSourceSnapshot := taskQueueUserDataWithDeployment(
+	otherUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
@@ -303,31 +303,31 @@ func TestMergeTaskQueueUserDataDeploymentsInitializesVersionMap(t *testing.T) {
 		},
 	)
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
-	protorequire.ProtoEqual(t, mergeSourceSnapshot, merged)
+	protorequire.ProtoEqual(t, otherUserData, merged)
 }
 
 // Merging deployments leaves the base clock, config, fairness, VersioningData,
 // legacy versions, and unversioned ramp data unchanged.
 //
-//nolint:staticcheck // Verifies compatibility for deprecated snapshot fields.
+//nolint:staticcheck // Verifies compatibility for deprecated user data fields.
 func TestMergeTaskQueueUserDataDeploymentsPreservesNonDeploymentFieldsFromBase(t *testing.T) {
 	t.Parallel()
 
 	workflowType := int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	baseClock := &clockspb.HybridLogicalClock{WallClock: 20, Version: 1, ClusterId: 2}
 	baseConfig := &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"base": 2}}
-	mergeSourceConfig := &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"merge-source": 3}}
+	otherConfig := &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"other": 3}}
 	baseLegacyVersion := newTestLegacyDeploymentVersionData("base")
-	mergeSourceLegacyVersion := newTestLegacyDeploymentVersionData("merge-source")
+	otherLegacyVersion := newTestLegacyDeploymentVersionData("other")
 	baseRampData := &deploymentspb.DeploymentVersionData{RampPercentage: 25}
 	baseVersioningData := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{{SetIds: []string{"base"}}},
 	}
 
-	baseSnapshot := &persistencespb.TaskQueueUserData{
+	baseUserData := &persistencespb.TaskQueueUserData{
 		Clock:          baseClock,
 		VersioningData: baseVersioningData,
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -344,18 +344,18 @@ func TestMergeTaskQueueUserDataDeploymentsPreservesNonDeploymentFieldsFromBase(t
 			},
 		},
 	}
-	mergeSourceSnapshot := &persistencespb.TaskQueueUserData{
+	otherUserData := &persistencespb.TaskQueueUserData{
 		Clock:          &clockspb.HybridLogicalClock{WallClock: 10},
-		VersioningData: &persistencespb.VersioningData{VersionSets: []*persistencespb.CompatibleVersionSet{{SetIds: []string{"merge-source"}}}},
+		VersioningData: &persistencespb.VersioningData{VersionSets: []*persistencespb.CompatibleVersionSet{{SetIds: []string{"other"}}}},
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 			workflowType: {
-				Config:        mergeSourceConfig,
+				Config:        otherConfig,
 				FairnessState: enumsspb.FAIRNESS_STATE_V2,
 				DeploymentData: &persistencespb.DeploymentData{
-					Versions:            []*deploymentspb.DeploymentVersionData{mergeSourceLegacyVersion},
+					Versions:            []*deploymentspb.DeploymentVersionData{otherLegacyVersion},
 					UnversionedRampData: &deploymentspb.DeploymentVersionData{RampPercentage: 50},
 					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-						"merge-source": {RoutingConfig: newTestRoutingConfig(1, "merge-source")},
+						"other": {RoutingConfig: newTestRoutingConfig(1, "other")},
 					},
 				},
 			},
@@ -372,49 +372,49 @@ func TestMergeTaskQueueUserDataDeploymentsPreservesNonDeploymentFieldsFromBase(t
 					Versions:            []*deploymentspb.DeploymentVersionData{baseLegacyVersion},
 					UnversionedRampData: baseRampData,
 					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-						"base":         {RoutingConfig: newTestRoutingConfig(1, "base")},
-						"merge-source": {RoutingConfig: newTestRoutingConfig(1, "merge-source")},
+						"base":  {RoutingConfig: newTestRoutingConfig(1, "base")},
+						"other": {RoutingConfig: newTestRoutingConfig(1, "other")},
 					},
 				},
 			},
 		},
 	}
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
 	protorequire.ProtoEqual(t, want, merged)
 }
 
-// A task queue type found only in the merge source contributes its deployment map.
+// A task queue type found only in the other user data contributes its deployment map.
 // Its config, fairness, and legacy deployment fields are not imported.
 //
-//nolint:staticcheck // Verifies compatibility for deprecated snapshot fields.
+//nolint:staticcheck // Verifies compatibility for deprecated user data fields.
 func TestMergeTaskQueueUserDataDeploymentsImportsOnlyDeploymentsForNewTaskQueueType(t *testing.T) {
 	t.Parallel()
 
 	activityType := int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	mergeSourceDeployment := &persistencespb.WorkerDeploymentData{
+	otherDeployment := &persistencespb.WorkerDeploymentData{
 		RoutingConfig: newTestRoutingConfig(0, "build"),
 		Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			"build": newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED),
 		},
 	}
-	baseSnapshot := &persistencespb.TaskQueueUserData{}
-	mergeSourceSnapshot := taskQueueUserDataWithDeployment(
+	baseUserData := &persistencespb.TaskQueueUserData{}
+	otherUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		"deployment",
-		mergeSourceDeployment,
+		otherDeployment,
 	)
-	mergeSourceActivityData := mergeSourceSnapshot.PerType[activityType]
-	mergeSourceActivityData.Config = &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"merge-source": 3}}
-	mergeSourceActivityData.FairnessState = enumsspb.FAIRNESS_STATE_V2
-	mergeSourceActivityData.DeploymentData.Versions = []*deploymentspb.DeploymentVersionData{newTestLegacyDeploymentVersionData("legacy")}
-	mergeSourceActivityData.DeploymentData.UnversionedRampData = &deploymentspb.DeploymentVersionData{RampPercentage: 25}
-	want := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_ACTIVITY, "deployment", mergeSourceDeployment)
+	otherActivityData := otherUserData.PerType[activityType]
+	otherActivityData.Config = &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"other": 3}}
+	otherActivityData.FairnessState = enumsspb.FAIRNESS_STATE_V2
+	otherActivityData.DeploymentData.Versions = []*deploymentspb.DeploymentVersionData{newTestLegacyDeploymentVersionData("legacy")}
+	otherActivityData.DeploymentData.UnversionedRampData = &deploymentspb.DeploymentVersionData{RampPercentage: 25}
+	want := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_ACTIVITY, "deployment", otherDeployment)
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
 	protorequire.ProtoEqual(t, want, merged)
@@ -426,9 +426,9 @@ func TestMergeTaskQueueUserDataDeploymentsReportsEqualRevisionConflicts(t *testi
 	t.Parallel()
 
 	baseRoutingConfig := newTestRoutingConfig(3, "base")
-	mergeSourceRoutingConfig := newTestRoutingConfig(3, "merge-source")
+	otherRoutingConfig := newTestRoutingConfig(3, "other")
 	baseVersion := newTestWorkerDeploymentVersionData(4, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
-	mergeSourceVersion := newTestWorkerDeploymentVersionData(4, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
+	otherVersion := newTestWorkerDeploymentVersionData(4, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
 	routingConflict := taskQueueUserDataMergeConflict{
 		conflictType:   taskQueueUserDataMergeConflictTypeRoutingConfig,
 		taskQueueType:  int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
@@ -443,24 +443,24 @@ func TestMergeTaskQueueUserDataDeploymentsReportsEqualRevisionConflicts(t *testi
 		revisionNumber: 4,
 	}
 	tests := []struct {
-		name                  string
-		baseDeployment        *persistencespb.WorkerDeploymentData
-		mergeSourceDeployment *persistencespb.WorkerDeploymentData
-		wantConflicts         []taskQueueUserDataMergeConflict
+		name            string
+		baseDeployment  *persistencespb.WorkerDeploymentData
+		otherDeployment *persistencespb.WorkerDeploymentData
+		wantConflicts   []taskQueueUserDataMergeConflict
 	}{
 		{
-			name:                  "routing_config_conflict",
-			baseDeployment:        &persistencespb.WorkerDeploymentData{RoutingConfig: baseRoutingConfig},
-			mergeSourceDeployment: &persistencespb.WorkerDeploymentData{RoutingConfig: mergeSourceRoutingConfig},
-			wantConflicts:         []taskQueueUserDataMergeConflict{routingConflict},
+			name:            "routing_config_conflict",
+			baseDeployment:  &persistencespb.WorkerDeploymentData{RoutingConfig: baseRoutingConfig},
+			otherDeployment: &persistencespb.WorkerDeploymentData{RoutingConfig: otherRoutingConfig},
+			wantConflicts:   []taskQueueUserDataMergeConflict{routingConflict},
 		},
 		{
 			name: "version_conflict",
 			baseDeployment: &persistencespb.WorkerDeploymentData{
 				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{"build": baseVersion},
 			},
-			mergeSourceDeployment: &persistencespb.WorkerDeploymentData{
-				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{"build": mergeSourceVersion},
+			otherDeployment: &persistencespb.WorkerDeploymentData{
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{"build": otherVersion},
 			},
 			wantConflicts: []taskQueueUserDataMergeConflict{versionConflict},
 		},
@@ -470,9 +470,9 @@ func TestMergeTaskQueueUserDataDeploymentsReportsEqualRevisionConflicts(t *testi
 				RoutingConfig: baseRoutingConfig,
 				Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"build": baseVersion},
 			},
-			mergeSourceDeployment: &persistencespb.WorkerDeploymentData{
-				RoutingConfig: mergeSourceRoutingConfig,
-				Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"build": mergeSourceVersion},
+			otherDeployment: &persistencespb.WorkerDeploymentData{
+				RoutingConfig: otherRoutingConfig,
+				Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"build": otherVersion},
 			},
 			wantConflicts: []taskQueueUserDataMergeConflict{routingConflict, versionConflict},
 		},
@@ -482,75 +482,75 @@ func TestMergeTaskQueueUserDataDeploymentsReportsEqualRevisionConflicts(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			baseSnapshot := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "deployment", test.baseDeployment)
-			mergeSourceSnapshot := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "deployment", test.mergeSourceDeployment)
+			baseUserData := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "deployment", test.baseDeployment)
+			otherUserData := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "deployment", test.otherDeployment)
 
-			merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+			merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 			require.Equal(t, test.wantConflicts, conflicts)
-			protorequire.ProtoEqual(t, baseSnapshot, merged)
+			protorequire.ProtoEqual(t, baseUserData, merged)
 		})
 	}
 }
 
-// Two nil snapshots produce empty data. Missing base containers are initialized for source deployments.
-// Source task queue types without deployments contribute nothing.
+// Two nil inputs produce empty user data. Missing base containers are initialized for deployments from the other user data.
+// Task queue types without deployments in the other user data contribute nothing.
 //
-//nolint:staticcheck // Verifies compatibility for deprecated snapshot fields.
-func TestMergeTaskQueueUserDataDeploymentsHandlesEmptySnapshotsAndContainers(t *testing.T) {
+//nolint:staticcheck // Verifies compatibility for deprecated user data fields.
+func TestMergeTaskQueueUserDataDeploymentsHandlesEmptyUserDataAndContainers(t *testing.T) {
 	t.Parallel()
 
 	workflowType := int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	sourceWithDeployment := taskQueueUserDataWithDeployment(
+	otherWithDeployment := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{},
 	)
-	sourceWithNilDeployment := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "nil-deployment", nil)
+	otherWithNilDeployment := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "nil-deployment", nil)
 	tests := []struct {
-		name                string
-		baseSnapshot        *persistencespb.TaskQueueUserData
-		mergeSourceSnapshot *persistencespb.TaskQueueUserData
-		want                *persistencespb.TaskQueueUserData
+		name          string
+		baseUserData  *persistencespb.TaskQueueUserData
+		otherUserData *persistencespb.TaskQueueUserData
+		want          *persistencespb.TaskQueueUserData
 	}{
 		{
-			name: "both_snapshots_nil",
+			name: "both_user_data_nil",
 			want: &persistencespb.TaskQueueUserData{},
 		},
 		{
-			name:                "nil_base_initializes_containers",
-			mergeSourceSnapshot: sourceWithDeployment,
-			want:                sourceWithDeployment,
+			name:          "nil_base_initializes_containers",
+			otherUserData: otherWithDeployment,
+			want:          otherWithDeployment,
 		},
 		{
-			name:         "nil_source_retains_base",
-			baseSnapshot: sourceWithDeployment,
-			want:         sourceWithDeployment,
+			name:         "nil_other_retains_base",
+			baseUserData: otherWithDeployment,
+			want:         otherWithDeployment,
 		},
 		{
 			name: "nil_task_queue_type_initializes_containers",
-			baseSnapshot: &persistencespb.TaskQueueUserData{
+			baseUserData: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{workflowType: nil},
 			},
-			mergeSourceSnapshot: sourceWithDeployment,
-			want:                sourceWithDeployment,
+			otherUserData: otherWithDeployment,
+			want:          otherWithDeployment,
 		},
 		{
 			name: "nil_deployment_entry_is_preserved",
-			baseSnapshot: &persistencespb.TaskQueueUserData{
+			baseUserData: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{workflowType: nil},
 			},
-			mergeSourceSnapshot: sourceWithNilDeployment,
-			want:                sourceWithNilDeployment,
+			otherUserData: otherWithNilDeployment,
+			want:          otherWithNilDeployment,
 		},
 		{
-			name:         "source_type_without_deployments_is_not_imported",
-			baseSnapshot: &persistencespb.TaskQueueUserData{},
-			mergeSourceSnapshot: &persistencespb.TaskQueueUserData{
+			name:         "other_type_without_deployments_is_not_imported",
+			baseUserData: &persistencespb.TaskQueueUserData{},
+			otherUserData: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					workflowType: {
-						Config:        &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"merge-source": 3}},
+						Config:        &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"other": 3}},
 						FairnessState: enumsspb.FAIRNESS_STATE_V2,
 						DeploymentData: &persistencespb.DeploymentData{
 							Versions:            []*deploymentspb.DeploymentVersionData{newTestLegacyDeploymentVersionData("legacy")},
@@ -567,7 +567,7 @@ func TestMergeTaskQueueUserDataDeploymentsHandlesEmptySnapshotsAndContainers(t *
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			merged, conflicts := mergeTaskQueueUserDataDeployments(test.baseSnapshot, test.mergeSourceSnapshot)
+			merged, conflicts := mergeTaskQueueUserDataDeployments(test.baseUserData, test.otherUserData)
 
 			require.Empty(t, conflicts)
 			protorequire.ProtoEqual(t, test.want, merged)
@@ -576,15 +576,15 @@ func TestMergeTaskQueueUserDataDeploymentsHandlesEmptySnapshotsAndContainers(t *
 }
 
 // Merging leaves both inputs unchanged. Mutating an input or the merged result does not
-// change the other snapshots, including nested maps and proto messages.
+// change the other values, including nested maps and proto messages.
 func TestMergeTaskQueueUserDataDeploymentsClonesInputs(t *testing.T) {
 	t.Parallel()
 
 	baseClock := &clockspb.HybridLogicalClock{WallClock: 20}
 	baseVersion := newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
-	mergeSourceRoutingConfig := newTestRoutingConfig(0, "revision-zero")
-	mergeSourceVersion := newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
-	baseSnapshot := taskQueueUserDataWithDeployment(
+	otherRoutingConfig := newTestRoutingConfig(0, "revision-zero")
+	otherVersion := newTestWorkerDeploymentVersionData(0, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
+	baseUserData := taskQueueUserDataWithDeployment(
 		baseClock,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
@@ -592,52 +592,52 @@ func TestMergeTaskQueueUserDataDeploymentsClonesInputs(t *testing.T) {
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{"base-build": baseVersion},
 		},
 	)
-	mergeSourceSnapshot := taskQueueUserDataWithDeployment(
+	otherUserData := taskQueueUserDataWithDeployment(
 		nil,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{
-			RoutingConfig: mergeSourceRoutingConfig,
-			Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"merge-source-build": mergeSourceVersion},
+			RoutingConfig: otherRoutingConfig,
+			Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"other-build": otherVersion},
 		},
 	)
-	baseBeforeMerge := common.CloneProto(baseSnapshot)
-	mergeSourceBeforeMerge := common.CloneProto(mergeSourceSnapshot)
+	baseBeforeMerge := common.CloneProto(baseUserData)
+	otherBeforeMerge := common.CloneProto(otherUserData)
 
-	merged, conflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
+	merged, conflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 	require.Empty(t, conflicts)
-	protorequire.ProtoEqual(t, baseBeforeMerge, baseSnapshot)
-	protorequire.ProtoEqual(t, mergeSourceBeforeMerge, mergeSourceSnapshot)
+	protorequire.ProtoEqual(t, baseBeforeMerge, baseUserData)
+	protorequire.ProtoEqual(t, otherBeforeMerge, otherUserData)
 	wantMerged := common.CloneProto(taskQueueUserDataWithDeployment(
 		baseClock,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{
-			RoutingConfig: mergeSourceRoutingConfig,
+			RoutingConfig: otherRoutingConfig,
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"base-build":         baseVersion,
-				"merge-source-build": mergeSourceVersion,
+				"base-build":  baseVersion,
+				"other-build": otherVersion,
 			},
 		},
 	))
 
 	baseClock.WallClock = 30
 	baseVersion.RevisionNumber = 30
-	mergeSourceRoutingConfig.CurrentDeploymentVersion.BuildId = "mutated-input"
-	mergeSourceVersion.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+	otherRoutingConfig.CurrentDeploymentVersion.BuildId = "mutated-input"
+	otherVersion.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
 	protorequire.ProtoEqual(t, wantMerged, merged)
 
-	baseAfterMutation := common.CloneProto(baseSnapshot)
-	mergeSourceAfterMutation := common.CloneProto(mergeSourceSnapshot)
+	baseAfterMutation := common.CloneProto(baseUserData)
+	otherAfterMutation := common.CloneProto(otherUserData)
 	deployment := merged.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
 	merged.Clock.WallClock = 40
 	deployment.RoutingConfig.CurrentDeploymentVersion.BuildId = "mutated-result"
 	deployment.Versions["base-build"].RevisionNumber = 40
-	deployment.Versions["merge-source-build"].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+	deployment.Versions["other-build"].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	deployment.Versions["new-build"] = &deploymentspb.WorkerDeploymentVersionData{}
-	protorequire.ProtoEqual(t, baseAfterMutation, baseSnapshot)
-	protorequire.ProtoEqual(t, mergeSourceAfterMutation, mergeSourceSnapshot)
+	protorequire.ProtoEqual(t, baseAfterMutation, baseUserData)
+	protorequire.ProtoEqual(t, otherAfterMutation, otherUserData)
 }
 
 func newTestRoutingConfig(revision int64, buildID string) *deploymentpb.RoutingConfig {

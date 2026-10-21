@@ -98,7 +98,7 @@ const (
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 
-	taskQueueUserDataConflictLogMessage = "task queue user data replication encountered an equal-revision conflict"
+	taskQueueUserDataConflictLogMessage = "found conflicting user data with same revision number during replication"
 )
 
 type (
@@ -2571,15 +2571,17 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
+		// Merge logic: Task queue user data has an overall clock. Deployment routing configs and
+		// individual versions within it have their own revision numbers. To merge the two user data values:
+		// 1. Select the base user data using the overall clock.
+		// 2. Merge the routing configs and versions from the other user data into the base.
+		baseUserData, otherUserData, selectionReason := selectTaskQueueUserData(current, incoming)
+		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
+
 		// Merge V1 sets.
 		mergedVersioningData := MergeVersioningData(currentVersioningData, incomingVersioningData)
-
-		// Merge task queue user data by taking snapshot-scoped fields from the parent-HLC-selected
-		// base (or the incoming compatibility fallback) and unioning worker-deployment data by revision.
-		baseSnapshot, mergeSourceSnapshot, selectionReason := selectTaskQueueUserDataSnapshots(current, incoming)
-		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(baseSnapshot, mergeSourceSnapshot)
 		if mergedVersioningData != nil {
-			baseVersioningData := baseSnapshot.GetVersioningData()
+			baseVersioningData := baseUserData.GetVersioningData()
 			// v2 rules
 			mergedVersioningData.AssignmentRules = baseVersioningData.GetAssignmentRules()
 			mergedVersioningData.RedirectRules = baseVersioningData.GetRedirectRules()
@@ -2625,11 +2627,11 @@ func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
 	ns *namespace.Namespace,
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
 	conflicts []taskQueueUserDataMergeConflict,
-	selectionReason taskQueueUserDataSnapshotSelectionReason,
+	selectionReason taskQueueUserDataSelectionReason,
 	currentClock *clockspb.HybridLogicalClock,
 	incomingClock *clockspb.HybridLogicalClock,
 ) {
-	selectedSnapshotSource := selectionReason.selectedSnapshotSource()
+	selectedUserDataSource := selectionReason.selectedUserDataSource()
 	resolution := string(selectionReason)
 	for _, conflict := range conflicts {
 		taskQueueType := enumspb.TaskQueueType(conflict.taskQueueType)
@@ -2649,7 +2651,7 @@ func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
 			tag.Deployment(conflict.deploymentName),
 			tag.NewStringTag("conflict-type", conflictType),
 			tag.NewInt64("revision", conflict.revisionNumber),
-			tag.NewStringTag("selected-side", selectedSnapshotSource),
+			tag.NewStringTag("selected-side", selectedUserDataSource),
 			tag.NewStringTag("resolution", resolution),
 			tag.NewAnyTag("current-clock", currentClock),
 			tag.NewAnyTag("incoming-clock", incomingClock),

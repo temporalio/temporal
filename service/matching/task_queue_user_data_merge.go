@@ -9,15 +9,15 @@ import (
 )
 
 type taskQueueUserDataMergeConflictType string
-type taskQueueUserDataSnapshotSelectionReason string
+type taskQueueUserDataSelectionReason string
 
 const (
 	taskQueueUserDataMergeConflictTypeRoutingConfig taskQueueUserDataMergeConflictType = "routing_config"
 	taskQueueUserDataMergeConflictTypeVersionData   taskQueueUserDataMergeConflictType = "version_data"
 
-	taskQueueUserDataSelectionReasonCurrentParentClock  taskQueueUserDataSnapshotSelectionReason = "current_parent_clock"
-	taskQueueUserDataSelectionReasonIncomingParentClock taskQueueUserDataSnapshotSelectionReason = "incoming_parent_clock"
-	taskQueueUserDataSelectionReasonIncomingFallback    taskQueueUserDataSnapshotSelectionReason = "incoming_clock_fallback"
+	taskQueueUserDataSelectionReasonCurrentParentClock  taskQueueUserDataSelectionReason = "current_parent_clock"
+	taskQueueUserDataSelectionReasonIncomingParentClock taskQueueUserDataSelectionReason = "incoming_parent_clock"
+	taskQueueUserDataSelectionReasonIncomingFallback    taskQueueUserDataSelectionReason = "incoming_clock_fallback"
 )
 
 type taskQueueUserDataMergeConflict struct {
@@ -33,18 +33,17 @@ type revisionedProto interface {
 	GetRevisionNumber() int64
 }
 
-// selectTaskQueueUserDataSnapshots orders the current and incoming snapshots before their
-// worker-deployment data is combined. The base snapshot supplies task queue config, fairness
-// settings, versioning rules, and legacy deployment data. A clocked snapshot wins over a
-// clockless snapshot, and otherwise the higher parent HLC wins. Incoming is used when the
-// clocks are equal or both absent.
-func selectTaskQueueUserDataSnapshots(
+// selectTaskQueueUserData selects the base user data before combining worker-deployment data.
+// The base supplies task queue config, fairness settings, versioning rules, and legacy deployment data.
+// User data with a clock wins over user data without a clock. Otherwise, the higher parent HLC wins.
+// Incoming is used when the clocks are equal or both absent.
+func selectTaskQueueUserData(
 	current *persistencespb.TaskQueueUserData,
 	incoming *persistencespb.TaskQueueUserData,
 ) (
-	baseSnapshot *persistencespb.TaskQueueUserData,
-	mergeSourceSnapshot *persistencespb.TaskQueueUserData,
-	selectionReason taskQueueUserDataSnapshotSelectionReason,
+	baseUserData *persistencespb.TaskQueueUserData,
+	otherUserData *persistencespb.TaskQueueUserData,
+	selectionReason taskQueueUserDataSelectionReason,
 ) {
 	currentClock := current.GetClock()
 	incomingClock := incoming.GetClock()
@@ -60,43 +59,43 @@ func selectTaskQueueUserDataSnapshots(
 	return incoming, current, taskQueueUserDataSelectionReasonIncomingFallback
 }
 
-func (reason taskQueueUserDataSnapshotSelectionReason) selectedSnapshotSource() string {
+func (reason taskQueueUserDataSelectionReason) selectedUserDataSource() string {
 	if reason == taskQueueUserDataSelectionReasonCurrentParentClock {
 		return "current"
 	}
 	return "incoming"
 }
 
-// mergeTaskQueueUserDataDeployments starts with a deep copy of baseSnapshot. Deployments and
-// worker versions found only in mergeSourceSnapshot are added. When both snapshots contain the
+// mergeTaskQueueUserDataDeployments starts with a deep copy of baseUserData. Deployments and
+// worker versions found only in otherUserData are added. When both contain the
 // same routing configuration or worker version, the value with the higher revision is retained.
-// Equal revisions retain the value from baseSnapshot.
+// Equal revisions retain the value from baseUserData.
 func mergeTaskQueueUserDataDeployments(
-	baseSnapshot *persistencespb.TaskQueueUserData,
-	mergeSourceSnapshot *persistencespb.TaskQueueUserData,
+	baseUserData *persistencespb.TaskQueueUserData,
+	otherUserData *persistencespb.TaskQueueUserData,
 ) (*persistencespb.TaskQueueUserData, []taskQueueUserDataMergeConflict) {
 	var merged *persistencespb.TaskQueueUserData
-	if baseSnapshot == nil {
+	if baseUserData == nil {
 		merged = &persistencespb.TaskQueueUserData{}
 	} else {
-		merged = common.CloneProto(baseSnapshot)
+		merged = common.CloneProto(baseUserData)
 	}
 
 	var conflicts []taskQueueUserDataMergeConflict
-	for taskQueueType, sourcePerType := range mergeSourceSnapshot.GetPerType() {
-		sourceDeployments := sourcePerType.GetDeploymentData().GetDeploymentsData()
-		if len(sourceDeployments) == 0 {
+	for taskQueueType, otherPerType := range otherUserData.GetPerType() {
+		otherDeployments := otherPerType.GetDeploymentData().GetDeploymentsData()
+		if len(otherDeployments) == 0 {
 			continue
 		}
 
 		mergedDeployments := ensureDeploymentsData(merged, taskQueueType)
-		for deploymentName, mergeSourceDeployment := range sourceDeployments {
+		for deploymentName, otherDeployment := range otherDeployments {
 			baseDeployment, exists := mergedDeployments[deploymentName]
 			if !exists || baseDeployment == nil {
-				mergedDeployments[deploymentName] = cloneWorkerDeploymentData(mergeSourceDeployment)
+				mergedDeployments[deploymentName] = cloneWorkerDeploymentData(otherDeployment)
 				continue
 			}
-			if mergeSourceDeployment == nil {
+			if otherDeployment == nil {
 				continue
 			}
 
@@ -106,7 +105,7 @@ func mergeTaskQueueUserDataDeployments(
 					taskQueueType,
 					deploymentName,
 					baseDeployment,
-					mergeSourceDeployment,
+					otherDeployment,
 				)...,
 			)
 		}
@@ -147,19 +146,19 @@ func mergeWorkerDeploymentDataIntoBase(
 	taskQueueType int32,
 	deploymentName string,
 	baseDeployment *persistencespb.WorkerDeploymentData,
-	mergeSourceDeployment *persistencespb.WorkerDeploymentData,
+	otherDeployment *persistencespb.WorkerDeploymentData,
 ) []taskQueueUserDataMergeConflict {
 	conflicts := mergeWorkerDeploymentRoutingConfigIntoBase(
 		taskQueueType,
 		deploymentName,
 		baseDeployment,
-		mergeSourceDeployment,
+		otherDeployment,
 	)
 	versionConflicts := mergeWorkerDeploymentVersionsIntoBase(
 		taskQueueType,
 		deploymentName,
 		baseDeployment,
-		mergeSourceDeployment,
+		otherDeployment,
 	)
 	conflicts = append(conflicts, versionConflicts...)
 	return conflicts
@@ -169,16 +168,16 @@ func mergeWorkerDeploymentRoutingConfigIntoBase(
 	taskQueueType int32,
 	deploymentName string,
 	baseDeployment *persistencespb.WorkerDeploymentData,
-	mergeSourceDeployment *persistencespb.WorkerDeploymentData,
+	otherDeployment *persistencespb.WorkerDeploymentData,
 ) []taskQueueUserDataMergeConflict {
 	baseRoutingConfig := baseDeployment.GetRoutingConfig()
-	mergeSourceRoutingConfig := mergeSourceDeployment.GetRoutingConfig()
+	otherRoutingConfig := otherDeployment.GetRoutingConfig()
 	if baseRoutingConfig == nil {
-		if mergeSourceRoutingConfig != nil {
-			baseDeployment.RoutingConfig = common.CloneProto(mergeSourceRoutingConfig)
+		if otherRoutingConfig != nil {
+			baseDeployment.RoutingConfig = common.CloneProto(otherRoutingConfig)
 		}
-	} else if mergeSourceRoutingConfig != nil {
-		selectedRoutingConfig, conflict := selectRevisionedProto(baseRoutingConfig, mergeSourceRoutingConfig)
+	} else if otherRoutingConfig != nil {
+		selectedRoutingConfig, conflict := selectRevisionedProto(baseRoutingConfig, otherRoutingConfig)
 		baseDeployment.RoutingConfig = selectedRoutingConfig
 		if conflict {
 			return []taskQueueUserDataMergeConflict{{
@@ -196,28 +195,28 @@ func mergeWorkerDeploymentVersionsIntoBase(
 	taskQueueType int32,
 	deploymentName string,
 	baseDeployment *persistencespb.WorkerDeploymentData,
-	mergeSourceDeployment *persistencespb.WorkerDeploymentData,
+	otherDeployment *persistencespb.WorkerDeploymentData,
 ) []taskQueueUserDataMergeConflict {
-	if baseDeployment.Versions == nil && len(mergeSourceDeployment.GetVersions()) > 0 {
+	if baseDeployment.Versions == nil && len(otherDeployment.GetVersions()) > 0 {
 		baseDeployment.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 	}
 
 	var conflicts []taskQueueUserDataMergeConflict
-	for buildID, mergeSourceVersion := range mergeSourceDeployment.GetVersions() {
+	for buildID, otherVersion := range otherDeployment.GetVersions() {
 		baseVersion, exists := baseDeployment.GetVersions()[buildID]
 		if !exists || baseVersion == nil {
-			if mergeSourceVersion == nil {
+			if otherVersion == nil {
 				baseDeployment.Versions[buildID] = nil
 			} else {
-				baseDeployment.Versions[buildID] = common.CloneProto(mergeSourceVersion)
+				baseDeployment.Versions[buildID] = common.CloneProto(otherVersion)
 			}
 			continue
 		}
-		if mergeSourceVersion == nil {
+		if otherVersion == nil {
 			continue
 		}
 
-		selectedVersion, conflict := selectRevisionedProto(baseVersion, mergeSourceVersion)
+		selectedVersion, conflict := selectRevisionedProto(baseVersion, otherVersion)
 		baseDeployment.Versions[buildID] = selectedVersion
 		if conflict {
 			conflicts = append(conflicts, taskQueueUserDataMergeConflict{
@@ -233,13 +232,13 @@ func mergeWorkerDeploymentVersionsIntoBase(
 	return conflicts
 }
 
-func selectRevisionedProto[T revisionedProto](baseValue T, mergeSourceValue T) (T, bool) {
+func selectRevisionedProto[T revisionedProto](baseValue T, otherValue T) (T, bool) {
 	switch {
-	case mergeSourceValue.GetRevisionNumber() > baseValue.GetRevisionNumber():
-		return common.CloneProto(mergeSourceValue), false
-	case mergeSourceValue.GetRevisionNumber() < baseValue.GetRevisionNumber():
+	case otherValue.GetRevisionNumber() > baseValue.GetRevisionNumber():
+		return common.CloneProto(otherValue), false
+	case otherValue.GetRevisionNumber() < baseValue.GetRevisionNumber():
 		return baseValue, false
-	case proto.Equal(baseValue, mergeSourceValue):
+	case proto.Equal(baseValue, otherValue):
 		return baseValue, false
 	default:
 		return baseValue, true

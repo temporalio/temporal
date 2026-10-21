@@ -1628,7 +1628,7 @@ var (
 	)
 	TaskQueueUserDataReplicationEqualRevisionConflicts = NewCounterDef(
 		"task_queue_user_data_replication_equal_revision_conflicts",
-		WithDescription("The number of equal-revision conflicts encountered while merging task queue user data replication events."),
+		WithDescription("Number of conflicting user data found with same revision number during replication"),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")

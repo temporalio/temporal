@@ -35,8 +35,8 @@ func taskQueueUserDataWithDeployment(
 	}
 }
 
-// Replicating an identical snapshot leaves persisted data unchanged and emits no conflict diagnostics.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdenticalSnapshots() {
+// Replicating identical user data leaves persisted data unchanged and emits no conflict diagnostics.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdenticalUserData() {
 	captureHandler := s.captureDroppedOnEngine()
 	current := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, Version: 1, ClusterId: 1},
@@ -52,6 +52,15 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdentica
 			},
 		},
 	)
+	current.VersioningData = &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{mkNewSet("v1-build", current.Clock)},
+		AssignmentRules: []*persistencespb.AssignmentRule{
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("v2-target"), current.Clock, nil),
+		},
+		RedirectRules: []*persistencespb.RedirectRule{
+			mkRedirectRulePersistence(mkRedirectRule("v2-source", "v2-target"), current.Clock, nil),
+		},
+	}
 	currentPerType := current.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
 	currentPerType.Config = &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"tenant": 2}}
 	//nolint:staticcheck // Verifies compatibility for the deprecated fairness state.
@@ -69,7 +78,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdentica
 	protorequire.ProtoEqual(s.T(), current, got)
 	s.Require().Empty(metricCapture.SnapshotMetric(metrics.TaskQueueUserDataReplicationEqualRevisionConflicts.Name()))
 	for _, record := range logCapture.Snapshot() {
-		s.Require().False(record.Level == testlogger.Warn && record.Message == "task queue user data replication encountered an equal-revision conflict")
+		s.Require().False(record.Level == testlogger.Warn && record.Message == "found conflicting user data with same revision number during replication")
 	}
 }
 
@@ -154,8 +163,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUnionsDe
 	protorequire.ProtoEqual(s.T(), incomingZeroRouting, gotDeployments["zero-routing"].GetRoutingConfig())
 }
 
-// Reordered and repeated snapshots retain the highest revisions, all build IDs, and the newest parent clock and config.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReorderedAndRepeatedSnapshots() {
+// Reordered and repeated user data updates retain the highest revisions, all build IDs, and the newest parent clock and config.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReorderedAndRepeatedUserData() {
 	older := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -213,39 +222,39 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReordere
 		FairnessWeightOverrides: map[string]float32{"disjoint": 1},
 	}
 	tests := []struct {
-		name      string
-		snapshots []*persistencespb.TaskQueueUserData
+		name            string
+		userDataUpdates []*persistencespb.TaskQueueUserData
 	}{
 		{
-			name:      "ordered updates then stale snapshot",
-			snapshots: []*persistencespb.TaskQueueUserData{older, newer, disjoint, older},
+			name:            "ordered updates then stale user data",
+			userDataUpdates: []*persistencespb.TaskQueueUserData{older, newer, disjoint, older},
 		},
 		{
-			name:      "newest parent first then stale snapshot",
-			snapshots: []*persistencespb.TaskQueueUserData{disjoint, newer, older, older},
+			name:            "newest parent first then stale user data",
+			userDataUpdates: []*persistencespb.TaskQueueUserData{disjoint, newer, older, older},
 		},
 		{
-			name:      "newer version before stale then repeated subset",
-			snapshots: []*persistencespb.TaskQueueUserData{newer, older, disjoint, newer},
+			name:            "newer version before stale then repeated subset",
+			userDataUpdates: []*persistencespb.TaskQueueUserData{newer, older, disjoint, newer},
 		},
 	}
 	for _, test := range tests {
 		s.Run(test.name, func() {
 			taskQueue := uuid.NewString()
-			s.seedTaskQueueUserData(taskQueue, test.snapshots[0])
+			s.seedTaskQueueUserData(taskQueue, test.userDataUpdates[0])
 			var got *persistencespb.TaskQueueUserData
-			for _, incoming := range test.snapshots[1 : len(test.snapshots)-1] {
+			for _, incoming := range test.userDataUpdates[1 : len(test.userDataUpdates)-1] {
 				got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
 			}
 			protorequire.ProtoEqual(s.T(), want, got)
 
-			got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.snapshots[len(test.snapshots)-1])
+			got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.userDataUpdates[len(test.userDataUpdates)-1])
 			protorequire.ProtoEqual(s.T(), want, got)
 		})
 	}
 }
 
-//nolint:staticcheck // SA1019 verifies that deprecated deployment fields remain snapshot-scoped
+//nolint:staticcheck // SA1019 verifies that deprecated deployment fields are selected by the parent clock.
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventImportsOnlyDeploymentDataForMissingType() {
 	current := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
@@ -290,7 +299,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventImportsO
 	s.NotContains(got.GetPerType(), int32(enumspb.TASK_QUEUE_TYPE_NEXUS))
 }
 
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRetainsEntryMissingFromNewerSnapshot() {
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRetainsEntryMissingFromNewerUserData() {
 	currentVersion := &deploymentspb.WorkerDeploymentVersionData{
 		RevisionNumber: 5,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
@@ -323,9 +332,9 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRetainsE
 	protorequire.ProtoEqual(s.T(), currentVersion, gotDeployment.GetVersions()["A"])
 }
 
-//nolint:staticcheck // SA1019 verifies that deprecated deployment fields remain snapshot-scoped
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesParentClockForSnapshotFields() {
-	snapshot := func(
+//nolint:staticcheck // SA1019 verifies that deprecated deployment fields are selected by the parent clock.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesParentClockForNonDeploymentFields() {
+	newUserData := func(
 		clock *clockspb.HybridLogicalClock,
 		label string,
 		fairnessState enumsspb.FairnessState,
@@ -394,8 +403,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesPare
 
 	for _, test := range tests {
 		s.Run(test.name, func() {
-			current := snapshot(test.currentClock, "current", enumsspb.FAIRNESS_STATE_V1, 1)
-			incoming := snapshot(test.incomingClock, "incoming", enumsspb.FAIRNESS_STATE_V2, 2)
+			current := newUserData(test.currentClock, "current", enumsspb.FAIRNESS_STATE_V1, 1)
+			incoming := newUserData(test.incomingClock, "incoming", enumsspb.FAIRNESS_STATE_V2, 2)
 			want := incoming
 			if test.currentWins {
 				want = current
@@ -419,7 +428,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesPare
 }
 
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventResolvesEqualRevisionConflictByParentClock() {
-	const conflictLogMessage = "task queue user data replication encountered an equal-revision conflict"
+	const conflictLogMessage = "found conflicting user data with same revision number during replication"
 	captureHandler := s.captureDroppedOnEngine()
 	tests := []struct {
 		name           string
