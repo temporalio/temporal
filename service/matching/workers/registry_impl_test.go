@@ -921,7 +921,7 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 		MetricsHandler:              metricstest.NewCaptureHandler(),
 		MetricsConfig:               WorkerMetricsConfig{},
 		EventLogger:                 eventLogger,
-		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerConfigEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 
@@ -949,7 +949,7 @@ func TestWorkerConfigEventNilLogger(t *testing.T) {
 		MetricsHandler:              metricstest.NewCaptureHandler(),
 		MetricsConfig:               WorkerMetricsConfig{},
 		EventLogger:                 nil,
-		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		EnableWorkerConfigEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 

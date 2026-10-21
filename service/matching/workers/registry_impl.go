@@ -67,7 +67,7 @@ type (
 		metricsHandler              metrics.Handler                  // metrics handler for recording registry metrics
 		metricsEmitter              *workerMetricsEmitter            // emitter for heartbeat-derived metrics
 		eventLogger                 otellog.Logger                   // OTEL logger for wide events
-		enableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableWorkerConfigEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
@@ -80,7 +80,7 @@ type (
 		MetricsHandler              metrics.Handler
 		MetricsConfig               WorkerMetricsConfig
 		EventLogger                 otellog.Logger
-		EnableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerConfigEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -252,7 +252,7 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		quit:                        make(chan struct{}),
 		metricsHandler:              params.MetricsHandler,
 		eventLogger:                 params.EventLogger,
-		enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
+		enableWorkerConfigEvents: params.EnableWorkerConfigEvents,
 		metricsEmitter: &workerMetricsEmitter{
 			handler: params.MetricsHandler,
 			config:  params.MetricsConfig,
@@ -290,7 +290,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 	}
 	m.recordUtilizationMetric()
 	// Emit config events only for newly seen workers, outside the bucket lock.
-	if m.enableWorkerHeartbeatEvents != nil && m.enableWorkerHeartbeatEvents(nsName.String()) {
+	if m.enableWorkerConfigEvents != nil && m.enableWorkerConfigEvents(nsName.String()) {
 		for _, hb := range newHeartbeats {
 			emitWorkerConfigEvent(m.eventLogger, nsName, hb)
 		}
