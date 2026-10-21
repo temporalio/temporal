@@ -3154,6 +3154,20 @@ func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
 }
 
+// HasStateMachineTimerTask mocks base method.
+func (m *MockMutableState) HasStateMachineTimerTask(deadline time.Time, version int64) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasStateMachineTimerTask", deadline, version)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasStateMachineTimerTask indicates an expected call of HasStateMachineTimerTask.
+func (mr *MockMutableStateMockRecorder) HasStateMachineTimerTask(deadline, version any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStateMachineTimerTask", reflect.TypeOf((*MockMutableState)(nil).HasStateMachineTimerTask), deadline, version)
+}
+
 // InitTransitionHistory mocks base method.
 func (m *MockMutableState) InitTransitionHistory() {
 	m.ctrl.T.Helper()

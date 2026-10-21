@@ -245,18 +245,6 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
-// MarkTotalTimeSkippedUpdatedInPassive mocks base method.
-func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MarkTotalTimeSkippedUpdatedInPassive")
-}
-
-// MarkTotalTimeSkippedUpdatedInPassive indicates an expected call of MarkTotalTimeSkippedUpdatedInPassive.
-func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTotalTimeSkippedUpdatedInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkTotalTimeSkippedUpdatedInPassive))
-}
-
 // PartitionedSnapshot mocks base method.
 func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
 	m.ctrl.T.Helper()
@@ -284,6 +272,18 @@ func (m *MockChasmTree) RefreshTasks() error {
 func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshTasks))
+}
+
+// RequestTimerTaskRegenerationOnClose mocks base method.
+func (m *MockChasmTree) RequestTimerTaskRegenerationOnClose() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RequestTimerTaskRegenerationOnClose")
+}
+
+// RequestTimerTaskRegenerationOnClose indicates an expected call of RequestTimerTaskRegenerationOnClose.
+func (mr *MockChasmTreeMockRecorder) RequestTimerTaskRegenerationOnClose() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestTimerTaskRegenerationOnClose", reflect.TypeOf((*MockChasmTree)(nil).RequestTimerTaskRegenerationOnClose))
 }
 
 // Snapshot mocks base method.
