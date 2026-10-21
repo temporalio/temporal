@@ -135,7 +135,6 @@ type (
 		clusterMetadata       cluster.Metadata
 		chasmRegistry         *chasm.Registry
 		taskTypeTagProvider   TaskTypeTagProvider
-		taskType              string
 		logger                log.Logger
 		baseMetricsHandler    metrics.Handler
 		defaultMetricsHandler metrics.Handler
@@ -230,8 +229,7 @@ func NewExecutable(
 	for _, opt := range opts {
 		opt(&params)
 	}
-	var e *executableImpl
-	e = &executableImpl{
+	e := &executableImpl{
 		Task:  task,
 		state: ctasks.TaskStatePending,
 
@@ -249,7 +247,9 @@ func NewExecutable(
 			logger,
 			func() []tag.Tag {
 				tags := tasks.Tags(task)
-				tags = append(tags, tag.TaskTypeName(e.taskType))
+				if chasmTask, ok := task.(*tasks.ChasmTask); ok {
+					tags = append(tags, tag.ChasmTaskType(getCHASMTaskTypeTagValue(chasmTask, chasmRegistry)))
+				}
 				return tags
 			},
 		),
@@ -932,7 +932,7 @@ func (e *executableImpl) resetAttempt() {
 }
 
 func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Tag) {
-	sharedTags, taskType := taskBaseMetricTagsWithoutArchetype(
+	sharedTags := taskBaseMetricTagsWithoutArchetype(
 		e.GetTask(),
 		e.namespaceRegistry,
 		e.clusterMetadata.GetCurrentClusterName(),
@@ -942,7 +942,6 @@ func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Ta
 	if len(executionMetricTags) > 0 {
 		sharedTags = append(sharedTags, executionMetricTags...)
 	}
-	e.taskType = taskType
 	e.defaultMetricsHandler = e.baseMetricsHandler.WithTags(sharedTags...)
 	e.chasmMetricsHandler = e.defaultMetricsHandler.WithTags(getArchetypeTag(e.GetTask(), e.chasmRegistry))
 }
@@ -954,18 +953,17 @@ func taskBaseMetricTags(
 	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 ) []metrics.Tag {
-	tags, _ := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
+	tags := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
 	return append(tags, getArchetypeTag(task, chasmRegistry))
 }
 
-// taskBaseMetricTagsWithoutArchetype returns the base metric tags for a task and the task type among them.
 func taskBaseMetricTagsWithoutArchetype(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
 	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
-) ([]metrics.Tag, string) {
+) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
 
@@ -981,7 +979,7 @@ func taskBaseMetricTagsWithoutArchetype(
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
-	}, taskType
+	}
 }
 
 func getArchetypeTag(task tasks.Task, chasmRegistry *chasm.Registry) metrics.Tag {

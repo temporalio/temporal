@@ -100,6 +100,11 @@ func ArchetypeID(archetype uint32) ZapTag {
 	return NewUInt32("archetype-id", archetype)
 }
 
+// ChasmTaskType returns tag for the fully qualified CHASM task type, e.g. "nexusoperation.invocation".
+func ChasmTaskType(taskType string) ZapTag {
+	return NewStringTag("chasm-task-type", taskType)
+}
+
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
 	return NewStringerTag("wf-timeout-type", timeoutType)
@@ -654,11 +659,6 @@ func TaskVersion(taskVersion int64) ZapTag {
 
 func TaskType(taskType enumsspb.TaskType) ZapTag {
 	return NewStringTag("queue-task-type", taskType.String())
-}
-
-// TaskTypeName returns tag for the task type name, e.g. "TransferActiveTaskActivity".
-func TaskTypeName(name string) ZapTag {
-	return NewStringTag("queue-task-type-name", name)
 }
 
 func TaskCategoryID(taskCategoryID int) ZapTag {

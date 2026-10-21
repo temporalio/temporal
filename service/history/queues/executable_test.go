@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -60,6 +61,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		task                       tasks.Task
 	}
 	option func(*params)
 )
@@ -1162,21 +1164,58 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	s.Equal([]int32{1, 2, 3}, loggedAttempts)
 }
 
-// Logs name the task with the same task type value as its metrics.
-func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
-	executable := s.newTestExecutable()
+// CHASM task logs name the task by its fully qualified CHASM task type.
+func (s *executableSuite) TestHandleErr_ChasmTask_LogsChasmTaskType() {
+	s.NoError(s.chasmRegistry.Register(&testTaskLibrary{
+		handler: chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask](s.controller),
+	}))
+
+	executable := s.newTestExecutable(func(p *params) {
+		p.task = &tasks.ChasmTask{
+			WorkflowKey: definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+			Category:    tasks.CategoryTransfer,
+			Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("TestLib.MyTask")},
+		}
+	})
 	logCapture := s.logger.StartCapture()
-	metricsCapture := s.metricsHandler.StartCapture()
 
 	s.Error(executable.HandleErr(errors.New("random error")))
 
-	failures := metricsCapture.Snapshot()[metrics.TaskFailures.Name()]
-	s.Len(failures, 1)
 	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Warn,
 		Message: "Fail to process task",
-		Tags:    map[string]any{"queue-task-type-name": failures[0].Tags["task_type"]},
+		Tags:    map[string]any{"chasm-task-type": "TestLib.MyTask"},
 	})
+}
+
+type testTask struct{}
+
+// testTaskLibrary is a minimal CHASM library that registers one side-effect task, "TestLib.MyTask".
+type testTaskLibrary struct {
+	chasm.UnimplementedLibrary
+	handler chasm.SideEffectTaskHandler[*chasm.MockComponent, testTask]
+}
+
+func (l *testTaskLibrary) Name() string { return "TestLib" }
+
+func (l *testTaskLibrary) Tasks() []*chasm.RegistrableTask {
+	return []*chasm.RegistrableTask{chasm.NewRegistrableSideEffectTask("MyTask", l.handler)}
+}
+
+// Non-CHASM task logs carry no CHASM task type.
+func (s *executableSuite) TestHandleErr_NonChasmTask_OmitsChasmTaskType() {
+	executable := s.newTestExecutable()
+	logCapture := s.logger.StartCapture()
+
+	s.Error(executable.HandleErr(errors.New("random error")))
+
+	records := logCapture.Snapshot()
+	s.NotEmpty(records)
+	for _, record := range records {
+		for _, t := range record.Tags {
+			s.NotEqual("chasm-task-type", t.Key())
+		}
+	}
 }
 
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
@@ -1543,13 +1582,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqErrorPattern: func() string {
 			return ""
 		},
-	}
-	for _, opt := range opts {
-		opt(&p)
-	}
-	return queues.NewExecutable(
-		queues.DefaultReaderId,
-		tasks.NewFakeTask(
+		task: tasks.NewFakeTask(
 			definition.NewWorkflowKey(
 				tests.NamespaceID.String(),
 				tests.WorkflowID,
@@ -1558,6 +1591,13 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			tasks.CategoryTransfer,
 			s.timeSource.Now(),
 		),
+	}
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
+		p.task,
 		s.mockExecutor,
 		s.mockScheduler,
 		s.mockRescheduler,
