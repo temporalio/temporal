@@ -56,7 +56,7 @@ type (
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		EnableWorkerConfigEvents              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerConfigEvents                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
 		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
@@ -313,7 +313,7 @@ func NewConfig(
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
-		EnableWorkerConfigEvents:              dynamicconfig.MatchingEnableWorkerConfigEvents.Get(dc),
+		EnableWorkerConfigEvents:                 dynamicconfig.MatchingEnableWorkerConfigEvents.Get(dc),
 		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
 		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
