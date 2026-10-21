@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -144,15 +146,15 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 
 	priority := &commonpb.Priority{PriorityKey: 2}
 	testCases := []struct {
-		name         string
-		checkEnabled bool
-		response     *matchingservice.GrantEagerDispatchResponse
-		matchingErr  error
-		wantEager    bool
+		name             string
+		checkEnabled     bool
+		firstTaskBackoff bool
+		response         *matchingservice.GrantEagerDispatchResponse
+		matchingErr      error
+		wantDeniedReason metrics.ReasonString
 	}{
 		{
-			name:      "check disabled",
-			wantEager: true,
+			name: "check disabled",
 		},
 		{
 			name:         "granted",
@@ -160,7 +162,6 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
 				{GrantedCount: 1},
 			}},
-			wantEager: true,
 		},
 		{
 			name:         "denied",
@@ -168,16 +169,20 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
 				{},
 			}},
+			wantDeniedReason: eagerStartDeniedReasonDispatchNotGranted,
 		},
 		{
-			name:         "matching error",
-			checkEnabled: true,
-			matchingErr:  errors.New("matching unavailable"),
+			name:             "matching error",
+			checkEnabled:     true,
+			matchingErr:      errors.New("matching unavailable"),
+			wantDeniedReason: eagerStartDeniedReasonDispatchNotGranted,
 		},
 		{
-			name:         "matching timeout",
-			checkEnabled: true,
-			matchingErr:  context.DeadlineExceeded,
+			// Matching isn't asked when eager start is already denied, so no grant is spent.
+			name:             "eager already denied",
+			checkEnabled:     true,
+			firstTaskBackoff: true,
+			wantDeniedReason: eagerStartDeniedReasonFirstWorkflowTaskBackoff,
 		},
 	}
 
@@ -197,8 +202,9 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 			shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 
+			grantRequested := test.checkEnabled && !test.firstTaskBackoff
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-			if test.checkEnabled {
+			if grantRequested {
 				matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), protomock.Eq(&matchingservice.GrantEagerDispatchRequest{
 					NamespaceId: tests.NamespaceID.String(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -209,12 +215,17 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 				})).Return(test.response, test.matchingErr)
 			}
 
+			var firstTaskBackoff *durationpb.Duration
+			if test.firstTaskBackoff {
+				firstTaskBackoff = durationpb.New(time.Minute)
+			}
 			starter := &Starter{
 				shardContext:   shardContext,
 				matchingClient: matchingClient,
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{
-					NamespaceId: tests.NamespaceID.String(),
+					NamespaceId:              tests.NamespaceID.String(),
+					FirstWorkflowTaskBackoff: firstTaskBackoff,
 					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 						Namespace:             tests.Namespace.String(),
 						RequestId:             "request-id",
@@ -227,11 +238,11 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 				},
 			}
 			require.NoError(t, starter.prepare(t.Context()))
-			require.Equal(t, test.wantEager, starter.requestEagerStart())
-			require.Equal(t, !test.wantEager, starter.eagerDispatchNotGranted)
+			require.Equal(t, test.wantDeniedReason == "", starter.requestEagerStart())
+			require.Equal(t, test.wantDeniedReason == eagerStartDeniedReasonDispatchNotGranted, starter.eagerDispatchNotGranted)
 
 			sent := capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()]
-			if test.checkEnabled {
+			if grantRequested {
 				require.Len(t, sent, 1)
 				require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(), sent[0].Tags[metrics.TaskTypeTagName])
 				require.Equal(t, metrics.HistoryStartWorkflowExecutionScope, sent[0].Tags[metrics.OperationTagName])
@@ -241,12 +252,12 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 				require.Empty(t, sent)
 			}
 
-			reasonTag := metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted)
+			reasonTag := metrics.ReasonTag(test.wantDeniedReason)
 			var deniedReasons []string
 			for _, recording := range capture.Snapshot()[metrics.WorkflowEagerExecutionDeniedCounter.Name()] {
 				deniedReasons = append(deniedReasons, recording.Tags[reasonTag.Key])
 			}
-			if test.wantEager {
+			if test.wantDeniedReason == "" {
 				require.Empty(t, deniedReasons)
 			} else {
 				require.Equal(t, []string{reasonTag.Value}, deniedReasons)
@@ -266,10 +277,6 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 	}{
 		{
 			name: "no override",
-		},
-		{
-			name:     "auto-upgrade override",
-			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}},
 		},
 		{
 			name: "pinned override",

@@ -176,11 +176,8 @@ func (s *Starter) prepare(ctx context.Context) error {
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
 		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
-			// This line makes an RPC call to matching, bounded and not retried by the Matching client.
-			// TODO: Reconcile the Matching grant when the start does not create a new execution.
 			!s.grantEagerWorkflowDispatch(ctx) {
-			// Matching grants are best-effort. On a denial or any matching failure, start the
-			// workflow normally instead of failing the start request.
+			// Grants are best-effort: on a denial or a failed call, start the workflow normally.
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
 			request.RequestEagerExecution = false
@@ -190,13 +187,16 @@ func (s *Starter) prepare(ctx context.Context) error {
 	return nil
 }
 
+// grantEagerWorkflowDispatch asks Matching whether the first workflow task may be dispatched eagerly. This is an RPC,
+// bounded by the Matching client's timeout and not retried.
+// TODO: Reconcile the Matching grant when the start does not create a new execution.
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	request := s.request.StartRequest
 	// Pinned and pending one-time overrides route the first workflow task to their target version.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
-	// Not s.getMetricsHandler(): its workflow type tag is not on the activity paths that emit this metric.
+	// Same tags as the activity eager paths, which have no workflow type.
 	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
 		s.shardContext.GetMetricsHandler(),
 		s.namespace.Name(),
@@ -756,16 +756,7 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
-		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
-			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
-
-		return &historyservice.StartWorkflowExecutionResponse{
-			RunId:               runID,
-			FirstExecutionRunId: firstExecutionRunID,
-			Started:             true,
-			// Status is set by caller
-			Link: s.generateStartedEventRefLink(runID),
-		}, nil
+		return s.taskAlreadyDispatchedResponse(runID, firstExecutionRunID), nil
 	}
 
 	events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -773,7 +764,25 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
+	// A first attempt that didn't start eagerly sent its task through matching, so a poller may already have it.
+	if !events[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted() {
+		return s.taskAlreadyDispatchedResponse(runID, firstExecutionRunID), nil
+	}
+
 	return s.generateEagerResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
+}
+
+func (s *Starter) taskAlreadyDispatchedResponse(runID string, firstExecutionRunID string) *historyservice.StartWorkflowExecutionResponse {
+	metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
+		Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
+
+	return &historyservice.StartWorkflowExecutionResponse{
+		RunId:               runID,
+		FirstExecutionRunId: firstExecutionRunID,
+		Started:             true,
+		// Status is set by caller
+		Link: s.generateStartedEventRefLink(runID),
+	}
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the

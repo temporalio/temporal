@@ -359,3 +359,33 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDeniedReturnsS
 		})
 	}
 }
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDoesNotReturnDispatchedTask() {
+	for _, crossRunDedup := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {
+			env := s.newBacklogEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, crossRunDedup))
+			backloggedWorkflowID := s.startBackloggedWorkflow(env)
+
+			// The backlog denies the first attempt's grant, so its workflow task goes through matching.
+			request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
+			response := s.startEagerWorkflow(env, request)
+			s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+			firstRunID := response.RunId
+
+			task := s.pollWorkflowTaskQueue(env)
+			s.Equal(backloggedWorkflowID, task.GetWorkflowExecution().GetWorkflowId())
+			s.respondWorkflowTaskCompleted(env, task, "ok")
+			polledTask := s.pollWorkflowTaskQueue(env)
+			s.Equal(s.defaultWorkflowID(), polledTask.GetWorkflowExecution().GetWorkflowId())
+
+			// A poller holds the task now, so the retry must not return it.
+			response = s.startEagerWorkflow(env, request)
+			s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+			s.Equal(firstRunID, response.RunId)
+
+			s.respondWorkflowTaskCompleted(env, polledTask, "ok")
+			result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+			s.Equal("ok", result)
+		})
+	}
+}
