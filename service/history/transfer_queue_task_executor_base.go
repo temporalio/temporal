@@ -121,6 +121,9 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	}
 
 	if err != nil {
+		// TODO (Shivam): Handle StickyWorkerUnavailable when versioning rejects sticky
+		// placement. Activity dispatch currently retries the sticky queue;
+		// normal-queue fallback is not implemented.
 		return err
 	}
 

@@ -6992,35 +6992,52 @@ func TestFairnessConfigOverridesPersistedV0(t *testing.T) {
 }
 
 func (s *matchingEngineSuite) TestStickyActivityBacklogSurvivesUnload() {
-	s.testStickyActivityBacklogSurvivesUnload(false)
+	s.testStickyActivityRouting(false, false)
 }
 
 func (s *matchingEngineSuite) TestStickyActivityVersionedBacklogSurvivesUnload() {
-	s.testStickyActivityBacklogSurvivesUnload(true)
+	s.testStickyActivityRouting(true, false)
 }
 
-func (s *matchingEngineSuite) testStickyActivityBacklogSurvivesUnload(versioned bool) {
+func (s *matchingEngineSuite) TestStickyActivityRejectsMismatchedDeployment() {
+	s.testStickyActivityRouting(true, true)
+}
+
+func (s *matchingEngineSuite) testStickyActivityRouting(versioned, mismatchedDeployment bool) {
 	s.T().Helper()
-	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
+	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID()).WithBuildIDNumber(1)
+	current := tv
 	var directive *taskqueuespb.TaskVersionDirective
 	if versioned {
-		independent := tv.WithBuildIDNumber(2)
-		s.seedTaskQueueUserData(tv.TaskQueue().GetName(), &persistencespb.TaskQueueUserData{
+		if mismatchedDeployment {
+			current = tv.WithBuildIDNumber(2)
+		}
+		userData := &persistencespb.VersionedTaskQueueUserData{Version: 1, Data: &persistencespb.TaskQueueUserData{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
 					DeploymentData: &persistencespb.DeploymentData{
 						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 							tv.DeploymentSeries(): {
 								RoutingConfig: &deploymentpb.RoutingConfig{
-									CurrentDeploymentVersion:  independent.ExternalDeploymentVersion(),
+									CurrentDeploymentVersion:  current.ExternalDeploymentVersion(),
 									CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									current.BuildID(): {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
 								},
 							},
 						},
 					},
 				},
 			},
-		})
+		}}
+		matchingClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+		matchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.GetTaskQueueUserDataResponse{UserData: userData}, nil).AnyTimes()
+		s.matchingEngine.Stop()
+		s.mockMatchingClient = matchingClient
+		s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
+		s.matchingEngine.Start()
 		directive = &taskqueuespb.TaskVersionDirective{
 			Behavior:          enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 			DeploymentVersion: tv.DeploymentVersion(),
@@ -7037,6 +7054,23 @@ func (s *matchingEngineSuite) testStickyActivityBacklogSurvivesUnload(versioned 
 		NamespaceId: tv.NamespaceID().String(), Execution: tv.WorkflowExecution(),
 		TaskQueue: queue, ScheduledEventId: 5, ScheduleToStartTimeout: durationpb.New(time.Minute), VersionDirective: directive,
 	})
+	queueManager, _, loadErr := s.matchingEngine.getTaskQueuePartitionManager(s.T().Context(), partition, false, loadCauseUnspecified)
+	s.Require().NoError(loadErr)
+	if versioned {
+		userData, _, userDataErr := queueManager.GetUserDataManager().GetUserData()
+		s.Require().NoError(userDataErr)
+		currentVersion, _, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(
+			userData.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetDeploymentData(),
+		)
+		protorequire.ProtoEqual(s.T(), current.DeploymentVersion(), currentVersion)
+	}
+	if mismatchedDeployment {
+		s.Require().ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+		s.Require().False(syncMatch)
+		s.Require().Zero(s.v1TaskManager.getTaskCount(key))
+		s.Require().Zero(s.v1TaskManager.getTaskCount(newUnversionedRootQueueKey(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)))
+		return
+	}
 	s.Require().NoError(err)
 	s.Require().False(syncMatch)
 	s.Require().Equal(1, s.v1TaskManager.getTaskCount(key))
@@ -7044,8 +7078,6 @@ func (s *matchingEngineSuite) testStickyActivityBacklogSurvivesUnload(versioned 
 	s.Require().Zero(s.v1TaskManager.getTaskCount(UnversionedQueueKey(newTestTaskQueue(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(queue.Name))))
 	s.Require().Zero(s.v1TaskManager.getTaskCount(UnversionedQueueKey(newTestTaskQueue(tv.NamespaceID().String(), queue.NormalName, enumspb.TASK_QUEUE_TYPE_ACTIVITY).StickyPartition("other-worker"))))
 
-	queueManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(s.T().Context(), partition, false, loadCauseUnspecified)
-	s.Require().NoError(err)
 	s.matchingEngine.unloadTaskQueuePartition(queueManager, unloadCauseUnspecified)
 
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(

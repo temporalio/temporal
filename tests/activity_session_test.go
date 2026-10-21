@@ -14,8 +14,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -129,14 +132,22 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 }
 
 func (s *Versioning3Suite) TestWorkflowSessionActivityUsesStickyQueue() {
-	s.testWorkflowSessionActivityUsesStickyQueue(vbPinned, false)
+	s.testWorkflowSessionActivityRouting(vbPinned, false)
 }
 
-func (s *Versioning3Suite) TestWorkflowSessionActivityIgnoresIndependentDeployment() {
-	s.testWorkflowSessionActivityUsesStickyQueue(vbUnpinned, true)
+func (s *Versioning3Suite) TestPinnedWorkflowSessionActivityIgnoresIndependentDeployment() {
+	s.testWorkflowSessionActivityRouting(vbPinned, true)
 }
 
-func (s *Versioning3Suite) testWorkflowSessionActivityUsesStickyQueue(behavior enumspb.VersioningBehavior, independentDeployment bool) {
+func (s *Versioning3Suite) TestWorkflowSessionActivityUsesCurrentDeployment() {
+	s.testWorkflowSessionActivityRouting(vbUnpinned, false)
+}
+
+func (s *Versioning3Suite) TestWorkflowSessionActivityRejectsMismatchedDeployment() {
+	s.testWorkflowSessionActivityRouting(vbUnpinned, true)
+}
+
+func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.VersioningBehavior, independentDeployment bool) {
 	s.T().Helper()
 	env := s.setupEnv(testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
 	tv := env.Tv()
@@ -144,8 +155,11 @@ func (s *Versioning3Suite) testWorkflowSessionActivityUsesStickyQueue(behavior e
 		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
 		CurrentVersionChangedTime: timestamp.TimeNowPtrUtc(), RevisionNumber: 1,
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT}}, nil, tqTypeWf)
-	if independentDeployment {
-		activityVersion := tv.WithBuildIDNumber(2)
+	if independentDeployment || behavior == vbUnpinned {
+		activityVersion := tv
+		if independentDeployment {
+			activityVersion = tv.WithBuildIDNumber(2)
+		}
 		env.updateTaskQueueDeploymentDataWithRoutingConfig(s, activityVersion, &deploymentpb.RoutingConfig{
 			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(activityVersion.DeploymentVersionString()),
 			CurrentVersionChangedTime: timestamp.TimeNowPtrUtc(), RevisionNumber: 1,
@@ -156,6 +170,24 @@ func (s *Versioning3Suite) testWorkflowSessionActivityUsesStickyQueue(behavior e
 	} else {
 		env.startWorkflow(s, tv, nil)
 	}
+
+	expectStickyRejection := behavior == vbUnpinned && independentDeployment
+	var rejectedDispatch chan error
+	if expectStickyRejection {
+		rejectedDispatch = make(chan error, 1)
+		defer env.InjectResponseFault(func(req, _ any, handlerErr error) error {
+			addRequest, ok := req.(*matchingservice.AddActivityTaskRequest)
+			if !ok || addRequest.GetTaskQueue().GetName() != tv.StickyTaskQueue().GetName() {
+				return nil
+			}
+			select {
+			case rejectedDispatch <- handlerErr:
+			default:
+			}
+			return handlerErr
+		})()
+	}
+
 	poller, _ := env.pollWftAndHandle(s, tv, false, nil, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		response := env.respondWftWithActivities(tv, tv, true, behavior, "session-activity")
 		response.Commands[0].GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{
@@ -163,6 +195,19 @@ func (s *Versioning3Suite) testWorkflowSessionActivityUsesStickyQueue(behavior e
 		}
 		return response, nil
 	})
+	if expectStickyRejection {
+		s.Require().ErrorAs(await.Rcv(s.T(), rejectedDispatch), new(*serviceerrors.StickyWorkerUnavailable))
+		description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
+		})
+		s.Require().NoError(err)
+		s.Require().Len(description.GetPendingActivities(), 1)
+		s.Require().Equal("session-activity", description.GetPendingActivities()[0].GetActivityId())
+		s.Require().Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.GetPendingActivities()[0].GetState())
+		s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.GetWorkflowExecutionInfo().GetStatus())
+		return
+	}
+
 	_, err := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
 		TaskQueue: tv.StickyTaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	}).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -170,4 +215,9 @@ func (s *Versioning3Suite) testWorkflowSessionActivityUsesStickyQueue(behavior e
 		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(s.Context()))
 	s.Require().NoError(err)
+	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
+	})
+	s.Require().NoError(err)
+	s.Require().Empty(description.GetPendingActivities())
 }

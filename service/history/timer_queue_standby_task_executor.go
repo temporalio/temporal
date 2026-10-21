@@ -779,6 +779,8 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
+	// TODO (Shivam): Add session activity fallback and placement handoff when no workflow task
+	// advertises a replacement worker.
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{

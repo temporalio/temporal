@@ -33,7 +33,9 @@ func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo
 	}
 	taskQueue := ms.CurrentTaskQueue()
 	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY || taskQueue.GetName() == "" {
-		// A workflow task completion must advertise a sticky destination before dispatch can proceed.
+		// TODO (Shivam): Recover placement when a workflow task timeout clears stickiness after
+		// activity scheduling. This error makes the transfer or activity retry timer task retry
+		// without dispatching to the normal queue.
 		return nil, consts.ErrDependencyTaskNotCompleted
 	}
 	return taskQueue, nil

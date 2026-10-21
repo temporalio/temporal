@@ -224,7 +224,10 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 			UseRampingVersion: false,
 		}
 	}
-	if !activityInfo.GetSessionOptions().GetUseWorkflowSession() && !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
+	if activityInfo.GetSessionOptions().GetUseWorkflowSession() {
+		// For now, session activities bypass legacy V1/V2 directives; V3 is handled above.
+		return nil
+	} else if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)
