@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -47,6 +47,9 @@ func Main() error {
 
 	if *shards < 1 {
 		return errors.New("-shards is required and must be >= 1")
+	}
+	if *tries < 1 {
+		return errors.New("-tries must be >= 1")
 	}
 	if *workflow == "" || *artifactPattern == "" {
 		return errors.New("-workflow and -artifact-pattern are required")
@@ -344,16 +347,23 @@ func aggregateRuns(tmap map[string][]float64) map[string]float64 {
 }
 
 func optimizeShardingSalt(smap map[string]float64, shards, tries int) (string, float64) {
-	bestSalt := ""
-	bestMax := math.MaxFloat64
+	var (
+		bestSalt   string
+		bestMax    float64
+		bestSpread float64
+	)
 
 	for s := range tries {
 		saltStr := fmt.Sprintf("-salt-%d", s)
-		m := maxShardTime(smap, shards, saltStr)
-		if m < bestMax {
-			bestSalt = saltStr
-			bestMax = m
+		totals := shardTotals(smap, shards, saltStr)
+		busiest := slices.Max(totals)
+		spread := busiest - slices.Min(totals)
+		if bestSalt != "" && (busiest > bestMax || busiest == bestMax && spread >= bestSpread) {
+			continue
 		}
+		bestSalt = saltStr
+		bestMax = busiest
+		bestSpread = spread
 	}
 
 	return bestSalt, bestMax
@@ -361,7 +371,8 @@ func optimizeShardingSalt(smap map[string]float64, shards, tries int) (string, f
 
 func shardTotals(smap map[string]float64, shards int, salt string) []float64 {
 	totals := make([]float64, shards)
-	for testName, testTime := range smap {
+	for _, testName := range slices.Sorted(maps.Keys(smap)) {
+		testTime := smap[testName]
 		idx := int(farm.Fingerprint32([]byte(testName+salt))) % shards
 		totals[idx] += testTime
 	}
