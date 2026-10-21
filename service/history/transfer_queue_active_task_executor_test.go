@@ -2744,6 +2744,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestGetOrphanedChildReplacementIn
 				return tc.enabled
 			}
 			mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+			mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				NamespaceId: "parent-namespace",
 				WorkflowId:  "parent-workflow",
@@ -2772,6 +2773,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestGetOrphanedChildReplacementIn
 	s.Run("same workflow ID in another namespace", func() {
 		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
 		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+		mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 		mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  "same-workflow",
@@ -2795,11 +2797,24 @@ func (s *transferQueueActiveTaskExecutorSuite) TestGetOrphanedChildReplacementIn
 			tests.Namespace,
 		))
 	})
+
+	s.Run("local namespace", func() {
+		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
+		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+		mutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+
+		s.Nil(s.transferQueueActiveTaskExecutor.getOrphanedChildReplacementInfo(
+			mutableState,
+			childInfo,
+			tests.Namespace,
+		))
+	})
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestOrphanedChildReplacementDoesNotDeadlockOnSelfWorkflowID() {
 	s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
 	mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+	mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: "same-namespace",
 		WorkflowId:  "same-workflow",
