@@ -1141,10 +1141,9 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 // The failure log reports the attempt that failed, not the one that will run next.
 func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	const numAttempts = 3
-
+	executable := s.newTestExecutable()
 	logCapture := s.logger.StartCapture()
 
-	executable := s.newTestExecutable()
 	for range numAttempts {
 		s.Error(executable.HandleErr(errors.New("random error")))
 	}
@@ -1165,9 +1164,8 @@ func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 
 // Logs name the task with the same task type value as its metrics.
 func (s *executableSuite) TestHandleErr_LogsTaskTypeName() {
-	logCapture := s.logger.StartCapture()
-
 	executable := s.newTestExecutable()
+	logCapture := s.logger.StartCapture()
 	metricsCapture := s.metricsHandler.StartCapture()
 
 	s.Error(executable.HandleErr(errors.New("random error")))
