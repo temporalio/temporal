@@ -246,24 +246,27 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		return conn
 	}
 
-	conn = d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	newConn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
 	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
-	if conn == nil {
+	if newConn == nil {
 		return nil
 	}
 
 	d.connectionsMu.Lock()
 	defer d.connectionsMu.Unlock()
 	if d.closed {
-		_ = conn.Close()
-		return conn
+		// Callers require a non-nil connection, even after shutdown.
+		_ = newConn.Close()
+		return newConn
 	}
-	if existing, ok := d.remoteFrontendGRPCConns[rpcAddress]; ok {
-		_ = conn.Close()
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.remoteFrontendGRPCConns[rpcAddress]
+	if ok {
+		_ = newConn.Close()
 		return existing
 	}
-	d.remoteFrontendGRPCConns[rpcAddress] = conn
-	return conn
+	d.remoteFrontendGRPCConns[rpcAddress] = newConn
+	return newConn
 }
 
 func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -352,10 +355,13 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 	d.connectionsMu.Lock()
 	defer d.connectionsMu.Unlock()
 	if d.closed {
+		// Callers require a non-nil connection, even after shutdown.
 		_ = newConn.Close()
 		return newConn
 	}
-	if existing, ok := d.internodeGRPCConnections[hostName]; ok && existing.GetState() != connectivity.Shutdown {
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.internodeGRPCConnections[hostName]
+	if ok && existing.GetState() != connectivity.Shutdown {
 		_ = newConn.Close()
 		return existing
 	}
