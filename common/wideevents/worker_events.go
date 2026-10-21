@@ -91,8 +91,8 @@ type WorkerMetricsPayload struct {
 	TaskQueue         string
 	WorkerInstanceKey string
 	TaskTypeStats     map[string]WorkerTaskTypeStats
-	// Details holds additional metrics not covered by the fields above.
-	// Empty today; reserved for future extensibility without schema changes.
+	// Details holds additional metrics not covered by the fields above
+	// (e.g., sticky_cache_size, sticky_cache_hit, sticky_cache_miss).
 	Details map[string]any
 }
 
