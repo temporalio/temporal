@@ -56,31 +56,31 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets                     []*bucket                        // buckets for partitioning the keyspace
-		maxItemsFn                  dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
-		ttlFn                       dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
-		minEvictAgeFn               dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
-		evictionIntervalFn          dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
-		total                       atomic.Int64                     // atomic counter of total entries
-		quit                        chan struct{}                    // channel to signal shutdown of the eviction loop
-		seed                        maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler              metrics.Handler                  // metrics handler for recording registry metrics
-		metricsEmitter              *workerMetricsEmitter            // emitter for heartbeat-derived metrics
-		eventLogger                 otellog.Logger                   // OTEL logger for wide events
-		enableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		buckets                  []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn               dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn                    dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn            dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn       dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total                    atomic.Int64                     // atomic counter of total entries
+		quit                     chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed                     maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler           metrics.Handler                  // metrics handler for recording registry metrics
+		metricsEmitter           *workerMetricsEmitter            // emitter for heartbeat-derived metrics
+		eventLogger              otellog.Logger                   // OTEL logger for wide events
+		enableWorkerConfigEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets                  dynamicconfig.IntPropertyFn
-		TTL                         dynamicconfig.DurationPropertyFn
-		MinEvictAge                 dynamicconfig.DurationPropertyFn
-		MaxItems                    dynamicconfig.IntPropertyFn
-		EvictionInterval            dynamicconfig.DurationPropertyFn
-		MetricsHandler              metrics.Handler
-		MetricsConfig               WorkerMetricsConfig
-		EventLogger                 otellog.Logger
-		EnableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		NumBuckets               dynamicconfig.IntPropertyFn
+		TTL                      dynamicconfig.DurationPropertyFn
+		MinEvictAge              dynamicconfig.DurationPropertyFn
+		MaxItems                 dynamicconfig.IntPropertyFn
+		EvictionInterval         dynamicconfig.DurationPropertyFn
+		MetricsHandler           metrics.Handler
+		MetricsConfig            WorkerMetricsConfig
+		EventLogger              otellog.Logger
+		EnableWorkerConfigEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -243,16 +243,16 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:                     make([]*bucket, params.NumBuckets()),
-		maxItemsFn:                  params.MaxItems,
-		ttlFn:                       params.TTL,
-		minEvictAgeFn:               params.MinEvictAge,
-		evictionIntervalFn:          params.EvictionInterval,
-		seed:                        maphash.MakeSeed(),
-		quit:                        make(chan struct{}),
-		metricsHandler:              params.MetricsHandler,
-		eventLogger:                 params.EventLogger,
-		enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
+		buckets:                  make([]*bucket, params.NumBuckets()),
+		maxItemsFn:               params.MaxItems,
+		ttlFn:                    params.TTL,
+		minEvictAgeFn:            params.MinEvictAge,
+		evictionIntervalFn:       params.EvictionInterval,
+		seed:                     maphash.MakeSeed(),
+		quit:                     make(chan struct{}),
+		metricsHandler:           params.MetricsHandler,
+		eventLogger:              params.EventLogger,
+		enableWorkerConfigEvents: params.EnableWorkerConfigEvents,
 		metricsEmitter: &workerMetricsEmitter{
 			handler:                     params.MetricsHandler,
 			config:                      params.MetricsConfig,
@@ -292,7 +292,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 	}
 	m.recordUtilizationMetric()
 	// Emit config events only for newly seen workers, outside the bucket lock.
-	if m.enableWorkerHeartbeatEvents != nil && m.enableWorkerHeartbeatEvents(nsName.String()) {
+	if m.enableWorkerConfigEvents != nil && m.enableWorkerConfigEvents(nsName.String()) {
 		for _, hb := range newHeartbeats {
 			emitWorkerConfigEvent(m.eventLogger, nsName, hb)
 		}

@@ -1649,6 +1649,19 @@ scoped by namespace and/or task queue.`,
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
+	MatchingValidatorBatchSize = NewTaskQueueIntSetting(
+		"matching.validatorBatchSize",
+		10,
+		`MatchingValidatorBatchSize is the number of local-backlog tasks the matcher
+validator pulls and validates concurrently per batch. Values are clamped to the
+range [1, 100].`,
+	)
+	MatchingValidatorValidationThreshold = NewTaskQueueDurationSetting(
+		"matching.validatorValidationThreshold",
+		600*time.Second,
+		`MatchingValidatorValidationThreshold is the minimum time since task creation or
+the last successful validation before the backlog task validator checks task validity.`,
+	)
 	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
 		"matching.forwardPollRetryMaxInterval",
 		10*time.Second,
@@ -1684,10 +1697,10 @@ movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
-	MatchingEnableWorkerHeartbeatEvents = NewNamespaceBoolSetting(
-		"matching.enableWorkerHeartbeatEvents",
+	MatchingEnableWorkerConfigEvents = NewNamespaceBoolSetting(
+		"matching.enableWorkerConfigEvents",
 		false,
-		`MatchingEnableWorkerHeartbeatEvents controls whether to emit wide events derived from worker heartbeats.`,
+		`MatchingEnableWorkerConfigEvents controls whether to emit worker_config wide events when a worker first registers.`,
 	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
