@@ -24,7 +24,6 @@ type (
 	UpdateStore interface {
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetCompletedUpdate(ctx context.Context, updateID string) (*CompletedUpdate, error)
-		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool

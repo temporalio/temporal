@@ -510,7 +510,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	acceptedEventID := common.EmptyEventID
 	if err == nil {
 		updOutcome = completedUpdate.Outcome
-		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+		acceptedEventID = completedUpdate.AcceptedEventID
 	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.

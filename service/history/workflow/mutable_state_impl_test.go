@@ -2998,18 +2998,6 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), completedUpdate.Outcome)
 	s.Equal(acptEvent1.GetEventId(), completedUpdate.AcceptedEventID)
 
-	acceptedEventID, err := s.mutableState.GetUpdateAcceptedEventID(ctx, updateID1)
-	s.Require().NoError(err)
-	s.Equal(acptEvent1.GetEventId(), acceptedEventID)
-
-	acceptedEventID, err = s.mutableState.GetUpdateAcceptedEventID(ctx, updateID2)
-	s.Require().NoError(err)
-	s.Equal(acptEvent2.GetEventId(), acceptedEventID)
-
-	_, err = s.mutableState.GetUpdateAcceptedEventID(ctx, "not_an_update_id")
-	s.Require().Error(err)
-	s.ErrorIs(err, errUpdateNotFound)
-
 	_, err = s.mutableState.GetCompletedUpdate(ctx, "not_an_update_id")
 	s.Error(err)
 	s.IsType((*serviceerror.NotFound)(nil), err)
