@@ -605,6 +605,9 @@ func (tr *fairTaskReader) isDrained() bool {
 	return tr.atEnd && tr.loadedTasks == 0
 }
 
+// Returns true if the ack level is pinned (which happens during the whole lifecycle of a
+// write, so we ensure we don't delete just-written tasks), or if it's unpinned but we haven't
+// merged the tasks that were just written into outstandingTasks yet.
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
 	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }
