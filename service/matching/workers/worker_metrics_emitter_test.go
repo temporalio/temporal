@@ -415,14 +415,14 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 	var stats map[string]wideevents.WorkerTaskTypeStats
 	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
 	require.Equal(t, wideevents.WorkerTaskTypeStats{
-		TotalSlots:                 int32Ptr(10),
-		UsedSlots:                  int32Ptr(2),
-		CurrentPollers:             int32Ptr(3),
-		CurrentStickyPollers:       int32Ptr(2),
-		TotalProcessedTasks:        int32Ptr(1000),
-		TotalFailedTasks:           int32Ptr(10),
-		LastIntervalProcessedTasks: int32Ptr(50),
-		LastIntervalFailureTasks:   int32Ptr(1),
+		TotalSlots:                 new(int32(10)),
+		UsedSlots:                  new(int32(2)),
+		CurrentPollers:             new(int32(3)),
+		CurrentStickyPollers:       new(int32(2)),
+		TotalProcessedTasks:        new(int32(1000)),
+		TotalFailedTasks:           new(int32(10)),
+		LastIntervalProcessedTasks: new(int32(50)),
+		LastIntervalFailureTasks:   new(int32(1)),
 	}, stats["workflow"])
 
 	var details struct {
@@ -490,8 +490,8 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 	})
 	var stats map[string]wideevents.WorkerTaskTypeStats
 	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
-	require.Equal(t, int32Ptr(-1), stats["workflow"].TotalSlots)
-	require.Equal(t, int32Ptr(5), stats["workflow"].UsedSlots)
+	require.Equal(t, new(int32(-1)), stats["workflow"].TotalSlots)
+	require.Equal(t, new(int32(5)), stats["workflow"].UsedSlots)
 }
 
 func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
@@ -522,7 +522,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 
 	// Activity should have pollers but no slot fields
 	act := stats["activity"]
-	require.Equal(t, int32Ptr(5), act.CurrentPollers)
+	require.Equal(t, new(int32(5)), act.CurrentPollers)
 	require.Nil(t, act.TotalSlots)
 	require.Nil(t, act.UsedSlots)
 

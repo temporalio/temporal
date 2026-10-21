@@ -179,22 +179,22 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		}
 		s := wideevents.WorkerTaskTypeStats{}
 		if te.pollerInfo != nil {
-			s.CurrentPollers = int32Ptr(te.pollerInfo.GetCurrentPollers())
+			s.CurrentPollers = new(te.pollerInfo.GetCurrentPollers())
 		}
 		if te.stickyInfo != nil {
-			s.CurrentStickyPollers = int32Ptr(te.stickyInfo.GetCurrentPollers())
+			s.CurrentStickyPollers = new(te.stickyInfo.GetCurrentPollers())
 		}
 		if te.slots != nil {
 			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
 			if te.slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
 				totalSlots = -1
 			}
-			s.TotalSlots = int32Ptr(totalSlots)
-			s.UsedSlots = int32Ptr(te.slots.GetCurrentUsedSlots())
-			s.TotalProcessedTasks = int32Ptr(te.slots.GetTotalProcessedTasks())
-			s.TotalFailedTasks = int32Ptr(te.slots.GetTotalFailedTasks())
-			s.LastIntervalProcessedTasks = int32Ptr(te.slots.GetLastIntervalProcessedTasks())
-			s.LastIntervalFailureTasks = int32Ptr(te.slots.GetLastIntervalFailureTasks())
+			s.TotalSlots = new(totalSlots)
+			s.UsedSlots = new(te.slots.GetCurrentUsedSlots())
+			s.TotalProcessedTasks = new(te.slots.GetTotalProcessedTasks())
+			s.TotalFailedTasks = new(te.slots.GetTotalFailedTasks())
+			s.LastIntervalProcessedTasks = new(te.slots.GetLastIntervalProcessedTasks())
+			s.LastIntervalFailureTasks = new(te.slots.GetLastIntervalFailureTasks())
 		}
 		stats[te.taskType] = s
 	}
@@ -211,8 +211,6 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		},
 	})
 }
-
-func int32Ptr(v int32) *int32 { return &v }
 
 // runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
 func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
