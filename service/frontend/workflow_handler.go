@@ -6556,7 +6556,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
