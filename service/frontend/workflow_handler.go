@@ -6512,7 +6512,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
 		}()
@@ -6556,7 +6556,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
-			tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
