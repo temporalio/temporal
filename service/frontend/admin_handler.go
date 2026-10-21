@@ -2445,28 +2445,13 @@ func (adh *AdminHandler) ListExecutions(
 		return nil, errRequestNotSet
 	}
 
-	pageSize := int(request.GetPageSize())
-	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if pageSize <= 0 || pageSize > maxPageSize {
-		pageSize = maxPageSize
+		request.PageSize = maxPageSize
 	}
 
-	resp, err := adh.visibilityMgr.AdminListExecutions(
-		ctx, &manager.AdminListExecutionsRequest{
-			Namespace:     namespace.Name(request.GetNamespace()),
-			Query:         request.GetQuery(),
-			PageSize:      pageSize,
-			NextPageToken: request.GetNextPageToken(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.ListExecutionsResponse{
-		Executions:    resp.Executions,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
 }
 
 func (adh *AdminHandler) CountExecutions(
@@ -2479,18 +2464,5 @@ func (adh *AdminHandler) CountExecutions(
 		return nil, errRequestNotSet
 	}
 
-	resp, err := adh.visibilityMgr.AdminCountExecutions(
-		ctx, &manager.AdminCountExecutionsRequest{
-			Namespace: namespace.Name(request.GetNamespace()),
-			Query:     request.GetQuery(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.CountExecutionsResponse{
-		Count:  resp.Count,
-		Groups: resp.Groups,
-	}, nil
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }
