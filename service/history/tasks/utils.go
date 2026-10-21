@@ -62,6 +62,8 @@ func nexusStageTag(task Task) (tag.Tag, bool) {
 	case group == "nexus", // CHASM
 		strings.HasPrefix(group, "nexusoperations."): // HSM
 		return tag.NexusStageCallerOutbound, true
+	// Every callback kind today delivers a Nexus operation completion (see common/callbacks.Kind);
+	// revisit if a non-Nexus kind is added.
 	case group == "callback.invoke", // CHASM
 		strings.HasPrefix(group, "callbacks."): // HSM
 		return tag.NexusStageHandlerOutbound, true
