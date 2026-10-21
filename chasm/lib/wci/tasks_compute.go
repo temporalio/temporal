@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -140,7 +141,7 @@ func (h *InvokeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm
 	return g.InflightInvokeId == task.GetRequestId() && g.InflightInvokeAttempt == task.GetAttempt() && g.rootRunning(ctx), nil
 }
 
-func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, _ *wcipb.InvokeTask) error {
+func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, task *wcipb.InvokeTask) error {
 	call, err := readGroupCall(ctx, ref)
 	if errors.Is(err, errSpecMissing) {
 		return nil
@@ -148,7 +149,7 @@ func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 	if err != nil {
 		return err
 	}
-	callErr := h.client.InvokeWorker(ctx, call.rc, call.cfg)
+	callErr := h.client.InvokeWorker(ctx, call.rc, call.cfg, strconv.FormatInt(task.GetRequestId(), 10))
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(g *ScalingGroup, mctx chasm.MutableContext, _ any) (struct{}, error) {
 		g.Root.Get(mctx).finishInvoke(mctx, g, call.providerType, callErr)
 		return struct{}{}, nil

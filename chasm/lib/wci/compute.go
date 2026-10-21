@@ -19,7 +19,8 @@ import (
 type ComputeClient interface {
 	// ValidateSpec checks provider configs only; algorithm configs are validated in history.
 	ValidateSpec(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error
-	InvokeWorker(ctx context.Context, rc compute.RequestContext, cfg *iface.ComputeProviderSpec) error
+	// requestID is stable across retries of one invoke; "" when there is nothing to de-duplicate.
+	InvokeWorker(ctx context.Context, rc compute.RequestContext, cfg *iface.ComputeProviderSpec, requestID string) error
 	UpdateWorkerSetSize(ctx context.Context, rc compute.RequestContext, cfg *iface.ComputeProviderSpec, size int32) error
 }
 
@@ -53,6 +54,7 @@ func retryable(err error) bool {
 
 func requestContext(ctx chasm.Context, w *WorkerControllerInstance) compute.RequestContext {
 	return compute.RequestContext{
+		NamespaceID:       ctx.NamespaceEntry().ID().String(),
 		NamespaceName:     ctx.NamespaceEntry().Name().String(),
 		DeploymentName:    w.DeploymentName,
 		DeploymentBuildID: w.BuildId,

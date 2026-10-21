@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package temporal.server.api.workercontrollerservice.v1;
+
+import "temporal/server/api/workercontrollerservice/v1/request_response.proto";
+
+option go_package = "go.temporal.io/server/api/workercontrollerservice/v1;workercontrollerservice";
+
+// Internal: history drives compute providers through it, in process or on the WCI process.
+// Each call returns once the provider's control plane accepts it; callers set per-call deadlines.
+service WorkerControllerComputeService {
+  // Checks one provider config; algorithm configs are validated by the caller.
+  rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse) {}
+  rpc InvokeWorker(InvokeWorkerRequest) returns (InvokeWorkerResponse) {}
+  // (-- api-linter: core::0134=disabled
+  //     aip.dev/not-precedent: This service does not follow the update method API --)
+  rpc UpdateWorkerSetSize(UpdateWorkerSetSizeRequest) returns (UpdateWorkerSetSizeResponse) {}
+}

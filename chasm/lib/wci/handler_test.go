@@ -3,6 +3,7 @@ package wci
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -38,10 +39,11 @@ const (
 )
 
 type fakeCompute struct {
-	mu      sync.Mutex
-	calls   []string
-	sizes   []int32
-	callErr error
+	mu         sync.Mutex
+	calls      []string
+	sizes      []int32
+	requestIDs []string
+	callErr    error
 }
 
 func (f *fakeCompute) record(call string) error {
@@ -55,7 +57,10 @@ func (f *fakeCompute) ValidateSpec(context.Context, compute.RequestContext, *ifa
 	return f.record("validate")
 }
 
-func (f *fakeCompute) InvokeWorker(context.Context, compute.RequestContext, *iface.ComputeProviderSpec) error {
+func (f *fakeCompute) InvokeWorker(_ context.Context, _ compute.RequestContext, _ *iface.ComputeProviderSpec, requestID string) error {
+	f.mu.Lock()
+	f.requestIDs = append(f.requestIDs, requestID)
+	f.mu.Unlock()
 	return f.record("invoke")
 }
 
@@ -292,6 +297,23 @@ func TestE2E_EmitsWorkflowMetricsTaggedCHASM(t *testing.T) {
 	require.Equal(t, wcimetrics.OperationTypeUpdateWorkerSetSize, resize.Tags[wcimetrics.OperationTagName])
 	require.Equal(t, string(wcimetrics.ErrorTypeNone), resize.Tags[wcimetrics.ErrorTypeTagName])
 	require.Equal(t, migrationOutcomeSuccess, snap[MigrateToWorkflowCount.Name()][0].Tags[wcimetrics.MigrationOutcomeTagName])
+}
+
+func TestE2E_InvokeTaskPassesItsRequestID(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	fake.actions = []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeInvokeWorker}}
+	require.NoError(t, e.recordTaskAdd())
+	_, g := e.live(t)
+	// Copied: finishing the invoke resets the live group's in-flight ID.
+	requestID, attempt := g.InflightInvokeId, g.InflightInvokeAttempt
+	require.NotZero(t, requestID)
+
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.InvokeTask](e.lib.InvokeTaskHandler), chasm.TaskAttributes{Destination: "test-invoke"}, &wcipb.InvokeTask{RequestId: requestID, Attempt: attempt})
+	require.NoError(t, err)
+	require.False(t, dropped)
+	require.Equal(t, []string{strconv.FormatInt(requestID, 10)}, e.compute.requestIDs, "the provider can de-duplicate retries on it")
 }
 
 func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {
