@@ -141,6 +141,7 @@ func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
 		Delay:      delay,
 		Err:        errors.New("down"),
 	}))
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, c.GetPeerApply()["cellB"].GetOutcome())
 	require.Len(t, ctx.Tasks, 1)
 	task, ok := ctx.Tasks[0].Payload.(*namespacereplicationpb.ApplyPeerBackoffTask)
 	require.True(t, ok)
@@ -153,6 +154,7 @@ func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
 func TestApplyPeerBackoffTaskReenqueuesOutboundTask(t *testing.T) {
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
 	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	c.PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 	c.PeerApply["cellB"].AttemptCount = 2
 	h := newApplyPeerBackoffTaskHandler()
 	task := &namespacereplicationpb.ApplyPeerBackoffTask{TargetCell: "cellB", Attempt: 2}
@@ -163,6 +165,10 @@ func TestApplyPeerBackoffTaskReenqueuesOutboundTask(t *testing.T) {
 
 	ctx := &chasm.MockMutableContext{}
 	require.NoError(t, h.Execute(ctx, c, chasm.TaskAttributes{}, task))
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()["cellB"].GetOutcome())
+	valid, err = h.Validate(nil, c, chasm.TaskInvocation{}, task)
+	require.NoError(t, err)
+	require.False(t, valid)
 	require.Len(t, ctx.Tasks, 1)
 	peerTask, ok := ctx.Tasks[0].Payload.(*namespacereplicationpb.ApplyPeerTask)
 	require.True(t, ok)

@@ -1351,7 +1351,7 @@ func TestApplyPeerTask_Execute_TerminalError(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
 }
 
-// A retriable peer error keeps the peer PENDING, bumps the attempt, and does not
+// A retriable peer error marks the peer FAILED_RETRIABLE, bumps the attempt, and does not
 // complete the component — a later attempt within the retry budget can converge.
 func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 	env := newNsreplTestEnv(t)
@@ -1367,7 +1367,7 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "retriable failure keeps peer pending")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome())
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus(), "component not complete while a peer is still retrying")
 }
@@ -1385,7 +1385,7 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		{
 			name:             "below budget retries",
 			elapsed:          retryExpiration - time.Nanosecond,
-			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 		},
@@ -1619,7 +1619,7 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 	require.Equal(t, []string{"cellB"}, applier.cells)
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "an unknown result must not be recorded as applied")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome(), "an unknown result must not be recorded as applied")
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Contains(t, peer.GetLastFailure().GetMessage(), "unknown peer apply result: 999")
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())
