@@ -135,11 +135,11 @@ type (
 		clusterMetadata       cluster.Metadata
 		chasmRegistry         *chasm.Registry
 		taskTypeTagProvider   TaskTypeTagProvider
+		taskType              string // the task type metrics are tagged with, also logged
 		logger                log.Logger
 		baseMetricsHandler    metrics.Handler
 		defaultMetricsHandler metrics.Handler
 		chasmMetricsHandler   metrics.Handler // contains archetype tag
-		taskType              string          // the task type metrics are tagged with, also logged
 		tracer                trace.Tracer
 		dlqWriter             *DLQWriter
 
@@ -230,20 +230,27 @@ func NewExecutable(
 	for _, opt := range opts {
 		opt(&params)
 	}
-	e := &executableImpl{
+	var e *executableImpl
+	e = &executableImpl{
 		Task:  task,
 		state: ctasks.TaskStatePending,
 
-		executor:                   executor,
-		scheduler:                  scheduler,
-		rescheduler:                rescheduler,
-		priorityAssigner:           priorityAssigner,
-		timeSource:                 timeSource,
-		namespaceRegistry:          namespaceRegistry,
-		clusterMetadata:            clusterMetadata,
-		chasmRegistry:              chasmRegistry,
-		taskTypeTagProvider:        taskTypeTagProvider,
-		readerID:                   readerID,
+		executor:            executor,
+		scheduler:           scheduler,
+		rescheduler:         rescheduler,
+		priorityAssigner:    priorityAssigner,
+		timeSource:          timeSource,
+		namespaceRegistry:   namespaceRegistry,
+		clusterMetadata:     clusterMetadata,
+		chasmRegistry:       chasmRegistry,
+		taskTypeTagProvider: taskTypeTagProvider,
+		readerID:            readerID,
+		logger: log.NewLazyLogger(
+			logger,
+			func() []tag.Tag {
+				return append(tasks.Tags(task), tag.TaskTypeName(e.taskType))
+			},
+		),
 		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
@@ -253,12 +260,6 @@ func NewExecutable(
 		dlqErrorPattern:            params.DLQErrorPattern,
 		alertableErrorCauseTag:     metrics.LastAttemptCauseTag("none"),
 	}
-	e.logger = log.NewLazyLogger(
-		logger,
-		func() []tag.Tag {
-			return append(tasks.Tags(task), tag.TaskTypeName(e.taskType))
-		},
-	)
 	e.refreshMetricsHandlers(nil)
 	e.attempt.Store(1)
 	e.priority = priorityAssigner.Assign(e)
