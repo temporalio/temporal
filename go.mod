@@ -49,7 +49,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/ringpop-go v0.1.0
+	github.com/temporalio/ringpop-go v0.1.1
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
 	github.com/tidwall/btree v1.8.1
