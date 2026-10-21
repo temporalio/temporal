@@ -139,6 +139,7 @@ type (
 		baseMetricsHandler    metrics.Handler
 		defaultMetricsHandler metrics.Handler
 		chasmMetricsHandler   metrics.Handler // contains archetype tag
+		taskType              string          // the task type metrics are tagged with, also logged
 		tracer                trace.Tracer
 		dlqWriter             *DLQWriter
 
@@ -233,24 +234,16 @@ func NewExecutable(
 		Task:  task,
 		state: ctasks.TaskStatePending,
 
-		executor:            executor,
-		scheduler:           scheduler,
-		rescheduler:         rescheduler,
-		priorityAssigner:    priorityAssigner,
-		timeSource:          timeSource,
-		namespaceRegistry:   namespaceRegistry,
-		clusterMetadata:     clusterMetadata,
-		chasmRegistry:       chasmRegistry,
-		taskTypeTagProvider: taskTypeTagProvider,
-		readerID:            readerID,
-		logger: log.NewLazyLogger(
-			logger,
-			func() []tag.Tag {
-				tags := tasks.Tags(task)
-				_, isActive := taskNamespace(task, namespaceRegistry, clusterMetadata.GetCurrentClusterName())
-				return append(tags, tag.TaskTypeName(taskTypeTagProvider(task, isActive, chasmRegistry)))
-			},
-		),
+		executor:                   executor,
+		scheduler:                  scheduler,
+		rescheduler:                rescheduler,
+		priorityAssigner:           priorityAssigner,
+		timeSource:                 timeSource,
+		namespaceRegistry:          namespaceRegistry,
+		clusterMetadata:            clusterMetadata,
+		chasmRegistry:              chasmRegistry,
+		taskTypeTagProvider:        taskTypeTagProvider,
+		readerID:                   readerID,
 		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
@@ -260,6 +253,12 @@ func NewExecutable(
 		dlqErrorPattern:            params.DLQErrorPattern,
 		alertableErrorCauseTag:     metrics.LastAttemptCauseTag("none"),
 	}
+	e.logger = log.NewLazyLogger(
+		logger,
+		func() []tag.Tag {
+			return append(tasks.Tags(task), tag.TaskTypeName(e.taskType))
+		},
+	)
 	e.refreshMetricsHandlers(nil)
 	e.attempt.Store(1)
 	e.priority = priorityAssigner.Assign(e)
@@ -930,7 +929,7 @@ func (e *executableImpl) resetAttempt() {
 }
 
 func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Tag) {
-	sharedTags := taskBaseMetricTagsWithoutArchetype(
+	sharedTags, taskType := taskBaseMetricTagsWithoutArchetype(
 		e.GetTask(),
 		e.namespaceRegistry,
 		e.clusterMetadata.GetCurrentClusterName(),
@@ -940,6 +939,7 @@ func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Ta
 	if len(executionMetricTags) > 0 {
 		sharedTags = append(sharedTags, executionMetricTags...)
 	}
+	e.taskType = taskType
 	e.defaultMetricsHandler = e.baseMetricsHandler.WithTags(sharedTags...)
 	e.chasmMetricsHandler = e.defaultMetricsHandler.WithTags(getArchetypeTag(e.GetTask(), e.chasmRegistry))
 }
@@ -951,21 +951,25 @@ func taskBaseMetricTags(
 	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 ) []metrics.Tag {
-	tags := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
+	tags, _ := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
 	return append(tags, getArchetypeTag(task, chasmRegistry))
 }
 
+// taskBaseMetricTagsWithoutArchetype returns the base metric tags for a task and the task type among them.
 func taskBaseMetricTagsWithoutArchetype(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
 	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
-) []metrics.Tag {
+) ([]metrics.Tag, string) {
 	namespaceTag := metrics.NamespaceUnknownTag()
-	ns, isActive := taskNamespace(task, namespaceRegistry, currentClusterName)
-	if ns != nil {
+	isActive := true
+
+	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err == nil {
 		namespaceTag = metrics.NamespaceTag(ns.Name().String())
+		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
 	}
 
 	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)
@@ -974,21 +978,7 @@ func taskBaseMetricTagsWithoutArchetype(
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
-	}
-}
-
-// taskNamespace returns the task's namespace, or nil if it can't be loaded, and whether the namespace is active in
-// the current cluster. A namespace that can't be loaded is treated as active.
-func taskNamespace(
-	task tasks.Task,
-	namespaceRegistry namespace.Registry,
-	currentClusterName string,
-) (*namespace.Namespace, bool) {
-	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err != nil {
-		return nil, true
-	}
-	return ns, ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
+	}, taskType
 }
 
 func getArchetypeTag(task tasks.Task, chasmRegistry *chasm.Registry) metrics.Tag {
