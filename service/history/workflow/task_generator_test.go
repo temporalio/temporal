@@ -2101,3 +2101,20 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 		require.Truef(t, seen[name], "expected RegenerateTimerTasksForTimeSkipping to emit a %s", name)
 	}
 }
+
+func TestTaskGeneratorImpl_CloseTaskSkipsParentVerification(t *testing.T) {
+	controller := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(controller)
+	key := definition.NewWorkflowKey("namespace", "workflow", "run")
+	mutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
+	mutableState.EXPECT().GetWorkflowKey().Return(key)
+	mutableState.EXPECT().AddTasks(&tasks.CloseExecutionTask{
+		WorkflowKey:            key,
+		Version:                1,
+		DeleteAfterClose:       true,
+		SkipParentVerification: true,
+	})
+	mutableState.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
+	generator := &TaskGeneratorImpl{mutableState: mutableState}
+	require.NoError(t, generator.GenerateWorkflowCloseTasks(time.Now(), true, true))
+}

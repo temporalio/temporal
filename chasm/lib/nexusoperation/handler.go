@@ -8,7 +8,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -17,16 +19,23 @@ import (
 type handler struct {
 	nexusoperationpb.UnimplementedNexusOperationServiceServer
 
-	config        *Config
-	linkValidator *linkValidator
-	logger        log.Logger
+	config            *Config
+	callbackValidator callbacks.Validator
+	linkValidator     *linkValidator
+	logger            log.Logger
 }
 
-func newHandler(config *Config, linkValidator *linkValidator, logger log.Logger) *handler {
+func newHandler(
+	config *Config,
+	callbackValidator callbacks.Validator,
+	linkValidator *linkValidator,
+	logger log.Logger,
+) *handler {
 	return &handler{
-		config:        config,
-		linkValidator: linkValidator,
-		logger:        logger,
+		config:            config,
+		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
+		logger:            logger,
 	}
 }
 
@@ -38,9 +47,6 @@ func (h *handler) StartNexusOperation(
 	defer log.CapturePanic(h.logger, &err)
 
 	frontendReq := req.GetFrontendRequest()
-	// Read once, so it's consistent for both the creation and on-conflict paths,
-	// despite being in two transactions.
-	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -49,7 +55,7 @@ func (h *handler) StartNexusOperation(
 			BusinessID:  frontendReq.GetOperationId(),
 		},
 		func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
-			return newStandaloneOperation(mutableCtx, req, maxCallbacks, h.linkValidator)
+			return newStandaloneOperation(mutableCtx, req, h.callbackValidator, h.linkValidator)
 		},
 		req,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
@@ -74,7 +80,7 @@ func (h *handler) StartNexusOperation(
 	}
 
 	if !result.Created {
-		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq, maxCallbacks); err != nil {
+		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq); err != nil {
 			return nil, err
 		}
 	}
@@ -92,7 +98,6 @@ func (h *handler) applyOnConflictOptions(
 	ctx context.Context,
 	key chasm.ExecutionKey,
 	req *workflowservice.StartNexusOperationExecutionRequest,
-	maxCallbacks int,
 ) error {
 	cbs := req.GetCompletionCallbacks()
 	links := req.GetLinks()
@@ -112,7 +117,8 @@ func (h *handler) applyOnConflictOptions(
 		chasm.NewComponentRef[*Operation](key),
 		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
 			if attachCallbacks {
-				if err := o.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+				regTime := timestamppb.New(ctx.Now(o))
+				if err := callback.ValidateAndAttach(ctx, o, requestID, regTime, cbs, namespaceName, h.callbackValidator); err != nil {
 					return nil, err
 				}
 			}
