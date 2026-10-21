@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -39,16 +38,14 @@ type (
 	Handler struct {
 		matchingservice.UnimplementedMatchingServiceServer
 
-		engine          Engine
-		config          *Config
-		metricsHandler  metrics.Handler
-		logger          log.Logger
-		startWG         sync.WaitGroup
-		throttledLogger log.Logger
-		// nexusTaskThrottledLogger is tagged once here so Nexus polls don't allocate a tagged logger per request.
-		nexusTaskThrottledLogger log.Logger
-		namespaceRegistry        namespace.Registry
-		workersRegistry          workers.Registry
+		engine            Engine
+		config            *Config
+		metricsHandler    metrics.Handler
+		logger            log.Logger
+		startWG           sync.WaitGroup
+		throttledLogger   log.Logger
+		namespaceRegistry namespace.Registry
+		workersRegistry   workers.Registry
 	}
 
 	HandlerParams struct {
@@ -94,11 +91,10 @@ func NewHandler(
 	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:                   params.Config,
-		metricsHandler:           params.MetricsHandler,
-		logger:                   params.Logger,
-		throttledLogger:          params.ThrottledLogger,
-		nexusTaskThrottledLogger: log.With(params.ThrottledLogger, tag.NexusStageHandlerTaskDelivery),
+		config:          params.Config,
+		metricsHandler:  params.MetricsHandler,
+		logger:          params.Logger,
+		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
 			params.TaskManager,
 			params.FairTaskManager,
@@ -556,7 +552,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollNexusTaskQueue",
-		h.nexusTaskThrottledLogger,
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
