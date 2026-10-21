@@ -204,6 +204,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			updateNexusCtx := ms.GetUpdateNexusSerializationContext(updateID)
 			nexusSerializationContext := common.CloneProto(updateNexusCtx)
 			updateResponse := uws.updater.CreateCompletedResponse(
+				ms,
 				workflowKey,
 				completedUpdate.Outcome,
 				completedUpdate.AcceptedEventID,
