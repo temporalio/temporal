@@ -22,6 +22,13 @@ const (
 	ErrReasonHistoryMutated = "history was mutated"
 )
 
+// URI schemes of the built-in archivers.
+const (
+	URISchemeFilestore = "file"
+	URISchemeS3store   = "s3"
+	URISchemeGstorage  = "gs"
+)
+
 var (
 	// ErrInvalidURI is the error for invalid URI
 	ErrInvalidURI = errors.New("URI is invalid")

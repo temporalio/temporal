@@ -284,6 +284,13 @@ jobs:
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh make unit-test-coverage
 
+      - name: Run unit tests with build tags
+        if: ${{ !cancelled() }}
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make unit-test-build-tags
+
       - name: Post-test reporting
         if: always()
         uses: ./.github/actions/post-test-reporting
