@@ -191,6 +191,8 @@ func (s *Starter) prepare(ctx context.Context) error {
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	request := s.request.StartRequest
 	// Pinned and pending one-time overrides route the first workflow task to their target version.
+	// TODO: Send the worker's deployment version when there's no override, once the SDK sends deployment options on
+	// eager start, so Matching also checks the versioned queue's backlog.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
@@ -762,6 +764,7 @@ func (s *Starter) respondToRetriedRequest(
 	}
 
 	// A first attempt that didn't start eagerly sent its task through matching, so a poller may already have it.
+	// TODO: Return the grant this request already took from Matching, since the retry doesn't dispatch a new task.
 	if !events[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted() {
 		return s.taskAlreadyDispatchedResponse(runID, firstExecutionRunID), nil
 	}
