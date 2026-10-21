@@ -6,7 +6,6 @@ import (
 	"text/template"
 	"time"
 
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
@@ -160,6 +159,40 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 "nexus_header" field that contains any of these disallowed keys will be rejected.`,
 )
 
+var TrackedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.trackedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string{"temporal-"},
+	`Case insensitive list of Nexus header key prefixes to track. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes are counted via the
+nexus_header_prefix_usage metric, tagged by prefix, and logged.`,
+)
+
+var RejectedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.rejectedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string(nil),
+	`Case insensitive list of Nexus header key prefixes to reject. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes will be rejected.
+Rejections are counted via the nexus_header_prefix_usage metric with rejected=true.`,
+)
+
+// convertHeaderPrefixes lower-cases the configured header prefixes and drops empty ones, which would otherwise match
+// every header key.
+func convertHeaderPrefixes(in any) ([]string, error) {
+	prefixes, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		if p != "" {
+			result = append(result, strings.ToLower(p))
+		}
+	}
+	return result, nil
+}
+
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.scheduleToCloseTimeout",
 	0,
@@ -247,7 +280,6 @@ type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -261,6 +293,8 @@ type Config struct {
 	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
+	TrackedHeaderPrefixes                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes                     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
@@ -280,7 +314,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
 		EnabledCallbackKinds:               EnabledCallbackKinds.Get(dc),
-		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
@@ -294,6 +327,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
+		TrackedHeaderPrefixes:              TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:             RejectedHeaderPrefixes.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),

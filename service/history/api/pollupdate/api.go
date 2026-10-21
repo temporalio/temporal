@@ -4,10 +4,12 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -25,6 +27,7 @@ func Invoke(
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
+	var nexusSerializationContext *nexuspb.PropagatedSerializationContext
 	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
@@ -43,6 +46,10 @@ func Invoke(
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
 		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		if upd != nil {
+			// Read while holding the workflow lease.
+			nexusSerializationContext = common.CloneProto(upd.NexusSerializationContext())
+		}
 		wfKey := wfCtx.GetWorkflowKey()
 		return &wfKey, upd, nil
 	}()
@@ -77,6 +84,7 @@ func Invoke(
 				},
 				UpdateId: updateRef.UpdateId,
 			},
+			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}, nil
 }

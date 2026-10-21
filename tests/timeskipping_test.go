@@ -40,7 +40,7 @@ import (
 )
 
 // defaultMaxSkipPerSession mirrors the compiled default of
-// dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession. The frontend populates a request's
+// dynamicconfig.TimeSkippingMaxSkipPerSession. The frontend populates a request's
 // unset MaxSkipPerSession with this value, so tests that leave it empty expect it back.
 const defaultMaxSkipPerSession = 200
 
@@ -70,7 +70,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
-	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
 }
 
 // TestTimeSkipping_StartWorkflow_DCEnabled verifies that StartWorkflowExecution with
@@ -109,6 +109,251 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	s.False(startTime.After(afterStart), "zero-offset start must not move after the admission window")
 	s.Equal(startTime, ms.State.ExecutionInfo.GetStartTime().AsTime())
 	s.Equal(startTime, ms.State.ExecutionInfo.GetExecutionTime().AsTime())
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	runID := s.startWorkflowWithTimeSkipping(env, tv, time.Hour)
+	s.True(s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, false)
+	updateRequest := &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	}
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), updateRequest)
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
+	s.ErrorContains(err, "workflow time skipping is not enabled for the namespace")
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("flag-off-timer", 10*time.Minute)},
+		}, nil
+	})
+	s.NoError(err)
+
+	tsi := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.True(tsi.GetConfig().GetEnabled())
+	s.Zero(tsi.GetSessionSkipCount())
+	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration())
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), updateRequest)
+	s.NoError(err)
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		SignalName:        tv.SignalName(),
+		Identity:          "test",
+		RequestId:         uuid.NewString(),
+	})
+	s.NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.True(firedTimers(task)["flag-off-timer"])
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	tsi = s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.Positive(tsi.GetSessionSkipCount())
+	s.Positive(tsi.GetAccumulatedSkippedDuration().AsDuration())
+	history = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
+func (s *TimeSkippingTestSuite) TestReuseWorkflowIDAfterTimeSkipping() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableWorkflowIdReuseStartTimeValidation, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Minute)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	first, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.Require().NoError(err)
+	poller := env.TaskPoller()
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("skip", time.Hour)},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        tv.WorkflowType(),
+						TaskQueue:           tv.TaskQueue(),
+						WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	var skippedRunID string
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		skippedRunID = task.GetWorkflowExecution().GetRunId()
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.Require().NoError(err)
+	s.Require().NotEqual(first.GetRunId(), skippedRunID)
+	s.Require().True(hasEventType(
+		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: first.GetRunId()}),
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+	))
+	s.Require().True(s.getMutableState(env, tv.WorkflowID(), skippedRunID).State.ExecutionState.GetStartTime().AsTime().After(time.Now()))
+
+	beforeRealStart := time.Now()
+	realRun, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:             uuid.NewString(),
+		Namespace:             env.Namespace().String(),
+		WorkflowId:            tv.WorkflowID(),
+		WorkflowType:          tv.WorkflowType(),
+		TaskQueue:             tv.TaskQueue(),
+		WorkflowRunTimeout:    durationpb.New(time.Minute),
+		WorkflowTaskTimeout:   durationpb.New(10 * time.Second),
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	})
+	s.Require().NoError(err)
+	afterRealStart := time.Now()
+	s.Require().NotEqual(skippedRunID, realRun.GetRunId())
+	realState := s.getMutableState(env, tv.WorkflowID(), realRun.GetRunId()).State
+	s.Require().Nil(realState.ExecutionInfo.GetTimeSkippingInfo())
+	s.Require().False(realState.ExecutionState.GetStartTime().AsTime().Before(beforeRealStart))
+	s.Require().False(realState.ExecutionState.GetStartTime().AsTime().After(afterRealStart))
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	current, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(realRun.GetRunId(), current.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+	s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.GetWorkflowExecutionInfo().GetStatus())
+}
+
+func (s *TimeSkippingTestSuite) TestTerminateExistingWorkflowAfterTimeSkipping() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableWorkflowIdReuseStartTimeValidation, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Minute)
+	tv := testvars.New(s.T())
+
+	first, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.Require().NoError(err)
+	poller := env.TaskPoller()
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("skip", time.Hour)},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        tv.WorkflowType(),
+						TaskQueue:           tv.TaskQueue(),
+						WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	current, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.Require().NoError(err)
+	virtualRunID := current.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+	s.Require().NotEqual(first.GetRunId(), virtualRunID)
+	s.Require().True(s.getMutableState(env, tv.WorkflowID(), virtualRunID).State.ExecutionState.GetStartTime().AsTime().After(time.Now()))
+
+	realRun, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               tv.WorkflowID(),
+		WorkflowType:             tv.WorkflowType(),
+		TaskQueue:                tv.TaskQueue(),
+		WorkflowRunTimeout:       durationpb.New(time.Minute),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	})
+	s.Require().NoError(err)
+	s.Require().NotEqual(virtualRunID, realRun.GetRunId())
+	s.Require().True(hasEventType(
+		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: virtualRunID}),
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+	))
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.Require().NoError(err)
+
+	current, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(realRun.GetRunId(), current.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+	s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.GetWorkflowExecutionInfo().GetStatus())
 }
 
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution

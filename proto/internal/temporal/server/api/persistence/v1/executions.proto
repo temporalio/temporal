@@ -351,6 +351,10 @@ message TimeSkippingInfo {
   // Tracks the number of times a time-skipping transition has occurred since time skipping
   // was most recently enabled. It is reset every time the skipping config is updated.
   int32 session_skip_count = 6;
+
+  // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
+  // this value remains fixed and can be used to calculate the execution's wall-clock start time.
+  google.protobuf.Duration initial_skipped_duration = 8;
 }
 
 message FastForwardInfo {
@@ -438,6 +442,8 @@ message TransferTaskInfo {
     // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
     // by some other task, so this task doesn't need to worry about it.
     bool can_skip_visibility_archival = 1;
+    // Only standby execution skips verification; active execution still notifies the parent.
+    bool skip_parent_verification = 2;
   }
   oneof task_details {
     CloseExecutionTaskDetails close_execution_task_details = 16;

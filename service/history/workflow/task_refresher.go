@@ -23,7 +23,7 @@ type (
 		Refresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
-			shouldSkipGeneratingCloseTransferTask bool,
+			shouldSkipParentVerification bool,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -39,7 +39,7 @@ type (
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 			previousPendingChildIds map[int64]struct{},
-			shouldSkipGeneratingCloseTransferTask bool,
+			shouldSkipParentVerification bool,
 		) error
 	}
 
@@ -64,12 +64,12 @@ func NewTaskRefresher(
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
-	shouldSkipGeneratingCloseTransferTask bool,
+	shouldSkipParentVerification bool,
 ) error {
 	// Invalidate all tasks generated for this mutable state before the refresh.
 	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
-	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipParentVerification); err != nil {
 		return err
 	}
 
@@ -97,7 +97,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
-	shouldSkipGeneratingCloseTransferTask bool,
+	shouldSkipParentVerification bool,
 ) error {
 	// CHASM tasks will be replicated as part of ApplyMutation/ApplySnapshot.
 	// Physical tasks will also be automatically generated upon CloseTransaction.
@@ -125,7 +125,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
-		shouldSkipGeneratingCloseTransferTask,
+		shouldSkipParentVerification,
 	); err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
-	skipCloseTransferTask bool,
+	skipParentVerification bool,
 ) error {
 
 	executionState := mutableState.GetExecutionState()
@@ -285,11 +285,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 		return err
 	}
 
-	return taskGenerator.GenerateWorkflowCloseTasks(
-		closeEventTime,
-		false,
-		skipCloseTransferTask,
-	)
+	return taskGenerator.GenerateWorkflowCloseTasks(closeEventTime, false, skipParentVerification)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
