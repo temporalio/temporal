@@ -26,10 +26,11 @@ var NexusOperationFailedCount = metrics.NewCounterDef(
 // reported as failed, synchronously at start or later via a completion.
 const FailedReasonOperationFailed metrics.ReasonString = "operation_failed"
 
-// FailedReasonServerError is the NexusOperationFailedCount reason for an operation that the caller
+// FailedReasonCallerError is the NexusOperationFailedCount reason for an operation that the caller
 // failed itself after a start attempt, e.g. because the handler's response exceeded a size limit or the
-// request failed with a non-retryable server error.
-const FailedReasonServerError metrics.ReasonString = "server_error"
+// request failed with a non-retryable server error. It names the side that decided the failure, like
+// FailedReasonHandlerError, not who is at fault: a rejected response usually points at the handler.
+const FailedReasonCallerError metrics.ReasonString = "caller_error"
 
 // FailedReasonHandlerError is the NexusOperationFailedCount reason for an operation whose start attempt
 // the handler rejected with a non-retryable handler error. The handler error type is deliberately left
@@ -43,7 +44,7 @@ const FailedReasonHandlerError metrics.ReasonString = "handler_error"
 //
 // A start attempt rejected with a non-retryable handler error resolves with the handler failure at
 // the top level; that reports FailedReasonHandlerError. A non-retryable failure the caller raises
-// itself reports FailedReasonServerError; CHASM records these as server failures and HSM as
+// itself reports FailedReasonCallerError; CHASM records these as server failures and HSM as
 // "CallError" application failures. Any other failure, including a nil one, reports
 // FailedReasonOperationFailed: the handler reporting the operation as failed.
 func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
@@ -51,7 +52,7 @@ func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 		return FailedReasonHandlerError
 	}
 	if failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError" {
-		return FailedReasonServerError
+		return FailedReasonCallerError
 	}
 	return FailedReasonOperationFailed
 }
