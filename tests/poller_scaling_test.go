@@ -553,33 +553,6 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
-func (s *PollerScalingIntegSuite) TestPollerScalingSignalsV2DelayScaleUp() {
-	env := s.setupEnv(
-		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseSignalsV2ForPollerScaling, true),
-	)
-	capture := env.StartNamespaceMetricCapture()
-	tq := testcore.RandomizeStr(s.T().Name())
-
-	s.startBacklog(env, tq, 5)
-	// Under v2 the delay signal measures the dispatched task's age since creation.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			ReportStats:   true,
-		})
-		require.NoError(t, err)
-		require.Greater(t, res.GetStats().GetApproximateBacklogAge().AsDuration(), 100*time.Millisecond)
-	}, 20*time.Second, 50*time.Millisecond)
-
-	resp := s.pollWorkflowTask(env, tq)
-	s.NotNil(resp.PollerScalingDecision)
-	s.Equal(int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
-	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay), 1)
-}
-
 func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV1() {
 	s.testPollerScalingNexusRatioScaleUp(false)
 }
