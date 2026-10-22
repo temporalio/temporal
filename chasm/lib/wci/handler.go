@@ -154,8 +154,9 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	if err != nil {
 		return nil, err
 	}
-	if cur.exists && len(req.GetConflictToken()) > 0 && !bytes.Equal(req.GetConflictToken(), cur.state.GetConflictToken()) {
-		return nil, serviceerror.NewFailedPrecondition("conflict token mismatch")
+	// Fails fast; checkConflictToken repeats this under the lock.
+	if len(req.GetConflictToken()) > 0 && (!cur.exists || !bytes.Equal(req.GetConflictToken(), cur.state.GetConflictToken())) {
+		return nil, errConflictTokenMismatch
 	}
 	merge := &iface.UpdateWorkerControllerInstanceRequest{
 		UpsertScalingGroups: upsertsToIface(req.GetUpsertScalingGroups()),
@@ -171,14 +172,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		if !cur.exists {
 			return &wcipb.UpdateWorkerControllerInstanceResponse{}, nil
 		}
-		_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
-			if err := w.CheckMutable(); err != nil {
-				return struct{}{}, err
-			}
-			w.ConflictToken = req.GetConflictToken()
-			return struct{}{}, TransitionDelete.Apply(w, mctx, EventDelete{Identity: req.GetIdentity()})
-		}, nil)
-		return &wcipb.UpdateWorkerControllerInstanceResponse{ConflictToken: req.GetConflictToken()}, err
+		return implicitDelete(ctx, req)
 	}
 
 	rc, err := h.requestContext(req.GetNamespaceId(), req.GetDeploymentName(), req.GetBuildId())
@@ -195,6 +189,9 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 
 	// apply re-merges against the current spec so a concurrent update is not overwritten wholesale.
 	apply := func(w *WorkerControllerInstance, mctx chasm.MutableContext) (*wcipb.UpdateWorkerControllerInstanceResponse, error) {
+		if err := w.checkConflictToken(req.GetConflictToken()); err != nil {
+			return nil, err
+		}
 		final, err := iface.BuildUpdatedSpec(w.spec(), merge)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(err.Error())
@@ -204,7 +201,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		}
 		w.applySpec(mctx, specsToCHASM(final), registrations)
 		w.LastModifierIdentity = req.GetIdentity()
-		w.ConflictToken = req.GetConflictToken()
+		w.mintConflictToken()
 		return &wcipb.UpdateWorkerControllerInstanceResponse{ScalingGroupSpecs: w.ScalingGroupSpecs, ConflictToken: w.ConflictToken}, nil
 	}
 
@@ -235,6 +232,23 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		return nil, err
 	}
 	return result.UpdateOutput, nil
+}
+
+func implicitDelete(ctx context.Context, req *wcipb.UpdateWorkerControllerInstanceRequest) (*wcipb.UpdateWorkerControllerInstanceResponse, error) {
+	token, _, err := chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) ([]byte, error) {
+		if err := w.CheckMutable(); err != nil {
+			return nil, err
+		}
+		if err := w.checkConflictToken(req.GetConflictToken()); err != nil {
+			return nil, err
+		}
+		w.mintConflictToken()
+		return w.ConflictToken, TransitionDelete.Apply(w, mctx, EventDelete{Identity: req.GetIdentity()})
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &wcipb.UpdateWorkerControllerInstanceResponse{ConflictToken: token}, nil
 }
 
 func (h *handler) DescribeWorkerControllerInstance(ctx context.Context, req *wcipb.DescribeWorkerControllerInstanceRequest) (resp *wcipb.DescribeWorkerControllerInstanceResponse, err error) {
