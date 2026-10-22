@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+scrape_configs:
+  - job_name: temporal-concurrency-local
+    scrape_timeout: 900ms
+    static_configs:
+      - targets: ['host.docker.internal:18000']
+        labels:
+          cluster: concurrency-local

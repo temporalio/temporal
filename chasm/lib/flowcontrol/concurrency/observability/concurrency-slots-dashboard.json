@@ -1,0 +1,1570 @@
+{
+  "id": null,
+  "uid": "concurrency-slot-metrics",
+  "title": "CHASM Concurrency Limiter \u00b7 Local Metrics",
+  "description": "All six new limiter metric families, CHASM persistence attribution and concurrency RPCs. Built and tested against the experimental FCW server.",
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "tags": [
+    "temporal",
+    "chasm",
+    "concurrency",
+    "local"
+  ],
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Concurrency local Prometheus",
+          "value": "concurrency-local-prometheus"
+        },
+        "refresh": 1,
+        "options": []
+      },
+      {
+        "name": "job",
+        "label": "Scrape job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(flowcontrol_concurrency_slots, job)",
+        "query": {
+          "query": "label_values(flowcontrol_concurrency_slots, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "text": "temporal-concurrency-local",
+          "value": "temporal-concurrency-local"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "namespace_id",
+        "label": "Namespace ID",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(flowcontrol_concurrency_slots{job=~\"$job\"}, namespace_id)",
+        "query": {
+          "query": "label_values(flowcontrol_concurrency_slots{job=~\"$job\"}, namespace_id)",
+          "refId": "namespace_id"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "text": "$__all",
+          "value": "$__all"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "taskqueue",
+        "label": "Task queue",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(flowcontrol_concurrency_slots{job=~\"$job\",namespace_id=~\"$namespace_id\"}, taskqueue)",
+        "query": {
+          "query": "label_values(flowcontrol_concurrency_slots{job=~\"$job\",namespace_id=~\"$namespace_id\"}, taskqueue)",
+          "refId": "taskqueue"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "text": [
+            "slot_metrics_live",
+            "slot_metrics_probe"
+          ],
+          "value": [
+            "slot_metrics_live",
+            "slot_metrics_probe"
+          ]
+        },
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "component",
+        "label": "Persistence component",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(persistence_requests{job=~\"$job\",service_name=\"history\"}, archetype)",
+        "query": {
+          "query": "label_values(persistence_requests{job=~\"$job\",service_name=\"history\"}, archetype)",
+          "refId": "component"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "text": "concurrency_limiter",
+          "value": "concurrency_limiter"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "Reading this local test",
+      "options": {
+        "mode": "markdown",
+        "content": "**Queues:** `slot_metrics_live` runs real standalone activities; `slot_metrics_probe` exercises reserve/commit/cancel/release, duplicate, rejected, no-op and 30-second reservation expiry paths. Local Tally sanitizes hyphens in label values to underscores.\n\n**Slot gauges are last successful Batch observations.** They do not continuously read limiter state. The gauge panels select the newest observing host for each logical queue; the observation-age panel exposes stale observations. An idle gauge after expiry may change only at the next Batch. Missing samples mean unknown.\n\n**Persistence panels are cell-wide for the selected component.** These metrics have no namespace ID / task queue label, so the namespace and queue selectors do not filter them. Counts are persistence API attempts, not Cassandra statements. Typed errors include expected NotFound responses. Timers use seconds."
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      }
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Metrics target health",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(up{job=~\"$job\"})",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Concurrency slots and observation freshness",
+      "collapsed": false,
+      "panels": [],
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Slots by state and queue",
+      "description": "RESERVED, COMMITTED, AVAILABLE and LIMIT. Latest observer only; no summing across history hosts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (namespace_id,taskqueue,task_type,state) (flowcontrol_concurrency_slots{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"} and ignoring (state) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"} == on (job,namespace_id,taskqueue,task_type) group_left max by (job,namespace_id,taskqueue,task_type) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})))",
+          "legendFormat": "{{taskqueue}} \u00b7 {{state}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 14,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Time since last successful Batch observation",
+      "description": "An increasing age indicates an idle/stale observation, not proof that permits remain held.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - max by (namespace_id,taskqueue,task_type) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})",
+          "legendFormat": "{{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 14,
+        "y": 6,
+        "w": 10,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Held slots / configured limit",
+      "description": "Reserved + committed slots divided by the newest observed limit. A limit of zero yields no meaningful ratio.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace_id,taskqueue,task_type) (max by (namespace_id,taskqueue,task_type,state) (flowcontrol_concurrency_slots{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"} and ignoring (state) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"} == on (job,namespace_id,taskqueue,task_type) group_left max by (job,namespace_id,taskqueue,task_type) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}))) * on (namespace_id,taskqueue,task_type,state) group_left max by (namespace_id,taskqueue,task_type,state) (flowcontrol_concurrency_slots{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\",state=~\"RESERVED|COMMITTED\"} * 0 + 1)) / on (namespace_id,taskqueue,task_type) max by (namespace_id,taskqueue,task_type) (flowcontrol_concurrency_slots{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\",state=\"LIMIT\"} and ignoring (state) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"} == on (job,namespace_id,taskqueue,task_type) group_left max by (job,namespace_id,taskqueue,task_type) (flowcontrol_concurrency_slots_observed_timestamp{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})))",
+          "legendFormat": "{{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cumulative slot operations by outcome",
+      "description": "Process-lifetime counters. Useful for rare probe events whose first increment occurs before their first scrape.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (taskqueue,operation,outcome) (flowcontrol_concurrency_slot_operations{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})",
+          "legendFormat": "{{taskqueue}} \u00b7 {{operation}} / {{outcome}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "row",
+      "title": "Slot operation rates and expirations",
+      "collapsed": false,
+      "panels": [],
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Acknowledged slot operations per second",
+      "description": "Includes duplicate, rejected and no-op results in successful CHASM batches. APPLIED is a newly applied operation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (taskqueue,operation,outcome) (rate(flowcontrol_concurrency_slot_operations{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{taskqueue}} \u00b7 {{operation}} / {{outcome}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Expired reservations: cumulative attempts and rate",
+      "description": "An attempt counter: persistence retries may count an expiration more than once. Inspect raw cumulative counts for a single probe expiration.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (taskqueue) (flowcontrol_concurrency_expiration_attempts{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})",
+          "legendFormat": "{{taskqueue}} \u00b7 attempts",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (taskqueue) (rate(flowcontrol_concurrency_expiration_attempts{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{taskqueue}} \u00b7 attempts/s",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "Reservation and release latency",
+      "collapsed": false,
+      "panels": [],
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reserve to first commit \u00b7 p50 / p95 / p99",
+      "description": "Only newly committed slots with a reservation timestamp contribute samples. Probe holds intentionally add seconds of delay.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le,taskqueue) (rate(flowcontrol_concurrency_reservation_to_commit_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p50 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le,taskqueue) (rate(flowcontrol_concurrency_reservation_to_commit_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p95 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le,taskqueue) (rate(flowcontrol_concurrency_reservation_to_commit_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p99 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Activity release scheduling to successful RPC \u00b7 p50 / p95 / p99",
+      "description": "Includes release-task queueing, batching and RPC latency. This does not measure SDK activity completion to release.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le,taskqueue) (rate(flowcontrol_concurrency_release_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p50 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le,taskqueue) (rate(flowcontrol_concurrency_release_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p95 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le,taskqueue) (rate(flowcontrol_concurrency_release_latency_bucket{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])))",
+          "legendFormat": "p99 \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Mean reservation / release latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (taskqueue) (rate(flowcontrol_concurrency_reservation_to_commit_latency_sum{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])) / sum by (taskqueue) (rate(flowcontrol_concurrency_reservation_to_commit_latency_count{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval]))",
+          "legendFormat": "Reserve \u2192 commit \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (taskqueue) (rate(flowcontrol_concurrency_release_latency_sum{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval])) / sum by (taskqueue) (rate(flowcontrol_concurrency_release_latency_count{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"}[$__rate_interval]))",
+          "legendFormat": "Scheduled release \u2192 response \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Recorded latency samples \u00b7 cumulative",
+      "description": "Histogram sample counters, including the first observation for a newly appearing series.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (taskqueue) (flowcontrol_concurrency_reservation_to_commit_latency_count{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})",
+          "legendFormat": "Reserve \u2192 commit \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (taskqueue) (flowcontrol_concurrency_release_latency_count{job=~\"$job\",archetype=\"concurrency_limiter\",namespace_id=~\"$namespace_id\",taskqueue=~\"${taskqueue:regex}\"})",
+          "legendFormat": "Scheduled release \u2192 response \u00b7 {{taskqueue}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 12,
+        "y": 39,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "row",
+      "title": "Persistence attribution \u00b7 cell-wide",
+      "collapsed": false,
+      "panels": [],
+      "id": 15,
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Persistence API attempts/s \u00b7 selected component",
+      "description": "Uses the component selector only. Namespace ID and task queue selectors cannot filter these metrics.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (rate(persistence_requests{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Persistence API attempts/s \u00b7 component comparison",
+      "description": "Shows concurrency_limiter, activity, and _unknown_ shared/background work. Cell-wide across queues and namespaces.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (archetype) (rate(persistence_requests{job=~\"$job\",service_name=\"history\"}[$__rate_interval]))",
+          "legendFormat": "{{archetype}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Persistence API latency \u00b7 p95 by operation",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,operation) (rate(persistence_latency_bucket{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"}[$__rate_interval])))",
+          "legendFormat": "{{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Typed persistence errors/s \u00b7 includes expected NotFound",
+      "description": "NotFound can be an expected lookup during execution creation. This panel is not an unexpected-error rate.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation,error_type) (rate(persistence_error_with_type{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}} \u00b7 {{error_type}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "x": 12,
+        "y": 55,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Unexpected persistence failures and resource exhaustion",
+      "description": "Zero is expected in the healthy local run. No database outage or persistence rate-limit failure is injected.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(persistence_errors{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "Unexpected failures/s",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(persistence_errors_resource_exhausted{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "Resource exhausted/s",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 20,
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Persistence API attempts \u00b7 cumulative",
+      "description": "Process-lifetime API attempt counters for the selected root component.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (persistence_requests{job=~\"$job\",service_name=\"history\",archetype=~\"$component\"})",
+          "legendFormat": "{{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 21,
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "row",
+      "title": "Visibility backend attribution \u00b7 cell-wide",
+      "collapsed": false,
+      "panels": [],
+      "id": 22,
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Visibility requests/s by component and operation",
+      "description": "Activity lifecycle writes appear under activity. Limiter visibility is disabled in this implementation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (archetype,operation) (rate(visibility_persistence_requests{job=~\"$job\",service_name=\"history\"}[$__rate_interval]))",
+          "legendFormat": "{{archetype}} \u00b7 {{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 23,
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Visibility persistence latency \u00b7 p95",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,archetype,operation) (rate(visibility_persistence_latency_bucket{job=~\"$job\",service_name=\"history\"}[$__rate_interval])))",
+          "legendFormat": "{{archetype}} \u00b7 {{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 24,
+      "gridPos": {
+        "x": 12,
+        "y": 71,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "row",
+      "title": "Concurrency Batch and Wait RPCs \u00b7 cell-wide",
+      "collapsed": false,
+      "panels": [],
+      "id": 25,
+      "gridPos": {
+        "x": 0,
+        "y": 78,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Batch / Wait RPCs per second",
+      "description": "These service metrics have operation labels Batch and Wait in the local exporter, without a concurrencyservice prefix.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (rate(service_requests{job=~\"$job\",service_name=\"history\",operation=~\"Batch|Wait\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 26,
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 12,
+        "h": 7
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Batch / Wait RPC latency \u00b7 p95",
+      "description": "Wait is a long-poll; time spent waiting for capacity is part of its latency.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,operation) (rate(service_latency_bucket{job=~\"$job\",service_name=\"history\",operation=~\"Batch|Wait\"}[$__rate_interval])))",
+          "legendFormat": "{{operation}}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "id": 27,
+      "gridPos": {
+        "x": 12,
+        "y": 79,
+        "w": 12,
+        "h": 7
+      }
+    }
+  ]
+}
