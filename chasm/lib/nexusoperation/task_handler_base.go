@@ -155,7 +155,7 @@ func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID n
 // value.
 //
 // There is no request timeout config. The task executor sets a deadline on ctx that covers loading the component, the
-// request, and saving the result: 10s for tasks on the outbound queue and 3s for system endpoint tasks, which run on
+// request, and saving the result: 11s for tasks on the outbound queue and 3s for system endpoint tasks, which run on
 // the transfer queue (see taskDestination). The request gets the time left until that deadline minus
 // StateAccessBuffer, which is reserved for saving the result. It is further capped by remainingOpTimeout, unless that
 // is maxDuration.

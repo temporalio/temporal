@@ -77,7 +77,7 @@ var StateAccessBuffer = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.request.stateAccessBuffer",
 	time.Second,
 	`Time reserved at the end of a Nexus start or cancel task for saving the result of the request. The task executor
-bounds each task with a deadline that covers loading the operation, the request, and saving the result: 10s on the
+bounds each task with a deadline that covers loading the operation, the request, and saving the result: 11s on the
 outbound queue and 3s on the transfer queue, which runs system endpoint requests. The request gets the time left until
 that deadline minus this buffer, further capped by the remaining operation timeout.`,
 )

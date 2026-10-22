@@ -43,7 +43,7 @@ const maxDuration = time.Duration(1<<63 - 1)
 // destination, which places the task on the transfer queue instead.
 //
 // The queue also determines the time budget of each attempt: the transfer queue executor bounds a task to 3s, compared
-// to 10s on the outbound queue. That budget covers loading the component, the request, and saving the result, so a
+// to 11s on the outbound queue. That budget covers loading the component, the request, and saving the result, so a
 // system endpoint request gets less than 3s minus StateAccessBuffer.
 func taskDestination(endpointName string) string {
 	if endpointName == commonnexus.SystemEndpoint {
