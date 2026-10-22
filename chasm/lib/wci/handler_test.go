@@ -424,6 +424,62 @@ func TestE2E_ConflictTokenMismatch(t *testing.T) {
 	require.ErrorAs(t, err, &precondition)
 }
 
+func (e *e2e) updateWithToken(token []byte, upserts map[string]*wcipb.ScalingGroupSpecUpdate, remove ...string) (*wcipb.UpdateWorkerControllerInstanceResponse, error) {
+	return e.handler.UpdateWorkerControllerInstance(e.ctx, &wcipb.UpdateWorkerControllerInstanceRequest{
+		NamespaceId: testNamespaceID, InstanceId: testInstanceID, DeploymentName: "dep", BuildId: "build",
+		Identity: "me", ConflictToken: token, UpsertScalingGroups: upserts, RemoveScalingGroups: remove,
+	})
+}
+
+func TestE2E_ConflictTokenRotates(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	created, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NotEmpty(t, created.GetConflictToken(), "minted at create")
+
+	// An update without a token still rotates it, so earlier holders go stale.
+	untokened, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NotEqual(t, created.GetConflictToken(), untokened.GetConflictToken())
+	_, err = e.updateWithToken(created.GetConflictToken(), groupUpsert("test-invoke"))
+	require.ErrorIs(t, err, errConflictTokenMismatch)
+
+	tokened, err := e.updateWithToken(untokened.GetConflictToken(), groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	desc, err := e.describe()
+	require.NoError(t, err)
+	require.Equal(t, tokened.GetConflictToken(), desc.GetConflictToken())
+
+	// Second holder of the same token loses.
+	_, err = e.updateWithToken(untokened.GetConflictToken(), groupUpsert("test-invoke"))
+	require.ErrorIs(t, err, errConflictTokenMismatch)
+}
+
+func TestE2E_ConflictTokenOnImplicitDelete(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	created, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	_, err = e.updateWithToken([]byte("stale"), nil, "g")
+	require.ErrorIs(t, err, errConflictTokenMismatch, "implicit delete checks the token too")
+	deleted, err := e.updateWithToken(created.GetConflictToken(), nil, "g")
+	require.NoError(t, err)
+	require.NotEqual(t, created.GetConflictToken(), deleted.GetConflictToken())
+}
+
+func TestE2E_ConflictTokenForMissingInstance(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.updateWithToken([]byte("any"), groupUpsert("test-invoke"))
+	require.ErrorIs(t, err, errConflictTokenMismatch)
+}
+
+// The pre-read check runs without the lock; this is the re-check that serialises same-token updates.
+func TestCheckConflictToken(t *testing.T) {
+	w := &WorkerControllerInstance{WorkerControllerInstanceState: &wcipb.WorkerControllerInstanceState{ConflictToken: []byte("cur")}}
+	require.NoError(t, w.checkConflictToken(nil))
+	require.NoError(t, w.checkConflictToken([]byte("cur")))
+	require.ErrorIs(t, w.checkConflictToken([]byte("old")), errConflictTokenMismatch)
+}
+
 const testToken = "run-1"
 
 func (e *e2e) prepare(token string, expireIn time.Duration) error {
