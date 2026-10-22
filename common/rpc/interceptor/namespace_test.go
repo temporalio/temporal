@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 )
@@ -55,8 +57,8 @@ var (
 		"AddTasks":                    {},
 		"ListQueues":                  {},
 		"ListTasks":                   {},
-		"CompleteNexusOperation":      {}, // NamespaceId is in the completion token for this request.
-		"CompleteNexusOperationChasm": {}, // NamespaceId is in the completion token for this request.
+		"CompleteNexusOperation":      {}, // GetNamespaceName reads the namespace from the completion token.
+		"CompleteNexusOperationChasm": {}, // GetNamespaceName reads the namespace from the completion token.
 		"DeepHealthCheck":             {},
 	}
 )
@@ -149,6 +151,10 @@ func (s *namespaceSuite) TestGetNamespace() {
 	register.EXPECT().GetNamespace(namespace.Name("nonexist")).Return(nil, errors.New("not found"))
 	register.EXPECT().GetNamespaceName(namespace.ID("exist")).Return(namespace.Name("exist"), nil)
 	register.EXPECT().GetNamespaceName(namespace.ID("nonexist")).Return(namespace.EmptyName, errors.New("not found"))
+	register.EXPECT().GetNamespaceName(namespace.ID("hsm-completion")).Return(namespace.Name("hsm-completion"), nil)
+	register.EXPECT().GetNamespaceName(namespace.ID("chasm-completion")).Return(namespace.Name("chasm-completion"), nil)
+	componentRef, err := (&persistencespb.ChasmComponentRef{NamespaceId: "chasm-completion", BusinessId: "business-id"}).Marshal()
+	s.NoError(err)
 	testCases := []struct {
 		method        any
 		namespaceName namespace.Name
@@ -167,6 +173,18 @@ func (s *namespaceSuite) TestGetNamespace() {
 		},
 		{
 			&historyservice.DescribeMutableStateRequest{NamespaceId: "nonexist"},
+			namespace.EmptyName,
+		},
+		{
+			&historyservice.CompleteNexusOperationRequest{Completion: &tokenspb.NexusOperationCompletion{NamespaceId: "hsm-completion"}},
+			namespace.Name("hsm-completion"),
+		},
+		{
+			&historyservice.CompleteNexusOperationChasmRequest{Completion: &tokenspb.NexusOperationCompletion{ComponentRef: componentRef}},
+			namespace.Name("chasm-completion"),
+		},
+		{
+			&historyservice.CompleteNexusOperationChasmRequest{Completion: &tokenspb.NexusOperationCompletion{ComponentRef: []byte("malformed")}},
 			namespace.EmptyName,
 		},
 	}
