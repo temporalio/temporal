@@ -1242,7 +1242,25 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 // tasks.Tags can't import this package, so it repeats TaskGroupName as a string literal.
 // This test fails if the group is renamed without updating tasks.Tags.
 func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
-	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
-	task.SetOutboundTaskGroup(TaskGroupName)
-	require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound)
+	t.Parallel()
+
+	registry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, registry.Register(NewNilLibrary()))
+
+	for _, taskType := range []string{
+		"nexusoperation.invocation",
+		"nexusoperation.cancellation",
+	} {
+		t.Run(taskType, func(t *testing.T) {
+			t.Parallel()
+
+			registered, ok := registry.TaskByID(chasm.GenerateTypeID(taskType))
+			require.True(t, ok)
+			require.Equal(t, TaskGroupName, registered.TaskGroup())
+
+			task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+			task.SetOutboundTaskGroup(registered.TaskGroup())
+			require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound)
+		})
+	}
 }
