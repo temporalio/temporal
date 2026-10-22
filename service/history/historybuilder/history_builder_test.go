@@ -2781,6 +2781,34 @@ func (s *historyBuilderSuite) TestEventStore_SingleOversizedEventAppended() {
 	s.NotEqual(batchID, batchID2)
 }
 
+// The batch holding the first event of a run is not split. Splitting resumes once
+// that batch is flushed.
+func (s *historyBuilderSuite) TestEventStore_NoRolloverOfFirstBatch() {
+	b := New(
+		s.mockTimeSource,
+		s.taskIDGenerator,
+		s.version,
+		common.FirstEventID,
+		nil,
+		metrics.NoopMetricsHandler,
+		dynamicconfig.GetIntPropertyFn(1),
+	)
+
+	for range 3 {
+		_, batchID := b.add(makeMarkerEvent(500))
+		s.Equal(common.FirstEventID, batchID)
+	}
+	s.Empty(b.memEventsBatches)
+	s.Len(b.memLatestBatch, 3)
+
+	b.FlushAndCreateNewBatch()
+	_, batchID1 := b.add(makeMarkerEvent(500))
+	_, batchID2 := b.add(makeMarkerEvent(500))
+	s.Len(b.memEventsBatches, 2)
+	s.Len(b.memLatestBatch, 1)
+	s.NotEqual(batchID1, batchID2)
+}
+
 func (s *historyBuilderSuite) TestEventStore_FlushBufferRolloverProducesMultipleBatches() {
 	eventSize := proto.Size(makeBufferedEvent(500))
 	limit := 2*eventSize + eventSize/2
