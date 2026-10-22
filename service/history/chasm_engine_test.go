@@ -158,9 +158,10 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 	var runID string
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context,
+			ctx context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.Equal("test_component", metrics.ArchetypeFromContext(ctx))
 			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
@@ -842,7 +843,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	)
 	newActivityID := tv.ActivityID()
 
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Cond(func(ctx context.Context) bool { return metrics.ArchetypeFromContext(ctx) == "test_component" }), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: "",
@@ -850,9 +851,10 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		}, nil).Times(1)
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context,
+			ctx context.Context,
 			request *persistence.UpdateWorkflowExecutionRequest,
 		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Equal("test_component", metrics.ArchetypeFromContext(ctx))
 			s.Len(request.UpdateWorkflowMutation.UpsertChasmNodes, 1)
 			updatedNode, ok := request.UpdateWorkflowMutation.UpsertChasmNodes[""]
 			s.True(ok)

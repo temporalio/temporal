@@ -63,3 +63,34 @@ The two added proto timestamps are optional and backward compatible. Reservation
 timestamps are cleared on commit. Release timestamps persist with the existing
 release task; neither requires additional CHASM tasks or database calls. Histograms
 use the metric backend's existing timer unit configuration.
+
+## Persistence attribution
+
+`persistence_requests`, `persistence_latency`, and their persistence error counters
+carry the existing `archetype` label. CHASM API calls and background task execution
+set this label to the registered **root component** name. Limiter state reads,
+creation, updates, and per-execution cleanup use `archetype="concurrency_limiter"`.
+Standalone activity state uses its own root component name.
+
+```promql
+sum by (operation) (
+  rate(persistence_requests{
+    cluster="$cluster", namespace="temporal", service_name="history",
+    archetype="concurrency_limiter"
+  }[$__rate_interval])
+)
+```
+
+The same filter applies to `persistence_latency_bucket`,
+`persistence_error_with_type`, `persistence_errors`, and
+`persistence_errors_resource_exhausted`. Existing namespace filtering behavior is
+unchanged. No business ID, slot ID, run ID, or task queue is added to these metrics.
+
+Shared queue reads/range cleanup and shard checkpoints have no single execution
+owner and use `archetype="_unknown_"`. Other calls without a CHASM attribution
+context also use `_unknown_`. Do not assign these shared operations to the limiter
+when estimating its isolated cost. This label counts persistence API attempts,
+including failed attempts; it does not count individual Cassandra statements.
+Visibility backend requests, latency, and errors carry the same label on their
+separate `visibility_persistence_*` metrics. Nested components share their root execution's
+persistence transaction and cannot be attributed individually.

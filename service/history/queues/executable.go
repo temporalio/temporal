@@ -279,6 +279,11 @@ func (e *executableImpl) Execute() (retErr error) {
 	)
 	e.Unlock()
 
+	if task, ok := e.GetTask().(tasks.HasArchetypeID); ok {
+		name, _ := e.chasmRegistry.ArchetypeDisplayName(task.GetArchetypeID())
+		ctx = metrics.WithArchetypeContext(ctx, name)
+	}
+
 	// Wrapped in if block to avoid unnecessary allocations when OTEL is disabled.
 	if telemetry.IsEnabled(e.tracer) {
 		var span trace.Span

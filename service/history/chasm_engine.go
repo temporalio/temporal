@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -189,6 +190,7 @@ func (e *ChasmEngine) startExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (result chasm.StartExecutionResult, retErr error) {
+	ctx = e.withArchetypeMetrics(ctx, executionRef)
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
@@ -285,6 +287,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
+	ctx = e.withArchetypeMetrics(ctx, executionRef)
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
@@ -557,6 +560,7 @@ func (e *ChasmEngine) updateComponent(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
 ) (updatedRef []byte, retError error) {
+	ctx = e.withArchetypeMetrics(ctx, ref)
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -593,6 +597,7 @@ func (e *ChasmEngine) deleteExecution(
 	ref chasm.ComponentRef,
 	request chasm.DeleteExecutionRequest,
 ) (retError error) {
+	ctx = e.withArchetypeMetrics(ctx, ref)
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
 		return err
@@ -674,6 +679,7 @@ func (e *ChasmEngine) readComponent(
 	ref chasm.ComponentRef,
 	readFn func(chasm.Context, chasm.Component) error,
 ) error {
+	ctx = e.withArchetypeMetrics(ctx, ref)
 	_, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
 		return err
@@ -727,6 +733,7 @@ func (e *ChasmEngine) pollComponent(
 	requestRef chasm.ComponentRef,
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
+	ctx = e.withArchetypeMetrics(ctx, requestRef)
 
 	var ch <-chan struct{}
 	var unsubscribe func()
@@ -1360,4 +1367,13 @@ func (e *ChasmEngine) convertNotFoundError(err error, ref chasm.ComponentRef) er
 		return serviceerror.NewNotFoundf("%s not found for ID: %s", displayName, ref.BusinessID)
 	}
 	return err
+}
+
+func (e *ChasmEngine) withArchetypeMetrics(ctx context.Context, ref chasm.ComponentRef) context.Context {
+	archetypeID, err := ref.ArchetypeID(e.registry)
+	if err != nil {
+		return metrics.WithArchetypeContext(ctx, "")
+	}
+	name, _ := e.registry.ArchetypeDisplayName(archetypeID)
+	return metrics.WithArchetypeContext(ctx, name)
 }

@@ -180,6 +180,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
+			metrics.ArchetypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
@@ -229,6 +230,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted_AddsPersiste
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
+			metrics.ArchetypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).AnyTimes()
 
@@ -282,6 +284,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
+			metrics.ArchetypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
@@ -307,6 +310,7 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 			metrics.OperationTag(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
 			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
+			metrics.ArchetypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)

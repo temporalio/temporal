@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -286,4 +287,48 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithEmptyWorkflowDetails(t *
 	assert.Equal(t, "", tags["workflow_id"])
 	assert.Equal(t, "", tags["run_id"])
 	assert.Equal(t, metrics.PersistenceListConcreteExecutionsScope, tags[metrics.OperationTag("").Key])
+}
+
+func TestExecutionPersistenceMetricsArchetype(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		archetype string
+		want      string
+		err       error
+	}{
+		{name: "limiter success", archetype: "concurrency_limiter", want: "concurrency_limiter"},
+		{name: "limiter error", archetype: "concurrency_limiter", want: "concurrency_limiter", err: serviceerror.NewUnavailable("unavailable")},
+		{name: "activity", archetype: "activity", want: "activity"},
+		{name: "shared", want: "_unknown_"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager := NewMockExecutionManager(gomock.NewController(t))
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			client := NewExecutionPersistenceMetricsClient(manager, handler, NoopHealthSignalAggregator, log.NewNoopLogger(), func() bool { return false })
+			ctx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo("experiment"))
+			if tc.archetype != "" {
+				ctx = metrics.WithArchetypeContext(ctx, tc.archetype)
+			}
+			manager.EXPECT().GetCurrentExecution(ctx, gomock.Any()).Return(nil, tc.err)
+			_, err := client.GetCurrentExecution(ctx, &GetCurrentExecutionRequest{WorkflowID: "must-not-be-a-label"})
+			require.ErrorIs(t, err, tc.err)
+			snapshot := capture.Snapshot()
+			for _, name := range []string{metrics.PersistenceRequests.Name(), metrics.PersistenceLatency.Name()} {
+				require.Len(t, snapshot[name], 1)
+				require.Equal(t, tc.want, snapshot[name][0].Tags["archetype"])
+				require.Equal(t, "GetCurrentExecution", snapshot[name][0].Tags["operation"])
+				require.Equal(t, "experiment", snapshot[name][0].Tags["namespace"])
+				require.NotContains(t, snapshot[name][0].Tags, "business_id")
+				require.NotContains(t, snapshot[name][0].Tags, "workflow_id")
+			}
+			if tc.err != nil {
+				for _, name := range []string{metrics.PersistenceErrorWithType.Name(), metrics.PersistenceFailures.Name()} {
+					require.Len(t, snapshot[name], 1)
+					require.Equal(t, tc.want, snapshot[name][0].Tags["archetype"])
+				}
+			}
+		})
+	}
 }

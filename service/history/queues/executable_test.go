@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -1435,4 +1436,33 @@ func (s *executableSuite) TestTaskNack_BusyWorkflow_NoHandlerFallsBackToReschedu
 
 func (s *executableSuite) accessInternalState(executable queues.Executable) {
 	_ = fmt.Sprintf("%v", executable)
+}
+
+func (s *executableSuite) TestExecuteArchetypeContext() {
+	s.NoError(s.chasmRegistry.Register(chasmtests.Library))
+	key := definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)
+	for _, tc := range []struct {
+		name string
+		task tasks.Task
+		want string
+	}{
+		{name: "CHASM", task: &tasks.ChasmTaskPure{WorkflowKey: key, ArchetypeID: chasmtests.ArchetypeID}, want: "payloadStore"},
+		{name: "unknown CHASM", task: &tasks.ChasmTaskPure{WorkflowKey: key, ArchetypeID: 9999}, want: "_unknown_"},
+		{name: "workflow", task: tasks.NewFakeTask(key, tasks.CategoryTransfer, s.timeSource.Now()), want: "_unknown_"},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			executable := queues.NewExecutable(
+				queues.DefaultReaderId, tc.task, s.mockExecutor, s.mockScheduler, s.mockRescheduler,
+				queues.NewNoopPriorityAssigner(), s.timeSource, s.mockNamespaceRegistry, s.mockClusterMetadata,
+				s.chasmRegistry, queues.GetTaskTypeTagValue, log.NewTestLogger(), s.metricsHandler, telemetry.NoopTracer,
+			)
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+				func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
+					require.Equal(t, tc.want, metrics.ArchetypeFromContext(ctx))
+					return queues.ExecuteResponse{}
+				})
+			require.NoError(t, executable.Execute())
+		})
+	}
 }
