@@ -474,7 +474,7 @@ func TestTransitionFailed(t *testing.T) {
 				protorequire.ProtoEqual(t, failure, operation.LastAttemptFailure)
 				require.Nil(t, operation.Outcome.Get(ctx).GetVariant())
 			},
-			wantReason: "operation_failed",
+			wantReason: "operation_error",
 		},
 		{
 			name:       "from scheduled with handler error tags handler error reason",
@@ -492,7 +492,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				protorequire.ProtoEqual(t, handlerFailure, operation.Outcome.Get(ctx).GetFailed().GetFailure())
 			},
-			wantReason: "operation_failed",
+			wantReason: "operation_error",
 		},
 		{
 			name:       "from non-scheduled stores outcome failure",
@@ -502,7 +502,7 @@ func TestTransitionFailed(t *testing.T) {
 				protorequire.ProtoEqual(t, failure, operation.Outcome.Get(ctx).GetFailed().GetFailure())
 				require.Nil(t, operation.LastAttemptFailure)
 			},
-			wantReason: "operation_failed",
+			wantReason: "operation_error",
 		},
 		{
 			name:       "uses default time",
@@ -511,7 +511,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
 			},
-			wantReason: "operation_failed",
+			wantReason: "operation_error",
 		},
 		{
 			name:       "uses event CompleteTime",
@@ -520,7 +520,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				require.Equal(t, customCompleteTime, operation.ClosedTime.AsTime())
 			},
-			wantReason: "operation_failed",
+			wantReason: "operation_error",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
