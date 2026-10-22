@@ -344,12 +344,10 @@ func PollResultTag(result string) Tag {
 	return Tag{Key: pollResultTagName, Value: result}
 }
 
+// Values of task_add_result on tasks_added. Rejected adds are covered by the Add*Task metrics.
 const (
-	TaskAddResultSyncMatch        = "sync_match"
-	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
-	TaskAddResultBacklog          = "backlog"
-	TaskAddResultThrottled        = "throttled"
-	TaskAddResultFailure          = "failure"
+	TaskAddResultSyncMatch = "sync_match"
+	TaskAddResultBacklog   = "backlog"
 )
 
 func TaskAddResultTag(result string) Tag {
@@ -390,6 +388,17 @@ func MatchingTaskPriorityTag(value int32) Tag {
 		priStr = strconv.FormatInt(int64(value), 10)
 	}
 	return Tag{Key: TaskPriorityTagName, Value: priStr}
+}
+
+func FairnessKeyTag(value string, breakdown bool) Tag {
+	// "__none__" is emitted even with the breakdown off, so keyless tasks stay distinguishable
+	// from hidden ("__omitted__") keys.
+	if value == "" {
+		value = none
+	} else if !breakdown {
+		value = omitted
+	}
+	return Tag{Key: FairnessKeyTagName, Value: value}
 }
 
 func QueueReaderIDTag(readerID int64) Tag {

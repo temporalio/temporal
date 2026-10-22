@@ -6,6 +6,7 @@ import (
 
 const (
 	omitted = "__omitted__"
+	none    = "__none__"
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if

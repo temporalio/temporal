@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -150,6 +152,62 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	}
 
 	s.True(validatorValidatedTask.Load(), "Validator should have called maybeValidate")
+}
+
+// TestEmitDispatchLatency_FairnessKeyTag verifies the matcher tags
+// TaskDispatchLatencyPerTaskQueue with the task's fairness key, and that the
+// breakdownByFairnessKey gate replaces it with "__omitted__" when disabled.
+func (s *PriMatcherSuite) TestEmitDispatchLatency_FairnessKeyTag() {
+	cases := []struct {
+		name      string
+		breakdown bool
+		taskKey   string
+		wantKey   string
+	}{
+		{"breakdown enabled tags the real key", true, "orders", "orders"},
+		{"breakdown enabled maps an empty key to none", true, "", "__none__"},
+		{"breakdown disabled omits a real key", false, "orders", "__omitted__"},
+		{"breakdown disabled still marks an empty key as none", false, "", "__none__"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			cfgClient := dynamicconfig.NewMemoryClient()
+			// Emit at the matcher (not at poll) so emitDispatchLatency actually records.
+			cfgClient.OverrideValue(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll.Key(), false)
+			cfgClient.OverrideValue(dynamicconfig.MetricsBreakdownByFairnessKey.Key(), tc.breakdown)
+
+			tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewCollection(cfgClient, s.logger)), "nsname")
+
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			rateLimitManager.Start()
+			tm := newPriTaskMatcher(
+				ctx, cfg, tq.RootPartition(),
+				nil, nil, // nil forwarder = root partition, no client
+				NewMocktaskValidator(s.controller),
+				s.logger, handler, rateLimitManager,
+				func() {}, func() {},
+			)
+
+			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+				CreateTime: timestamppb.New(time.Now().Add(-time.Second)),
+				Priority:   &commonpb.Priority{PriorityKey: 3, FairnessKey: tc.taskKey},
+			}, nil, 0, nil)
+
+			tm.emitDispatchLatency(task, false)
+
+			recs := capture.Snapshot()[metrics.TaskDispatchLatencyPerTaskQueue.Name()]
+			s.Require().Len(recs, 1)
+			s.Equal(tc.wantKey, recs[0].Tags[metrics.FairnessKeyTagName])
+		})
+	}
 }
 
 // TestForwardPollRetriesOnResourceExhausted verifies that when a child partition's
@@ -309,7 +367,7 @@ func (s *PriMatcherSuite) TestChildOfferForwardsToParent() {
 				synctest.Wait() // let the task forwarder get in place
 
 				task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{CreateTime: timestamppb.Now()}, nil, 0, nil)
-				outcome, err := tm.Offer(ctx, task)
+				outcome, _, err := tm.Offer(ctx, task)
 				require.NoError(t, err)
 				require.Equal(t, tc.wantOutcome, outcome)
 				require.NotNil(t, req)
@@ -399,7 +457,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			tm.Start()
 			defer tm.Stop()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(nil))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(nil))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchNoPoller, outcome)
 		})
@@ -413,7 +471,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			tm.Start()
 			defer tm.Stop()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_HISTORY)))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_HISTORY)))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchNoPoller, outcome)
 		})
@@ -432,7 +490,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			var outcome syncMatchOutcome
 			var offerErr error
 			go func() {
-				outcome, offerErr = tm.Offer(ctx, task)
+				outcome, _, offerErr = tm.Offer(ctx, task)
 				offerDone.Store(true)
 			}()
 			time.Sleep(time.Minute) //nolint:forbidigo // virtual time
@@ -468,7 +526,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			_ = tm.AddTask(backlogTask)
 			synctest.Wait()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_DB_BACKLOG)))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_DB_BACKLOG)))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchBacklogPresent, outcome)
 		})

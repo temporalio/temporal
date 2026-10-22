@@ -270,15 +270,15 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 }
 
 // RecordTaskAdd mocks base method.
-func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior enums.VersioningBehavior) {
+func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior enums.VersioningBehavior, fairnessKey string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordTaskAdd", result, forwarded, behavior)
+	m.ctrl.Call(m, "RecordTaskAdd", result, forwarded, behavior, fairnessKey)
 }
 
 // RecordTaskAdd indicates an expected call of RecordTaskAdd.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordTaskAdd(result, forwarded, behavior any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordTaskAdd(result, forwarded, behavior, fairnessKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTaskAdd", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordTaskAdd), result, forwarded, behavior)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTaskAdd", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordTaskAdd), result, forwarded, behavior, fairnessKey)
 }
 
 // RemovePoller mocks base method.
@@ -368,12 +368,13 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call 
 }
 
 // TrySyncMatch mocks base method.
-func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TrySyncMatch", ctx, task)
 	ret0, _ := ret[0].(syncMatchOutcome)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // TrySyncMatch indicates an expected call of TrySyncMatch.
