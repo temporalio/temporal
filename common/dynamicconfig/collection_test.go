@@ -26,6 +26,8 @@ const (
 	testGetIntPropertyKey                             = "testGetIntPropertyKey"
 	testGetFloat64PropertyKey                         = "testGetFloat64PropertyKey"
 	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
+	testGetPositiveDurationPropertyKey                = "testGetPositiveDurationPropertyKey"
+	testGetPositiveDurationStructuredDefaults         = "testGetPositiveDurationStructuredDefaults"
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
@@ -171,6 +173,62 @@ func (s *collectionSuite) TestGetDurationProperty() {
 	s.Equal(33*time.Hour, value())
 	s.client.SetValue(testGetDurationPropertyKey, float32(33.5))
 	s.Equal(33*time.Second+500*time.Millisecond, value())
+}
+
+func (s *collectionSuite) TestGetPositiveDurationProperty() {
+	setting := dynamicconfig.NewGlobalPositiveDurationSetting(testGetPositiveDurationPropertyKey, 5*time.Minute, "")
+	value := setting.Get(s.cln)
+	s.Equal(5*time.Minute, value())
+
+	// positive values are accepted in every form a duration setting takes
+	s.client.SetValue(testGetPositiveDurationPropertyKey, time.Minute)
+	s.Equal(time.Minute, value())
+	s.client.SetValue(testGetPositiveDurationPropertyKey, 33)
+	s.Equal(33*time.Second, value())
+	s.client.SetValue(testGetPositiveDurationPropertyKey, "33h")
+	s.Equal(33*time.Hour, value())
+
+	// zero and negative values fall back to the default, however they are written
+	for _, bad := range []any{0, -1, time.Duration(0), -time.Second, "0", "0s", "-5s", float64(0), float32(-0.5)} {
+		s.client.SetValue(testGetPositiveDurationPropertyKey, time.Hour)
+		s.Equal(time.Hour, value())
+		s.client.SetValue(testGetPositiveDurationPropertyKey, bad)
+		s.Equal(5*time.Minute, value(), "value %v (%T)", bad, bad)
+	}
+}
+
+func (s *collectionSuite) TestGetPositiveDurationPropertyStructuredDefaults() {
+	setting := dynamicconfig.NewTaskQueuePositiveDurationSettingWithConstrainedDefault(
+		testGetPositiveDurationStructuredDefaults,
+		[]dynamicconfig.TypedConstrainedValue[time.Duration]{
+			{
+				Constraints: dynamicconfig.Constraints{
+					TaskQueueName: "tq2",
+				},
+				Value: 5 * time.Minute,
+			},
+			{
+				Value: 1 * time.Minute,
+			},
+		},
+		"",
+	)
+	value := setting.Get(s.cln)
+	s.Equal(time.Minute, value("ns1", "tq1", 0))
+	s.Equal(5*time.Minute, value("ns1", "tq2", 0))
+
+	// a zero override on the unconstrained value is ignored and the matching default is used
+	s.client.Set(testGetPositiveDurationStructuredDefaults, []dynamicconfig.ConstrainedValue{
+		{Value: 0},
+	})
+	s.Equal(time.Minute, value("ns1", "tq1", 0))
+	s.Equal(5*time.Minute, value("ns1", "tq2", 0))
+
+	// a positive override still wins
+	s.client.Set(testGetPositiveDurationStructuredDefaults, []dynamicconfig.ConstrainedValue{
+		{Value: 7 * time.Second},
+	})
+	s.Equal(7*time.Second, value("ns1", "tq1", 0))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
