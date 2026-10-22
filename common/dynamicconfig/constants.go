@@ -1705,10 +1705,9 @@ an optional feature and also requires a metrics collection system that can handl
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
 		false,
-		`MatchingEnablePollerAutoscalingMetrics controls whether to export per-task-queue worker heartbeat metrics
-(worker_heartbeat_count and poller_autoscaling_heartbeat_count). The metrics have dimensions: namespace,
-taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by default as namespace and task queue
-cardinality can be high and this requires a metrics collection system that can handle it.`,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
+default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",

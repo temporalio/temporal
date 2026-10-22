@@ -62,10 +62,9 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 			}
 		}
 
-		// Per-task-queue heartbeat metrics, including poller autoscaling (if enabled)
-		if enablePollerAutoscalingMetrics {
-			e.emitPollerHeartbeat(nsID, nsName, hb)
-		}
+		// Per-task-queue heartbeat metrics. The total heartbeat count is always emitted; the poller autoscaling
+		// heartbeat count is only emitted if enabled.
+		e.emitPollerHeartbeat(nsID, nsName, hb, enablePollerAutoscalingMetrics)
 
 		// Storage driver metrics (if external payloads enabled)
 		if enableStorageDriverMetrics {
@@ -86,9 +85,15 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	}
 }
 
-// emitPollerHeartbeat records the total heartbeat count for each task type the worker is polling, and additionally
-// the autoscaling heartbeat count if that poller has autoscaling enabled. Autoscaling is therefore a subset of total.
-func (e *workerMetricsEmitter) emitPollerHeartbeat(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+// emitPollerHeartbeat records the total heartbeat count for each task type the worker is polling. If
+// enableAutoscalingMetrics is set, it additionally records the autoscaling heartbeat count for each poller that has
+// autoscaling enabled, so the autoscaling count is a subset of the total.
+func (e *workerMetricsEmitter) emitPollerHeartbeat(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	hb *workerpb.WorkerHeartbeat,
+	enableAutoscalingMetrics bool,
+) {
 	family, err := tqid.NewTaskQueueFamily(nsID.String(), hb.GetTaskQueue())
 	if err != nil {
 		return
@@ -103,7 +108,7 @@ func (e *workerMetricsEmitter) emitPollerHeartbeat(nsID namespace.ID, nsName nam
 			e.config.BreakdownMetricsByTaskQueue(nsName.String(), hb.GetTaskQueue(), taskType)
 		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, breakdownByTQ)
 		metrics.WorkerHeartbeatCount.With(handler).Record(1)
-		if pollerInfo.GetIsAutoscaling() {
+		if enableAutoscalingMetrics && pollerInfo.GetIsAutoscaling() {
 			metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
 		}
 	}
