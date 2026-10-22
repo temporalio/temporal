@@ -51,6 +51,7 @@ type invocationTaskTestEnv struct {
 	timeSource  *clock.EventTimeSource
 	nsRegistry  *namespace.MockRegistry
 	taskTimeout time.Duration
+	saveCtxErr  error
 }
 
 func newInvocationTaskTestEnv(
@@ -79,7 +80,7 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+				StateAccessBuffer:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
 				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
@@ -173,7 +174,8 @@ func (e *invocationTaskTestEnv) setupUpdateComponent() {
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+	).DoAndReturn(func(ctx context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+		e.saveCtxErr = ctx.Err()
 		mockCtx := &chasm.MockMutableContext{
 			MockContext: chasm.MockContext{
 				HandleNow: func(_ chasm.Component) time.Time {
@@ -230,7 +232,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
-		requestTimeout        time.Duration
+		stateAccessBuffer     time.Duration
 		taskTimeout           time.Duration
 		schedToCloseTimeout   time.Duration
 		startToCloseTimeout   time.Duration
@@ -389,13 +391,14 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "invocation timeout by request timeout",
-			requestTimeout:        50 * time.Millisecond,
+			name:                  "invocation timeout leaves state access buffer",
+			taskTimeout:           300 * time.Millisecond,
+			stateAccessBuffer:     200 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				time.Sleep(time.Millisecond * 300) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
 			checkOutcome: func(t *testing.T, op *Operation) {
@@ -585,9 +588,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 					NexusLinks: []nexus.Link{callerLink},
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
-			if tc.requestTimeout > 0 {
-				env.handler.config.RequestTimeout = dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout)
-			}
+			env.handler.config.StateAccessBuffer = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.stateAccessBuffer)
 
 			env.setupReadComponent()
 			env.setupUpdateComponent()
@@ -600,6 +601,9 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				require.NoError(t, err)
 			}
 			tc.checkOutcome(t, op)
+			if tc.stateAccessBuffer > 0 {
+				require.NoError(t, env.saveCtxErr, "the result must be saved before the task deadline")
+			}
 
 			if tc.expectedMetricOutcome != "" {
 				snap := capture.Snapshot()

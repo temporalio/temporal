@@ -73,13 +73,13 @@ func UseChasmForWorkflow(enabled bool, rolloutPercent int, namespaceName, workfl
 	return dynamicconfig.RolloutAccepts(key, rolloutPercent)
 }
 
-var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"nexusoperation.request.timeout",
-	time.Second*10,
-	`Timeout for making a single nexus start or cancel request. The request is also bound by the task executor's
-deadline, which covers loading the operation, the request, and saving the result: 10s on the outbound queue and 3s on
-the transfer queue, which runs system endpoint requests. Set this below the task deadline to leave time to save the
-result.`,
+var StateAccessBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.request.stateAccessBuffer",
+	time.Second,
+	`Time reserved at the end of a Nexus start or cancel task for saving the result of the request. The task executor
+bounds each task with a deadline that covers loading the operation, the request, and saving the result: 10s on the
+outbound queue and 3s on the transfer queue, which runs system endpoint requests. The request gets the time left until
+that deadline minus this buffer, further capped by the remaining operation timeout.`,
 )
 
 var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
@@ -87,7 +87,7 @@ var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	time.Millisecond*1500,
 	`Minimum time remaining for a request to complete for the server to make RPCs. If the remaining operation timeout is
 less than this value, the operation fails with a non-retryable timeout error. If the time left on the task deadline
-is less than this value, the attempt fails with a retryable request timeout error.`,
+minus StateAccessBuffer is less than this value, the attempt fails with a retryable request timeout error.`,
 )
 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
@@ -289,7 +289,7 @@ type Config struct {
 	NumHistoryShards                           int32
 	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	RequestTimeout                             dynamicconfig.DurationPropertyFnWithDestinationFilter
+	StateAccessBuffer                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -323,7 +323,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
-		RequestTimeout:                     RequestTimeout.Get(dc),
+		StateAccessBuffer:                  StateAccessBuffer.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
