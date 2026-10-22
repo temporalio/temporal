@@ -21,9 +21,9 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -44,7 +44,7 @@ var _ chasm.RootComponent = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 var _ chasm.VisibilitySearchAttributesProvider = (*Operation)(nil)
 var _ chasm.NexusCompletionHandler = (*Operation)(nil)
-var _ callback.CompletionSource = (*Operation)(nil)
+var _ callback.Host = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
@@ -118,7 +118,7 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
-	maxCallbacks int,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
@@ -139,16 +139,28 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+
+	// Visibility
+	visibility, err := chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
 		nil,
-	))
-	if err := op.addCompletionCallbacks(
+	)
+	if err != nil {
+		return nil, err
+	}
+	op.Visibility = chasm.NewComponentField(ctx, visibility)
+
+	// Callbacks and Links
+	regTime := timestamppb.New(ctx.Now(op))
+	if err := callback.ValidateAndAttach(
 		ctx,
+		op,
 		frontendReq.GetRequestId(),
+		regTime,
 		frontendReq.GetCompletionCallbacks(),
-		maxCallbacks,
+		frontendReq.GetNamespace(),
+		callbackValidator,
 	); err != nil {
 		return nil, err
 	}
@@ -161,6 +173,7 @@ func newStandaloneOperation(
 	); err != nil {
 		return nil, err
 	}
+
 	if err := TransitionScheduled.Apply(op, ctx, EventScheduled{}); err != nil {
 		return nil, err
 	}
@@ -437,7 +450,7 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 
 	// NextAttemptScheduleTime is only valid in BACKING_OFF; clear on close
 	o.NextAttemptScheduleTime = nil
-	return o.scheduleCompletionCallbacks(ctx)
+	return callback.ScheduleCompletionCallbacks(ctx, o)
 }
 
 func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperationpb.OperationOutcome {
@@ -447,65 +460,6 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 	outcome := &nexusoperationpb.OperationOutcome{}
 	o.Outcome = chasm.NewDataField(ctx, outcome)
 	return outcome
-}
-
-// addCompletionCallbacks creates the child CHASM callback components. They stay in STANDBY until this
-// Operation reaches a terminal state.
-//
-// Callbacks are keyed by request ID plus their position within the request, so re-attaching the same
-// request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
-// retry still succeeds if the operation closed after the first attach.
-//
-// maxCallbacks is re-checked here because callback.Validator only bounds the callbacks on the start
-// request; callbacks added later via on_conflict_options bypass it.
-func (o *Operation) addCompletionCallbacks(
-	ctx chasm.MutableContext,
-	requestID string,
-	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
-) error {
-	if len(completionCallbacks) == 0 {
-		return nil
-	}
-	if requestID == "" {
-		return serviceerror.NewInvalidArgument("cannot attach completion callbacks without a request ID")
-	}
-	// Attaching is atomic, so the presence of the first key means this request already attached all of
-	// its callbacks. See the note above on why this precedes the closed check.
-	if _, ok := o.Callbacks[completionCallbackID(requestID, 0)]; ok {
-		return nil
-	}
-	if o.isClosed() {
-		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
-	}
-
-	currentCount := len(o.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
-	}
-
-	if o.Callbacks == nil {
-		o.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
-	}
-
-	registrationTime := timestamppb.New(ctx.Now(o))
-	for idx, cb := range completionCallbacks {
-		chasmCB, err := callback.FromAPICallback(cb)
-		if err != nil {
-			return err
-		}
-
-		// Give each callback its own, unique request ID. Since using the same request ID as the
-		// operation which added the callbacks would be ambiguous if it added more than one callback.
-		cbRequestID := uuid.NewString()
-		callbackObj := callback.NewCallback(cbRequestID, registrationTime, chasmCB)
-		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
-	}
-	return nil
 }
 
 // attachLinks records the given links on the operation keyed by requestID. Duplicates within the same
@@ -557,69 +511,6 @@ func (o *Operation) allLinks(ctx chasm.Context) []*commonpb.Link {
 	all = append(all, requestLinks...)
 	all = append(all, o.Links...)
 	return all
-}
-
-// completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
-func completionCallbackID(requestID string, idx int) string {
-	return fmt.Sprintf("%s-%d", requestID, idx)
-}
-
-// scheduleCompletionCallbacks releases every STANDBY completion callback for delivery. Called from each
-// terminal transition.
-func (o *Operation) scheduleCompletionCallbacks(ctx chasm.MutableContext) error {
-	return callback.ScheduleStandbyCallbacks(ctx, o.Callbacks)
-}
-
-// GetNexusCompletion implements callback.CompletionSource, providing the result of the Nexus operation.
-func (o *Operation) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
-	if !o.isClosed() {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("nexus operation has not completed yet")
-	}
-
-	key := ctx.ExecutionKey()
-	backLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-		Namespace:   ctx.NamespaceEntry().Name().String(),
-		OperationId: key.BusinessID,
-		RunId:       key.RunID,
-	})
-
-	opts := nexusrpc.CompleteOperationOptions{
-		StartTime: o.GetScheduledTime().AsTime(),
-		CloseTime: ctx.ExecutionInfo().CloseTime,
-		Links:     []nexus.Link{backLink},
-	}
-
-	result, failure := o.outcome(ctx)
-	if o.Status == nexusoperationpb.OPERATION_STATUS_SUCCEEDED {
-		opts.Result = result
-		return opts, nil
-	}
-	if failure == nil {
-		return nexusrpc.CompleteOperationOptions{},
-			serviceerror.NewInternalf("nexus operation in status %v has no outcome", o.Status)
-	}
-
-	state := nexus.OperationStateFailed
-	message := "operation failed"
-	if o.Status == nexusoperationpb.OPERATION_STATUS_CANCELED {
-		state = nexus.OperationStateCanceled
-		message = "operation canceled"
-	}
-
-	nf, err := commonnexus.TemporalFailureToNexusFailure(failure)
-	if err != nil {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("failed to convert failure: %v", err)
-	}
-	opErr := &nexus.OperationError{
-		State:   state,
-		Message: message,
-		Cause:   &nexus.FailureError{Failure: nf},
-	}
-	if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-		return nexusrpc.CompleteOperationOptions{}, err
-	}
-	opts.Error = opErr
-	return opts, nil
 }
 
 // buildCompletionCallbackInfos projects the attached completion callbacks onto the API surface for the

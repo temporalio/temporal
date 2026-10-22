@@ -323,9 +323,6 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 }
 
 func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	if config == nil {
-		return
-	}
 	c.root.backend.SetTimeSkippingConfig(config)
 }
 

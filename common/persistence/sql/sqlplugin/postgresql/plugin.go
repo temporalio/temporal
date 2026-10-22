@@ -19,8 +19,8 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName    = "postgres12"
-	PluginNamePGX = "postgres12_pgx"
+	PluginName    = sqlplugin.PluginNamePostgreSQL
+	PluginNamePGX = sqlplugin.PluginNamePostgreSQLPGX
 )
 
 var defaultDatabaseNames = []string{

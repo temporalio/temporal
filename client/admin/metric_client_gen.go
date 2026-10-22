@@ -51,6 +51,20 @@ func (c *metricClient) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientApplyNamespaceMutation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,

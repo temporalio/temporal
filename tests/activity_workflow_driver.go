@@ -16,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -122,6 +124,9 @@ func (a *wfaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 }
 
 func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
+	if cfg.EagerStart {
+		return d.startEager(t, cfg)
+	}
 	cfg.StartDelay = 0 // WFA does not support start delay, but SAA/WFA tests often share config
 	wfTQ := testcore.RandomizeStr("wfa-wf")
 	actTQ := testcore.RandomizeStr("wfa-act")
@@ -156,6 +161,88 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 		t.Require().True(activityInProgress, "the workflow has not scheduled its activity")
 	}, activityDriverTimeout, activityDriverPollInterval)
 	return a
+}
+
+func (d *wfaDriver) startEager(t *testing.T, cfg activityConfig) *wfaHandle {
+	wfTQ := testcore.RandomizeStr("wfa-eager-wf")
+	actTQ := testcore.RandomizeStr("wfa-eager-act")
+	const actID = "act"
+	wfID := testcore.RandomizeStr("wfa-eager-run")
+	fc := d.env.FrontendClient()
+
+	started, err := fc.StartWorkflowExecution(d.testContext(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    d.env.Namespace().String(),
+		WorkflowId:   wfID,
+		WorkflowType: &commonpb.WorkflowType{Name: "eagerActivityDriver"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: wfTQ},
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(d.testContext(), activityDriverTimeout)
+	defer cancel()
+	workflowTask, err := fc.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: d.env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: wfTQ},
+		Identity:  d.env.Tv().WorkerIdentity(),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, workflowTask.GetTaskToken(), "workflow start did not produce a workflow task")
+
+	activityTask, err := fc.RespondWorkflowTaskCompleted(d.testContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: d.env.Namespace().String(),
+		Identity:  d.env.Tv().WorkerIdentity(),
+		TaskToken: workflowTask.GetTaskToken(),
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             actID,
+					ActivityType:           d.env.Tv().ActivityType(),
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: actTQ},
+					Input:                  payloads.EncodeString(activityInput),
+					StartToCloseTimeout:    durationpb.New(cfg.startToClose()),
+					ScheduleToCloseTimeout: optionalDuration(cfg.ScheduleToClose),
+					ScheduleToStartTimeout: optionalDuration(cfg.ScheduleToStart),
+					HeartbeatTimeout:       optionalDuration(cfg.HeartbeatTimeout),
+					RetryPolicy: &commonpb.RetryPolicy{
+						InitialInterval:        durationpb.New(cfg.retryInterval()),
+						BackoffCoefficient:     cmp.Or(cfg.BackoffCoefficient, 1.0),
+						MaximumInterval:        durationpb.New(cmp.Or(cfg.MaxRetryInterval, cfg.retryInterval())),
+						MaximumAttempts:        cfg.MaxAttempts,
+						NonRetryableErrorTypes: cfg.NonRetryableErrorTypes,
+					},
+					RequestEagerExecution: true,
+				},
+			},
+		}},
+	})
+	require.NoError(t, err)
+	require.Len(t, activityTask.GetActivityTasks(), 1, "eager workflow activity start did not return a task")
+	task := activityTask.GetActivityTasks()[0]
+
+	t.Cleanup(func() {
+		if err := d.env.SdkClient().TerminateWorkflow(context.Background(), wfID, started.GetRunId(), "eager activity driver cleanup"); err != nil {
+			t.Logf("eager activity driver cleanup: %v", err)
+		}
+	})
+	return &wfaHandle{
+		activityDriverState: activityDriverState{cfg: cfg, token: task.GetTaskToken(), startedAttempt: task.GetAttempt()},
+		model:               newActivityModel(cfg),
+		d:                   d,
+		run:                 d.env.SdkClient().GetWorkflow(d.testContext(), wfID, started.GetRunId()),
+		workflowID:          wfID,
+		runID:               started.GetRunId(),
+		activityID:          actID,
+		taskQueue:           actTQ,
+	}
+}
+
+func optionalDuration(value time.Duration) *durationpb.Duration {
+	if value == 0 {
+		return nil
+	}
+	return durationpb.New(value)
 }
 
 // wfaActivityParams is what the helper workflow needs to schedule the activity: the activity the

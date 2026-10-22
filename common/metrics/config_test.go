@@ -1,13 +1,23 @@
 package metrics
 
 import (
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/freeport"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -127,6 +137,79 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		config := &ClientConfig{PerUnitHistogramBoundaries: test.input}
 		setDefaultPerUnitHistogramBoundaries(config)
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
+	}
+}
+
+func TestPrometheusReporterErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		recordingTags []map[string]string
+		wantLogLevel  testlogger.Level
+		wantError     string
+	}{
+		{
+			name: "label collision",
+			recordingTags: []map[string]string{
+				{"outcome": "fired", "reason": ""},
+				{"outcome": "skipped", "reason": ""},
+				{"outcome": "invalidated"},
+			},
+			wantLogLevel: testlogger.Error,
+			wantError:    `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {outcome}} has different label names or a different help string`,
+		},
+		{
+			name: "label collision on root scope",
+			recordingTags: []map[string]string{
+				{"outcome": "fired"},
+				nil,
+			},
+			wantLogLevel: testlogger.Error,
+			wantError:    `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`,
+		},
+		{
+			name: "invalid label",
+			recordingTags: []map[string]string{
+				{"__reserved": "value"},
+			},
+			wantLogLevel: testlogger.Warn,
+			wantError:    `descriptor Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {__reserved}} is invalid: "__reserved" is not a valid label name for metric "test_counter"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			logTags := []tag.Tag{tag.String("error", "^"+regexp.QuoteMeta(tc.wantError)+"$")}
+			wantDefinitionConflicts := 0
+			if tc.wantLogLevel == testlogger.Error {
+				logTags = append(logTags, tag.FailedAssertion)
+				wantDefinitionConflicts = 1
+			}
+			expected := logger.Expect(tc.wantLogLevel, "error in prometheus reporter$", logTags...)
+
+			address := fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
+			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: address}})
+			t.Cleanup(func() { require.NoError(t, scope.(io.Closer).Close()) })
+
+			for _, recordingTags := range tc.recordingTags {
+				scope.Tagged(recordingTags).Counter("test_counter").Inc(1)
+			}
+
+			require.Equal(t, int64(1), expected.MatchCount())
+
+			await.Require(t.Context(), t, func(t *await.T) {
+				require.NoError(t, testutil.ScrapeAndCompare(
+					"http://"+address+"/metrics",
+					strings.NewReader(fmt.Sprintf(`# HELP prometheus_metric_definition_conflicts prometheus_metric_definition_conflicts counter
+# TYPE prometheus_metric_definition_conflicts counter
+prometheus_metric_definition_conflicts %d
+`, wantDefinitionConflicts)),
+					"prometheus_metric_definition_conflicts",
+				))
+			}, 5*time.Second, 10*time.Millisecond)
+		})
 	}
 }
 

@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -35,6 +34,12 @@ var (
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
 
+	EnableEagerStart = dynamicconfig.NewNamespaceBoolSetting(
+		"activity.enableEagerStart",
+		true,
+		`Allows the first standalone activity task to be returned directly by StartActivityExecution.`,
+	)
+
 	EnableCallbacks = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.enableCallbacks",
 		false,
@@ -61,13 +66,14 @@ type Config struct {
 	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableActivityEagerDispatchCheck          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerStart                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
-	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -82,15 +88,16 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BlobSizeLimitWarn:                         dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		BreakdownMetricsByTaskQueue:               dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
+		EnableActivityEagerDispatchCheck:          dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
 		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
+		EnableEagerStart:                          EnableEagerStart.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
 		LongPollBuffer:                            LongPollBuffer.Get(dc),
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
-		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),

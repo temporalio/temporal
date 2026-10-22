@@ -80,6 +80,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
+		testcore.WithDynamicConfig(wciclient.WorkerControllerEnabled, true),
 		testcore.WithDynamicConfig(wciclient.WorkerControllerEnabledComputeProviders, []string{string(wciiface.ComputeProviderTypeTestInvoke)}),
 
 		// Make sure we don't hit the rate limiter in tests
