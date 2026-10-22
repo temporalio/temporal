@@ -16,6 +16,10 @@ type validSuite struct{ Suite[*validSuite] }
 
 func (s *validSuite) TestA() {
 	s.NotNil(s.T())
+
+	ch := make(chan int, 1)
+	s.Snd(ch, 42)
+	s.Equal(42, s.Rcv(ch))
 }
 
 type validWithArgsSuite struct{ Suite[*validWithArgsSuite] }
@@ -115,6 +119,14 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 
 	// T() also panics after Run.
 	require.Panics(t, func() { s.T() })
+
+	// Context() resolves through T() and also panics after Run.
+	require.Panics(t, func() { s.Context() })
+
+	// Channel helpers resolve through T() and also panic after Run.
+	ch := make(chan int, 1)
+	require.Panics(t, func() { s.Snd(ch, 42) })
+	require.Panics(t, func() { s.Rcv(ch) })
 }
 
 func TestRun_AcceptsSuite(t *testing.T) {

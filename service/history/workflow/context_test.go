@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,8 +24,10 @@ import (
 	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -82,6 +85,7 @@ func (s *contextSuite) SetupTest() {
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 		limiter.NewKeyedBytesLimiter(),
+		testhooks.TestHooks{},
 	)
 }
 
@@ -584,78 +588,6 @@ func (s *contextSuite) TestRefreshTask() {
 		})
 	}
 }
-
-func (s *contextSuite) TestUpdateWorkflowExecutionWithNew_ChasmNoopSkipsPersistence() {
-	now := time.Now().UTC()
-	chasmArchetypeID := chasm.WorkflowArchetypeID + 101
-	dbState := &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: tests.NamespaceID.String(),
-			WorkflowId:  tests.WorkflowID,
-			VersionHistories: &historyspb.VersionHistories{
-				CurrentVersionHistoryIndex: 0,
-				Histories: []*historyspb.VersionHistory{
-					{
-						BranchToken: []byte("token#1"),
-						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 1, Version: common.EmptyVersion},
-						},
-					},
-				},
-			},
-			TransitionHistory: []*persistencespb.VersionedTransition{
-				{
-					NamespaceFailoverVersion: common.EmptyVersion,
-					TransitionCount:          1,
-				},
-			},
-			ExecutionStats: &persistencespb.ExecutionStats{
-				HistorySize: 128,
-			},
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     tests.RunID,
-			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			StartTime: timestamppb.New(now),
-		},
-		NextEventId: 2,
-	}
-
-	mutableState, err := NewMutableStateFromDB(
-		s.mockShard,
-		s.mockShard.MockEventsCache,
-		s.mockShard.GetLogger(),
-		tests.LocalNamespaceEntry,
-		dbState,
-		1,
-	)
-	s.NoError(err)
-	_, err = mutableState.StartTransaction(tests.LocalNamespaceEntry)
-	s.NoError(err)
-
-	mockChasmTree := historyi.NewMockChasmTree(gomock.NewController(s.T()))
-	mutableState.chasmTree = mockChasmTree
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasmArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
-
-	s.workflowContext.archetypeID = chasmArchetypeID
-	s.workflowContext.MutableState = mutableState
-
-	err = s.workflowContext.UpdateWorkflowExecutionWithNew(
-		context.Background(),
-		s.mockShard,
-		persistence.UpdateWorkflowModeIgnoreCurrent,
-		nil,
-		nil,
-		historyi.TransactionPolicyActive,
-		nil,
-	)
-	s.NoError(err)
-}
-
 func intermediatePage(pageNumber int32, markerName string) *workflowservice.RespondWorkflowTaskCompletedRequest {
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{
 		IntermediatePage: true,
@@ -846,4 +778,85 @@ func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() 
 	s.Positive(budget.Used())
 	s.workflowContext.Clear()
 	s.Equal(int64(0), budget.Used())
+}
+
+// TestTaskCompletionBuffer_NewPaginationLimit verifies that a new pagination request only
+// gets WorkflowTaskCompletionBufferNewPaginationRatio of the process
+// limit and the namespace share, while in-flight paginations can use
+// the full limits.
+func (s *contextSuite) TestTaskCompletionBuffer_NewPaginationLimit() {
+	const processLimit = 1000
+	const newPaginationRatio = 0.5
+	testCases := []struct {
+		name           string
+		namespaceRatio float64
+		namespace      string
+		namespaceBytes int64
+	}{
+		{
+			name:           "process limit",
+			namespaceRatio: 1,
+			namespace:      "other-namespace",
+			namespaceBytes: 600,
+		},
+		{
+			name:           "namespace share",
+			namespaceRatio: 0.5,
+			namespace:      tests.Namespace.String(),
+			namespaceBytes: 300,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			budget := limiter.NewKeyedBytesLimiter()
+			s.workflowContext.paginationLimiter = budget
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.workflowContext.metricsHandler = metricsHandler
+			s.setTaskCompletionBufferSizeLimit(0)
+			s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit = func() int { return processLimit }
+			s.workflowContext.config.WorkflowTaskCompletionBufferNamespaceRatio = func(string) float64 { return tc.namespaceRatio }
+			s.workflowContext.config.WorkflowTaskCompletionBufferNewPaginationRatio = func(string) float64 { return newPaginationRatio }
+
+			s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+			ok, _ := budget.TryReserve(tc.namespace, tc.namespaceBytes, 0, 0)
+			s.True(ok)
+
+			// In-flight pagination is admitted above the new pagination threshold.
+			s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1")))
+
+			// A page for a different workflow task clears the stale buffer and starts a new pagination.
+			err := s.workflowContext.AppendTaskCompletionPage(11, 1, intermediatePage(0, "p0"))
+			_, isBufferLost := errors.AsType[*serviceerror.WorkflowTaskCompletionBufferLost](err)
+			s.True(isBufferLost)
+			recordings := capture.Snapshot()[metrics.WorkflowTaskCompletionBufferLost.Name()]
+			s.Len(recordings, 1)
+			s.Equal(map[string]string{"reason": string(metrics.BufferLostReasonNewPaginationLimit)}, recordings[0].Tags)
+		})
+	}
+}
+
+// TestTaskCompletionBuffer_MemoryLimitReason verifies that a page of an in-flight
+// pagination rejected by the full process limit is recorded with the memory_limit reason.
+func (s *contextSuite) TestTaskCompletionBuffer_MemoryLimitReason() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.workflowContext.metricsHandler = metricsHandler
+	s.setTaskCompletionBufferSizeLimit(0)
+	processLimit := int64(s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+	ok, _ := budget.TryReserve("filler", processLimit-s.workflowContext.taskCompletionBuffer.totalSize, 0, 0)
+	s.True(ok)
+
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1"))
+	_, isBufferLost := errors.AsType[*serviceerror.WorkflowTaskCompletionBufferLost](err)
+	s.True(isBufferLost)
+	recordings := capture.Snapshot()[metrics.WorkflowTaskCompletionBufferLost.Name()]
+	s.Len(recordings, 1)
+	s.Equal(string(metrics.BufferLostReasonMemoryLimit), recordings[0].Tags["reason"])
 }

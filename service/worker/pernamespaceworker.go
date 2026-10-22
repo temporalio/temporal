@@ -42,7 +42,7 @@ const (
 
 type (
 	PerNamespaceWorkerManager struct {
-		status int32
+		status atomic.Int32
 
 		// from init params or Start
 		logger            log.Logger
@@ -129,18 +129,14 @@ func NewPerNamespaceWorkerManager(
 }
 
 func (wm *PerNamespaceWorkerManager) Running() bool {
-	return atomic.LoadInt32(&wm.status) == common.DaemonStatusStarted
+	return wm.status.Load() == common.DaemonStatusStarted
 }
 
 func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -163,11 +159,7 @@ func (wm *PerNamespaceWorkerManager) Start(
 }
 
 func (wm *PerNamespaceWorkerManager) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
@@ -244,11 +236,15 @@ func (wm *PerNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
 		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 	}
+	// Hold lock before registering dynamic config subscriptions: their callbacks can fire
+	// concurrently and must not observe uninitialized fields.
+	worker.lock.Lock()
 	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
 	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
 	worker.ns = ns
 	worker.count = count
 	worker.opts = opts
+	worker.lock.Unlock()
 	worker.cancel = func() { c1(); c2() }
 
 	wm.workers[ns.ID()] = worker
@@ -423,17 +419,18 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// ensure this changes if multiplicity changes
 	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
-	// get sdk worker options
-	fmt.Fprintf(&componentSet, "%+v,", w.opts)
-
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	if args.ns != w.ns {
-		// stale refresh goroutine, do nothing
+		// Namespace changed since we snapshotted — another goroutine will handle the new one.
 		return nil
 	}
+
+	// Format opts under the lock so the cache key describes the worker actually being started
+	// (startWorker reads w.opts, not the snapshot).
+	fmt.Fprintf(&componentSet, "%+v,", w.opts)
 
 	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running

@@ -54,6 +54,11 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 	if err != nil {
 		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, testData.Cfg, resolver.NewNoopResolver(), testData.Logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	s := NewExecutionMutableStateSuite(
 		p.T(),
@@ -62,6 +67,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		serialization.NewSerializer(),
 		testData.Logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(p.T(), s)
 }
 

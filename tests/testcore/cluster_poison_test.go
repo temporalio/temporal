@@ -2,6 +2,7 @@ package testcore
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
@@ -54,8 +55,8 @@ func (f *mockSubtestT) finish() {
 	cleanups := f.cleanups
 	f.cleanups = nil
 	f.mu.Unlock()
-	for i := len(cleanups) - 1; i >= 0; i-- {
-		cleanups[i]()
+	for _, cleanup := range slices.Backward(cleanups) {
+		cleanup()
 	}
 }
 
@@ -135,7 +136,7 @@ func TestSharedClusterPoison(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &FunctionalTestBase{}
+			s := &functionalTestBase{}
 			s.t = &sharedClusterT{name: t.Name()}
 			tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 			tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)

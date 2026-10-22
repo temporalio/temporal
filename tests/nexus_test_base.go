@@ -1,9 +1,12 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -19,6 +22,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NexusTestEnv struct {
@@ -31,6 +35,38 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 		TestEnv:             testcore.NewEnv(t, opts...),
 		useTemporalFailures: useTemporalFailures,
 	}
+}
+
+// startNexusOperation starts a standalone Nexus operation, applying defaults for
+// required fields tests usually don't care about.
+func (env *NexusTestEnv) startNexusOperation(
+	ctx context.Context,
+	req *workflowservice.StartNexusOperationExecutionRequest,
+) (*workflowservice.StartNexusOperationExecutionResponse, error) {
+	req.Namespace = cmp.Or(req.Namespace, env.Namespace().String())
+	req.Service = cmp.Or(req.Service, "test-service")
+	req.Operation = cmp.Or(req.Operation, "test-operation")
+	req.RequestId = cmp.Or(req.RequestId, env.Tv().RequestID())
+	if req.ScheduleToCloseTimeout == nil {
+		req.ScheduleToCloseTimeout = durationpb.New(10 * time.Minute)
+	}
+
+	return env.FrontendClient().StartNexusOperationExecution(ctx, req)
+}
+
+// describeNexusOperation describes a standalone Nexus operation by ID, including its outcome.
+func (env *NexusTestEnv) describeNexusOperation(
+	ctx context.Context,
+	t require.TestingT,
+	operationID string,
+) *workflowservice.DescribeNexusOperationExecutionResponse {
+	descResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:      env.Namespace().String(),
+		OperationId:    operationID,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
+	return descResp
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
@@ -66,16 +102,20 @@ func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testi
 
 // createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
 func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
-	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, handler)
+	return env.createExternalNexusEndpoint(ctx, t, "http://"+listenAddr)
+}
+
+func (env *NexusTestEnv) createExternalNexusEndpoint(ctx context.Context, t *testing.T, url string) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_External_{
 					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
+						Url: url,
 					},
 				},
 			},
@@ -92,6 +132,53 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 	})
 
 	return endpointName
+}
+
+func (env *NexusTestEnv) dispatchByEndpointURL(endpoint string) string {
+	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint)
+}
+
+func (env *NexusTestEnv) dispatchByTaskQueueURL(taskQueue string) string {
+	return env.dispatchByNamespaceAndTaskQueueURL(env.Namespace().String(), taskQueue)
+}
+
+func (env *NexusTestEnv) dispatchByNamespaceAndTaskQueueURL(namespace string, taskQueue string) string {
+	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
+		Path(cnexus.NamespaceAndTaskQueue{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+		})
+}
+
+// createSyncSuccessEndpoint registers an endpoint whose handler completes every operation
+// synchronously with the supplied result payload. Shutdown as part with the test's Cleanup.
+func (env *NexusTestEnv) createSyncSuccessEndpoint(ctx context.Context, t *testing.T, result string) string {
+	return env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: result}, nil
+		},
+	})
+}
+
+// createAsyncEndpoint registers an endpoint whose handler leaves every operation running async,
+// so calls to the endpoint remain in the STARTED state until it is completed by other means.
+// (e.g. the Nexus operation gets canceled or terminated.)
+func (env *NexusTestEnv) createAsyncEndpoint(ctx context.Context, t *testing.T) string {
+	return env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	})
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
@@ -345,4 +432,55 @@ func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context
 		return err
 	}
 	return nil
+}
+
+// completionHandler is a nexusrpc completion handler that hands each delivered completion to the
+// test on requestCh, then waits on requestCompleteCh for the error to return to the caller.
+type completionHandler struct {
+	requestCh         chan *nexusrpc.CompletionRequest
+	requestCompleteCh chan error
+	doneCh            chan struct{}
+}
+
+func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
+	// Push the request to the requests channel.
+	select {
+	case h.requestCh <- request:
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Pull from the rsponse channel.
+	select {
+	case err := <-h.requestCompleteCh:
+		return err
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// newNexusCompletionHandler returns a completion handler along with the URL of an HTTP server that
+// delivers completions to it, for use as the target of a completion callback. The server shuts
+// down when t cleans up.
+func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
+	// Buffered so the server can deliver several completions (or retries) before the test drains them.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 4),
+		requestCompleteCh: make(chan error, 4),
+		doneCh:            make(chan struct{}),
+	}
+
+	httpHandler := nexusrpc.CompletionHandlerOptions{Handler: ch}
+	srv := httptest.NewServer(nexusrpc.NewCompletionHTTPHandler(httpHandler))
+
+	t.Cleanup(func() {
+		// Unblock any calls to CompleteOperation; srv.Close waits for in-flight requests.
+		close(ch.doneCh)
+		srv.Close()
+	})
+	return ch, srv.URL
 }

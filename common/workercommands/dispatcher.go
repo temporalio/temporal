@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -14,7 +13,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -26,9 +24,6 @@ import (
 )
 
 const (
-	DispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
-	MaxTaskAttempts = 3
-
 	// Nexus service and operation names for worker commands.
 	// TODO: Replace with workerservicepb.WorkerService.ServiceName and
 	// workerservicepb.WorkerService.ExecuteCommands.Name() once the Nexus service
@@ -41,17 +36,15 @@ const (
 //
 // Failure scenarios:
 //   - No worker polling: matching returns RequestTimeout -> *nexus.HandlerError{Type: UpstreamTimeout}.
-//     Retryable -- worker may come up later.
+//     Not retried — if no poller appeared within the dispatch timeout, the worker is likely gone.
 //   - Worker crashes after receiving the task: matching blocks waiting for a response until
 //     context deadline, then returns RequestTimeout. Indistinguishable from "no worker polling".
-//     Safe to retry because commands are idempotent (e.g., cancelling a missing activity is a
-//     no-op success per the worker contract).
 //   - Transport/RPC failure: *nexus.HandlerError. Retryable.
 //   - Worker failure (worker explicitly returns error): *temporal.ApplicationError or
 //     *temporal.CanceledError. Permanent — the worker contract requires success for all
 //     defined commands, so this indicates a bug or version incompatibility.
 //
-// Callers are responsible for enforcing retry limits (see MaxTaskAttempts).
+// Callers are responsible for enforcing retry limits (see WorkerCommandsMaxAttempts dynamic config).
 // These commands are best-effort — the activity will eventually time out anyway —
 // so excessive retries waste resources.
 type Dispatcher struct {
@@ -95,7 +88,7 @@ func (d *Dispatcher) Execute(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, DispatchTimeout)
+	ctx, cancel := context.WithTimeout(ctx, d.config.WorkerCommandsDispatchTimeout())
 	defer cancel()
 
 	return d.dispatchToWorker(ctx, task, namespaceName)
@@ -159,15 +152,16 @@ func (d *Dispatcher) dispatchToWorker(
 }
 
 func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask, namespaceName string) error {
-	var handlerErr *nexus.HandlerError
-	if errors.As(nexusErr, &handlerErr) {
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](nexusErr); ok {
 		// Handler-level error (transport, timeout, internal). These are constructed by
 		// MatchingDispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
-			d.logger.Warn("No worker polling control queue",
+			d.logger.Debug("No worker polling control queue, dropping command",
 				tag.NewStringTag("control_queue", task.Destination))
 			d.recordCommandMetrics(task.Commands, namespaceName, "no_poller")
-			return nexusErr
+			// Don't retry — if no poller appeared within the dispatch timeout, the worker
+			// is likely gone.
+			return nil
 		}
 
 		if !handlerErr.Retryable() {

@@ -131,9 +131,12 @@ func TestShouldProcessTask_SkipsAdmitterWhenNamespaceExists(t *testing.T) {
 	// GetNamespace returns a matching local record, so shouldProcessTask takes the
 	// nil-error branch and must NOT consult the admitter.
 	mockMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(
-		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: "ns-id"},
-		}}, nil,
+		&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{Id: "ns-id"},
+			},
+			IsGlobalNamespace: true,
+		}, nil,
 	).Times(1)
 
 	shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest())

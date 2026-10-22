@@ -19,6 +19,10 @@ const (
  db_record_version = :db_record_version, next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
  WHERE shard_id = :shard_id AND namespace_id = :namespace_id AND workflow_id = :workflow_id AND run_id = :run_id`
 
+	updateExecutionWithConditionQuery = updateExecutionQuery + `
+ AND ((CAST(:db_record_version AS BIGINT) != 0 AND db_record_version = CAST(:db_record_version AS BIGINT) - 1)
+      OR (CAST(:db_record_version AS BIGINT) = 0 AND next_event_id = :condition))`
+
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
  WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
 
@@ -114,9 +118,9 @@ namespace_id = :namespace_id
 
 	getTimerTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
   WHERE shard_id = $1 
-  AND ((visibility_timestamp >= $2 AND task_id >= $3) OR visibility_timestamp > $4) 
-  AND visibility_timestamp < $5
-  ORDER BY visibility_timestamp,task_id LIMIT $6`
+  AND (visibility_timestamp, task_id) >= ($2, $3)
+  AND visibility_timestamp < $4
+  ORDER BY visibility_timestamp,task_id LIMIT $5`
 
 	deleteTimerTaskQuery      = `DELETE FROM timer_tasks WHERE shard_id = $1 AND visibility_timestamp = $2 AND task_id = $3`
 	rangeDeleteTimerTaskQuery = `DELETE FROM timer_tasks WHERE shard_id = $1 AND visibility_timestamp >= $2 AND visibility_timestamp < $3`
@@ -199,6 +203,17 @@ func (pdb *db) UpdateExecutions(
 	return pdb.NamedExecContext(ctx,
 		updateExecutionQuery,
 		row,
+	)
+}
+
+// UpdateExecutionsWithCondition conditionally updates a single row in executions table
+func (pdb *db) UpdateExecutionsWithCondition(
+	ctx context.Context,
+	update *sqlplugin.ExecutionsUpdate,
+) (sql.Result, error) {
+	return pdb.NamedExecContext(ctx,
+		updateExecutionWithConditionQuery,
+		update,
 	)
 }
 
@@ -664,7 +679,6 @@ func (pdb *db) RangeSelectFromTimerTasks(
 		filter.ShardID,
 		filter.InclusiveMinVisibilityTimestamp,
 		filter.InclusiveMinTaskID,
-		filter.InclusiveMinVisibilityTimestamp,
 		filter.ExclusiveMaxVisibilityTimestamp,
 		filter.PageSize,
 	)

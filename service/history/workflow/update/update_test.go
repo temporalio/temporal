@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
 	. "go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -372,7 +373,7 @@ func TestUpdateState(t *testing.T) {
 						acceptedRequest *updatepb.Request,
 					) (*historypb.HistoryEvent, error) {
 						gotAcceptedRequestSequencingEventId = acceptedRequestSequencingEventId
-						return &historypb.HistoryEvent{}, nil
+						return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 					}
 
 					err := accept(t, store, upd)
@@ -911,7 +912,7 @@ func TestUpdateState(t *testing.T) {
 		runTests(t,
 			func() {
 				t.Helper()
-				upd = update.NewCompleted(tv.UpdateID(), future.NewReadyFuture(successOutcome, nil))
+				upd = update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture(successOutcome, nil))
 				assertCompleted(t, upd, successOutcome)
 			},
 			[]*stateTest{{
@@ -1271,7 +1272,7 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("on stateCompleted returns true without attaching callbacks", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, eventCreated := trackingStore(effects)
-		upd := update.NewCompleted(tv.UpdateID(), future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
+		upd := update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
 
 		fired, err := upd.AttachCallbacks(testRequest, store)
 		require.NoError(t, err)
@@ -1299,6 +1300,103 @@ func TestAttachCallbacks(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, fired)
 		require.False(t, *eventCreated)
+	})
+
+	// The admitting request carries its callbacks in the Update's request, so only a
+	// different request's callbacks are dropped in these states.
+	otherRequest := &updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+		Input:               &updatepb.Input{Name: "not_empty"},
+		RequestId:           "other-" + tv.RequestID(),
+		CompletionCallbacks: testCallbacks,
+	}
+	admitWithRequest := func(t *testing.T, store mockEventStore, upd *update.Update) {
+		t.Helper()
+		require.NoError(t, upd.Admit(testRequest, store))
+	}
+
+	for _, tc := range []struct {
+		name  string
+		state string
+		setup func(t *testing.T, store mockEventStore, effects *effect.Buffer, upd *update.Update)
+	}{
+		{
+			name:  "stateCreated",
+			state: "Created",
+			setup: func(*testing.T, mockEventStore, *effect.Buffer, *update.Update) {},
+		},
+		{
+			name:  "stateProvisionallyAdmitted",
+			state: "ProvisionallyAdmitted",
+			setup: func(t *testing.T, store mockEventStore, _ *effect.Buffer, upd *update.Update) {
+				admitWithRequest(t, store, upd)
+			},
+		},
+		{
+			name:  "stateAdmitted",
+			state: "Admitted",
+			setup: func(t *testing.T, store mockEventStore, effects *effect.Buffer, upd *update.Update) {
+				admitWithRequest(t, store, upd)
+				effects.Apply(context.Background())
+			},
+		},
+		{
+			name:  "stateAborted",
+			state: "Aborted",
+			setup: func(t *testing.T, store mockEventStore, effects *effect.Buffer, upd *update.Update) {
+				admitWithRequest(t, store, upd)
+				effects.Apply(context.Background())
+				upd.Abort(update.AbortReasonRegistryCleared, effects)
+				effects.Apply(context.Background())
+			},
+		},
+	} {
+		t.Run("on "+tc.name+" logs when a different request's callbacks are not attached", func(t *testing.T) {
+			tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			capture := tl.StartCapture()
+			reg := update.NewRegistry(&emptyUpdateStore, update.WithLogger(tl), update.WithNamespace("test-ns"))
+			effects := &effect.Buffer{}
+			store, eventCreated := trackingStore(effects)
+			upd, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+			require.NoError(t, err)
+			tc.setup(t, store, effects, upd)
+
+			fired, err := upd.AttachCallbacks(otherRequest, store)
+			require.NoError(t, err)
+			require.False(t, fired)
+			require.False(t, *eventCreated)
+			capture.RequireContains(t, testlogger.CapturedLogPattern{
+				Level:   testlogger.Info,
+				Message: "update completion callbacks were not attached",
+				Tags: map[string]any{
+					"update-id":      tv.UpdateID(),
+					"request-id":     otherRequest.GetRequestId(),
+					"update-state":   tc.state,
+					"callback-count": 1,
+					"namespace":      "test-ns",
+				},
+			})
+		})
+	}
+
+	t.Run("on stateAdmitted does not log for the admitting request", func(t *testing.T) {
+		tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+		capture := tl.StartCapture()
+		reg := update.NewRegistry(&emptyUpdateStore, update.WithLogger(tl))
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		upd, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+		require.NoError(t, err)
+		admitWithRequest(t, store, upd)
+		effects.Apply(context.Background())
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired)
+		require.False(t, *eventCreated)
+		for _, record := range capture.Snapshot() {
+			require.NotEqual(t, "update completion callbacks were not attached", record.Message)
+		}
 	})
 
 	t.Run("on stateSent buffers callbacks and returns true", func(t *testing.T) {

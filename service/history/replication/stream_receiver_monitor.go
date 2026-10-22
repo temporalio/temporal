@@ -352,8 +352,8 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 				tag.SourceShardID(key.Server.ShardID), tag.TargetCluster(strconv.Itoa(int(key.Client.ClusterID))), tag.TargetShardID(key.Client.ShardID))
 			metrics.ReplicationStreamStuck.With(m.MetricsHandler).Record(
 				int64(1),
-				metrics.FromClusterIDTag(key.Server.ClusterID),
-				metrics.ToClusterIDTag(key.Client.ClusterID),
+				metrics.FromClusterTag(m.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(key.Server.ClusterID))),
+				metrics.ToClusterTag(m.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(key.Client.ClusterID))),
 			)
 			return false
 		}

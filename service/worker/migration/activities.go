@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -19,8 +20,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
-	chasmactivity "go.temporal.io/server/chasm/lib/activity"
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -32,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -123,13 +123,14 @@ type (
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
 		Logger                           log.Logger
+		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
-		chasmRegistry                    *chasm.Registry
 	}
 
 	shardStatus struct {
@@ -167,13 +168,6 @@ const (
 func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
 }
-
-// TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
-// However, activity background context is per-worker, which means once set, all activities processed by the
-// worker will use CallerType Preemptable, including those not related to migration. This is not ideal.
-// Using a different task queue and a dedicated worker for migration can solve the issue but requires
-// changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
-// Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
 
 // GetMetadata returns history shard count and namespaceID for requested namespace.
 func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*MetadataResponse, error) {
@@ -375,13 +369,22 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	return isReady, nil
 }
 
-func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) (retErr error) {
 	// Use the highest priority caller type for checking handover state
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
+	// The wait never returns on its own while shards lag: it is killed from the outside, the SDK
+	// cancels the context off the heartbeat, the next status call fails, and this defer runs.
+	// The snapshot is empty on a successful handover, which emits nothing.
+	var snapshot wideevents.HandoverLagSnapshot
+	start := time.Now()
+	defer func() {
+		a.emitHandoverIncomplete(waitRequest, &snapshot, time.Since(start), retErr)
+	}()
+
 	for {
-		done, err := a.checkHandoverOnce(ctx, waitRequest)
+		done, err := a.checkHandoverOnce(ctx, waitRequest, &snapshot)
 		if err != nil {
 			return err
 		}
@@ -394,8 +397,28 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	}
 }
 
+func (a *activities) emitHandoverIncomplete(
+	waitRequest waitHandoverRequest,
+	snapshot *wideevents.HandoverLagSnapshot,
+	elapsed time.Duration,
+	exitErr error,
+) {
+	if a.emitNamespaceLifecycleEvents == nil || !a.emitNamespaceLifecycleEvents() {
+		return
+	}
+	wideevents.EmitHandoverIncomplete(
+		a.EventLogger,
+		waitRequest.Namespace,
+		a.namespaceIDForEvent(waitRequest.Namespace),
+		waitRequest.RemoteCluster,
+		snapshot,
+		elapsed,
+		exitErr,
+	)
+}
+
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -462,11 +485,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		maxHandoverLag        int64
 	)
 
+	// Reset each poll so the summary sees the final state, not an accumulation.
+	*snapshot = wideevents.NewHandoverLagSnapshot(len(localShards), handoverInfosMissingCount)
+
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
 		} else {
 			notReadyShardCount++
+			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -474,6 +501,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			maxHandoverLagShardID = status.shardID
 		}
 	}
+
+	snapshot.ReadyCount = readyShardCount
+	snapshot.NotReadyCount = notReadyShardCount
+	snapshot.MaxLaggingTasks = maxHandoverLag
+	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
@@ -500,6 +532,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return isReady, nil
 }
 
+// namespaceIDForEvent lets events join on ID rather than name. Called once per activity.
+func (a *activities) namespaceIDForEvent(name string) string {
+	ns, err := a.NamespaceRegistry.GetNamespace(namespace.Name(name))
+	if err != nil {
+		return ""
+	}
+	return ns.ID().String()
+}
+
 func (a *activities) generateWorkflowReplicationTask(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
@@ -519,18 +560,12 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
-		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-		if err != nil {
-			return err
-		}
-
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
 			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: execution.BusinessID,
 				RunId:      execution.RunID,
 			},
-			Archetype:      archetype,
 			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
@@ -646,7 +681,9 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
 			// which does not have ArchetypeId field.
 			//
-			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			// TODO: Switch to chasm.WorkflowArchetypeID and remove the workflow exception below.
+			// ExecutionInfo decoders in OSS v1.30 and later accept nonzero archetype IDs.
+			// Remove this workaround once compatibility with older workflow workers is no longer required.
 			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
@@ -915,20 +952,12 @@ func (a *activities) verifySingleReplicationTask(
 	s := time.Now()
 	// Check if execution exists on remote cluster
 
-	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-	if err != nil {
-		return verifyResult{
-			status: notVerified,
-		}, err
-	}
-
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: execution.BusinessID,
 			RunId:      execution.RunID,
 		},
-		Archetype:       archetype,
 		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
@@ -1234,39 +1263,4 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	}
 
 	return isReady, nil
-}
-
-func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.ArchetypeID) (chasm.Archetype, error) {
-	if archetypeID == chasm.UnspecifiedArchetypeID {
-		// For backward compatibility reason, the archetypeID is set to 0 in MigrationExecutionInfo
-		// for workflows. But 0 is not a valid archetypeID in chasm.Registry, so explicitly return
-		//  WorkflowArchetype here.
-		return chasm.WorkflowArchetype, nil
-	}
-
-	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
-	// the mapping here for now.
-	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
-	// chasm registry.
-	if archetypeID == chasmactivity.ArchetypeID {
-		return chasmactivity.Archetype, nil
-	}
-	if archetypeID == chasmnexus.ArchetypeID {
-		return chasmnexus.Archetype, nil
-	}
-
-	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
-	if !ok {
-		activityInfo := activity.GetInfo(ctx)
-		err := fmt.Errorf("unknown archetypeID: %v", archetypeID)
-		a.Logger.Error("force-replication failed to translate archetypeID to name",
-			tag.Error(err),
-			tag.ArchetypeID(archetypeID),
-			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
-			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-		)
-		return "", err
-	}
-	return archetype, nil
 }

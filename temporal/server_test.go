@@ -77,7 +77,6 @@ func runAndTestServer(t *testing.T) {
 
 	// Tweak matching to ensure tasks are written to persistence immediately.
 	dcClient := dynamicconfig.StaticClient{
-		dynamicconfig.MatchingSyncMatchWaitDuration.Key():       time.Duration(0),
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
 	}

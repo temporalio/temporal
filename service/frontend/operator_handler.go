@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -51,6 +52,7 @@ type (
 		status int32
 
 		logger                 log.Logger
+		eventLogger            otellog.Logger
 		config                 *Config
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
@@ -68,6 +70,7 @@ type (
 	NewOperatorHandlerImplArgs struct {
 		config                 *Config
 		Logger                 log.Logger
+		EventLogger            otellog.Logger
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
 		VisibilityMgr          manager.VisibilityManager
@@ -95,6 +98,7 @@ func NewOperatorHandlerImpl(
 
 	handler := &OperatorHandlerImpl{
 		logger:                 args.Logger,
+		eventLogger:            args.EventLogger,
 		status:                 common.DaemonStatusInitialized,
 		config:                 args.config,
 		sdkClientFactory:       args.sdkClientFactory,
@@ -605,7 +609,32 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		remoteResponse     *adminservice.DescribeClusterResponse
+		persistedBefore    *persistence.GetClusterMetadataResponse
+		persistenceRequest *persistence.SaveClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(h.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(h.logger, &retError)
+	lifecycleEvent = newRemoteClusterUpsertLifecycleEvent(
+		ctx,
+		h.eventLogger,
+		h.clusterMetadata,
+		h.config,
+		remoteClusterAPIOperator,
+		remoteClusterUpsertRequestFields{
+			FrontendAddress:               request.GetFrontendAddress(),
+			FrontendHTTPAddress:           request.GetFrontendHttpAddress(),
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			EnableReplication:             request.GetEnableReplication(),
+		},
+	)
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -615,6 +644,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	remoteResponse = resp
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
 			errUnableConnectRemoteClusterMessage,
@@ -649,14 +679,14 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	)
 	switch err.(type) {
 	case nil:
+		persistedBefore = clusterData
 		updateRequestVersion = clusterData.Version
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
 		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
-
-	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -671,13 +701,16 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
-	})
+	}
+	persistenceRequest = saveRequest
+	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, saveRequest)
 	if err != nil {
 		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
 	if !applied {
 		return nil, serviceerror.NewInvalidArgumentf(errUnableToStoreClusterInfo, err)
 	}
+	lifecycleEvent.emitUpsertSuccess(persistedBefore, persistenceRequest)
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
@@ -685,29 +718,43 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		cachedBefore       cachedRemoteClusterLookup
+		persistenceRequest *persistence.DeleteClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(h.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(h.logger, &retError)
+	clusterName := request.GetClusterName()
+	lifecycleEvent = newRemoteClusterRemoveLifecycleEvent(
+		ctx,
+		h.eventLogger,
+		h.clusterMetadata,
+		h.config,
+		remoteClusterAPIOperator,
+		remoteClusterRemoveRequestFields{ClusterName: clusterName},
+	)
 
-	var isClusterNameExist bool
-	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
-		if clusterName == request.GetClusterName() {
-			isClusterNameExist = true
-			break
-		}
-	}
-	if !isClusterNameExist {
+	cachedBefore = lookupCachedRemoteCluster(h.clusterMetadata, clusterName)
+	if !cachedBefore.found {
 		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
 	}
 
-	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, h.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
+	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, h.clusterMetadata.GetCurrentClusterName(), clusterName); err != nil {
 		return nil, err
 	}
 
-	if err := h.clusterMetadataManager.DeleteClusterMetadata(
-		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
+	deleteRequest := &persistence.DeleteClusterMetadataRequest{ClusterName: clusterName}
+	persistenceRequest = deleteRequest
+	if err := h.clusterMetadataManager.DeleteClusterMetadata(ctx, deleteRequest); err != nil {
 		return nil, serviceerror.NewInternalf(errUnableToDeleteClusterInfo, err)
 	}
+	lifecycleEvent.emitRemoveSuccess(cachedBefore, persistenceRequest)
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
 }
 

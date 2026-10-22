@@ -315,6 +315,42 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 	s.pollFromDeploymentExpectFail(env, secondDeploymentVersionOne.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
 }
 
+func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsNewType() {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1),
+	)
+	tv := env.Tv()
+
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionWithExpectedTaskQueues(env, tv, 1)
+
+	go pollActivityFromDeployment(s.Context(), env.TestEnv, tv)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(
+			s.Context(),
+			&workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace:         env.Namespace().String(),
+				DeploymentVersion: tv.ExternalDeploymentVersion(),
+			},
+		)
+		s.NoError(err)
+		s.ProtoElementsMatch(
+			[]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
+				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+			},
+			resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(),
+		)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	secondTaskQueue := tv.WithTaskQueueNumber(2)
+	expectedError := fmt.Sprintf(
+		"cannot add task queue %v since maximum number of task queues (1) have been registered in deployment",
+		secondTaskQueue.TaskQueue().GetName(),
+	)
+	s.pollFromDeploymentExpectFail(env, secondTaskQueue, expectedError)
+}
+
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
 	// Also in TestCreateWorkerDeployment_MaxDeploymentsLimit
@@ -1870,6 +1906,57 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 			LastModifierIdentity: env.Tv().ClientIdentity(),
 		},
 	})
+}
+
+// TestSetCurrentVersion_Unversioned_AllowNoPollers tests unsetting current version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers() {
+	env := s.newTestEnv()
+	currentVars := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, currentVars)
+	s.ensureCreateVersionInDeployment(env, currentVars)
+
+	// set current version
+	s.setCurrentVersion(env, currentVars, true, "")
+	env.waitForTaskQueueVersioningInfo(s, env.Tv().TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+
+	// unset current version with allowNoPollers=true - this should work even though buildId is empty
+	s.setCurrentVersionUnversionedOption(env, currentVars, true, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: currentVars.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
+}
+
+// TestSetRampingVersion_Unset_AllowNoPollers tests unsetting ramping version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
+	env := s.newTestEnv()
+	tv := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionInDeployment(env, tv)
+
+	// set ramping version
+	s.setAndVerifyRampingVersion(env, tv, false, 50, true, "")
+
+	// unset ramping version with allowNoPollers=true - this should work even though buildId is empty
+	s.setAndVerifyRampingVersionUnversionedOption(env, tv, false, true, 0, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, tv.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 }
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed

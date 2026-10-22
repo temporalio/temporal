@@ -7,8 +7,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	schedulescommon "go.temporal.io/server/common/schedules"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 )
 
 // The Backfiller component is responsible for buffering manually
@@ -36,10 +35,14 @@ func addBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 ) *Backfiller {
-	id := schedulescommon.GenerateBackfillerID()
+	id := schedulerinternal.GenerateBackfillerID()
+	// LastProcessedTime is intentionally left unset here. For range backfills it
+	// is the "progress recorded" signal and must stay zero until a batch is
+	// actually processed (see processBackfill). Trigger backfills, which use it as
+	// their fire time, set it explicitly in NewImmediateBackfiller.
 	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
 		BackfillId:        id,
-		LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
+		LastProcessedTime: nil,
 	})
 
 	if scheduler.Backfillers == nil {
@@ -60,13 +63,16 @@ func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.Backfil
 	return backfiller
 }
 
-// scheduleTask schedules a BackfillerTask at the given time.
+// scheduleTask advances the stamp for the initial task or a successor.
 func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	b.TaskStamp++
 	b.getOrCreateEventLog(ctx).LogEvent(ctx,
-		fmt.Sprintf("scheduled backfillerTask for %s", scheduledTime.Format(time.RFC3339)))
+		fmt.Sprintf("scheduled backfillerTask for %s (stamp %d)", scheduledTime.Format(time.RFC3339), b.TaskStamp))
 	ctx.AddTask(b, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
-	}, &schedulerpb.BackfillerTask{})
+	}, &schedulerpb.BackfillerTask{
+		Stamp: b.TaskStamp,
+	})
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

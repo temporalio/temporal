@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -235,7 +236,7 @@ func hasWordsBefore(s string, pos int, words ...string) bool {
 	if pos <= 0 || !unicode.IsSpace(rune(s[pos])) {
 		return false
 	}
-	for i := len(words) - 1; i >= 0; i-- {
+	for _, word := range slices.Backward(words) {
 		// skip spaces
 		for pos >= 0 && unicode.IsSpace(rune(s[pos])) {
 			pos--
@@ -245,7 +246,7 @@ func hasWordsBefore(s string, pos int, words ...string) bool {
 			pos--
 		}
 		// check if current pos matches the word
-		if pos < 0 || !hasWordAt(s, words[i], pos) {
+		if pos < 0 || !hasWordAt(s, word, pos) {
 			return false
 		}
 		pos--

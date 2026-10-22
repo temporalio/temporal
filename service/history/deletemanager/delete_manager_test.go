@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -96,6 +97,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	})
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -107,6 +109,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			RunID:       tests.RunID,
 		},
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
@@ -142,6 +145,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	})
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -153,6 +157,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			RunID:       tests.RunID,
 		},
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
@@ -198,6 +203,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_Skip
 			RunID:       tests.RunID,
 		},
 		workflow.NoopChasmTree.ArchetypeID(),
+		common.EmptyVersion,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
@@ -208,6 +214,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_Skip
 		_ context.Context,
 		_ definition.WorkflowKey,
 		_ chasm.ArchetypeID,
+		_ int64,
 		_ []byte,
 		_ int64,
 		_ time.Time,
@@ -248,6 +255,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	})
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -259,6 +267,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),

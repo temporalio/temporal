@@ -16,14 +16,41 @@ func (s *nodeSuite) minimalTestComponent() *TestComponent {
 	}
 }
 
+func (s *nodeSuite) newSkipPersistenceTestTree(
+	serializedNodes map[string]*persistencespb.ChasmNode,
+	enabled func() bool,
+) *Node {
+	s.nodeBackend.HandleChasmSkipPersistenceEnabled = enabled
+	if len(serializedNodes) == 0 {
+		return NewEmptyTree(
+			s.registry,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+			s.metricsHandler,
+		)
+	}
+
+	root, err := NewTreeFromDB(
+		serializedNodes,
+		s.registry,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		s.logger,
+		s.metricsHandler,
+	)
+	s.NoError(err)
+	return root
+}
+
 func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return true })
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	mutation, err := rootNode.CloseTransaction()
+	mutation, err := rootNode.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	s.Contains(mutation.UpdatedNodes, "", "brand-new node must always be persisted")
@@ -34,10 +61,10 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return true })
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 	s.Contains(firstMutation.UpdatedNodes, "", "new node must be in UpdatedNodes")
 
@@ -49,14 +76,13 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	s.NoError(err)
+	rootNode2 := s.newSkipPersistenceTestTree(persistedNodes, func() bool { return true })
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
 	_, err = rootNode2.Component(ctx, ComponentRef{})
 	s.NoError(err)
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	s.NotContains(secondMutation.UpdatedNodes, "", "unchanged node must not be in UpdatedNodes")
@@ -71,18 +97,17 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return true })
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
 
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	s.NoError(err)
+	rootNode2 := s.newSkipPersistenceTestTree(persistedNodes, func() bool { return true })
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
 	component, err := rootNode2.Component(ctx, ComponentRef{})
@@ -90,7 +115,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 
 	component.(*TestComponent).ComponentData.RunId = "modified-run-id"
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	s.Contains(secondMutation.UpdatedNodes, "", "modified node must be in UpdatedNodes")
@@ -105,18 +130,17 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return true })
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
 
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	s.NoError(err)
+	rootNode2 := s.newSkipPersistenceTestTree(persistedNodes, func() bool { return true })
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
 	component, err := rootNode2.Component(ctx, ComponentRef{})
@@ -126,7 +150,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	ctx.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task-payload")})
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	s.Contains(secondMutation.UpdatedNodes, "", "node with a new task must be in UpdatedNodes even if data is unchanged")
@@ -138,7 +162,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_DeleteUnpersistedNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return true })
 	s.NoError(rootNode.SetRootComponent(&TestComponent{
 		ComponentData: &persistencespb.WorkflowExecutionState{RunId: "root"},
 		SubComponent1: NewComponentField(nil, &TestSubComponent1{
@@ -150,9 +174,43 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_DeleteUnpersistedNode() {
 	component := rootNode.value.(*TestComponent)
 	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 
-	mutation, err := rootNode.CloseTransaction()
+	mutation, err := rootNode.CloseTransaction(context.Background(), true)
 	s.NoError(err)
 
 	s.Contains(mutation.UpdatedNodes, "", "root still needs initial persistence")
 	s.Empty(mutation.DeletedNodes, "node created and deleted before first persistence must not emit a tombstone")
+}
+
+func (s *nodeSuite) TestSkipPersistenceIfClean_DynamicConfig() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	rootNode := s.newSkipPersistenceTestTree(nil, func() bool { return false })
+	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
+
+	firstMutation, err := rootNode.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
+
+	enabled := false
+	nextTransitionCount := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+	rootNode2 := s.newSkipPersistenceTestTree(persistedNodes, func() bool { return enabled })
+
+	ctx := NewMutableContext(context.Background(), rootNode2)
+	_, err = rootNode2.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	mutation, err := rootNode2.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes, "", "disabled optimization must preserve pre-optimization persistence behavior")
+	s.Equal(int64(2), rootNode2.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
+
+	enabled = true
+	nextTransitionCount = 3
+	_, err = rootNode2.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	mutation, err = rootNode2.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.NotContains(mutation.UpdatedNodes, "", "enabled optimization must omit an unchanged node")
+	s.Equal(int64(2), rootNode2.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
 }

@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"container/heap"
 	"context"
 	"sync"
 	"time"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	invalidHeapIndex        = -13     // use unusual value to stand out in panics
 	maxPriorityLevels       = 60      // maximum value for priority levels (fits in a bitfield with a few bits reserved)
 	effectivePriorityFactor = 10      // multiply priority level by this to leave room for intermediate levels
 	pollForwarderPriority   = 1000000 // lower than any other priority. must be > maxPriorityLevels*effectivePriorityFactor.
@@ -51,7 +49,7 @@ type taskForwarderType int32
 const (
 	notTaskForwarder       taskForwarderType = iota
 	parentTaskForwarder                      // forwards tasks to parent partition
-	validatorTaskForwarder                   // validates tasks on root partition
+	validatorTaskForwarder                   // validates local backlog tasks
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
@@ -62,58 +60,74 @@ const (
 // Currently we only use 1 token at a time.
 const maxTokens = 1
 
-type pollerPQ struct {
-	heap []*waitingPoller
+// pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
+// by walking from the head, so the list is kept in the order we want to match them:
+// local pollers, parent forwarders, then validators. Within each type, earlier
+// poll start times come first; ties retain insertion order.
+//
+// It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
+// and removal is O(1) given the poller.
+type pollerList struct {
+	logger     log.Logger
+	head, tail *waitingPoller
+	count      int
 }
 
-// implements heap.Interface
-func (p *pollerPQ) Len() int {
-	return len(p.heap)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Less(i int, j int) bool {
-	a, b := p.heap[i], p.heap[j]
-	// task forwarders/validators have lower priority than local polls
-	aIsForwarder := a.taskForwarderType != notTaskForwarder
-	bIsForwarder := b.taskForwarderType != notTaskForwarder
-	if !aIsForwarder && bIsForwarder {
-		return true
-	} else if aIsForwarder && !bIsForwarder {
-		return false
+// comesBefore orders pollers by forwarder type, then by poll start time.
+func (p *waitingPoller) comesBefore(other *waitingPoller) bool {
+	if p.taskForwarderType != other.taskForwarderType {
+		return p.taskForwarderType < other.taskForwarderType
 	}
-	return a.startTime.Before(b.startTime)
+	return p.startTime.Before(other.startTime)
 }
 
-func (p *pollerPQ) Add(poller *waitingPoller) {
-	heap.Push(p, poller)
+func (p *pollerList) Len() int {
+	return p.count
 }
 
-func (p *pollerPQ) Remove(poller *waitingPoller) {
-	heap.Remove(p, poller.matchHeapIndex)
+func (p *pollerList) Add(poller *waitingPoller) {
+	softassert.That(p.logger, !poller.queued, "adding poller that is already queued")
+	poller.queued = true
+
+	// Match order is head→tail: local pollers, parentTaskForwarder, then
+	// validatorTaskForwarder. Locals must win over both. On child partitions
+	// the task forwarder must take the head before the batch validator.
+	at := p.tail
+	for at != nil && poller.comesBefore(at) {
+		at = at.prev
+	}
+
+	next := p.head
+	if at != nil {
+		next = at.next
+		at.next = poller
+	} else {
+		p.head = poller
+	}
+	poller.prev, poller.next = at, next
+	if next != nil {
+		next.prev = poller
+	} else {
+		p.tail = poller
+	}
+	p.count++
 }
 
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Swap(i int, j int) {
-	p.heap[i], p.heap[j] = p.heap[j], p.heap[i]
-	p.heap[i].matchHeapIndex = i
-	p.heap[j].matchHeapIndex = j
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Push(x any) {
-	poller := x.(*waitingPoller) // nolint:revive
-	poller.matchHeapIndex = len(p.heap)
-	p.heap = append(p.heap, poller)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Pop() any {
-	last := len(p.heap) - 1
-	poller := p.heap[last]
-	p.heap = p.heap[:last]
-	poller.matchHeapIndex = invalidHeapIndex
-	return poller
+func (p *pollerList) Remove(poller *waitingPoller) {
+	softassert.That(p.logger, poller.queued, "removing poller that is not queued")
+	if poller.prev != nil {
+		poller.prev.next = poller.next
+	} else {
+		p.head = poller.next
+	}
+	if poller.next != nil {
+		poller.next.prev = poller.prev
+	} else {
+		p.tail = poller.prev
+	}
+	poller.prev, poller.next = nil, nil
+	poller.queued = false
+	p.count--
 }
 
 // taskBTree is a priority-ordered collection of tasks backed by a B-tree.
@@ -161,7 +175,7 @@ func newTaskBTree() taskBTree {
 }
 
 func (b *taskBTree) Add(task *internalTask) {
-	task.matchHeapIndex = 0 // non-negative: signals "in queue"
+	task.queued = true
 	b.tree.Set(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, 1)
@@ -170,7 +184,7 @@ func (b *taskBTree) Add(task *internalTask) {
 
 func (b *taskBTree) Remove(task *internalTask) {
 	b.tree.Delete(task)
-	task.matchHeapIndex = invalidHeapIndex
+	task.queued = false
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, -1)
 	}
@@ -193,7 +207,7 @@ func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*intern
 	})
 	for _, task := range toRemove {
 		b.tree.Delete(task)
-		task.matchHeapIndex = invalidHeapIndex
+		task.queued = false
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 			b.ages.record(task.event.Data.CreateTime, -1)
 		}
@@ -216,8 +230,8 @@ type matcherData struct {
 	reconsiderForwardTimer resettableTimer
 
 	// waiting pollers and tasks
-	// invariant: all pollers and tasks in these data structures have matchResult == nil
-	pollers pollerPQ
+	// invariant: all pollers and tasks in these data structures have matchResult == nil and queued == true
+	pollers pollerList
 	tasks   taskBTree
 
 	lastPoller time.Time // most recent poll start time
@@ -235,6 +249,7 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
 		onRateLimited:    onRateLimited,
+		pollers:          pollerList{logger: logger},
 		tasks:            newTaskBTree(),
 	}
 }
@@ -264,7 +279,7 @@ func (d *matcherData) RemoveTask(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if task.matchHeapIndex >= 0 {
+	if task.queued {
 		d.tasks.Remove(task)
 	}
 }
@@ -334,9 +349,9 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 			defer d.lock.Unlock()
 
 			if poller.matchResult == nil {
-				// if poll was being forwarded, it would be absent from heap even though
-				// matchResult == nil
-				if poller.matchHeapIndex >= 0 {
+				// if poll was being forwarded, it would be absent from the queue even
+				// though matchResult == nil
+				if poller.queued {
 					d.pollers.Remove(poller)
 				}
 				poller.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
@@ -426,7 +441,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	// refactor the rate limit logic so findMatch doesn't need to know about it.
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
 	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
-		if delay := wholeQueueReady.delay(now); delay > 0 {
+		if delay := wholeQueueReady.Delay(now); delay > 0 {
 			return nil, nil, delay
 		}
 	}
@@ -439,7 +454,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		}
 
 		var matched *waitingPoller
-		for _, poller := range d.pollers.heap {
+		for poller := d.pollers.head; poller != nil; poller = poller.next {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)
@@ -451,7 +466,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 				// task forwarder only matches when forwarding is allowed
 				continue
 			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-				// validator (root only) only matches local backlog tasks
+				// validator only matches local backlog tasks
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.
@@ -470,7 +485,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		// skip per-key rate-limited tasks, tracking the minimum delay so the caller
 		// knows when the soonest one becomes ready
 		if perKeyLimited {
-			delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
+			delay := d.rateLimitManager.readyTimeForTask(task).Delay(now)
 			if delay > 0 {
 				if minDelay == 0 || delay < minDelay {
 					minDelay = delay
@@ -603,7 +618,7 @@ func (d *matcherData) TimeSinceLastPoll() time.Duration {
 func (d *matcherData) HasWaitingPoller() bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	for _, p := range d.pollers.heap {
+	for p := d.pollers.head; p != nil; p = p.next {
 		if p.taskForwarderType == notTaskForwarder {
 			return true
 		}
@@ -615,9 +630,8 @@ func (d *matcherData) HasWaitingPoller() bool {
 
 type waitableMatchResult struct {
 	// these fields are under matcherData.lock even though they're embedded in other structs
-	matchCond      sync.Cond
-	matchResult    *matchResult
-	matchHeapIndex int // current heap index for easy removal
+	matchCond   sync.Cond
+	matchResult *matchResult
 }
 
 func (w *waitableMatchResult) initMatch(d *matcherData) {
@@ -627,10 +641,10 @@ func (w *waitableMatchResult) initMatch(d *matcherData) {
 
 // call with matcherData.lock held.
 // w.matchResult must be nil (can't call wake twice).
-// w must not be in queues anymore.
+// w must not be queued anymore. We don't assert that here: queued lives on the outer
+// struct now, not w, and callers always Remove (which asserts it) before waking.
 func (w *waitableMatchResult) wake(logger log.Logger, res *matchResult) {
 	softassert.That(logger, w.matchResult == nil, "wake called twice")
-	softassert.That(logger, w.matchHeapIndex < 0, "wake called but still in heap")
 	w.matchResult = res
 	w.matchCond.Signal()
 }
@@ -666,75 +680,4 @@ func (rt *resettableTimer) unset() {
 		rt.timer.Stop()
 		rt.timer = nil
 	}
-}
-
-// simple limiter
-
-// simpleLimiter and simpleLimiterParams implement a "GCRA" limiter.
-// A simpleLimiter is "ready" if its value is <= now (as unix nanos).
-type simpleLimiter int64 // ready time as unix nanos
-
-type simpleLimiterParams struct {
-	interval time.Duration // ideal task spacing interval, or 0 for no limit (infinite), or -1 for zero limit
-	burst    time.Duration // burst duration
-}
-
-const maxBurst = time.Minute
-const simpleLimiterNever = simpleLimiter(7 << 60) // this is in the year 2225
-
-func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLimiterParams {
-	// 1e-9 would make interval overflow int64
-	if rate <= 1e-9 {
-		return simpleLimiterParams{
-			interval: time.Duration(-1),
-		}
-	}
-	return simpleLimiterParams{
-		interval: time.Duration(float64(time.Second) / rate),
-		burst:    min(burstDuration, maxBurst),
-	}
-}
-
-func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
-func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
-
-// delay returns the time until the limiter is ready.
-// If the return value is <= 0 then the limiter can go now.
-func (ready simpleLimiter) delay(now int64) time.Duration {
-	return time.Duration(int64(ready) - now)
-}
-
-// consume updates ready based on the current time and number of new tokens consumed.
-func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int64) simpleLimiter {
-	// This is a slight variation of the normal GCRA: instead of tracking the end of the
-	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
-	// the end is ready + burst. To find the next ready time:
-	// - Add ready+burst to find the next theoretical arrival time.
-	// - If that's in the past, clip it at the current time.
-	// - Subtract burst to turn it back into a ready time.
-	// - Finally add the tokens we used.
-	//
-	// For intuition, consider that if if now is > ready by only a tiny amount, i.e. we're
-	// bursting, then the max takes ready+burst and we push up the ready time by the full
-	// interval. We can do this burst/interval times before it catches up and we're no longer
-	// ready.
-	//
-	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
-	// burst from now and adding one interval.
-	if p.never() {
-		return simpleLimiterNever
-	}
-	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
-	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
-}
-
-// clip updates ready to an allowable range based on the given parameters.
-func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int64) simpleLimiter {
-	if p.never() {
-		return simpleLimiterNever
-	}
-	// If ready was set very far in the future (e.g. because the rate was zero), then we can
-	// clip it back to now + maxTokens*interval + burst.
-	maxDelay := maxTokens*p.interval.Nanoseconds() + p.burst.Nanoseconds()
-	return min(ready, simpleLimiter(now+maxDelay))
 }

@@ -51,6 +51,20 @@ func (c *metricClient) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientApplyNamespaceMutation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -77,6 +91,20 @@ func (c *metricClient) CloseShard(
 	}()
 
 	return c.client.CloseShard(ctx, request, opts...)
+}
+
+func (c *metricClient) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientCountExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) DeepHealthCheck(
@@ -413,6 +441,20 @@ func (c *metricClient) ListClusters(
 	}()
 
 	return c.client.ListClusters(ctx, request, opts...)
+}
+
+func (c *metricClient) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientListExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) ListHistoryTasks(

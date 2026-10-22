@@ -7,6 +7,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -20,32 +23,56 @@ type scalerCfg = dynamicconfig.TypedPropertyFn[dynamicconfig.SimplePartitionScal
 
 // simplePartitionScalerFactory creates simplePartitionScalers.
 type simplePartitionScalerFactory struct {
-	cfg scalerFactoryCfg
+	cfg         scalerFactoryCfg
+	legacyCount dynamicconfig.IntPropertyFnWithTaskQueueFilter
 }
 
-func newSimplePartitionScalerFactory(cfg scalerFactoryCfg) *simplePartitionScalerFactory {
-	return &simplePartitionScalerFactory{cfg: cfg}
+func newSimplePartitionScalerFactory(
+	cfg scalerFactoryCfg,
+	legacyCount dynamicconfig.IntPropertyFnWithTaskQueueFilter,
+) *simplePartitionScalerFactory {
+	return &simplePartitionScalerFactory{cfg: cfg, legacyCount: legacyCount}
 }
 
 func (s *simplePartitionScalerFactory) New(
-	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType,
+	nsName namespace.Name,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, clock.NewRealTimeSource())
+	legacyCount := func() int { return s.legacyCount(nsName.String(), tqName, tqType) }
+	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource(), logger, metricsHandler)
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
 type simplePartitionScaler struct {
-	cfg      scalerCfg
-	ts       clock.TimeSource
-	trackers map[time.Duration]*taskTracker
+	cfg scalerCfg
+	// legacyCount returns the "legacy" static partition count that the *AsMultipleOfLegacy
+	// settings are relative to. May be nil, which disables those settings.
+	legacyCount               dynamicconfig.IntPropertyFn
+	ts                        clock.TimeSource
+	logger                    log.Logger
+	metricsHandler            metrics.Handler
+	trackers                  map[time.Duration]*taskTracker
+	lastLoggedTargetBeforeMax int
 }
 
-func newSimplePartitionScaler(cfg scalerCfg, ts clock.TimeSource) *simplePartitionScaler {
+func newSimplePartitionScaler(
+	cfg scalerCfg,
+	legacyCount dynamicconfig.IntPropertyFn,
+	ts clock.TimeSource,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *simplePartitionScaler {
 	return &simplePartitionScaler{
-		cfg:      cfg,
-		ts:       ts,
-		trackers: make(map[time.Duration]*taskTracker),
+		cfg:            cfg,
+		legacyCount:    legacyCount,
+		ts:             ts,
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		trackers:       make(map[time.Duration]*taskTracker),
 	}
 }
 
@@ -62,9 +89,27 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	cfg := s.cfg()
 
 	if !cfg.Enabled {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: 0}
-	} else if cfg.Fixed > 0 {
+	}
+
+	var legacyCount int // read at most once per call
+	multiplied := func(setting float32) int {
+		if setting <= 0 || s.legacyCount == nil {
+			return 0
+		}
+		if legacyCount == 0 {
+			legacyCount = max(1, s.legacyCount())
+		}
+		return max(1, int(setting*float32(legacyCount)+0.5))
+	}
+
+	if cfg.Fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
+	} else if fixed := multiplied(cfg.FixedAsMultipleOfLegacy); fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
+		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
 	// init trackers in use
@@ -98,13 +143,30 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	// update backlog target based on counts
 	backlogTarget := updateBacklogTarget(cfg, in.BacklogCounts, (*bitSet)(&state.BacklogTarget))
 
-	// add them and clamp
+	// add them and clamp. note all mins are applied before all maxes, so a max wins if the
+	// two are in conflict.
 	totalTarget := addTarget + backlogTarget
 	if cfg.Min > 0 {
 		totalTarget = max(totalTarget, int(cfg.Min))
 	}
+	if multipliedMin := multiplied(cfg.MinAsMultipleOfLegacy); multipliedMin > 0 {
+		totalTarget = max(totalTarget, multipliedMin)
+	}
+	targetBeforeMax := totalTarget
 	if cfg.Max > 0 {
 		totalTarget = min(totalTarget, int(cfg.Max))
+	}
+	if multipliedMax := multiplied(cfg.MaxAsMultipleOfLegacy); multipliedMax > 0 {
+		totalTarget = min(totalTarget, multipliedMax)
+	}
+	if totalTarget >= targetBeforeMax {
+		s.lastLoggedTargetBeforeMax = 0
+	} else if targetBeforeMax != s.lastLoggedTargetBeforeMax {
+		s.lastLoggedTargetBeforeMax = targetBeforeMax
+		metrics.PartitionScaleMaxClamped.With(s.metricsHandler).Record(1)
+		s.logger.Info("partition scale target clamped by maximum",
+			tag.Int("target-before-max", targetBeforeMax),
+			tag.Int("target", totalTarget))
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil

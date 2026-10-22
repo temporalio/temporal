@@ -53,7 +53,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/deleteexecution"
@@ -64,6 +63,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -245,6 +245,18 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+	if componentRefBytes := request.GetComponentRef(); len(componentRefBytes) > 0 {
+		isValid, err := chasm.ReadComponent(
+			ctx,
+			componentRefBytes,
+			(*activity.Activity).IsDispatchTaskValid,
+			request.GetStamp(),
+		)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
+		return &historyservice.IsActivityTaskValidResponse{IsValid: isValid}, nil
+	}
 	workflowID := request.Execution.WorkflowId
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
@@ -287,11 +299,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
-	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
-		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
-			tag.WorkflowID(taskToken.GetWorkflowId()),
-			tag.ActivityID(taskToken.GetActivityId()))
-	}
+	h.markActivityIDForContextMetadata(ctx, taskToken.GetActivityId(), taskToken.GetWorkflowId())
 
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -1860,6 +1868,26 @@ func (h *Handler) PollWorkflowExecutionUpdate(
 	return engine.PollWorkflowExecutionUpdate(ctx, request)
 }
 
+func (h *Handler) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.PollWorkflowExecutionTimeSkipping(ctx, request)
+}
+
 func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retErr error) {
@@ -2349,6 +2377,23 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
+// markActivityIDForContextMetadata records the activity ID targeted by a request on the context so
+// that mutable state can resolve it to the activity's type and task queue during closeTransaction
+// (see contextutil.ContextMetadataMarkActivityID). activityID is empty when the request targets
+// activities by type or matches all pending activities: such a request can fan out to several
+// activities, which context metadata cannot attribute to a single one, so it is left unmarked and
+// attribution falls back to the workflow.
+func (h *Handler) markActivityIDForContextMetadata(ctx context.Context, activityID string, workflowID string) {
+	if activityID == "" {
+		return
+	}
+	if !contextutil.ContextMetadataMarkActivityID(ctx, activityID) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(workflowID),
+			tag.ActivityID(activityID))
+	}
+}
+
 func (h *Handler) UpdateActivityOptions(
 	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
@@ -2357,6 +2402,8 @@ func (h *Handler) UpdateActivityOptions(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetUpdateRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -2383,6 +2430,8 @@ func (h *Handler) PauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2408,6 +2457,8 @@ func (h *Handler) UnpauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2432,6 +2483,8 @@ func (h *Handler) ResetActivity(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -2499,6 +2552,9 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 	return unpauseResp, nil
 }
 
+// StartNexusOperation is the History Service's StartNexusOperation endpoint is for dispatching requests
+// to the System Nexus Endpoint, distinct from the Frontend Service's `nexus_handler.go` which
+// starts Nexus operations by sending Nexus tasks directly to workers via the Matching Service.
 func (h *Handler) StartNexusOperation(
 	ctx context.Context,
 	req *historyservice.StartNexusOperationRequest,
@@ -2530,8 +2586,7 @@ func (h *Handler) StartNexusOperation(
 	}
 	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
 	if err != nil {
-		var opErr *nexus.OperationError
-		if errors.As(err, &opErr) {
+		if opErr, ok := errors.AsType[*nexus.OperationError](err); ok {
 			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 			if convErr != nil {
 				return nil, convErr
@@ -2562,10 +2617,29 @@ func (h *Handler) StartNexusOperation(
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 		}
+
 		var payload *commonpb.Payload
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
+		// Responses from the System Nexus Endpoint are server generated, so we must mark them as system payloads.
+		if payload != nil {
+			if payload.Metadata == nil {
+				payload.Metadata = make(map[string][]byte, 1)
+			}
+
+			// For now, we require all responess from the System Nexus Endpoint be protobufs.
+			encoding := string(payload.Metadata["encoding"])
+			if encoding != "binary/protobuf" {
+				return nil, serviceerror.NewFailedPreconditionf("system payload must be encoded as binary/protobuf but got %s", encoding)
+			}
+			if _, ok := payload.Metadata["messageType"]; !ok {
+				return nil, serviceerror.NewFailedPrecondition("system payload missing messageType metadata key")
+			}
+
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
+		}
+
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
@@ -2588,7 +2662,6 @@ func (h *Handler) StartNexusOperation(
 		Response: response,
 	}, nil
 }
-
 func (h *Handler) CancelNexusOperation(
 	ctx context.Context,
 	req *historyservice.CancelNexusOperationRequest,

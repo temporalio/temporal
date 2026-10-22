@@ -76,18 +76,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) AddTask(ctx, params any) *g
 }
 
 // Describe mocks base method.
-func (m *MocktaskQueuePartitionManager) Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+func (m *MocktaskQueuePartitionManager) Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Describe", ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus)
+	ret := m.ctrl.Call(m, "Describe", ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Describe indicates an expected call of Describe.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) Describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) Describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Describe), ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Describe), ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive)
 }
 
 // DispatchNexusTask mocks base method.
@@ -188,6 +188,21 @@ func (m *MocktaskQueuePartitionManager) GetUserDataManager() userDataManager {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) GetUserDataManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserDataManager", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetUserDataManager))
+}
+
+// GrantEagerDispatch mocks base method.
+func (m *MocktaskQueuePartitionManager) GrantEagerDispatch(ctx context.Context, items []*matchingservice.GrantEagerDispatchRequest_Item) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", ctx, items)
+	ret0, _ := ret[0].([]*matchingservice.GrantEagerDispatchResponse_Item)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GrantEagerDispatch(ctx, items any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GrantEagerDispatch), ctx, items)
 }
 
 // HasAnyPollerAfter mocks base method.
@@ -315,20 +330,6 @@ func (m *MocktaskQueuePartitionManager) PollTask(ctx context.Context, pollMetada
 func (mr *MocktaskQueuePartitionManagerMockRecorder) PollTask(ctx, pollMetadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PollTask), ctx, pollMetadata)
-}
-
-// ProcessSpooledTask mocks base method.
-func (m *MocktaskQueuePartitionManager) ProcessSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessSpooledTask", ctx, task, backlogQueue)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ProcessSpooledTask indicates an expected call of ProcessSpooledTask.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) ProcessSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).ProcessSpooledTask), ctx, task, backlogQueue)
 }
 
 // PutCache mocks base method.

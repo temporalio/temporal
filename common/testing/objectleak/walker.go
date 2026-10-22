@@ -7,11 +7,11 @@ import (
 	"unsafe"
 )
 
-type objectWalker struct {
-	objects    []trackedObject
-	seen       map[uintptr]struct{}
-	pruneTypes patterns
-}
+// The runtime may batch pointer-free allocations smaller than 16 bytes into a
+// shared block. A cleanup attached to one of those allocations may not run
+// while any allocation in the block is reachable, so those objects cannot be
+// tracked individually.
+const runtimeTinyAllocationSize = 16
 
 type trackedObject struct {
 	addr      uintptr
@@ -19,6 +19,12 @@ type trackedObject struct {
 	typeName  string
 	collected *atomic.Bool
 	cleanup   runtime.Cleanup
+}
+
+type objectWalker struct {
+	objects    []trackedObject
+	seen       map[uintptr]struct{}
+	pruneTypes patterns
 }
 
 func newObjectWalker(pruneTypes patterns) objectWalker {
@@ -53,8 +59,10 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 			return
 		}
 		w.seen[addr] = struct{}{}
-		if obj, ok := trackPointerObject(ptr, addr, path, v.Type().String()); ok {
-			w.objects = append(w.objects, obj)
+		if isTrackableObject(v.Type().Elem()) {
+			if obj, ok := trackPointerObject(ptr, addr, path, v.Type().String()); ok {
+				w.objects = append(w.objects, obj)
+			}
 		}
 		if w.shouldPrune(v.Type()) {
 			return
@@ -81,6 +89,29 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 	default:
 		return
 	}
+}
+
+func isTrackableObject(t reflect.Type) bool {
+	return t.Size() >= runtimeTinyAllocationSize || typeContainsPointers(t)
+}
+
+func typeContainsPointers(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Array:
+		return t.Len() > 0 && typeContainsPointers(t.Elem())
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer,
+		reflect.Slice, reflect.String, reflect.UnsafePointer:
+		return true
+	case reflect.Struct:
+		for field := range t.Fields() {
+			if typeContainsPointers(field.Type) {
+				return true
+			}
+		}
+	default:
+		return false
+	}
+	return false
 }
 
 func (w *objectWalker) shouldPrune(t reflect.Type) bool {

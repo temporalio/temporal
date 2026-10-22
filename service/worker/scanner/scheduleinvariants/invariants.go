@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -74,9 +75,12 @@ func NewActivities(
 // ScanOverdueNextActionTime is a long-running activity that periodically lists
 // schedules whose TemporalScheduleNextActionTime is in the past beyond the configured
 // tolerance, calls DescribeSchedule on each candidate, and filters out schedules that
-// are paused or legitimately blocked from firing by a BUFFER_ONE / BUFFER_ALL overlap
-// policy with a prior workflow still running. Whatever remains is counted as an
+// are paused or whose index entry was stale. Whatever remains is counted as an
 // anomaly per namespace and logged for triage.
+//
+// Overlap policy is deliberately not an exemption: the Generator advances
+// FutureActionTimes regardless of whether starts are buffered behind a running
+// workflow, so an overdue NextActionTime means the Generator itself has stalled.
 func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
 		threshold := a.timeSource.Now().UTC().Add(-a.opts().OverdueNextActionTimeTolerance).Format(time.RFC3339Nano)
@@ -194,9 +198,8 @@ func (a *Activities) runScan(ctx context.Context, subScanner, query, metricName 
 }
 
 // runOverdueScan lists individual matching schedules per namespace, calls
-// DescribeSchedule on each, and filters out schedules that are paused or
-// expected to not be able to fire (BUFFER_ONE / BUFFER_ALL waiting on a prior
-// running workflow). What remains is counted as an anomaly.
+// DescribeSchedule on each, and filters out schedules that are paused or whose
+// index entry was stale. What remains is counted as an anomaly.
 func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 	const subScanner = "overdue_next_action_time"
 	metricName := metrics.ScheduleInvariantsScannerOverdueNextActionTimeCount.Name()
@@ -216,7 +219,10 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 			if checked >= int64(maxChecks) {
 				a.logger.Warn("overdue scan hit per-namespace check cap; remaining schedules left unchecked this pass",
 					tag.WorkflowNamespace(nsName),
-					tag.NewInt("cap", maxChecks))
+					tag.ScheduleID(scheduleID),
+					tag.NewInt64("checked", checked),
+					tag.NewInt("cap", maxChecks),
+					tag.NewInt64("anomalies-found-so-far", nsAnomalies))
 				metrics.ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount.With(
 					a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
 				break
@@ -246,6 +252,10 @@ func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
 		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+			continue
+		}
+		//nolint:forbidigo // scanner works per namespace, not per workflow.
+		if !ns.ActiveInCluster(a.currentClusterName) {
 			continue
 		}
 		names = append(names, ns.Name().String())
@@ -337,8 +347,7 @@ func (a *Activities) schedulesInNamespace(ctx context.Context, nsName, query str
 
 // scheduleIsExpectedNotToFire returns true when a schedule flagged as "overdue" in
 // visibility is actually in a state that legitimately explains the stale NextActionTime:
-// either the schedule is paused, or it's holding under BUFFER_ONE / BUFFER_ALL with a
-// prior workflow still running.
+// either the schedule is paused, or its authoritative next action time is not overdue.
 //
 // This deliberately relies on DescribeSchedule rather than the visibility memo: a stuck
 // schedule is exactly the case where the memo's paused flag and running-workflow list go
@@ -363,12 +372,37 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 	if desc.GetSchedule().GetState().GetPaused() {
 		return true
 	}
-	overlap := desc.GetSchedule().GetPolicies().GetOverlapPolicy()
-	if (overlap == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE || overlap == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL) &&
-		len(desc.GetInfo().GetRunningWorkflows()) > 0 {
+
+	// Confirm the invariant against what Describe just returned: the candidate came from
+	// a ScheduleNextActionTime index entry, which goes stale on replication or indexing
+	// lag.
+	if !a.nextActionTimeIsOverdue(desc.GetInfo().GetFutureActionTimes()) {
+		a.logger.Info("overdue candidate was not overdue on re-check; visibility entry was stale",
+			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID))
+		metrics.ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount.With(
+			a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
 		return true
 	}
 	return false
+}
+
+// nextActionTimeIsOverdue applies the candidate query's predicate to futureActionTimes.
+func (a *Activities) nextActionTimeIsOverdue(futureActionTimes []*timestamppb.Timestamp) bool {
+	var earliest time.Time
+	var found bool
+	for _, t := range futureActionTimes {
+		if t == nil {
+			continue
+		}
+		// Ordered soonest-first, but don't rely on it.
+		if ts := t.AsTime(); !found || ts.Before(earliest) {
+			earliest, found = ts, true
+		}
+	}
+	if !found {
+		return false
+	}
+	return earliest.Before(a.timeSource.Now().UTC().Add(-a.opts().OverdueNextActionTimeTolerance))
 }
 
 func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64) {

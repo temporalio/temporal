@@ -98,7 +98,7 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	resetBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
+	resetBranchToken, newBaseBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (r *resetterImpl) resetWorkflow(
 			r.workflowID,
 			r.baseRunID,
 		),
-		baseBranchToken,
+		newBaseBranchToken,
 		baseLastEventID,
 		new(baseLastEventVersion),
 		definition.NewWorkflowKey(
@@ -205,7 +205,7 @@ func (r *resetterImpl) getResetBranchToken(
 	ctx context.Context,
 	baseBranchToken []byte,
 	baseLastEventID int64,
-) ([]byte, error) {
+) (newBranchToken []byte, forkedBaseBranchToken []byte, err error) {
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
@@ -218,8 +218,13 @@ func (r *resetterImpl) getResetBranchToken(
 		NewRunID:        r.newRunID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return resp.NewBranchToken, nil
+	// An empty resp.BaseBranchToken means the storage layer did not rewrite the
+	// token. So it is still valid.
+	if len(resp.BaseBranchToken) == 0 {
+		return resp.NewBranchToken, baseBranchToken, nil
+	}
+	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }

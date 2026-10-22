@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/sony/gobreaker"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -15,6 +16,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -24,31 +26,31 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/callbacks"
-	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
-	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/archival"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
+	hsmnexusoperations "go.temporal.io/server/service/history/hsm/nexusoperations"
+	hsmnexusworkflow "go.temporal.io/server/service/history/hsm/nexusoperations/workflow"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -69,6 +71,9 @@ var Module = fx.Options(
 	archival.Module,
 	ChasmEngineModule,
 	chasmtests.Module,
+	fx.Provide(CallbackDestinationBlockedProvider),
+	fx.Provide(CallbackValidatorProvider),
+	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -85,6 +90,7 @@ var Module = fx.Options(
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -92,6 +98,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(WorkflowResendSchedulerProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),
@@ -127,6 +134,52 @@ var Module = fx.Options(
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
 )
+
+// CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
+// the outbound queue's circuit breaker for its destination is open. Only the history service runs
+// that queue, so only it can answer.
+func CallbackDestinationBlockedProvider(
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) callback.DestinationBlockedFn {
+	return func(namespaceID string, destination string) bool {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   callback.InvocationTaskGroup,
+			NamespaceID: namespaceID,
+			Destination: destination,
+		})
+		return cb.State() != gobreaker.StateClosed
+	}
+}
+
+func NexusOperationDestinationBlockedProvider(
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) chasmnexus.DestinationBlockedFn {
+	return func(namespaceID string, destination string) bool {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   chasmnexus.TaskGroupName,
+			NamespaceID: namespaceID,
+			Destination: destination,
+		})
+		return cb.State() != gobreaker.StateClosed
+	}
+}
+
+// CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// so that existing operator configurations (callback.allowedAddresses) are honored.
+func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
+	cfg := commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: callback.NexusHandlerSourceContextMaxSize.Get(dc),
+	}
+	return commoncallbacks.NewValidator(cfg, namespaceRegistry)
+}
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
@@ -247,9 +300,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -291,18 +348,21 @@ func TelemetryInterceptorProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.ThrottledLogger,
 ) interceptor.HealthSignalAggregator {
-	return interceptor.NewHealthSignalAggregator(
+	aggregator := interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
 		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
+		dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
-		dynamicconfig.HistoryHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
-		dynamicconfig.HistoryHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 	)
+	lc.Append(fx.StopHook(aggregator.Stop))
+
+	return aggregator
 }
 
 func HealthCheckInterceptorProvider(
@@ -349,7 +409,6 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},      // no token overrides
 		map[string]struct{}{}, // no long polls on history service
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
 		metricsHandler,
@@ -419,43 +478,30 @@ func PersistenceRateLimitingParamsProvider(
 	}
 }
 
-func VisibilityManagerProvider(
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	persistenceConfig *config.Persistence,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
+func VisibilityManagerConfigProvider(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	namespaceRegistry namespace.Registry,
-	chasmRegistry *chasm.Registry,
-	serializer serialization.Serializer,
+) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: esProcessorConfig,
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: serviceConfig.SecondaryVisibilityWritingMode,
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
+func VisibilityManagerProvider(
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
 ) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		*persistenceConfig,
-		persistenceServiceResolver,
-		customVisibilityStoreFactory,
-		esProcessorConfig,
-		saProvider,
-		searchAttributesMapperProvider,
-		namespaceRegistry,
-		chasmRegistry,
-		serviceConfig.VisibilityPersistenceMaxReadQPS,
-		serviceConfig.VisibilityPersistenceMaxWriteQPS,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
-		serviceConfig.EnableReadFromSecondaryVisibility,
-		serviceConfig.VisibilityEnableShadowReadMode,
-		serviceConfig.SecondaryVisibilityWritingMode,
-		serviceConfig.VisibilityDisableOrderByClause,
-		serviceConfig.VisibilityEnableManualPagination,
-		serviceConfig.VisibilityEnableUnifiedQueryConverter,
-		metricsHandler,
-		logger,
-		serializer,
-	)
+	return visibility.NewManager(&managerParams, managerConfig)
 }
 
 func ChasmVisibilityManagerProvider(
@@ -484,6 +530,46 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func WorkflowResendSchedulerProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) workflowresend.Scheduler {
+	schedulerLogger := log.With(
+		logger,
+		tag.ComponentTaskScheduler,
+		tag.ScopeHost,
+		tag.Operation(workflowresend.OperationName),
+	)
+	workflowResendScheduler := workflowresend.NewBoundedWorkflowScheduler(
+		serviceConfig.WorkflowResendHostMaxInFlight,
+		schedulerLogger,
+		metricsHandler,
+	)
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			workflowResendScheduler.InitiateShutdown()
+
+			shutdownCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			stopped := make(chan struct{})
+			go func() {
+				workflowResendScheduler.WaitShutdown()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+				return nil
+			case <-shutdownCtx.Done():
+				schedulerLogger.Warn("Workflow resend scheduler timed out during shutdown", tag.Error(shutdownCtx.Err()))
+				return shutdownCtx.Err()
+			}
+		},
+	})
+	return workflowResendScheduler
 }
 
 func ReplicationProgressCacheProvider(

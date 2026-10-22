@@ -48,8 +48,9 @@ type SuiteReport struct {
 type ReportSummary struct {
 	FlakyTests         []TestReport
 	Timeouts           []TestReport  // Tests ending with "(timeout)"
+	TestRunnerTimeouts []TestReport  // Synthetic test-runner timeout events
 	Crashes            []TestReport  // Tests containing "crash"
-	CIBreakers         []TestReport  // Tests that failed all retries (3x) in a single job
+	CIBreakers         []TestReport  // Tests that failed their final retry in an artifact
 	Suites             []SuiteReport // Per-suite flake breakdown
 	TotalFailures      int           // Total raw failure count
 	TotalTestRuns      int           // Total test executions (all tests, all runs)

@@ -8,6 +8,8 @@ import (
 
 var _ Action = (*actionReaderStuck)(nil)
 
+const readerStuckActionName = "reader-stuck"
+
 type (
 	actionReaderStuck struct {
 		attributes *AlertAttributesReaderStuck
@@ -26,7 +28,7 @@ func newReaderStuckAction(
 }
 
 func (a *actionReaderStuck) Name() string {
-	return "reader-stuck"
+	return readerStuckActionName
 }
 
 func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {

@@ -24,15 +24,20 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
+
+// Minimum interval between (traffic-triggered) sweeps of shut-down connections.
+const internodeConnCleanupInterval = 30 * time.Minute
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
@@ -41,10 +46,11 @@ type RPCFactory struct {
 	logger         log.Logger
 	metricsHandler metrics.Handler
 
-	frontendURL       string
-	frontendHTTPURL   string
-	frontendHTTPPort  int
-	frontendTLSConfig *tls.Config
+	frontendURL                       string
+	frontendHTTPURL                   string
+	frontendHTTPPort                  int
+	frontendTLSConfig                 *tls.Config
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter
 
 	grpcListener             func() net.Listener
 	tlsFactory               encryption.TLSConfigProvider
@@ -57,13 +63,22 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
 
+	// Guards closed and both connection maps.
+	connectionsMu            sync.RWMutex
+	closed                   bool
+	internodeGRPCConnections map[string]*grpc.ClientConn
+	remoteFrontendGRPCConns  map[string]*grpc.ClientConn
+
+	internodeConnCleanupTicker *time.Ticker
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
+	localFrontendGRPCConn func() *grpc.ClientConn
+
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
 }
 
-// NewFactory builds a new RPCFactory
-// conforming to the underlying configuration
+// NewFactory builds a new RPCFactory conforming to the underlying configuration.
 func NewFactory(
 	cfg *config.Config,
 	sName primitives.ServiceName,
@@ -74,6 +89,7 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
@@ -86,24 +102,29 @@ func NewFactory(
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
 	}
 	f := &RPCFactory{
-		config:                   cfg,
-		serviceName:              sName,
-		logger:                   logger,
-		metricsHandler:           metricsHandler,
-		frontendURL:              frontendURL,
-		frontendHTTPURL:          frontendHTTPURL,
-		frontendHTTPPort:         frontendHTTPPort,
-		frontendTLSConfig:        frontendTLSConfig,
-		tlsFactory:               tlsProvider,
-		commonDialOptions:        commonDialOptions,
-		perServiceDialOptions:    perServiceDialOptions,
-		tokenProvider:            tokenProvider,
-		authHeaderName:           authHeaderName,
-		requireRemoteClusterAuth: requireRemoteClusterAuth,
-		monitor:                  monitor,
+		config:                            cfg,
+		serviceName:                       sName,
+		logger:                            logger,
+		metricsHandler:                    metricsHandler,
+		frontendURL:                       frontendURL,
+		frontendHTTPURL:                   frontendHTTPURL,
+		frontendHTTPPort:                  frontendHTTPPort,
+		frontendTLSConfig:                 frontendTLSConfig,
+		frontendHTTPTransportInstrumenter: frontendHTTPTransportInstrumenter,
+		tlsFactory:                        tlsProvider,
+		commonDialOptions:                 commonDialOptions,
+		perServiceDialOptions:             perServiceDialOptions,
+		tokenProvider:                     tokenProvider,
+		authHeaderName:                    authHeaderName,
+		requireRemoteClusterAuth:          requireRemoteClusterAuth,
+		monitor:                           monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.internodeGRPCConnections = make(map[string]*grpc.ClientConn)
+	f.remoteFrontendGRPCConns = make(map[string]*grpc.ClientConn)
+	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
+	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -215,14 +236,47 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
+// CreateRemoteFrontendGRPCConnection returns the shared connection for cross-cluster
+// calls to rpcAddress, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	d.connectionsMu.RLock()
+	conn, ok := d.remoteFrontendGRPCConns[rpcAddress]
+	d.connectionsMu.RUnlock()
+	if ok {
+		return conn
+	}
+
+	newConn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
+	if newConn == nil {
+		return nil
+	}
+
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	if d.closed {
+		// Callers require a non-nil connection, even after shutdown.
+		_ = newConn.Close()
+		return newConn
+	}
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.remoteFrontendGRPCConns[rpcAddress]
+	if ok {
+		_ = newConn.Close()
+		return existing
+	}
+	d.remoteFrontendGRPCConns[rpcAddress] = newConn
+	return newConn
+}
+
+func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
 		hostname, _, err2 := net.SplitHostPort(rpcAddress)
 		if err2 != nil {
 			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
+			return nil
 		}
 		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 		if err != nil {
@@ -259,8 +313,13 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal frontend
+// calls, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendGRPCConn()
+}
+
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
@@ -268,6 +327,16 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // createInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
+	d.maybeCleanupInternodeConns()
+
+	// Reuse the cached connection unless it has been shut down, in which case re-dial.
+	d.connectionsMu.RLock()
+	conn, ok := d.internodeGRPCConnections[hostName]
+	d.connectionsMu.RUnlock()
+	if ok && conn.GetState() != connectivity.Shutdown {
+		return conn
+	}
+
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -278,7 +347,46 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		}
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
-	return d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+	newConn := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+	if newConn == nil {
+		return nil
+	}
+
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	if d.closed {
+		// Callers require a non-nil connection, even after shutdown.
+		_ = newConn.Close()
+		return newConn
+	}
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.internodeGRPCConnections[hostName]
+	if ok && existing.GetState() != connectivity.Shutdown {
+		_ = newConn.Close()
+		return existing
+	}
+	d.internodeGRPCConnections[hostName] = newConn
+	return newConn
+}
+
+// Triggers a sweep at most once per interval, off the connection path.
+func (d *RPCFactory) maybeCleanupInternodeConns() {
+	select {
+	case <-d.internodeConnCleanupTicker.C:
+		go d.cleanupInternodeConns()
+	default:
+	}
+}
+
+// Removes shut-down cached connections; never closes live ones.
+func (d *RPCFactory) cleanupInternodeConns() {
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	for hostName, conn := range d.internodeGRPCConnections {
+		if conn.GetState() == connectivity.Shutdown {
+			delete(d.internodeGRPCConnections, hostName)
+		}
+	}
 }
 
 func (d *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -298,6 +406,24 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	}
 
 	return connection
+}
+
+// Close shuts down all cached connections. Later requests return closed connections.
+func (d *RPCFactory) Close() {
+	d.internodeConnCleanupTicker.Stop()
+	_ = d.localFrontendGRPCConn().Close()
+
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	d.closed = true
+	for _, conn := range d.internodeGRPCConnections {
+		_ = conn.Close()
+	}
+	clear(d.internodeGRPCConnections)
+	for _, conn := range d.remoteFrontendGRPCConns {
+		_ = conn.Close()
+	}
+	clear(d.remoteFrontendGRPCConns)
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
@@ -326,32 +452,20 @@ func (d *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 // createLocalFrontendHTTPClient creates an HTTP client for communicating with the frontend.
 // It uses either the provided frontendURL or membership to resolve the frontend address.
 func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
-	// dialer and transport field values copied from http.DefaultTransport.
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
+	transport, err := common.NewHTTPTransport(d.frontendTLSConfig)
+	if err != nil {
+		return nil, err
 	}
-	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	client := http.Client{}
-
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
-		transport.TLSClientConfig = d.frontendTLSConfig
 		scheme = "https"
 	}
 
 	var address string
+	var clientTransport http.RoundTripper
 	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
-		client.Transport = &roundTripper{
+		clientTransport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
 			httpPort:   d.frontendHTTPPort,
@@ -359,8 +473,11 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = "internal" // This will be replaced by the roundTripper
 	} else {
 		// Use the URL as-is and leave the transport unmodified.
-		client.Transport = transport
+		clientTransport = transport
 		address = d.frontendHTTPURL
+	}
+	client := http.Client{
+		Transport: d.frontendHTTPTransportInstrumenter.Instrument(clientTransport),
 	}
 
 	return &common.FrontendHTTPClient{

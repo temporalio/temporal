@@ -65,8 +65,7 @@ func WrapEventLoop(
 		err := originalEventLoop()
 
 		if err != nil {
-			var streamError *StreamError
-			if errors.As(err, &streamError) {
+			if streamError, ok := errors.AsType[*StreamError](err); ok {
 				metrics.ReplicationStreamError.With(metricsHandler).Record(
 					int64(1),
 					metrics.ServiceErrorTypeTag(streamError.cause),
@@ -130,6 +129,43 @@ func livenessMonitor(
 				return
 			}
 		}
+	}
+}
+
+// maxLifetimeMonitor bounds the lifetime of a replication stream. When maxLifetime (jittered)
+// elapses, it stops the stream. The stream receiver monitor then reopens a fresh stream, which
+// can land on a different (non-draining) connection. This lets proxies such as Envoy gracefully
+// drain connections that would otherwise be pinned open forever by endless replication streams.
+// A non-positive maxLifetime disables the monitor. The jitter (mirroring gRPC's MaxConnectionAge
+// +/-10% jitter) staggers recycling so streams sharing a connection do not all recycle at once,
+// which is what lets a GOAWAY'd connection monotonically drain. maxLifetimeFn/jitterFn are read
+// once when the stream starts; changed values take effect the next time the stream is (re)created.
+func maxLifetimeMonitor(
+	maxLifetimeFn dynamicconfig.DurationPropertyFn,
+	jitterFn dynamicconfig.FloatPropertyFn,
+	shutdownChan channel.ShutdownOnce,
+	stopStream func(),
+	logger log.Logger,
+) {
+	// Guard against a panic in this goroutine taking down the whole process.
+	var panicErr error
+	defer log.CapturePanic(logger, &panicErr)
+
+	maxLifetime := maxLifetimeFn()
+	if maxLifetime <= 0 {
+		return
+	}
+
+	// backoff.Jitter clamps the (dynamic) coefficient into [0, 1] internally.
+	timer := time.NewTimer(backoff.Jitter(maxLifetime, jitterFn()))
+	defer timer.Stop()
+
+	select {
+	case <-shutdownChan.Channel():
+		return
+	case <-timer.C:
+		logger.Info("Replication stream reached max lifetime, recycling stream.")
+		stopStream()
 	}
 }
 

@@ -46,6 +46,14 @@ var (
 	NoopTracer         = NoopTracerProvider.Tracer("")
 )
 
+func isEnabled(tp trace.TracerProvider) bool {
+	if tp == nil {
+		return false
+	}
+	_, isNoop := tp.(otelnoop.TracerProvider)
+	return !isNoop
+}
+
 type (
 	metadata struct {
 		Name   string

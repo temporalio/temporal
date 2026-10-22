@@ -145,6 +145,7 @@ var (
 		"GetWorkerTaskReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"UpdateWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"PollWorkflowExecutionUpdate":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
+		"PollWorkflowExecutionTimeSkipping":            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
 		"StartBatchOperation":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"StopBatchOperation":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DescribeBatchOperation":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
@@ -238,6 +239,21 @@ func MethodName(fullApiName string) string {
 		return fullApiName[index+1:]
 	}
 	return fullApiName
+}
+
+// ParseFullMethod splits a full gRPC method — "/pkg.Service/Method" — into its proto
+// service full name and method name. ok is false for anything that is not that shape.
+func ParseFullMethod(fullMethod string) (service string, method string, ok bool) {
+	rest, ok := strings.CutPrefix(fullMethod, "/")
+	if !ok {
+		return "", "", false
+	}
+	service, method, ok = strings.Cut(rest, "/")
+	if !ok || service == "" || method == "" || strings.ContainsRune(method, '/') {
+		return "", "", false
+	}
+	// A proto service is package-qualified, so no dot means this is not a service name.
+	return service, method, strings.ContainsRune(service, '.')
 }
 
 func ServiceName(fullApiName string) string {

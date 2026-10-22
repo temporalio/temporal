@@ -163,8 +163,7 @@ func AliasFields(
 			// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
 			// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
 			// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgumentErr) {
+			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 				continue
 			}
 			return nil, err

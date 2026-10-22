@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -97,7 +98,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 	s.replicationAckManager = NewAckManager(
@@ -494,6 +495,36 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.NotNil(replicationMessages)
 	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
 	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+}
+
+// TestGetReplicationTasksIter_EmptyPageWithToken verifies the ranged read keeps paging
+// when the store returns zero tasks with a continuation token (legal, e.g. for
+// Cassandra paging): an empty page is only authoritative when the token is empty too,
+// so the range's tasks must still be delivered rather than silently skipped.
+func (s *ackManagerSuite) TestGetReplicationTasksIter_EmptyPageWithToken() {
+	continuation := []byte{7, 7, 7}
+	gomock.InOrder(
+		s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(
+			&persistence.GetHistoryTasksResponse{
+				Tasks:         nil,
+				NextPageToken: continuation,
+			}, nil),
+		s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+				s.Equal(continuation, req.NextPageToken)
+				return s.getHistoryTasksResponse(2), nil
+			}),
+	)
+
+	iter, err := s.replicationAckManager.GetReplicationTasksIter(context.Background(), cluster.TestCurrentClusterName, 1, 10)
+	s.NoError(err)
+	var got []int64
+	for iter.HasNext() {
+		task, err := iter.Next()
+		s.NoError(err)
+		got = append(got, task.GetTaskID())
+	}
+	s.Equal([]int64{1, 2}, got)
 }
 
 func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {

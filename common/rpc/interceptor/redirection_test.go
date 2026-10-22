@@ -141,6 +141,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"ExecuteMultiOperation":              {},
 		"UpdateWorkflowExecution":            {},
 		"PollWorkflowExecutionUpdate":        {},
+		"PollWorkflowExecutionTimeSkipping":  {},
 		"TerminateWorkflowExecution":         {},
 		"DeleteWorkflowExecution":            {},
 		"ListTaskQueuePartitions":            {},

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
@@ -77,14 +78,14 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add SA via Visibility struct method.
-	s.visibility.MergeCustomSearchAttributes(
+	s.NoError(s.visibility.MergeCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			stringKey: s.mustEncode(stringVal),
 			intKey:    s.mustEncode(intVal),
 			floatKey:  s.mustEncode(floatVal),
 		},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 1)
 	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
@@ -107,10 +108,10 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 	s.Equal(floatVal, actualFloatVal)
 
 	// Test remove search attributes by setting payload to nil.
-	s.visibility.MergeCustomSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+	s.NoError(s.visibility.MergeCustomSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
 		intKey:   s.mustEncode(intVal),
 		floatKey: nil,
-	})
+	}))
 	s.NoError(err)
 	s.Len(s.mockMutableContext.Tasks, 2)
 	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
@@ -120,10 +121,10 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 	s.Len(sa, 2, "intKey and stringKey should remain")
 
 	// Test removing all search attributes also removes the node.
-	s.visibility.MergeCustomSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+	s.NoError(s.visibility.MergeCustomSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
 		stringKey: nil,
 		intKey:    nil,
-	})
+	}))
 	s.Len(s.mockMutableContext.Tasks, 3)
 	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.SA.TryGet(s.mockContext)
@@ -145,13 +146,106 @@ func (s *visibilitySuite) TestNewVisibilityWithData_FilterNilSearchAttributes() 
 		"nilKey1": nil,
 		"nilKey2": nil,
 	}
-	visibility := NewVisibilityWithData(s.mockMutableContext, customSearchAttributes, customMemo)
+	visibility, err := NewVisibilityWithData(s.mockMutableContext, customSearchAttributes, customMemo)
+	s.NoError(err)
 	// SA should have only 1 field (nil values filtered out)
 	s.Len(visibility.SA.Get(s.mockContext).IndexedFields, 1)
 	s.NotNil(visibility.SA.Get(s.mockContext).IndexedFields[stringKey])
 	// Memo should have only 1 field (nil values filtered out)
 	s.Len(visibility.Memo.Get(s.mockContext).Fields, 1)
 	s.NotNil(visibility.Memo.Get(s.mockContext).Fields[stringKey])
+}
+
+// reservedCustomSearchAttributeKeys covers each category rejected by sadefs.IsReserved:
+// the "Temporal" prefix (including CHASM field names), system, predefined, and reserved names.
+var reservedCustomSearchAttributeKeys = []string{
+	"TemporalCustomKey",
+	"TemporalInt01",
+	"TemporalNamespaceDivision",
+	"WorkflowId",
+	"ExecutionStatus",
+	"BuildIds",
+	"BatcherUser",
+}
+
+func (s *visibilitySuite) TestNewVisibilityWithData_RejectsReservedSearchAttributes() {
+	for _, key := range reservedCustomSearchAttributeKeys {
+		s.Run(key, func() {
+			s.mockMutableContext.Tasks = nil
+			visibility, err := NewVisibilityWithData(
+				s.mockMutableContext,
+				map[string]*commonpb.Payload{
+					"CustomKey": s.mustEncode("value"),
+					key:         s.mustEncode("value"),
+				},
+				nil,
+			)
+			var invalidArgErr *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgErr)
+			s.ErrorContains(err, key)
+			s.Nil(visibility)
+			s.Empty(s.mockMutableContext.Tasks)
+		})
+	}
+}
+
+func (s *visibilitySuite) TestMergeCustomSearchAttributes_RejectsReservedSearchAttributes() {
+	s.NoError(s.visibility.MergeCustomSearchAttributes(
+		s.mockMutableContext,
+		map[string]*commonpb.Payload{"CustomKey": s.mustEncode("original")},
+	))
+	s.mockMutableContext.Tasks = nil
+
+	for _, key := range reservedCustomSearchAttributeKeys {
+		s.Run(key, func() {
+			for _, value := range []*commonpb.Payload{s.mustEncode("value"), nil} {
+				err := s.visibility.MergeCustomSearchAttributes(
+					s.mockMutableContext,
+					map[string]*commonpb.Payload{
+						"CustomKey": s.mustEncode("updated"),
+						key:         value,
+					},
+				)
+				var invalidArgErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgErr)
+				s.ErrorContains(err, key)
+				s.Empty(s.mockMutableContext.Tasks)
+
+				// Existing search attributes are left unchanged.
+				sa := s.visibility.CustomSearchAttributes(s.mockContext)
+				s.Len(sa, 1)
+				protorequire.ProtoEqual(s.T(), s.mustEncode("original"), sa["CustomKey"])
+			}
+		})
+	}
+}
+
+func (s *visibilitySuite) TestReplaceCustomSearchAttributes_RejectsReservedSearchAttributes() {
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
+		s.mockMutableContext,
+		map[string]*commonpb.Payload{"CustomKey": s.mustEncode("original")},
+	))
+	s.mockMutableContext.Tasks = nil
+
+	for _, key := range reservedCustomSearchAttributeKeys {
+		s.Run(key, func() {
+			for _, value := range []*commonpb.Payload{s.mustEncode("value"), nil} {
+				err := s.visibility.ReplaceCustomSearchAttributes(
+					s.mockMutableContext,
+					map[string]*commonpb.Payload{key: value},
+				)
+				var invalidArgErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgErr)
+				s.ErrorContains(err, key)
+				s.Empty(s.mockMutableContext.Tasks)
+
+				// Existing search attributes are left unchanged.
+				sa := s.visibility.CustomSearchAttributes(s.mockContext)
+				s.Len(sa, 1)
+				protorequire.ProtoEqual(s.T(), s.mustEncode("original"), sa["CustomKey"])
+			}
+		})
+	}
 }
 
 func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
@@ -161,14 +255,14 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	byteKey, byteVal := "byteKey", []byte{0x01, 0x02, 0x03}
 
 	// Set up some initial SA.
-	s.visibility.ReplaceCustomSearchAttributes(
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			stringKey: s.mustEncode(stringVal),
 			intKey:    s.mustEncode(intVal),
 			floatKey:  s.mustEncode(floatVal),
 		},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 1)
 	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
@@ -176,13 +270,13 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	s.Len(sa, 3)
 
 	// Set to a new set of SA, non-existing keys should be removed.
-	s.visibility.ReplaceCustomSearchAttributes(
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			floatKey: s.mustEncode(floatVal),
 			byteKey:  s.mustEncode(byteVal),
 		},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 2)
 	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
 
@@ -190,10 +284,10 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	s.Len(sa, 2)
 
 	// Setting to an empty map should remove the node.
-	s.visibility.ReplaceCustomSearchAttributes(
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 3)
 	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.SA.TryGet(s.mockContext)
@@ -201,13 +295,13 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	s.Nil(s.visibility.CustomSearchAttributes(s.mockContext))
 
 	// Test that nil values are filtered out during replace.
-	s.visibility.ReplaceCustomSearchAttributes(
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			stringKey: s.mustEncode(stringVal),
 			intKey:    nil, // Should be filtered out
 		},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 4)
 	s.assertTaskPayload(5, s.mockMutableContext.Tasks[3].Payload)
 
@@ -217,13 +311,13 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	s.Nil(sa[intKey])
 
 	// Test that replacing with all nil values removes the node.
-	s.visibility.ReplaceCustomSearchAttributes(
+	s.NoError(s.visibility.ReplaceCustomSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			stringKey: nil,
 			intKey:    nil,
 		},
-	)
+	))
 	s.Len(s.mockMutableContext.Tasks, 5)
 	s.assertTaskPayload(6, s.mockMutableContext.Tasks[4].Payload)
 	_, ok = s.visibility.SA.TryGet(s.mockContext)

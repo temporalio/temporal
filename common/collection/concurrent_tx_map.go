@@ -21,7 +21,7 @@ type (
 	ShardedConcurrentTxMap struct {
 		shards     [nShards]mapShard
 		hashfn     HashFunc
-		size       int32
+		size       atomic.Int32
 		initialCap int
 	}
 
@@ -87,7 +87,7 @@ func (cmap *ShardedConcurrentTxMap) Put(key any, value any) {
 	cmap.lazyInitShard(shard)
 	_, ok := shard.items[key]
 	if !ok {
-		atomic.AddInt32(&cmap.size, 1)
+		cmap.size.Add(1)
 	}
 	shard.items[key] = value
 	shard.Unlock()
@@ -103,7 +103,7 @@ func (cmap *ShardedConcurrentTxMap) PutIfNotExist(key any, value any) bool {
 	_, ok = shard.items[key]
 	if !ok {
 		shard.items[key] = value
-		atomic.AddInt32(&cmap.size, 1)
+		cmap.size.Add(1)
 	}
 	shard.Unlock()
 	return !ok
@@ -117,7 +117,7 @@ func (cmap *ShardedConcurrentTxMap) Remove(key any) {
 	_, ok := shard.items[key]
 	if ok {
 		delete(shard.items, key)
-		atomic.AddInt32(&cmap.size, -1)
+		cmap.size.Add(-1)
 	}
 	shard.Unlock()
 }
@@ -151,7 +151,7 @@ func (cmap *ShardedConcurrentTxMap) PutOrDo(key any, value any, fn ActionFunc) (
 	if !ok {
 		shard.items[key] = value
 		v = value
-		atomic.AddInt32(&cmap.size, 1)
+		cmap.size.Add(1)
 	} else {
 		err = fn(key, v)
 	}
@@ -169,7 +169,7 @@ func (cmap *ShardedConcurrentTxMap) RemoveIf(key any, fn PredicateFunc) bool {
 		if ok && fn(key, value) {
 			removed = true
 			delete(shard.items, key)
-			atomic.AddInt32(&cmap.size, -1)
+			cmap.size.Add(-1)
 		}
 	}
 	shard.Unlock()
@@ -218,7 +218,7 @@ func (cmap *ShardedConcurrentTxMap) Iter() MapIterator {
 
 // Len returns the number of items in the map
 func (cmap *ShardedConcurrentTxMap) Len() int {
-	return int(atomic.LoadInt32(&cmap.size))
+	return int(cmap.size.Load())
 }
 
 func (cmap *ShardedConcurrentTxMap) getShard(key any) *mapShard {

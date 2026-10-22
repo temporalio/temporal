@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
+const testStatusJobName = "Test Status"
+
 // getWorkflowRun fetches workflow run details for failure notifications.
 func getWorkflowRun(runID string) (*github.Run, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -28,34 +30,27 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	commitMeta, err := github.GetCommit(ctx, "temporalio/temporal", run.HeadSHA)
-	author := commitMeta.Commit.Author.Name
-	if err != nil {
-		// Non-fatal: use unknown if we can't get author
-		author = "Unknown"
-	}
-
-	commit := CommitInfo{
-		SHA:      run.HeadSHA,
-		ShortSHA: run.ShortSHA(),
-		Author:   author,
-		Message:  run.DisplayTitle,
-	}
-
 	// Identify failed jobs
 	var failedJobs []github.Job
 	for _, job := range run.Jobs {
-		if job.Conclusion == github.ConclusionFailure {
+		if isFailedJob(job) {
 			failedJobs = append(failedJobs, job)
 		}
 	}
 
+	failures, err := getFailures(context.Background(), run.DatabaseID)
+	if err != nil {
+		failures = nil
+	}
+
 	return &FailureReport{
-		Workflow:   *run,
-		Commit:     commit,
+		Run:        *run,
 		FailedJobs: failedJobs,
+		Failures:   failures,
 		TotalJobs:  len(run.Jobs),
 	}, nil
+}
+
+func isFailedJob(job github.Job) bool {
+	return job.Conclusion == github.ConclusionFailure && job.Name != testStatusJobName
 }

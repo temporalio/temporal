@@ -87,12 +87,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.NoError(err)
 
 			// Get the task that we skipped, and add it back
-			var task tasks.Task
-			select {
-			case task = <-skippedTasks:
-			case <-s.Context().Done():
-				s.FailNow("timed out waiting for skipped task")
-			}
+			task := s.Rcv(skippedTasks)
 
 			shouldSkip.Store(false)
 			blob, err := serialization.NewSerializer().SerializeTask(task)

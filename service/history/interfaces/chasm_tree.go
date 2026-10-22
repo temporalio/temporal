@@ -8,6 +8,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -16,16 +17,17 @@ var _ ChasmTree = (*chasm.Node)(nil)
 // TODO: Remove this interface and use *chasm.Node directly
 // when chasm/tree.go implementation completes.
 type ChasmTree interface {
-	CloseTransaction() (chasm.NodesMutation, error)
+	CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error)
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
 	PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState)
 	ApplySystemMutation(chasm.NodesMutation) error
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	RefreshTasks() error
+	MarkTotalTimeSkippedUpdatedInPassive()
 	IsStateDirty() bool
 	IsDirty() bool
-	Terminate(chasm.TerminateComponentRequest) error
+	Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error
 	Archetype() (chasm.Archetype, error)
 	ArchetypeID() chasm.ArchetypeID
 	EachPureTask(
