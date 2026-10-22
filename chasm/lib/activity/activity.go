@@ -480,7 +480,8 @@ func (a *Activity) Terminate(
 
 	// If the activity has an attempt running on a worker, proactively notify the worker.
 	// Check before the transition changes the status.
-	if a.hasAttemptInProgress() {
+	actCtx := activityContextFromChasm(ctx)
+	if a.hasAttemptInProgress() && actCtx.config.EnableCancelActivityWorkerCommand(ctx.NamespaceEntry().Name().String()) {
 		a.addWorkerCommandDispatchTask(ctx, &activitypb.WorkerCommandDispatchTask{
 			Command: &activitypb.WorkerCommandDispatchTask_Cancel{},
 		})
