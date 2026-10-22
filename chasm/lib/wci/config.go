@@ -7,14 +7,14 @@ import (
 )
 
 var (
-	InProcessComputeProviders = dynamicconfig.NewGlobalTypedSettingWithConverter(
+	InProcessComputeProviders = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 		"workercontroller.chasm.in_process_compute_providers",
 		convertStringList,
 		[]string{"test-invoke", "test-worker-set"},
 		`InProcessComputeProviders are the provider types a CHASM WCI runs inside history. They must need no
 assumed identity; "subprocess" executes on the history host and is for local development only.`,
 	)
-	RemoteComputeProviders = dynamicconfig.NewGlobalTypedSetting(
+	RemoteComputeProviders = dynamicconfig.NewNamespaceTypedSetting(
 		"workercontroller.chasm.remote_compute_providers",
 		[]string(nil),
 		`RemoteComputeProviders are the provider types a CHASM WCI calls on the WCI process, under its
@@ -34,7 +34,7 @@ the WCI client's task queue (cloud uses temporal-sys-worker-controller-per-ns-tq
 	)
 )
 
-// convertStringList makes a configured list replace the default: NewGlobalTypedSetting merges over a
+// convertStringList makes a configured list replace the default: typed settings merge over a
 // copy of it, so ["subprocess"] would become [subprocess test-worker-set].
 func convertStringList(in any) ([]string, error) {
 	var out []string

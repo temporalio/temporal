@@ -100,9 +100,9 @@ func (h *handler) algorithmContext(ctx context.Context) context.Context {
 }
 
 // checkSupported rejects provider types CHASM cannot run, so the caller keeps the WCI a workflow.
-func (h *handler) checkSupported(spec *iface.WorkerControllerInstanceSpec) error {
+func (h *handler) checkSupported(namespaceName string, spec *iface.WorkerControllerInstanceSpec) error {
 	for _, group := range spec.ScalingGroupSpecs {
-		if !h.compute.Supports(string(group.Compute.ProviderType)) {
+		if !h.compute.Supports(namespaceName, string(group.Compute.ProviderType)) {
 			return ErrProviderNotSupportedOnCHASM
 		}
 	}
@@ -114,7 +114,7 @@ func (h *handler) validate(ctx context.Context, rc compute.RequestContext, spec 
 	if err := spec.Validate(); err != nil {
 		return err
 	}
-	if err := h.checkSupported(spec); err != nil {
+	if err := h.checkSupported(rc.NamespaceName, spec); err != nil {
 		return err
 	}
 	if err := validateAlgorithms(h.algorithmContext(ctx), spec); err != nil {
@@ -344,7 +344,11 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 	for id, group := range req.GetState().GetScalingGroupSpecs() {
 		spec.ScalingGroupSpecs[id] = migration.SpecToWorkflow(group)
 	}
-	if err := h.checkSupported(spec); err != nil {
+	name, err := h.namespaces.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	if err := h.checkSupported(name.String(), spec); err != nil {
 		return nil, err
 	}
 	if req.GetMigrationToken() == "" || req.GetExpireTime() == nil {

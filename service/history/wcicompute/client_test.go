@@ -78,29 +78,51 @@ func TestFactoryRouting(t *testing.T) {
 		wci.RemoteComputeProviders.Key(): []string{"aws-lambda", "test-invoke"},
 	}, nil)
 
-	_, err := c.factory.For("test-invoke")
+	_, err := c.factory.For("ns", "test-invoke")
 	require.NoError(t, err)
-	svc, _ := c.factory.For("test-invoke")
+	svc, _ := c.factory.For("ns", "test-invoke")
 	require.IsType(t, localClient{}, svc, "in-process wins over remote")
 
-	svc, err = c.factory.For("aws-lambda")
+	svc, err = c.factory.For("ns", "aws-lambda")
 	require.NoError(t, err)
 	require.IsType(t, &RemoteClient{}, svc)
 
-	_, err = c.factory.For("gcp-cloud-run")
+	_, err = c.factory.For("ns", "gcp-cloud-run")
 	require.ErrorIs(t, err, wci.ErrProviderNotSupportedOnCHASM, "in neither list: stays a workflow")
 }
 
 func TestSupports(t *testing.T) {
 	settings := dynamicconfig.StaticClient{wci.RemoteComputeProviders.Key(): []string{"aws-lambda"}}
 	configured := newTestClient(t, settings, nil)
-	require.True(t, configured.Supports("test-invoke"), "in process")
-	require.True(t, configured.Supports("aws-lambda"), "served by the WCI process")
-	require.False(t, configured.Supports("gcp-cloud-run"), "in neither list")
+	require.True(t, configured.Supports("ns", "test-invoke"), "in process")
+	require.True(t, configured.Supports("ns", "aws-lambda"), "served by the WCI process")
+	require.False(t, configured.Supports("ns", "gcp-cloud-run"), "in neither list")
 
 	notReachable := newTestClient(t, settings, newRemoteClient(func() bool { return false }, nil, nil))
-	require.False(t, notReachable.Supports("aws-lambda"), "history can't resolve the WCI service, so it stays a workflow")
-	require.True(t, notReachable.Supports("test-invoke"), "in-process types don't depend on it")
+	require.False(t, notReachable.Supports("ns", "aws-lambda"), "history can't resolve the WCI service, so it stays a workflow")
+	require.True(t, notReachable.Supports("ns", "test-invoke"), "in-process types don't depend on it")
+}
+
+func TestProviderListsPerNamespace(t *testing.T) {
+	c := newTestClient(t, dynamicconfig.StaticClient{
+		wci.InProcessComputeProviders.Key(): []dynamicconfig.ConstrainedValue{
+			{Constraints: dynamicconfig.Constraints{Namespace: "dev"}, Value: []string{"test-invoke", "subprocess"}},
+		},
+		wci.RemoteComputeProviders.Key(): []dynamicconfig.ConstrainedValue{
+			{Constraints: dynamicconfig.Constraints{Namespace: "prod"}, Value: []string{"aws-lambda"}},
+		},
+	}, nil)
+	require.True(t, c.Supports("dev", "subprocess"))
+	require.False(t, c.Supports("other", "subprocess"), "other namespaces keep the default")
+	require.True(t, c.Supports("other", "test-worker-set"))
+	require.True(t, c.Supports("prod", "aws-lambda"))
+	require.False(t, c.Supports("dev", "aws-lambda"))
+
+	svc, err := c.factory.For("prod", "aws-lambda")
+	require.NoError(t, err)
+	require.Equal(t, c.factory.remote, svc)
+	_, err = c.factory.For("dev", "aws-lambda")
+	require.ErrorIs(t, err, wci.ErrProviderNotSupportedOnCHASM)
 }
 
 func TestInProcessAllowList(t *testing.T) {
@@ -194,7 +216,7 @@ func (r *recordingService) UpdateWorkerSetSize(_ context.Context, req *workercon
 func TestRequestFieldsAndFailureClassReachTheCaller(t *testing.T) {
 	recorder := &recordingService{}
 	c := &Client{
-		factory:     &Factory{remote: recorder, inProcess: func() []string { return nil }, remoteFor: func() []string { return []string{"aws-lambda"} }},
+		factory:     &Factory{remote: recorder, inProcess: func(string) []string { return nil }, remoteFor: func(string) []string { return []string{"aws-lambda"} }},
 		concurrency: func(string) int { return 1 },
 		limiters:    map[string]chan struct{}{},
 	}
