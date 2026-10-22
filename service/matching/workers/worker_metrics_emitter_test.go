@@ -174,19 +174,19 @@ func TestWorkerHeartbeatCountMetrics(t *testing.T) {
 	countByTaskType := func(name string) map[string]int {
 		counts := make(map[string]int)
 		for _, m := range snapshot[name] {
-			assert.Equal(t, "test-namespace", m.Tags["namespace"])
-			assert.Equal(t, "__omitted__", m.Tags["taskqueue"])
+			require.Equal(t, "test-namespace", m.Tags["namespace"])
+			require.Equal(t, "__omitted__", m.Tags["taskqueue"])
 			counts[m.Tags[metrics.TaskTypeTagName]]++
 		}
 		return counts
 	}
 
-	assert.Equal(t, map[string]int{
+	require.Equal(t, map[string]int{
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(): 2,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(): 2,
 		enumspb.TASK_QUEUE_TYPE_NEXUS.String():    1,
 	}, countByTaskType(metrics.WorkerHeartbeatCount.Name()))
-	assert.Equal(t, map[string]int{
+	require.Equal(t, map[string]int{
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(): 1,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(): 1,
 	}, countByTaskType(metrics.PollerAutoscalingHeartbeatCount.Name()))
@@ -211,8 +211,8 @@ func TestWorkerHeartbeatCountMetricsDisabled(t *testing.T) {
 	}})
 
 	snapshot := capture.Snapshot()
-	assert.Empty(t, snapshot[metrics.WorkerHeartbeatCount.Name()])
-	assert.Empty(t, snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()])
+	require.Empty(t, snapshot[metrics.WorkerHeartbeatCount.Name()])
+	require.Empty(t, snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()])
 }
 
 func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
