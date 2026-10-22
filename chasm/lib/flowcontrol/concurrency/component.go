@@ -40,11 +40,13 @@ func expiredReservation(slot *fcpb.ConcurrencyState_Slot, nowSec int64) bool {
 	return !slot.Committed && slot.Expires != nil && slot.Expires.Seconds < nowSec+1
 }
 
-func (c *Component) expire(now time.Time) {
+func (c *Component) expire(now time.Time) int {
+	previous := len(c.Slots)
 	nowSec := now.Unix()
 	c.Slots = slices.DeleteFunc(c.Slots, func(slot *fcpb.ConcurrencyState_Slot) bool {
 		return expiredReservation(slot, nowSec)
 	})
+	return previous - len(c.Slots)
 }
 
 func (c *Component) find(slotID string) int {
@@ -93,8 +95,9 @@ func (c *Component) reserve(slotID string, now time.Time) bool {
 		return false
 	}
 	c.Slots = append(c.Slots, &fcpb.ConcurrencyState_Slot{
-		SlotId:    slotID,
-		Committed: false,
+		SlotId:     slotID,
+		Committed:  false,
+		ReservedAt: timestamppb.New(now),
 		// Truncate is okay because expire adds a second anyway.
 		Expires: timestamppb.New(now.Add(reserveTimeout).Truncate(time.Second)),
 	})
@@ -107,16 +110,17 @@ func (c *Component) cancelReservation(slotID string) {
 	})
 }
 
-func (c *Component) commit(slotID string) bool {
+func (c *Component) commit(slotID string) (success, changed bool, reservedAt *timestamppb.Timestamp) {
 	if idx := c.find(slotID); idx >= 0 {
-		// note this works even if it was already committed
-		c.Slots[idx].Committed = true
-		c.Slots[idx].Expires = nil
-		return true
+		slot := c.Slots[idx]
+		changed = !slot.Committed
+		reservedAt = slot.ReservedAt
+		slot.Committed = true
+		slot.Expires = nil
+		slot.ReservedAt = nil
+		return true, changed, reservedAt
 	}
-
-	// TODO(fc): consider fast-recover if free slots
-	return false
+	return false, false, nil
 }
 
 func (c *Component) release(slotID string) {

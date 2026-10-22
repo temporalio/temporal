@@ -15,6 +15,7 @@ import (
 	v1 "go.temporal.io/server/api/taskqueue/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -246,8 +247,10 @@ func (x *ActivityDispatchTask) GetStartDelayBucket() StartDelayBucket {
 }
 
 type ReleaseLimiterTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limiters      []*v1.LimiterRef       `protobuf:"bytes,1,rep,name=limiters,proto3" json:"limiters,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Limiters []*v1.LimiterRef       `protobuf:"bytes,1,rep,name=limiters,proto3" json:"limiters,omitempty"`
+	// Time the activity scheduled this release, retained across task retries.
+	ScheduledAt   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=scheduled_at,json=scheduledAt,proto3" json:"scheduled_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -285,6 +288,13 @@ func (*ReleaseLimiterTask) Descriptor() ([]byte, []int) {
 func (x *ReleaseLimiterTask) GetLimiters() []*v1.LimiterRef {
 	if x != nil {
 		return x.Limiters
+	}
+	return nil
+}
+
+func (x *ReleaseLimiterTask) GetScheduledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ScheduledAt
 	}
 	return nil
 }
@@ -476,13 +486,14 @@ var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a.temporal/server/api/taskqueue/v1/message.proto\"\xff\x01\n" +
+	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\xff\x01\n" +
 	"\x14ActivityDispatchTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\x12d\n" +
 	"\x0fdispatch_reason\x18\x02 \x01(\x0e2;.temporal.server.chasm.lib.activity.proto.v1.DispatchReasonR\x0edispatchReason\x12k\n" +
-	"\x12start_delay_bucket\x18\x03 \x01(\x0e2=.temporal.server.chasm.lib.activity.proto.v1.StartDelayBucketR\x10startDelayBucket\"^\n" +
+	"\x12start_delay_bucket\x18\x03 \x01(\x0e2=.temporal.server.chasm.lib.activity.proto.v1.StartDelayBucketR\x10startDelayBucket\"\x9d\x01\n" +
 	"\x12ReleaseLimiterTask\x12H\n" +
-	"\blimiters\x18\x01 \x03(\v2,.temporal.server.api.taskqueue.v1.LimiterRefR\blimiters\"2\n" +
+	"\blimiters\x18\x01 \x03(\v2,.temporal.server.api.taskqueue.v1.LimiterRefR\blimiters\x12=\n" +
+	"\fscheduled_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vscheduledAt\"2\n" +
 	"\x1aScheduleToStartTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
 	"\x1aScheduleToCloseTimeoutTask\x12\x14\n" +
@@ -532,16 +543,18 @@ var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any
 	(*StartToCloseTimeoutTask)(nil),    // 6: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
 	(*HeartbeatTimeoutTask)(nil),       // 7: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
 	(*v1.LimiterRef)(nil),              // 8: temporal.server.api.taskqueue.v1.LimiterRef
+	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.dispatch_reason:type_name -> temporal.server.chasm.lib.activity.proto.v1.DispatchReason
 	1, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.start_delay_bucket:type_name -> temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
 	8, // 2: temporal.server.chasm.lib.activity.proto.v1.ReleaseLimiterTask.limiters:type_name -> temporal.server.api.taskqueue.v1.LimiterRef
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	9, // 3: temporal.server.chasm.lib.activity.proto.v1.ReleaseLimiterTask.scheduled_at:type_name -> google.protobuf.Timestamp
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() }

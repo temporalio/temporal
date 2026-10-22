@@ -33,7 +33,7 @@ func (t *StagedWakeHandler) Execute(cctx chasm.MutableContext, c *Component, _ c
 		return t.handler.getWakeLevel(key, wantTokens)
 	}
 
-	c.expire(cctx.Now(c))
+	recordExpirationAttempts(cctx, c.expire(cctx.Now(c)))
 
 	// double number woken at each stage
 	c.WakeStage++

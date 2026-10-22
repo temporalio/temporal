@@ -29,6 +29,7 @@ type batchReq struct {
 }
 
 type chasmReq struct {
+	metrics      *batchMetrics
 	items        []batchReq
 	getWakeLevel func(wantTokens int32) (wakeUpTo int64, wakeAll bool)
 }
@@ -109,6 +110,12 @@ func initFn(_ chasm.MutableContext, creq chasmReq) (*Component, error) {
 
 func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.ConcurrencyBatchResponse, error) {
 	now := cctx.Now(c)
+	m := creq.metrics
+	if m == nil {
+		m = &batchMetrics{}
+	}
+	*m = batchMetrics{operations: make(map[operationResult]int64), observedAt: now}
+	m.handler, m.wholeQueue = limiterMetricsHandler(cctx.MetricsHandler(), cctx.ExecutionKey())
 
 	// allocate new protos for responses
 	ress := make([]*fcpb.ConcurrencyBatchResponse, len(creq.items))
@@ -120,7 +127,7 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 	prevEffectiveAvailable := c.effectiveAvailableSlots(now)
 
 	// expire old reservations
-	c.expire(now)
+	recordExpirationAttempts(cctx, c.expire(now))
 
 	// update config
 	for _, it := range creq.items {
@@ -130,14 +137,31 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 	// apply releases
 	for _, it := range creq.items {
 		for _, slotId := range it.req.GetReleaseSlots() {
+			before := len(c.Slots)
 			c.release(slotId)
+			outcome := "NOOP"
+			if len(c.Slots) < before {
+				outcome = "APPLIED"
+			}
+			m.recordOperation("RELEASE", outcome)
 		}
 	}
 
 	// apply commits
 	for i, it := range creq.items {
 		for _, slotId := range it.req.GetCommitSlots() {
-			success := c.commit(slotId)
+			success, changed, reservedAt := c.commit(slotId)
+			outcome := "REJECTED"
+			if success {
+				outcome = "DUPLICATE"
+			}
+			if changed {
+				outcome = "APPLIED"
+				if reservedAt != nil && !now.Before(reservedAt.AsTime()) {
+					m.commitLatencies = append(m.commitLatencies, now.Sub(reservedAt.AsTime()))
+				}
+			}
+			m.recordOperation("COMMIT", outcome)
 			ress[i].CommitSuccess = append(ress[i].CommitSuccess, success)
 		}
 	}
@@ -145,14 +169,29 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 	// apply cancels
 	for _, it := range creq.items {
 		for _, slotId := range it.req.GetCancelReservationSlots() {
+			before := len(c.Slots)
 			c.cancelReservation(slotId)
+			outcome := "NOOP"
+			if len(c.Slots) < before {
+				outcome = "APPLIED"
+			}
+			m.recordOperation("CANCEL", outcome)
 		}
 	}
 
 	// apply reserves
 	for i, it := range creq.items {
 		for _, slotId := range it.req.GetReserveSlots() {
+			before := len(c.Slots)
 			success := c.reserve(slotId, now)
+			outcome := "REJECTED"
+			if success {
+				outcome = "DUPLICATE"
+			}
+			if len(c.Slots) > before {
+				outcome = "APPLIED"
+			}
+			m.recordOperation("RESERVE", outcome)
 			ress[i].ReserveSuccess = append(ress[i].ReserveSuccess, success)
 		}
 	}
@@ -182,6 +221,15 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 		ress[i].AvailableSlotsHint = availableSlots
 	}
 
+	m.limit = c.Config.ConcurrentTasks
+	m.available = c.availableSlots()
+	for _, slot := range c.Slots {
+		if slot.Committed {
+			m.committed++
+		} else {
+			m.reserved++
+		}
+	}
 	return ress, nil
 }
 
@@ -206,6 +254,7 @@ func (h *Handler) applyBatch(
 	}
 
 	creq := chasmReq{
+		metrics:      &batchMetrics{},
 		items:        items,
 		getWakeLevel: func(wantTokens int32) (int64, bool) { return h.getWakeLevel(key, wantTokens) },
 	}
@@ -226,6 +275,9 @@ func (h *Handler) applyBatch(
 			creq,
 			opts...,
 		)
+		if err == nil {
+			creq.metrics.record()
+		}
 		return makeBatchResults(len(items), updateRes.UpdateOutput, err)
 	}
 
@@ -239,6 +291,9 @@ func (h *Handler) applyBatch(
 		creq,
 		opts...,
 	)
+	if err == nil {
+		creq.metrics.record()
+	}
 	return makeBatchResults(len(items), ress, err)
 }
 

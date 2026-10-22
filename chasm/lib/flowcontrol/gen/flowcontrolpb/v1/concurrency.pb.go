@@ -465,7 +465,9 @@ type ConcurrencyState_Slot struct {
 	// Committed slots don't expire, they must be Released.
 	Committed bool `protobuf:"varint,2,opt,name=committed,proto3" json:"committed,omitempty"`
 	// Expiry time for reserved slot.
-	Expires       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires,proto3" json:"expires,omitempty"`
+	Expires *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires,proto3" json:"expires,omitempty"`
+	// Exact initial reservation time for latency metrics. Cleared when committed.
+	ReservedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=reserved_at,json=reservedAt,proto3" json:"reserved_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -521,11 +523,18 @@ func (x *ConcurrencyState_Slot) GetExpires() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *ConcurrencyState_Slot) GetReservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReservedAt
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/flowcontrol/proto/v1/concurrency.proto\x12.temporal.server.chasm.lib.flowcontrol.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\xc8\x03\n" +
+	"@temporal/server/chasm/lib/flowcontrol/proto/v1/concurrency.proto\x12.temporal.server.chasm.lib.flowcontrol.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\x86\x04\n" +
 	"\x10ConcurrencyState\x12C\n" +
 	"\x06config\x18\x01 \x01(\v2+.temporal.api.taskqueue.v1.ConcurrencyLimitR\x06config\x12%\n" +
 	"\x0econfig_version\x18\x02 \x01(\x03R\rconfigVersion\x12[\n" +
@@ -537,11 +546,13 @@ const file_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto_rawD
 	"wake_up_to\x18\x05 \x01(\x03R\bwakeUpTo\x12\x19\n" +
 	"\bwake_all\x18\x06 \x01(\bR\awakeAll\x12\x1d\n" +
 	"\n" +
-	"wake_stage\x18\a \x01(\x05R\twakeStage\x1as\n" +
+	"wake_stage\x18\a \x01(\x05R\twakeStage\x1a\xb0\x01\n" +
 	"\x04Slot\x12\x17\n" +
 	"\aslot_id\x18\x01 \x01(\tR\x06slotId\x12\x1c\n" +
 	"\tcommitted\x18\x02 \x01(\bR\tcommitted\x124\n" +
-	"\aexpires\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aexpires\"\xfb\x02\n" +
+	"\aexpires\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aexpires\x12;\n" +
+	"\vreserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"reservedAt\"\xfb\x02\n" +
 	"\x17ConcurrencyBatchRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12#\n" +
@@ -604,15 +615,16 @@ var file_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto_depIdx
 	5, // 1: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyState.slots:type_name -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyState.Slot
 	6, // 2: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyBatchRequest.config_update:type_name -> temporal.api.taskqueue.v1.ConcurrencyLimit
 	7, // 3: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyState.Slot.expires:type_name -> google.protobuf.Timestamp
-	1, // 4: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Batch:input_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyBatchRequest
-	3, // 5: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Wait:input_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyWaitRequest
-	2, // 6: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Batch:output_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyBatchResponse
-	4, // 7: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Wait:output_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyWaitResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 4: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyState.Slot.reserved_at:type_name -> google.protobuf.Timestamp
+	1, // 5: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Batch:input_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyBatchRequest
+	3, // 6: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Wait:input_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyWaitRequest
+	2, // 7: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Batch:output_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyBatchResponse
+	4, // 8: temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyService.Wait:output_type -> temporal.server.chasm.lib.flowcontrol.proto.v1.ConcurrencyWaitResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_flowcontrol_proto_v1_concurrency_proto_init() }

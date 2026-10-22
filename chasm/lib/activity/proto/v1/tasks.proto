@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;
 
+import "google/protobuf/timestamp.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
@@ -39,6 +40,8 @@ message ActivityDispatchTask {
 
 message ReleaseLimiterTask {
   repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 1;
+  // Time the activity scheduled this release, retained across task retries.
+  google.protobuf.Timestamp scheduled_at = 2;
 }
 
 message ScheduleToStartTimeoutTask {

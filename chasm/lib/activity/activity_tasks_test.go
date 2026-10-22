@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -57,7 +58,7 @@ func TestReleaseLimiterTaskExecute(t *testing.T) {
 	}, &Config{FlowControlClientBatcherOptions: dynamicconfig.GetTypedPropertyFn(stream_batcher.BatcherOptions{
 		MaxItems: 1,
 		IdleTime: time.Minute,
-	})})
+	})}, metrics.NoopMetricsHandler)
 	task := &activitypb.ReleaseLimiterTask{Limiters: []*taskqueuespb.LimiterRef{
 		{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "first-key", SlotId: "bad-slot"},
 		{LimiterType: enumsspb.LIMITER_TYPE_UNSPECIFIED, Key: "ignored-key", SlotId: "ignored-slot"},
@@ -276,4 +277,64 @@ func TestTimeoutTaskTerminalFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReleaseLatencyPreservesSchedulingTime(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		timestamp *timestamppb.Timestamp
+		failed    bool
+		want      bool
+	}{
+		{name: "success", timestamp: timestamppb.New(defaultTime), want: true},
+		{name: "failed release", timestamp: timestamppb.New(defaultTime), failed: true},
+		{name: "legacy task"},
+		{name: "future timestamp", timestamp: timestamppb.New(defaultTime.Add(time.Second))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+			clockSource := clock.NewEventTimeSource().Update(defaultTime.Add(150 * time.Millisecond))
+			releaseErr := errors.New("release failed")
+			h := newReleaseLimiterTaskHandler(&testConcurrencyServiceClient{batch: func(context.Context, *fcpb.ConcurrencyBatchRequest, ...grpc.CallOption) (*fcpb.ConcurrencyBatchResponse, error) {
+				if tc.failed {
+					return nil, releaseErr
+				}
+				return &fcpb.ConcurrencyBatchResponse{}, nil
+			}}, &Config{FlowControlClientBatcherOptions: dynamicconfig.GetTypedPropertyFn(stream_batcher.BatcherOptions{MaxItems: 1, IdleTime: time.Minute})}, captureHandler)
+			h.timeSource = clockSource
+			task := &activitypb.ReleaseLimiterTask{ScheduledAt: tc.timestamp, Limiters: []*taskqueuespb.LimiterRef{{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "wholequeue/test/queue/2/0", SlotId: "slot"}}}
+			err := h.Execute(t.Context(), chasm.ComponentRef{ExecutionKey: chasm.ExecutionKey{NamespaceID: "namespace-id"}}, chasm.TaskAttributes{}, task)
+			if tc.failed {
+				require.ErrorIs(t, err, releaseErr)
+			} else {
+				require.NoError(t, err)
+			}
+			records := capture.Snapshot()["flowcontrol_concurrency_release_latency"]
+			if !tc.want {
+				require.Empty(t, records)
+				return
+			}
+			require.Len(t, records, 1)
+			require.Equal(t, 150*time.Millisecond, records[0].Value)
+			require.Equal(t, "namespace-id", records[0].Tags["namespace_id"])
+			require.Equal(t, "test/queue", records[0].Tags["taskqueue"])
+		})
+	}
+}
+
+func TestReleaseLimiterTaskSchedulingTimestamp(t *testing.T) {
+	t.Parallel()
+	cctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return defaultTime }}}
+	limiter := &taskqueuespb.LimiterRef{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "wholequeue/queue/2/0", SlotId: "slot"}
+	a := &Activity{LastAttempt: chasm.NewDataField(cctx, &activitypb.ActivityAttemptState{Limiters: []*taskqueuespb.LimiterRef{limiter}})}
+	a.releaseAttemptLimiters(cctx)
+	require.Len(t, cctx.Tasks, 1)
+	payload, ok := cctx.Tasks[0].Payload.(*activitypb.ReleaseLimiterTask)
+	require.True(t, ok)
+	require.Equal(t, defaultTime, payload.GetScheduledAt().AsTime())
+	require.Equal(t, []*taskqueuespb.LimiterRef{limiter}, payload.GetLimiters())
 }

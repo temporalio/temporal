@@ -26,9 +26,11 @@ func TestSlotLifecycle(t *testing.T) {
 	require.True(t, limiter.reserve("slot-1", now))
 	require.Len(t, limiter.Slots, 1)
 	require.False(t, limiter.reserve("slot-2", now))
-	require.False(t, limiter.commit("slot-2"))
+	success, _, _ := limiter.commit("slot-2")
+	require.False(t, success)
 
-	require.True(t, limiter.commit("slot-1"))
+	success, _, _ = limiter.commit("slot-1")
+	require.True(t, success)
 	limiter.cancelReservation("slot-1")
 	require.Len(t, limiter.Slots, 1)
 
