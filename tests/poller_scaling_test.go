@@ -580,6 +580,97 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSignalsV2DelayScaleUp() {
 	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay), 1)
 }
 
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV1() {
+	s.testPollerScalingNexusRatioScaleUp(false)
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2() {
+	s.testPollerScalingNexusRatioScaleUp(true)
+}
+
+// Nexus tasks are never backlogged, so the ratio signal is what scales up Nexus pollers. The delay
+// signal is disabled here so a scale-up can only come from the ratio of adds to dispatches (v1) or
+// sync matches (v2).
+func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV2 bool) {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingUseSignalsV2ForPollerScaling, useSignalsV2),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp, time.Hour),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+
+	_, err := env.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: env.Namespace().String(),
+						TaskQueue: tq,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Queue a few workflows; each attempt below consumes one workflow task.
+	for range 5 {
+		_, err := env.SdkClient().ExecuteWorkflow(
+			s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.NoError(err)
+	}
+
+	// Schedule a batch of Nexus operations with no Nexus poller present. Retry because the new
+	// endpoint isn't visible to history immediately.
+	const numOperations = 10
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp := s.pollWorkflowTask(env, tq)
+		require.NotEmpty(t, resp.GetTaskToken())
+		commands := make([]*commandpb.Command, 0, numOperations)
+		for range numOperations {
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			})
+		}
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: resp.TaskToken,
+			Commands:  commands,
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Operations are added faster than this single poller takes them, so the ratio signal fires.
+	// Poll until a decision comes back, since the operations reach matching asynchronously.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.GetTaskToken())
+		require.NotNil(t, resp.GetPollerScalingDecision())
+		require.Equal(t, int32(1), resp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
+	}, 30*time.Second, 100*time.Millisecond)
+
+	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio), 1)
+	s.Zero(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay))
+}
+
 // startBacklog starts n workflows with no pollers present and waits until their tasks are persisted, so
 // they are later dispatched from the DB backlog rather than sync-matched.
 func (s *PollerScalingIntegSuite) startBacklog(env *testcore.TestEnv, tq string, n int) {
