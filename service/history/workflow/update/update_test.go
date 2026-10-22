@@ -1477,8 +1477,9 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("on stateSent flush skips already-persisted requestID", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, optionsEventCount := countingOptionsStore(effects)
-		store.HasRequestIDFunc = func(requestID string) bool {
-			return requestID == tv.RequestID()
+		store.HasCallbackAttachmentFunc = func(updateID, requestID string) (bool, error) {
+			require.Equal(t, tv.UpdateID(), updateID)
+			return requestID == tv.RequestID(), nil
 		}
 		upd := update.New(tv.UpdateID())
 		mustAdmit(t, store, upd)
@@ -1609,8 +1610,9 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("re-buffered requestID deduped against persisted state after loss", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, optionsEventCount := countingOptionsStore(effects)
-		store.HasRequestIDFunc = func(requestID string) bool {
-			return requestID == tv.RequestID()
+		store.HasCallbackAttachmentFunc = func(updateID, requestID string) (bool, error) {
+			require.Equal(t, tv.UpdateID(), updateID)
+			return requestID == tv.RequestID(), nil
 		}
 		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
 
@@ -1619,6 +1621,20 @@ func TestAttachCallbacks(t *testing.T) {
 		require.True(t, fired)
 		require.Equal(t, 0, *optionsEventCount,
 			"already-persisted requestID should not write another event")
+	})
+
+	t.Run("requestID lookup error returns error without creating event", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		store.HasCallbackAttachmentFunc = func(string, string) (bool, error) {
+			return false, serviceerror.NewInternal("request ID lookup failed")
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.False(t, fired)
+		require.ErrorContains(t, err, "request ID lookup failed")
+		require.False(t, *eventCreated)
 	})
 
 	t.Run("with EventStore error returns error", func(t *testing.T) {
@@ -1660,8 +1676,9 @@ func TestAttachCallbacks(t *testing.T) {
 		eventCreated := false
 		store := mockEventStore{
 			Controller: effects,
-			HasRequestIDFunc: func(requestID string) bool {
-				return requestID == tv.RequestID()
+			HasCallbackAttachmentFunc: func(updateID, requestID string) (bool, error) {
+				require.Equal(t, tv.UpdateID(), updateID)
+				return requestID == tv.RequestID(), nil
 			},
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
@@ -1682,8 +1699,9 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("different requestID on stateAccepted creates event normally", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, capturedOptions := capturingStore(effects)
-		store.HasRequestIDFunc = func(requestID string) bool {
-			return false // different requestID, not seen before
+		store.HasCallbackAttachmentFunc = func(updateID, requestID string) (bool, error) {
+			require.Equal(t, tv.UpdateID(), updateID)
+			return false, nil // Different request ID, not seen before.
 		}
 		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
 

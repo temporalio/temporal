@@ -495,15 +495,15 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 }
 
 // persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
-// buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
+// buffered AttachCallbacks callback, skipping any whose requestID is already attached.
 // Called from onAcceptanceMsg after the acceptance event has been written.
 //
 // NOTE: Each pending callback requires its own event because the API proto's
 // WorkflowUpdateOptionsUpdate carries a singular AttachedRequestId, and the
 // WorkflowUpdateOptions map is keyed by update ID (all entries here share u.id,
 // so only one map entry is possible per event). Each requestID must be durably
-// recorded in the event so that ApplyWorkflowExecutionOptionsUpdatedEvent can
-// call AttachRequestID during replay for correct deduplication.
+// recorded in the event so that replay reconstructs the callback component used
+// for deduplication.
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
@@ -527,8 +527,14 @@ func (u *Update) persistCallback(
 	completionCallbacks []*commonpb.Callback,
 ) (isCallbackAttached bool, err error) {
 	// Callback is already attached, no need to update.
-	if requestID != "" && eventStore.HasRequestID(requestID) {
-		return true, nil
+	if requestID != "" {
+		attached, lookupErr := eventStore.HasCallbackAttachment(u.id, requestID)
+		if lookupErr != nil {
+			return false, lookupErr
+		}
+		if attached {
+			return true, nil
+		}
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
 		nil, false, "", nil, nil, "", nil, nil, false,

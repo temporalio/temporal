@@ -122,7 +122,7 @@ func (u *Updater) ApplyRequest(
 	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
-	u.requestIDLink = u.captureRequestIDLink(ms)
+	u.requestIDLink = u.captureRequestIDLink(ctx, ms)
 	return action, nil
 }
 
@@ -265,7 +265,7 @@ func (u *Updater) applyRequest(
 //	    - No: is the Update already completed?
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
-func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
+func (u *Updater) captureRequestIDLink(ctx context.Context, ms historyi.MutableState) *commonpb.Link {
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
 	if requestID == "" {
@@ -279,8 +279,25 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 	}
 
 	var eventType enumspb.EventType
-	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
-		eventType = requestIDInfo.GetEventType()
+	eventReference, ok, err := workflow.ResolveCallbackAttachmentEventReference(
+		ctx,
+		ms,
+		request.GetMeta().GetUpdateId(),
+		requestID,
+	)
+	if err != nil {
+		u.shardCtx.GetLogger().Warn(
+			"unable to resolve update callback request ID link",
+			tag.NewStringTag("update-id", request.GetMeta().GetUpdateId()),
+			tag.RequestID(requestID),
+			tag.Error(err),
+		)
+		// The link is a response hint. Fall back to the accepted event instead of
+		// projecting a request ID reference from incomplete state.
+		return nil
+	}
+	if ok {
+		eventType = eventReference.EventType
 	} else {
 		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
 		if updateInfo.GetCompletion() != nil {
