@@ -82,14 +82,7 @@ Before writing, reviewing, or running tests, read and follow the [testing guide]
 - CLI documentation follows the codebase's conventions, including capitalization of proper nouns.
 - Metric tags match existing formats, including `CONSTANT_CASE` for enum values.
 - Error messages match the surrounding code's style, including omission of punctuation for single sentences.
-
-### Nexus logging
-
-- New or changed logs on Nexus lifecycle paths carry the appropriate `tag.NexusStage*` value from `common/log/tag/values.go` so stage-based log searches continue to find failures.
-- Choose the stage for the local work: caller dispatch is caller outbound, operation handling is handler inbound, completion callbacks are handler outbound, and receiving completions is caller inbound.
-- Attach the stage with `log.With` at the Nexus boundary and propagate that logger through helpers, adapters, and task executors. Include failures before routing, authorization, or namespace lookup completes when their stage is already known.
-- In shared interceptors and task-processing code, classify the Nexus path before adding a stage. Standalone Nexus frontend API requests are identified by their operation name; they are not caller outbound merely because they initiate an operation.
-- Preserve available request ID, namespace, and task queue tags alongside the stage so logs can be correlated across caller and handler services.
+- Nexus-related logs use the `tag.NexusStage*` value matching the local phase, as defined in `common/log/tag/values.go`.
 
 ## 8. Code comments
 
