@@ -62,9 +62,9 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 			}
 		}
 
-		// Poller autoscaling metrics (if enabled)
+		// Per-task-queue heartbeat metrics, including poller autoscaling (if enabled)
 		if enablePollerAutoscalingMetrics {
-			e.emitPollerAutoscaling(nsID, nsName, hb)
+			e.emitPollerHeartbeat(nsID, nsName, hb)
 		}
 
 		// Storage driver metrics (if external payloads enabled)
@@ -86,29 +86,31 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	}
 }
 
-func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+// emitPollerHeartbeat records the total heartbeat count for each task type the worker is polling, and additionally
+// the autoscaling heartbeat count if that poller has autoscaling enabled. Autoscaling is therefore a subset of total.
+func (e *workerMetricsEmitter) emitPollerHeartbeat(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
 	family, err := tqid.NewTaskQueueFamily(nsID.String(), hb.GetTaskQueue())
 	if err != nil {
 		return
 	}
 
-	recordAutoscaling := func(taskType enumspb.TaskQueueType) {
+	record := func(taskType enumspb.TaskQueueType, pollerInfo *workerpb.WorkerPollerInfo) {
+		if pollerInfo == nil {
+			return // worker is not polling this task type
+		}
 		tq := family.TaskQueue(taskType)
 		breakdownByTQ := e.config.BreakdownMetricsByTaskQueue != nil &&
 			e.config.BreakdownMetricsByTaskQueue(nsName.String(), hb.GetTaskQueue(), taskType)
 		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, breakdownByTQ)
-		metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		metrics.WorkerHeartbeatCount.With(handler).Record(1)
+		if pollerInfo.GetIsAutoscaling() {
+			metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		}
 	}
 
-	if hb.WorkflowPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	}
-	if hb.ActivityPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	}
-	if hb.NexusPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
-	}
+	record(enumspb.TASK_QUEUE_TYPE_WORKFLOW, hb.WorkflowPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_ACTIVITY, hb.ActivityPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_NEXUS, hb.NexusPollerInfo)
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
