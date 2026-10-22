@@ -276,8 +276,8 @@ message ActivityAttemptState {
   // Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
   string worker_control_task_queue = 15;
 
-  // The serialized ComponentRef captured when the attempt was scheduled. Used to
-  // construct the task token for sending worker commands.
+  // The serialized ComponentRef that matching embedded in the task token sent to the worker.
+  // Set when the attempt starts. Used to build the task token for worker commands.
   bytes component_ref = 16;
 }
 

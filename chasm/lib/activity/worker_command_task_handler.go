@@ -23,7 +23,7 @@ import (
 // worker control queue.
 type workerCommandDispatchTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*activitypb.WorkerCommandDispatchTask]
-	matchingClient    resource.MatchingClient
+	dispatcher        *workercommands.Dispatcher
 	namespaceRegistry namespace.Registry
 	config            *configs.Config
 	metricsHandler    metrics.Handler
@@ -42,7 +42,12 @@ type workerCommandDispatchTaskHandlerOptions struct {
 
 func newWorkerCommandDispatchTaskHandler(opts workerCommandDispatchTaskHandlerOptions) *workerCommandDispatchTaskHandler {
 	return &workerCommandDispatchTaskHandler{
-		matchingClient:    opts.MatchingClient,
+		dispatcher: workercommands.NewDispatcher(
+			opts.MatchingClient,
+			opts.Config,
+			opts.MetricsHandler,
+			opts.Logger,
+		),
 		namespaceRegistry: opts.NamespaceRegistry,
 		config:            opts.Config,
 		metricsHandler:    opts.MetricsHandler,
@@ -118,14 +123,7 @@ func (h *workerCommandDispatchTaskHandler) Execute(
 		Destination: taskAttrs.Destination,
 	}
 
-	dispatcher := workercommands.NewDispatcher(
-		h.matchingClient,
-		h.config,
-		h.metricsHandler,
-		h.logger,
-	)
-
-	return dispatcher.Execute(ctx, dispatchTask, nsEntry.Name().String())
+	return h.dispatcher.Execute(ctx, dispatchTask, nsEntry.Name().String())
 }
 
 // validateCancelCommand returns true if the activity is in a state where a cancel command

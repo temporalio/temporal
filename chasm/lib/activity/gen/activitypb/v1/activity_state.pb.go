@@ -765,8 +765,8 @@ type ActivityAttemptState struct {
 	// The worker's control queue for sending commands (e.g. cancel, pause, resume).
 	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
 	WorkerControlTaskQueue string `protobuf:"bytes,15,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
-	// The serialized ComponentRef captured when the attempt was scheduled. Used to
-	// construct the task token for sending worker commands.
+	// The serialized ComponentRef that matching embedded in the task token sent to the worker.
+	// Set when the attempt starts. Used to build the task token for worker commands.
 	ComponentRef  []byte `protobuf:"bytes,16,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

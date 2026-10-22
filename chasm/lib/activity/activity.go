@@ -229,7 +229,7 @@ func NewEmbeddedActivity(
 
 // buildWorkerCommandTaskToken builds the serialized task token for a worker command.
 // The token must match what was sent to the worker in the poll response.
-func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
+func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.ComponentRef) ([]byte, error) {
 	attempt := a.LastAttempt.Get(ctx)
 	key := ctx.ExecutionKey()
 
