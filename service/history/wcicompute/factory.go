@@ -15,8 +15,8 @@ import (
 type Factory struct {
 	local     workercontrollerservice.WorkerControllerComputeServiceClient
 	remote    remoteService
-	inProcess dynamicconfig.TypedPropertyFn[[]string]
-	remoteFor dynamicconfig.TypedPropertyFn[[]string]
+	inProcess dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	remoteFor dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 }
 
 func NewFactory(dc *dynamicconfig.Collection, remote *RemoteClient) *Factory {
@@ -36,19 +36,19 @@ type remoteService interface {
 
 // Supports matches For: a remote type counts only while history can resolve the WCI service, so a
 // WCI that could never be served stays a workflow instead of retrying forever on CHASM.
-func (f *Factory) Supports(providerType string) bool {
-	if slices.Contains(f.inProcess(), providerType) {
+func (f *Factory) Supports(namespaceName, providerType string) bool {
+	if slices.Contains(f.inProcess(namespaceName), providerType) {
 		return true
 	}
-	return slices.Contains(f.remoteFor(), providerType) && f.remote.Configured()
+	return slices.Contains(f.remoteFor(namespaceName), providerType) && f.remote.Configured()
 }
 
 // For returns the client for providerType; in-process takes precedence over remote.
-func (f *Factory) For(providerType string) (workercontrollerservice.WorkerControllerComputeServiceClient, error) {
+func (f *Factory) For(namespaceName, providerType string) (workercontrollerservice.WorkerControllerComputeServiceClient, error) {
 	switch {
-	case slices.Contains(f.inProcess(), providerType):
+	case slices.Contains(f.inProcess(namespaceName), providerType):
 		return f.local, nil
-	case slices.Contains(f.remoteFor(), providerType):
+	case slices.Contains(f.remoteFor(namespaceName), providerType):
 		return f.remote, nil
 	default:
 		return nil, wci.ErrProviderNotSupportedOnCHASM

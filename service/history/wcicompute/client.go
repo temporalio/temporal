@@ -43,8 +43,8 @@ func NewClient(dc *dynamicconfig.Collection, factory *Factory) wci.ComputeClient
 	}
 }
 
-func (c *Client) Supports(providerType string) bool {
-	return c.factory.Supports(providerType)
+func (c *Client) Supports(namespaceName, providerType string) bool {
+	return c.factory.Supports(namespaceName, providerType)
 }
 
 func (c *Client) ValidateSpec(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error {
@@ -82,7 +82,7 @@ func (c *Client) call(
 	spec *iface.ComputeProviderSpec,
 	fn func(workercontrollerservice.WorkerControllerComputeServiceClient, *workercontrollerservice.ComputeRequestContext, *workercontrollerservice.ComputeProviderConfig) (*workercontrollerservice.ComputeFailure, error),
 ) error {
-	svc, err := c.factory.For(string(spec.ProviderType))
+	svc, err := c.factory.For(rc.NamespaceName, string(spec.ProviderType))
 	if err != nil {
 		return err
 	}

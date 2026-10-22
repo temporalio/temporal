@@ -49,8 +49,8 @@ type fakeCompute struct {
 	remote []string
 }
 
-func (f *fakeCompute) Supports(providerType string) bool {
-	return slices.Contains(InProcessComputeProviders.Get(dynamicconfig.NewNoopCollection())(), providerType) ||
+func (f *fakeCompute) Supports(namespaceName, providerType string) bool {
+	return slices.Contains(InProcessComputeProviders.Get(dynamicconfig.NewNoopCollection())(namespaceName), providerType) ||
 		slices.Contains(f.remote, providerType)
 }
 
