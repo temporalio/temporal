@@ -271,7 +271,10 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		if !ok {
 			minAckedTaskID = min(minAckedTaskID, 0)
 		} else {
-			minAckedTaskID = min(minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
+			minAckedTaskID = min(
+				minAckedTaskID,
+				readerState.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId-1,
+			)
 		}
 	}
 

@@ -98,6 +98,17 @@ func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_ThreeScopes_Uses
 	s.Equal(int64(100), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_UNSPECIFIED))
 }
 
+func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_LanesUseDefaultCursor() {
+	g := s.newGroup(true)
+	state := s.makeQueueState(50, 50, 300)
+	state.ReaderStates[s.readerID].ReplicationLaneDefaultCursor =
+		shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(200))
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true).Times(2)
+
+	s.Equal(int64(200), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_HIGH))
+	s.Equal(int64(300), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_LOW))
+}
+
 // BuildReaderState — tiered mode
 
 func (s *replicationReaderGroupSuite) TestBuildReaderState_Tiered_Success() {
@@ -110,9 +121,9 @@ func (s *replicationReaderGroupSuite) TestBuildReaderState_Tiered_Success() {
 	got, err := g.BuildReaderState(attr)
 	s.NoError(err)
 	s.Len(got.Scopes, 3)
-	s.Equal(int64(50), got.Scopes[0].Range.InclusiveMin.TaskId)
-	s.Equal(int64(100), got.Scopes[1].Range.InclusiveMin.TaskId)
-	s.Equal(int64(200), got.Scopes[2].Range.InclusiveMin.TaskId)
+	s.Equal(int64(50), got.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(100), got.Scopes[readerHighPriorityScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(200), got.Scopes[readerLowPriorityScopeIndex].Range.InclusiveMin.TaskId)
 	for _, sc := range got.Scopes {
 		s.Equal(int64(math.MaxInt64), sc.Range.ExclusiveMax.TaskId)
 		s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, sc.Predicate.PredicateType)
@@ -148,9 +159,9 @@ func (s *replicationReaderGroupSuite) TestBuildReaderState_SingleStack_Success()
 	got, err := g.BuildReaderState(attr)
 	s.NoError(err)
 	s.Len(got.Scopes, 1)
-	s.Equal(int64(77), got.Scopes[0].Range.InclusiveMin.TaskId)
-	s.Equal(int64(math.MaxInt64), got.Scopes[0].Range.ExclusiveMax.TaskId)
-	s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, got.Scopes[0].Predicate.PredicateType)
+	s.Equal(int64(77), got.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(math.MaxInt64), got.Scopes[readerOverallScopeIndex].Range.ExclusiveMax.TaskId)
+	s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, got.Scopes[readerOverallScopeIndex].Predicate.PredicateType)
 }
 
 func (s *replicationReaderGroupSuite) TestBuildReaderState_SingleStack_UnexpectedHighPriority_Error() {
@@ -223,9 +234,8 @@ func (s *replicationReaderGroupSuite) TestPriorityScopeIndex() {
 		s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_UNSPECIFIED, 3, allowExtraScopes))
 		s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_UNSPECIFIED, 1, allowExtraScopes))
 	}
-	// The 4+ scope boundary: only the reader group (allowExtraScopes) reads priority
-	// scopes out of an extended state; the legacy path keeps the pre-refactor
-	// exactly-3 semantics and falls back to the overall watermark.
+	// Keep reading the experimental extended-scope encoding during upgrades even
+	// though generic lanes now persist separately from the three priority scopes.
 	s.Equal(1, priorityScopeIndex(enumsspb.TASK_PRIORITY_HIGH, 4, true))
 	s.Equal(2, priorityScopeIndex(enumsspb.TASK_PRIORITY_LOW, 4, true))
 	s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_HIGH, 4, false))
