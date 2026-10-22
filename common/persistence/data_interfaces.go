@@ -505,11 +505,9 @@ type (
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
-		ShardID             int32
-		TaskCategory        tasks.Category
-		InclusiveMinTaskKey tasks.Key
-		ExclusiveMaxTaskKey tasks.Key
-		SourceClusterName   string
+		RangeCompleteHistoryTasksRequest
+
+		SourceClusterName string
 	}
 
 	// CreateTaskQueueRequest create a new task queue

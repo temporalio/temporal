@@ -130,11 +130,13 @@ func (r *dlqHandlerImpl) PurgeMessages(
 	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		ctx,
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			ShardID:             r.shard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
-			SourceClusterName:   sourceCluster,
+			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+			},
+			SourceClusterName: sourceCluster,
 		},
 	)
 	if err != nil {
@@ -188,11 +190,13 @@ func (r *dlqHandlerImpl) MergeMessages(
 	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		ctx,
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			ShardID:             r.shard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
-			SourceClusterName:   sourceCluster,
+			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+			},
+			SourceClusterName: sourceCluster,
 		},
 	)
 	if err != nil {
