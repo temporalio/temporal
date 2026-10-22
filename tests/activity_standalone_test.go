@@ -8050,16 +8050,18 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			StartDelay:             durationpb.New(originalStartDelay),
 		})
 		require.NoError(t, err)
-		describe := func() *workflowservice.DescribeActivityExecutionResponse {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+
+		ctx := s.Context()
+		describe := func() (*workflowservice.DescribeActivityExecutionResponse, error) {
+			return env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			require.NoError(t, err)
-			return resp
 		}
-		desc := describe()
+
+		desc, err := describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
@@ -8073,7 +8075,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
 		})
 		require.NoError(t, err)
-		desc = describe()
+		desc, err = describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(0+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
@@ -8086,13 +8089,15 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RestoreOriginalOptions: true,
 		})
 		require.NoError(t, err)
-		desc = describe()
+		desc, err = describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
 
 		require.Never(t, func() bool {
-			return describe().GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			resp, err := describe()
+			return err != nil || resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 		}, 3500*time.Millisecond, 200*time.Millisecond,
 			"ScheduleToStart and ScheduleToClose timeouts should have been pushed back to 6s by the start delay")
 
