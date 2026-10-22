@@ -13,8 +13,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -269,6 +272,134 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 	history := env.GetHistory(env.Namespace().String(), we)
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
+// TestFirstTransactionSingleBatch verifies that with the smallest batch size limit a
+// run's first transaction is persisted as a single history batch, for a new
+// workflow and for the new run of a continue-as-new.
+func (s *WorkflowCompletionPaginationTestSuite) TestFirstTransactionSingleBatch() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.MaximumEventBatchSizeInBytes, 1),
+		// Without a minimal backoff the continue-as-new run schedules its first
+		// workflow task in its first transaction.
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0)),
+	)
+	workflowType := &commonpb.WorkflowType{Name: "functional-first-transaction-single-batch"}
+
+	startWorkflow := func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string {
+		resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    env.Namespace().String(),
+			WorkflowId:   id,
+			WorkflowType: workflowType,
+			TaskQueue:    taskQueue,
+			Identity:     "worker1",
+		})
+		s.NoError(err)
+		return resp.RunId
+	}
+
+	for _, tc := range []struct {
+		name               string
+		start              func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string
+		expectedFirstBatch []enumspb.EventType
+	}{
+		{
+			name:  "StartWorkflowExecution",
+			start: startWorkflow,
+			expectedFirstBatch: []enumspb.EventType{
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+		},
+		{
+			name: "SignalWithStartWorkflowExecution",
+			start: func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string {
+				resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+					RequestId:    uuid.NewString(),
+					Namespace:    env.Namespace().String(),
+					WorkflowId:   id,
+					WorkflowType: workflowType,
+					TaskQueue:    taskQueue,
+					SignalName:   "signal",
+					Identity:     "worker1",
+				})
+				s.NoError(err)
+				s.True(resp.Started)
+				return resp.RunId
+			},
+			expectedFirstBatch: []enumspb.EventType{
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+		},
+		{
+			name: "ContinueAsNew",
+			start: func(s *WorkflowCompletionPaginationTestSuite, id string, taskQueue *taskqueuepb.TaskQueue) string {
+				startWorkflow(s, id, taskQueue)
+				pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+					Namespace: env.Namespace().String(),
+					TaskQueue: taskQueue,
+					Identity:  "worker1",
+				})
+				s.NoError(err)
+				s.NotEmpty(pollResp.TaskToken)
+
+				_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: pollResp.TaskToken,
+					Commands: []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: workflowType,
+								TaskQueue:    taskQueue,
+							},
+						},
+					}},
+					Identity: "worker1",
+				})
+				s.NoError(err)
+
+				describeResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: env.Namespace().String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+				})
+				s.NoError(err)
+				s.NotEqual(pollResp.WorkflowExecution.GetRunId(), describeResp.WorkflowExecutionInfo.Execution.GetRunId())
+				return describeResp.WorkflowExecutionInfo.Execution.GetRunId()
+			},
+			expectedFirstBatch: []enumspb.EventType{
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+		},
+	} {
+		s.Run(tc.name, func(s *WorkflowCompletionPaginationTestSuite) {
+			id := uuid.NewString()
+			taskQueue := &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			runID := tc.start(s, id, taskQueue)
+
+			resp, err := env.AdminClient().GetWorkflowExecutionRawHistoryV2(s.Context(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId:     env.NamespaceID().String(),
+				Execution:       &commonpb.WorkflowExecution{WorkflowId: id, RunId: runID},
+				StartEventId:    common.FirstEventID,
+				EndEventId:      common.FirstEventID + 1,
+				MaximumPageSize: 1,
+			})
+			s.NoError(err)
+			s.NotEmpty(resp.HistoryBatches)
+			firstBatch, err := serialization.NewSerializer().DeserializeEvents(resp.HistoryBatches[0])
+			s.NoError(err)
+
+			eventTypes := make([]enumspb.EventType, len(firstBatch))
+			for i, event := range firstBatch {
+				eventTypes[i] = event.GetEventType()
+			}
+			s.Equal(tc.expectedFirstBatch, eventTypes)
+		})
+	}
 }
 
 // TestPaginationDisabledRejected verifies that a paginated request is rejected with
