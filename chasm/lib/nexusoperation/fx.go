@@ -22,9 +22,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/httpfaults"
-	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -128,8 +125,7 @@ func clientProviderFactory(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
-	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
-	testHooks testhooks.TestHooks,
+	faults resource.HTTPFaultParams,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -140,11 +136,10 @@ func clientProviderFactory(
 	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 		clusterID = clusterInfo.ClusterID
 	}
-	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
-			Transport: httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport}),
+			Transport: faults.Wrap(responseSizeLimiter{transport}),
 		}, nil
 	})
 
@@ -178,7 +173,7 @@ func clientProviderFactory(
 			}
 		}
 
-		if httpClientTransportInstrumenter != nil {
+		if faults.Instrumenter != nil {
 			var targetNamespaceName string
 			if targetNamespaceID != "" {
 				if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(targetNamespaceID)); err == nil {
@@ -193,11 +188,10 @@ func clientProviderFactory(
 				return baseHTTPCaller(r)
 			}
 		}
-		httpCaller = httpfaults.Wrap(
-			httpFaultGenerator,
-			httpfaults.Scope{NamespaceID: namespace.ID(namespaceID)},
-			httpCaller,
-		)
+		baseHTTPCaller := httpCaller
+		httpCaller = func(r *http.Request) (*http.Response, error) {
+			return baseHTTPCaller(httpfaults.WithScope(r, httpfaults.Scope{NamespaceID: namespace.ID(namespaceID)}))
+		}
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,

@@ -1,17 +1,19 @@
+import "go.temporal.io/server/common/faultinjection"
+
 {{ $decorator := (or .Vars.DecoratorName (printf "faultInjection%s" .Interface.Name)) }}
 
 type (
     // {{$decorator}} implements {{.Interface.Name}} interface with fault injection.
     {{$decorator}} struct {
         {{.Interface.Type}}
-        generator faultGenerator
+        generator faultinjection.Generator[any, struct{}]
     }
 )
 
 // new{{upFirst $decorator}} returns {{$decorator}}.
 func new{{upFirst $decorator}} (
     baseStore {{.Interface.Type}},
-    generator faultGenerator,
+    generator faultinjection.Generator[any, struct{}],
 ) *{{$decorator}} {
     return &{{$decorator}} {
         {{.Interface.Name}}: baseStore,
@@ -25,9 +27,9 @@ func new{{upFirst $decorator}} (
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
         func (d {{$decorator}}) {{$method.Declaration}} {
             {{- $request := (index $method.Params 1) }}
-            err = d.generator.generate("{{ $method.Name }}", {{ $request.Name }}).inject(func() error {
+            _, err = faultinjection.Invoke({{ (index $method.Params 0).Name }}, d.generator, "{{ $method.Name }}", any({{ $request.Name }}), func() (struct{}, error) {
                 {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
-                return err
+                return struct{}{}, err
             })
             return
         }
