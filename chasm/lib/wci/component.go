@@ -2,8 +2,10 @@
 package wci
 
 import (
+	"bytes"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/server/chasm"
@@ -21,6 +23,8 @@ var (
 	ErrMigrationNotPending = serviceerror.NewFailedPrecondition("worker controller instance migration is not pending")
 	// errPendingInvisible: a pending migration target looks absent, so callers keep using the workflow.
 	errPendingInvisible = serviceerror.NewNotFound("worker controller instance not found")
+
+	errConflictTokenMismatch = serviceerror.NewFailedPrecondition("conflict token mismatch")
 )
 
 var (
@@ -58,6 +62,7 @@ func NewWorkerControllerInstance(
 	}
 	now := ctx.Now(w)
 	w.CreateTime = timestamppb.New(now)
+	w.mintConflictToken()
 	for id := range specs {
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, NewScalingGroup(id))
 	}
@@ -162,4 +167,17 @@ func (w *WorkerControllerInstance) CheckMutable() error {
 	default:
 		return ErrClosed
 	}
+}
+
+// mintConflictToken is random so tokens from a deleted run never match its successor; CHASM mutations aren't replayed.
+func (w *WorkerControllerInstance) mintConflictToken() {
+	w.ConflictToken = []byte(uuid.NewString())
+}
+
+// checkConflictToken under the lock: two updates holding the same token can both pass the pre-read check.
+func (w *WorkerControllerInstance) checkConflictToken(token []byte) error {
+	if len(token) > 0 && !bytes.Equal(token, w.ConflictToken) {
+		return errConflictTokenMismatch
+	}
+	return nil
 }
