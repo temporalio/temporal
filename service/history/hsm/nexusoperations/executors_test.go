@@ -292,7 +292,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, "endpoint", failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
-				require.Equal(t, "operation_failed", failedCount[0].Tags["reason"])
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationCancelCount.Name()])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
@@ -423,7 +423,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				// The handler reported the operation as failed; the handler error is only its cause.
 				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
 				require.Len(t, failedCount, 1)
-				require.Equal(t, "operation_failed", failedCount[0].Tags["reason"])
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 			},
 		},
 		{
@@ -1876,7 +1876,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, commonnexus.SystemEndpoint, failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
-				require.Equal(t, "operation_failed", failedCount[0].Tags["reason"])
+				require.Equal(t, "operation_error", failedCount[0].Tags["reason"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},

@@ -54,7 +54,7 @@ func TestOperationBackendMetricTag(t *testing.T) {
 					}
 					closeTime := defaultTime.Add(2 * time.Second)
 					op.emitOnSucceededMetrics(ctx, closeTime)
-					op.emitOnFailedMetrics(ctx, closeTime, FailedReasonOperationFailed)
+					op.emitOnFailedMetrics(ctx, closeTime, FailedReasonOperationError)
 					op.emitOnCanceledMetrics(ctx, closeTime)
 					op.emitOnTerminatedMetrics(ctx, closeTime)
 					op.emitOnTimedOutMetrics(ctx, closeTime, "SCHEDULE_TO_CLOSE")
@@ -131,7 +131,7 @@ func TestAttemptFailedReason(t *testing.T) {
 		{
 			name:    "synchronous operation failure",
 			failure: operationFailure,
-			want:    FailedReasonOperationFailed,
+			want:    FailedReasonOperationError,
 		},
 		{
 			name: "handler error as the cause of an operation failure",
@@ -141,7 +141,7 @@ func TestAttemptFailedReason(t *testing.T) {
 				},
 				Cause: handlerFailure,
 			},
-			want: FailedReasonOperationFailed,
+			want: FailedReasonOperationError,
 		},
 		{
 			name: "non-retryable server failure",
@@ -164,7 +164,7 @@ func TestAttemptFailedReason(t *testing.T) {
 		{
 			name:    "nil failure",
 			failure: nil,
-			want:    FailedReasonOperationFailed,
+			want:    FailedReasonOperationError,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

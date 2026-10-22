@@ -50,7 +50,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 				OriginalFailure: &nexus.Failure{Message: "operation failed"},
 			},
 			wantCounter: chasmnexus.NexusOperationFailedCount.Name(),
-			wantReason:  "operation_failed",
+			wantReason:  "operation_error",
 		},
 		{
 			name: "canceled",

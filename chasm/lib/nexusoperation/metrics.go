@@ -22,9 +22,10 @@ var NexusOperationFailedCount = metrics.NewCounterDef(
 	metrics.WithDescription("Nexus Operations failures."),
 )
 
-// FailedReasonOperationFailed is the NexusOperationFailedCount reason for an operation the handler
-// reported as failed, synchronously at start or later via a completion.
-const FailedReasonOperationFailed metrics.ReasonString = "operation_failed"
+// FailedReasonOperationError is the NexusOperationFailedCount reason for an operation the handler
+// reported as failed, synchronously at start or later via a completion. It is named after the Nexus
+// operation error, as FailedReasonHandlerError is after the handler error.
+const FailedReasonOperationError metrics.ReasonString = "operation_error"
 
 // FailedReasonCallerError is the NexusOperationFailedCount reason for an operation that the caller
 // failed itself after a start attempt, e.g. because the handler's response exceeded a size limit or the
@@ -46,7 +47,7 @@ const FailedReasonHandlerError metrics.ReasonString = "handler_error"
 // the top level; that reports FailedReasonHandlerError. A non-retryable failure the caller raises
 // itself reports FailedReasonCallerError; CHASM records these as server failures and HSM as
 // "CallError" application failures. Any other failure, including a nil one, reports
-// FailedReasonOperationFailed: the handler reporting the operation as failed.
+// FailedReasonOperationError: the handler reporting the operation as failed.
 func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 	if failure.GetNexusHandlerFailureInfo() != nil {
 		return FailedReasonHandlerError
@@ -54,7 +55,7 @@ func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 	if failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError" {
 		return FailedReasonCallerError
 	}
-	return FailedReasonOperationFailed
+	return FailedReasonOperationError
 }
 
 var NexusOperationCancelCount = metrics.NewCounterDef(
