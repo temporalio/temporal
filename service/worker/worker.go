@@ -22,6 +22,7 @@ type (
 		hostInfo         membership.HostInfo
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
+		config           *Config
 		workers          []sdkworker.Worker
 		workerComponents []workercommon.WorkerComponent
 	}
@@ -34,11 +35,13 @@ func NewWorkerManager(
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	hostInfo membership.HostInfo,
+	config *Config,
 ) *workerManager {
 	return &workerManager{
 		hostInfo:         hostInfo,
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
+		config:           config,
 		workerComponents: workerComponents,
 	}
 }
@@ -53,6 +56,7 @@ func (wm *workerManager) Start() {
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh),
 	}
+	wm.applyPollerAutoscaling(&defaultWorkerOptions)
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
 	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
@@ -64,6 +68,7 @@ func (wm *workerManager) Start() {
 			wc.RegisterWorkflow(defaultWorker)
 		} else {
 			wfWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
+			wm.applyPollerAutoscaling(&wfWorkerOptions.Options)
 			// this worker component requires a dedicated worker
 			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
 			wc.RegisterWorkflow(dedicatedWorker)
@@ -81,6 +86,7 @@ func (wm *workerManager) Start() {
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
 			activityWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
+			wm.applyPollerAutoscaling(&activityWorkerOptions.Options)
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)
@@ -105,4 +111,11 @@ func (wm *workerManager) Stop() {
 		w.Stop()
 	}
 	wm.logger.Info("", tag.ComponentWorkerManager, tag.LifeCycleStopped)
+}
+
+// applyPollerAutoscaling switches options to poller autoscaling when enabled by dynamic config.
+func (wm *workerManager) applyPollerAutoscaling(options *sdkworker.Options) {
+	if wm.config.SystemWorkerPollerAutoscaling() {
+		workercommon.ApplyPollerAutoscaling(options, wm.config.PollerAutoscalingMaxMultiplier())
+	}
 }

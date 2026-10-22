@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/sdk"
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
@@ -23,6 +24,8 @@ type (
 		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
 		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+		PollerAutoscaling                      dynamicconfig.BoolPropertyFn
+		PollerAutoscalingMaxMultiplier         dynamicconfig.IntPropertyFn
 		NumParentClosePolicySystemWorkflows    dynamicconfig.IntPropertyFn
 	}
 
@@ -93,7 +96,7 @@ func getWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 
-	return worker.Options{
+	options := worker.Options{
 		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
@@ -101,4 +104,8 @@ func getWorkerOptions(p *Processor) worker.Options {
 		BackgroundActivityContext:              ctx,
 		Identity:                               "temporal-system@" + p.hostInfo.Identity(),
 	}
+	if p.cfg.PollerAutoscaling != nil && p.cfg.PollerAutoscaling() {
+		workercommon.ApplyPollerAutoscaling(&options, p.cfg.PollerAutoscalingMaxMultiplier())
+	}
+	return options
 }

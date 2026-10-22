@@ -3750,6 +3750,28 @@ The configured value will be divided by the number of worker hosts to get the pe
 		10.0,
 		`WorkerPerNamespaceWorkerStartRate controls how fast per-namespace workers can be started (workers/second)`,
 	)
+	WorkerPerNamespaceWorkerPollerAutoscaling = NewNamespaceBoolSetting(
+		"worker.perNamespaceWorkerPollerAutoscaling",
+		false,
+		`WorkerPerNamespaceWorkerPollerAutoscaling switches the per-namespace worker's workflow and activity task pollers
+from fixed counts to SDK poller autoscaling. The configured poller counts (after multiplying by the local worker
+allocation) become the initial number of pollers, the minimum is 1, and the maximum is the initial number times
+worker.pollerAutoscalingMaxMultiplier. Changing this setting recreates the namespace's per-namespace worker.`,
+	)
+	WorkerSystemWorkerPollerAutoscaling = NewGlobalBoolSetting(
+		"worker.systemWorkerPollerAutoscaling",
+		false,
+		`WorkerSystemWorkerPollerAutoscaling switches the worker service's other SDK workers (the default and dedicated
+system workers, scanner, and parent close policy workers) from fixed poller counts to SDK poller autoscaling, using
+the same bounds as worker.perNamespaceWorkerPollerAutoscaling. Read when those workers start, so changes take effect
+after a worker service restart.`,
+	)
+	WorkerPollerAutoscalingMaxMultiplier = NewGlobalIntSetting(
+		"worker.pollerAutoscalingMaxMultiplier",
+		4,
+		`WorkerPollerAutoscalingMaxMultiplier sets the maximum number of pollers for system workers using poller
+autoscaling, as a multiple of the poller count they would otherwise use. Values below 1 are treated as 1.`,
+	)
 	WorkerEnableScheduler = NewNamespaceBoolSetting(
 		"worker.enableScheduler",
 		true,

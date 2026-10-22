@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
 )
@@ -39,6 +40,8 @@ type (
 		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
 		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+		PollerAutoscaling                      dynamicconfig.BoolPropertyFn
+		PollerAutoscalingMaxMultiplier         dynamicconfig.IntPropertyFn
 
 		// PersistenceMaxQPS the max rate of calls to persistence
 		PersistenceMaxQPS dynamicconfig.IntPropertyFn
@@ -167,6 +170,9 @@ func (s *Scanner) Start() error {
 		MaxConcurrentWorkflowTaskPollers:       s.context.cfg.MaxConcurrentWorkflowTaskPollers(),
 
 		BackgroundActivityContext: ctx,
+	}
+	if s.context.cfg.PollerAutoscaling != nil && s.context.cfg.PollerAutoscaling() {
+		workercommon.ApplyPollerAutoscaling(&workerOpts, s.context.cfg.PollerAutoscalingMaxMultiplier())
 	}
 
 	var workerTaskQueueNames []string

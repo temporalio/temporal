@@ -102,6 +102,9 @@ type (
 		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
 		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
+		PerNamespaceWorkerPollerAutoscaling  dynamicconfig.TypedSubscribableWithNamespaceFilter[bool]
+		SystemWorkerPollerAutoscaling        dynamicconfig.BoolPropertyFn
+		PollerAutoscalingMaxMultiplier       dynamicconfig.IntPropertyFn
 
 		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -199,12 +202,16 @@ func NewConfig(
 			MaxConcurrentActivityTaskPollers:       dynamicconfig.WorkerParentCloseMaxConcurrentActivityTaskPollers.Get(dc),
 			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers.Get(dc),
 			NumParentClosePolicySystemWorkflows:    dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
+			PollerAutoscaling:                      dynamicconfig.WorkerSystemWorkerPollerAutoscaling.Get(dc),
+			PollerAutoscalingMaxMultiplier:         dynamicconfig.WorkerPollerAutoscalingMaxMultiplier.Get(dc),
 		},
 		ScannerCfg: &scanner.Config{
 			MaxConcurrentActivityExecutionSize:     dynamicconfig.WorkerScannerMaxConcurrentActivityExecutionSize.Get(dc),
 			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskExecutionSize.Get(dc),
 			MaxConcurrentActivityTaskPollers:       dynamicconfig.WorkerScannerMaxConcurrentActivityTaskPollers.Get(dc),
 			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskPollers.Get(dc),
+			PollerAutoscaling:                      dynamicconfig.WorkerSystemWorkerPollerAutoscaling.Get(dc),
+			PollerAutoscalingMaxMultiplier:         dynamicconfig.WorkerPollerAutoscalingMaxMultiplier.Get(dc),
 
 			PersistenceMaxQPS:                       dynamicconfig.ScannerPersistenceMaxQPS.Get(dc),
 			Persistence:                             persistenceConfig,
@@ -231,6 +238,9 @@ func NewConfig(
 		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
 		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
+		PerNamespaceWorkerPollerAutoscaling:  dynamicconfig.WorkerPerNamespaceWorkerPollerAutoscaling.Subscribe(dc),
+		SystemWorkerPollerAutoscaling:        dynamicconfig.WorkerSystemWorkerPollerAutoscaling.Get(dc),
+		PollerAutoscalingMaxMultiplier:       dynamicconfig.WorkerPollerAutoscalingMaxMultiplier.Get(dc),
 		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
 		PersistenceGlobalMaxQPS:              dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),

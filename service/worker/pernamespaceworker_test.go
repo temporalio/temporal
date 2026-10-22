@@ -111,7 +111,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		HostName:          "self",
 		Config: &Config{
 			PerNamespaceWorkerCount: func(ns string, cb func(int)) (int, func()) {
-				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns]), func() {}
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6, "ns4": 2}[ns]), func() {}
 			},
 			PerNamespaceWorkerOptions: func(ns string, cb func(sdkworker.Options)) (sdkworker.Options, func()) {
 				switch ns {
@@ -124,11 +124,19 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 						WorkerLocalActivitiesPerSecond: 200.0,
 						StickyScheduleToStartTimeout:   7500 * time.Millisecond,
 					}, func() {}
+				case "ns4":
+					return sdkworker.Options{
+						MaxConcurrentWorkflowTaskPollers: 5,
+					}, func() {}
 				default:
 					return sdkworker.Options{}, func() {}
 				}
 			},
 			PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
+			PerNamespaceWorkerPollerAutoscaling: func(ns string, cb func(bool)) (bool, func()) {
+				return ns == "ns4", func() {}
+			},
+			PollerAutoscalingMaxMultiplier: dynamicconfig.GetIntPropertyFn(4),
 		},
 		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
 		ClusterMetadata: clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
@@ -324,6 +332,49 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 	cli1.EXPECT().Close()
 	cli2.EXPECT().Close()
 	cli3.EXPECT().Close()
+}
+
+func (s *perNsWorkerManagerSuite) TestPollerAutoscaling() {
+	ns := testns("ns4", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	// both allocations land on this host, so the local multiplicity is 2
+	s.serviceResolver.EXPECT().LookupN("ns4", 2).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+	})
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns4")).Return(cli1)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+		// fixed counts are replaced by autoscaling: initial = count * multiplicity, max = initial * 4
+		s.Zero(options.MaxConcurrentWorkflowTaskPollers)
+		s.Zero(options.MaxConcurrentActivityTaskPollers)
+		s.Equal(sdkworker.NewPollerBehaviorAutoscaling(sdkworker.PollerBehaviorAutoscalingOptions{
+			InitialNumberOfPollers: 10,
+			MinimumNumberOfPollers: 1,
+			MaximumNumberOfPollers: 40,
+		}), options.WorkflowTaskPollerBehavior)
+		s.Equal(sdkworker.NewPollerBehaviorAutoscaling(sdkworker.PollerBehaviorAutoscalingOptions{
+			InitialNumberOfPollers: 4,
+			MinimumNumberOfPollers: 1,
+			MaximumNumberOfPollers: 16,
+		}), options.ActivityTaskPollerBehavior)
+	}).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns, workercommon.RegistrationDetails{TotalWorkers: 2, Multiplicity: 2})
+	wkr1.EXPECT().Start()
+
+	s.manager.namespaceCallback(ns, false)
+
+	time.Sleep(50 * time.Millisecond)
+
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close()
 }
 
 func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
@@ -690,6 +741,31 @@ func TestPerNsWorkerManagerSubscription(t *testing.T) {
 	expectStop()
 	expectWorker(1, 1, 2)
 	revert2()
+	<-wait
+	<-wait
+
+	// enable poller autoscaling: should stop and restart worker with autoscaling pollers
+	expectStop()
+	cfactory.EXPECT().NewWorker(gomock.Any(), primitives.PerNSWorkerTaskQueue, gomock.Any()).
+		DoAndReturn(func(_ sdkclient.Client, _ string, options sdkworker.Options) sdkworker.Worker {
+			assert.Zero(t, options.MaxConcurrentWorkflowTaskPollers)
+			assert.Equal(t, sdkworker.NewPollerBehaviorAutoscaling(sdkworker.PollerBehaviorAutoscalingOptions{
+				InitialNumberOfPollers: 2,
+				MinimumNumberOfPollers: 1,
+				MaximumNumberOfPollers: 8,
+			}), options.WorkflowTaskPollerBehavior)
+			return wkr
+		})
+	cmp.EXPECT().Register(wkr, ns, workercommon.RegistrationDetails{TotalWorkers: 1, Multiplicity: 1})
+	wkr.EXPECT().Start().Do(func() { wait <- struct{}{} })
+	revert4 := mem.OverrideSetting(dynamicconfig.WorkerPerNamespaceWorkerPollerAutoscaling, true)
+	<-wait
+	<-wait
+
+	// disable poller autoscaling: back to fixed pollers
+	expectStop()
+	expectWorker(1, 1, 2)
+	revert4()
 	<-wait
 	<-wait
 

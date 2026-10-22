@@ -87,6 +87,8 @@ type (
 		ns    *namespace.Namespace // can change on namespace change notification
 		count int                  // pushed from dynamic config
 		opts  sdkworker.Options    // pushed from dynamic config
+		// pushed from dynamic config
+		pollerAutoscaling bool
 	}
 
 	workerAllocation struct {
@@ -187,14 +189,14 @@ func (wm *PerNamespaceWorkerManager) Stop() {
 }
 
 func (wm *PerNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, nsDeleted bool) {
-	go wm.getWorkerByNamespace(ns).update(ns, nsDeleted, nil, nil)
+	go wm.getWorkerByNamespace(ns).update(ns, nsDeleted, nil, nil, nil)
 }
 
 func (wm *PerNamespaceWorkerManager) refreshAll() {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 	for _, worker := range wm.workers {
-		go worker.update(nil, false, nil, nil)
+		go worker.update(nil, false, nil, nil, nil)
 	}
 }
 
@@ -241,11 +243,13 @@ func (wm *PerNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 	worker.lock.Lock()
 	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
 	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
+	pollerAutoscaling, c3 := wm.config.PerNamespaceWorkerPollerAutoscaling(ns.Name().String(), worker.setPollerAutoscaling)
 	worker.ns = ns
 	worker.count = count
 	worker.opts = opts
+	worker.pollerAutoscaling = pollerAutoscaling
 	worker.lock.Unlock()
-	worker.cancel = func() { c1(); c2() }
+	worker.cancel = func() { c1(); c2(); c3() }
 
 	wm.workers[ns.ID()] = worker
 	return worker
@@ -290,15 +294,25 @@ func (w *perNamespaceWorker) getLocallyDesiredWorkers(args refreshArgs) (int, er
 }
 
 func (w *perNamespaceWorker) setWorkerCount(count int) {
-	w.update(nil, false, &count, nil)
+	w.update(nil, false, &count, nil, nil)
 }
 
 func (w *perNamespaceWorker) setWorkerOptions(opts sdkworker.Options) {
-	w.update(nil, false, nil, &opts)
+	w.update(nil, false, nil, &opts, nil)
+}
+
+func (w *perNamespaceWorker) setPollerAutoscaling(enabled bool) {
+	w.update(nil, false, nil, nil, &enabled)
 }
 
 // called on namespace state change callback, membership change, and dynamic config change
-func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, newCount *int, newOpts *sdkworker.Options) {
+func (w *perNamespaceWorker) update(
+	ns *namespace.Namespace,
+	nsDeleted bool,
+	newCount *int,
+	newOpts *sdkworker.Options,
+	newPollerAutoscaling *bool,
+) {
 	w.lock.Lock()
 
 	if ns != nil {
@@ -311,6 +325,9 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 	}
 	if newOpts != nil {
 		w.opts = *newOpts
+	}
+	if newPollerAutoscaling != nil {
+		w.pollerAutoscaling = *newPollerAutoscaling
 	}
 
 	refreshArgs := w.refreshArgs // copy before releasing lock
@@ -419,6 +436,8 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// ensure this changes if multiplicity changes
 	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
+	pollerAutoscalingMaxMultiplier := w.wm.config.PollerAutoscalingMaxMultiplier()
+
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -431,6 +450,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// Format opts under the lock so the cache key describes the worker actually being started
 	// (startWorker reads w.opts, not the snapshot).
 	fmt.Fprintf(&componentSet, "%+v,", w.opts)
+	fmt.Fprintf(&componentSet, "%t,%d,", w.pollerAutoscaling, pollerAutoscalingMaxMultiplier)
 
 	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
@@ -451,7 +471,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(enabledComponents, workerAllocation)
+	client, worker, err := w.startWorker(enabledComponents, workerAllocation, pollerAutoscalingMaxMultiplier)
 	if err != nil {
 		// TODO: add metric also
 		w.stopWorkerLocked() // for calling cleanup
@@ -467,6 +487,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 func (w *perNamespaceWorker) startWorker(
 	components []workercommon.PerNSWorkerComponent,
 	allocation workerAllocation,
+	pollerAutoscalingMaxMultiplier int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := w.ns.Name().String()
 	// this should not block because it uses an existing grpc connection
@@ -497,6 +518,11 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize *= allocation.local
 	sdkoptions.MaxConcurrentActivityExecutionSize *= allocation.local
 	sdkoptions.OnFatalError = w.onFatalError
+	if w.pollerAutoscaling {
+		// the poller counts computed above (including the allocation multiplier) become the
+		// initial number of pollers
+		workercommon.ApplyPollerAutoscaling(&sdkoptions, pollerAutoscalingMaxMultiplier)
+	}
 
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, w.wm.taskQueueName, sdkoptions)
