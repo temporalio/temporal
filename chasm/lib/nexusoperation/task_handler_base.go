@@ -121,8 +121,7 @@ func (b *nexusTaskHandlerBase) newInvocation(
 		return &invocationTimeout{timeoutType}, nil
 	}
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < minRequestTimeout {
-		// The operation has enough time left but the request doesn't, because of the task deadline or RequestTimeout.
-		// Fail this attempt only and let it be retried.
+		// The operation has enough time left but the task doesn't. Fail this attempt only and let it be retried.
 		return invocationRequestDeadline{}, nil
 	}
 	if endpointName == commonnexus.SystemEndpoint {
@@ -155,16 +154,27 @@ func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID n
 // setupCallContext creates the context for a single start or cancel request and attaches the failure source tracking
 // value.
 //
-// The request is bound by requestTimeout and remainingOpTimeout, and by the deadline that the task executor sets on
-// ctx. That deadline also covers loading the component and saving the result: 10s for tasks on the outbound queue and
-// 3s for system endpoint tasks, which run on the transfer queue (see taskDestination). requestTimeout must be shorter
-// than the task deadline to leave time to save the result.
+// There is no request timeout config. The task executor sets a deadline on ctx that covers loading the component, the
+// request, and saving the result: 10s for tasks on the outbound queue and 3s for system endpoint tasks, which run on
+// the transfer queue (see taskDestination). The request gets the time left until that deadline minus
+// StateAccessBuffer, which is reserved for saving the result. It is further capped by remainingOpTimeout, unless that
+// is maxDuration.
 func (b *nexusTaskHandlerBase) setupCallContext(
 	ctx context.Context,
-	requestTimeout time.Duration,
+	ns *namespace.Namespace,
 	remainingOpTimeout time.Duration,
 ) (context.Context, context.CancelFunc) {
-	callCtx, cancel := context.WithTimeout(ctx, min(requestTimeout, remainingOpTimeout))
+	timeout := remainingOpTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = min(timeout, time.Until(deadline)-b.config.StateAccessBuffer(ns.Name().String()))
+	}
+	var callCtx context.Context
+	var cancel context.CancelFunc
+	if timeout == maxDuration {
+		callCtx, cancel = context.WithCancel(ctx)
+	} else {
+		callCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 	return callCtx, cancel
 }

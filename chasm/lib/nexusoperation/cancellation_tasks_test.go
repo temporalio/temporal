@@ -44,6 +44,7 @@ type cancellationTaskTestEnv struct {
 	mockEngine   *chasm.MockEngine
 	timeSource   *clock.EventTimeSource
 	taskTimeout  time.Duration
+	saveCtxErr   error
 }
 
 func newCancellationTaskTestEnv(
@@ -69,7 +70,7 @@ func newCancellationTaskTestEnv(
 	handler := &cancellationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+				StateAccessBuffer:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
@@ -124,7 +125,8 @@ func (e *cancellationTaskTestEnv) setupUpdateComponent() {
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+	).DoAndReturn(func(ctx context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+		e.saveCtxErr = ctx.Err()
 		mockCtx := &chasm.MockMutableContext{
 			MockContext: chasm.MockContext{
 				HandleNow: func(_ chasm.Component) time.Time {
@@ -314,7 +316,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 		onCancelOperation           func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 		expectedMetricOutcome       string
 		checkOutcome                func(t *testing.T, c *Cancellation)
-		requestTimeout              time.Duration
+		stateAccessBuffer           time.Duration
 		taskTimeout                 time.Duration
 		schedToCloseTimeout         time.Duration
 		startToCloseTimeout         time.Duration
@@ -413,11 +415,12 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:            "invocation timeout by request timeout",
-			requestTimeout:  50 * time.Millisecond,
-			destinationDown: true,
+			name:              "invocation timeout leaves state access buffer",
+			taskTimeout:       300 * time.Millisecond,
+			stateAccessBuffer: 200 * time.Millisecond,
+			destinationDown:   true,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
-				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				time.Sleep(time.Millisecond * 300) //nolint:forbidigo
 				return nil
 			},
 			expectedMetricOutcome: "request-timeout",
@@ -617,9 +620,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 					Header: tc.header,
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
-			if tc.requestTimeout > 0 {
-				env.handler.config.RequestTimeout = dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout)
-			}
+			env.handler.config.StateAccessBuffer = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.stateAccessBuffer)
 			env.handler.config.UseNewFailureWireFormat = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(!tc.disableNewFailureWireFormat)
 
 			env.setupReadComponent()
@@ -633,6 +634,9 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 				require.NoError(t, err)
 			}
 			tc.checkOutcome(t, cancellation)
+			if tc.stateAccessBuffer > 0 {
+				require.NoError(t, env.saveCtxErr, "the result must be saved before the task deadline")
+			}
 
 			if tc.expectedMetricOutcome != "" {
 				snap := capture.Snapshot()

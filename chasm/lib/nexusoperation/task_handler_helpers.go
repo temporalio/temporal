@@ -28,8 +28,8 @@ var (
 	ErrInvalidOperationToken = errors.New("invalid operation token")
 	errRequestTimedOut       = errors.New("request timed out")
 	errOpProcessorFailed     = errors.New("nexus operation processor failed")
-	// errRequestDeadlineTooShort is returned without making a request when the task deadline or RequestTimeout leaves
-	// less than MinRequestTimeout for it. It wraps context.DeadlineExceeded so the attempt is recorded as a retryable
+	// errRequestDeadlineTooShort is returned without making a request when the task deadline, minus StateAccessBuffer,
+	// leaves less than MinRequestTimeout for it. It wraps context.DeadlineExceeded so the attempt is recorded as a retryable
 	// request timeout.
 	errRequestDeadlineTooShort = fmt.Errorf("not enough time left to make a request: %w", context.DeadlineExceeded)
 )
@@ -44,7 +44,7 @@ const maxDuration = time.Duration(1<<63 - 1)
 //
 // The queue also determines the time budget of each attempt: the transfer queue executor bounds a task to 3s, compared
 // to 10s on the outbound queue. That budget covers loading the component, the request, and saving the result, so a
-// system endpoint request gets less than 3s regardless of RequestTimeout.
+// system endpoint request gets less than 3s minus StateAccessBuffer.
 func taskDestination(endpointName string) string {
 	if endpointName == commonnexus.SystemEndpoint {
 		return ""
