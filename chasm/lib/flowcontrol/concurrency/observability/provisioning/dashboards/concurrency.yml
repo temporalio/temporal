@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: concurrency-local
+    orgId: 1
+    folder: Concurrency metrics
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 15
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/local-dashboards
