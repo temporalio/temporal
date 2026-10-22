@@ -15,7 +15,7 @@ func TestInProcessComputeProvidersReplacesTheDefault(t *testing.T) {
 		if v != nil {
 			client[InProcessComputeProviders.Key()] = v
 		}
-		return InProcessComputeProviders.Get(dynamicconfig.NewCollection(client, log.NewNoopLogger()))()
+		return InProcessComputeProviders.Get(dynamicconfig.NewCollection(client, log.NewNoopLogger()))("ns")
 	}
 	require.Equal(t, []string{"test-invoke", "test-worker-set"}, get(nil), "unset keeps the default")
 	require.Equal(t, []string{"subprocess"}, get([]any{"subprocess"}), "a shorter list replaces it")
