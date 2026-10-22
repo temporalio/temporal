@@ -83,6 +83,7 @@ Before writing, reviewing, or running tests, read and follow the [testing guide]
 - Metric tags match existing formats, including `CONSTANT_CASE` for enum values.
 - Error messages match the surrounding code's style, including omission of punctuation for single sentences.
 - Nexus-related logs use the `tag.NexusStage*` value matching the local phase, as defined in `common/log/tag/values.go`.
+- Nexus-related logs include `tag.RequestID` when available; propagate it through helpers, retries, and completion handling to correlate logs across caller and handler services.
 
 ## 8. Code comments
 
