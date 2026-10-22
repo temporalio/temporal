@@ -269,7 +269,7 @@ func (h *CompletionHandler) deferredCompletionMetric(
 			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
 		default:
 			// A completion is the handler reporting the operation's outcome, never a rejected start attempt.
-			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, chasmnexus.FailedReasonOperationFailed, closeTime)
+			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, chasmnexus.FailedReasonOperationError, closeTime)
 		}
 	}
 }

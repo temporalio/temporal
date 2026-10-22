@@ -543,7 +543,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
 		// The handler reported the operation's outcome, so there is no handler error to classify and a
-		// failed operation is tagged operation_failed.
+		// failed operation is tagged operation_error.
 		return nil, handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
