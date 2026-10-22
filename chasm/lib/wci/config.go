@@ -1,13 +1,15 @@
 package wci
 
 import (
+	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives"
 )
 
 var (
-	InProcessComputeProviders = dynamicconfig.NewGlobalTypedSetting(
+	InProcessComputeProviders = dynamicconfig.NewGlobalTypedSettingWithConverter(
 		"workercontroller.chasm.in_process_compute_providers",
+		convertStringList,
 		[]string{"test-invoke", "test-worker-set"},
 		`InProcessComputeProviders are the provider types a CHASM WCI runs inside history. They must need no
 assumed identity; "subprocess" executes on the history host and is for local development only.`,
@@ -31,3 +33,11 @@ slow provider cannot starve task processing.`,
 the WCI client's task queue (cloud uses temporal-sys-worker-controller-per-ns-tq).`,
 	)
 )
+
+// convertStringList makes a configured list replace the default: NewGlobalTypedSetting merges over a
+// copy of it, so ["subprocess"] would become [subprocess test-worker-set].
+func convertStringList(in any) ([]string, error) {
+	var out []string
+	err := mapstructure.Decode(in, &out)
+	return out, err
+}
