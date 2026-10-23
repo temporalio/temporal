@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -62,7 +63,7 @@ type (
 		instrumentation *instrumentation
 		admittedTime    time.Time
 		// pendingCallbacks buffers AttachCallbacks requests that arrive while
-		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
+		// the Update is in stateAdmitted or stateSent. Flushed to the event store in onAcceptanceMsg.
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
 		pendingCallbacks []pendingCallback
 		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
@@ -398,23 +399,24 @@ func (u *Update) Admit(
 	return nil
 }
 
-// AttachCallbacks attaches completion callbacks from a second caller to an update
-// that has already progressed past admission. If the update is accepted, it writes
-// a WorkflowExecutionOptionsUpdatedEvent with the caller's callbacks and request ID.
-// If the update is in stateSent (sent to worker, not yet accepted), callbacks are
-// buffered in memory and flushed when the update is accepted. If the update is
-// already completed, returns true without attaching callbacks since the caller
-// receives the result synchronously.
+// AttachCallbacks attaches a request's completion callbacks to an Update that was
+// admitted by another request with the same Update ID. What it does depends on the
+// Update's state:
+//   - Admitted or sent: buffers the callbacks in memory. They are written to history
+//     in the same transaction as the UpdateAccepted event.
+//   - Accepted: writes a WorkflowExecutionOptionsUpdatedEvent with the callbacks.
+//   - Completed: attaches nothing. The caller receives the outcome synchronously.
 //
-// Returns (true, nil) if the caller should proceed (callbacks attached or update already completed),
-// (false, nil) if the update is in an early state where attachment does not apply,
-// or (false, error) if the update is in a transient state where the caller should retry.
+// The admitting request's own callbacks are written with the UpdateAccepted event,
+// so they are not attached here.
+//
+// Returns true if the request is fully handled, and false if the caller should
+// continue processing it, e.g. by scheduling a workflow task. Returns an error if
+// the Update is in a provisional state; the caller should retry.
 func (u *Update) AttachCallbacks(
 	req *updatepb.Request,
 	eventStore EventStore,
-) (isCallbackAttached bool, err error) {
-	// Only attach callbacks if the request actually has something to attach.
-	// This preserves existing behavior for callers that don't set callbacks.
+) (handled bool, err error) {
 	if len(req.GetCompletionCallbacks()) == 0 {
 		return false, nil
 	}
@@ -427,41 +429,37 @@ func (u *Update) AttachCallbacks(
 		stateProvisionallyCompleted,
 		stateProvisionallyCompletedAfterAccepted,
 		stateProvisionallyAborted:
-		// Provisional states are transient — they exist only between an event write
-		// and its OnAfterCommit callback within a single workflow task completion
-		// transaction. In practice, AttachCallbacks should never see these states because
-		// a new UpdateWorkflowExecution API call must acquire the workflow lock,
-		// which means the previous transaction has already committed and provisional
-		// states have resolved. This guard is kept defensively in case future code
-		// paths call AttachCallbacks within the same transaction.
+		// Provisional states only exist inside a transaction that holds the workflow
+		// lock, so a new request should never see them. Ask the caller to retry if it does.
+		// This guard is kept defensively in case future code paths call AttachCallbacks within
+		// the same transaction.
 		return false, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: "workflow update is not yet accepted, please retry",
 		}
 
-	case stateSent:
-		// stateSent: the update has been sent to the worker but not yet accepted.
-		// Buffer the callbacks in memory; they will be flushed to the event store
-		// when the update is accepted in onAcceptanceMsg.
-		// Returning (true, nil) is safe because:
-		// - The caller already holds the workflow lock
-		// - A workflow task already exists (the update was sent via one)
-		// - No new workflow task is needed — just buffer until acceptance
-		// - The event will be written atomically with acceptance
-		// If the Update struct is lost (registry cleared), the abort mechanism fires
-		// registryClearedErr on the caller's future, prompting an immediate retry.
-		if req.GetRequestId() != "" {
-			for _, pc := range u.pendingCallbacks {
-				if pc.requestID == req.GetRequestId() {
-					return true, nil
-				}
-			}
+	case stateAdmitted, stateSent:
+		// This is the admitting request, or a retry of it. Returning false lets the caller
+		// schedule a workflow task for a new Update. A new Update is already in stateAdmitted
+		// here because the caller admits it with immediate effects.
+		if req.GetRequestId() == u.originalReqID {
+			return false, nil
 		}
-		u.pendingCallbacks = append(u.pendingCallbacks, pendingCallback{
-			requestID:           req.GetRequestId(),
-			completionCallbacks: req.GetCompletionCallbacks(),
+		// Otherwise the request is from another caller. The Update is not yet accepted, so
+		// buffer its callbacks. onAcceptanceMsg writes them in the same transaction as the
+		// UpdateAccepted event. The admitting request already ensured that a workflow task
+		// will deliver the Update, so the caller has nothing more to do. If the Registry is
+		// cleared, the Update is aborted and the caller retries.
+		alreadyBuffered := slices.ContainsFunc(u.pendingCallbacks, func(pc pendingCallback) bool {
+			return pc.requestID == req.GetRequestId()
 		})
+		if !alreadyBuffered {
+			u.pendingCallbacks = append(u.pendingCallbacks, pendingCallback{
+				requestID:           req.GetRequestId(),
+				completionCallbacks: req.GetCompletionCallbacks(),
+			})
+		}
 		return true, nil
 
 	case stateAccepted:
@@ -475,8 +473,8 @@ func (u *Update) AttachCallbacks(
 		return true, nil
 
 	default:
-		// All other states are too early or not applicable for callback attachment.
-		// Callbacks on the admitting request travel with u.request and are attached on acceptance.
+		// Callbacks cannot be attached in the remaining states. Only another request's
+		// callbacks are dropped, because the admitting request's travel with u.request.
 		if req.GetRequestId() != u.originalReqID {
 			u.instrumentation.logCallbacksNotAttached(u.id, req.GetRequestId(), u.state.String(), len(req.GetCompletionCallbacks()))
 		}
@@ -507,7 +505,7 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
-// stateSent. The execution's aggregate callback limits, which reserve buffered
+// stateAdmitted or stateSent. The execution's aggregate callback limits, which reserve buffered
 // callbacks at admission, bound the worst case.
 func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	for _, pc := range u.pendingCallbacks {

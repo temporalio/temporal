@@ -74,7 +74,7 @@ type (
 
 		// InFlightCallbacks returns every set of completion callbacks held by an Update that is
 		// admitted but not yet accepted: its original request's callbacks, and any
-		// buffered by AttachCallbacks while it was with the worker.
+		// buffered by AttachCallbacks before acceptance.
 		//
 		// These callbacks are not yet persisted, so they are missing from the execution's
 		// persisted callback totals, yet they will be persisted if the Update is accepted. By
