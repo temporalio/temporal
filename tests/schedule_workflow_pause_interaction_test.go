@@ -508,6 +508,10 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 // event is not part of the reset history), and the scheduler keeps tracking the
 // reset run through to completion.
 func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
+	// A reset run no longer carries the original start's request ID, so the scheduler matches the completion
+	// only through the request ID in the envelope token.
+	opts := append(pauseInteractionOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+
 	register := func(s *testcore.TestEnv, wt string) {
 		s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
@@ -528,7 +532,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 		)
 	}
 
-	f := setupPausedTriggeredWorkflow(t, newContext, pauseInteractionOpts(t), "sched-pause-reset", register, afterStart)
+	f := setupPausedTriggeredWorkflow(t, newContext, opts, "sched-pause-reset", register, afterStart)
 
 	// Reset the paused workflow to a point before it was paused.
 	resetResp, err := f.env.FrontendClient().ResetWorkflowExecution(f.ctx, &workflowservice.ResetWorkflowExecutionRequest{
