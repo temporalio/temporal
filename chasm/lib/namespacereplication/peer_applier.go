@@ -15,7 +15,13 @@ import (
 // PeerApplyRequest carries the independently built namespace snapshot and the
 // original legacy reference used only for shadow validation.
 type PeerApplyRequest struct {
-	TargetCluster           string
+	SourceCluster       string
+	TargetCluster       string
+	ComponentBusinessID string
+	ComponentRunID      string
+	// AttemptCount is the one-based component-managed peer retry attempt.
+	// Task redelivery and transport retries may reuse the same number.
+	AttemptCount            int32
 	Operation               enumsspb.NamespaceOperation
 	Detail                  *persistencespb.NamespaceDetail
 	Shadow                  bool
@@ -141,6 +147,10 @@ func (a *adminClientPeerApplier) ApplyWithRequest(
 		Fingerprint:             fingerprint,
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: request.ShadowLegacyTaskPayload,
+		SourceCluster:           request.SourceCluster,
+		ComponentBusinessId:     request.ComponentBusinessID,
+		ComponentRunId:          request.ComponentRunID,
+		AttemptCount:            request.AttemptCount,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err

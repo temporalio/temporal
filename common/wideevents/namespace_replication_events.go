@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"maps"
+	"strings"
 
 	"go.opentelemetry.io/otel/log"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -24,16 +25,21 @@ type NamespaceReplicationPhase string
 type NamespaceReplicationOutcome string
 
 const (
-	NamespaceReplicationCreated   NamespaceReplicationPhase = "created"
-	NamespaceReplicationReceived  NamespaceReplicationPhase = "received"
-	NamespaceReplicationProcessed NamespaceReplicationPhase = "processed"
-	NamespaceReplicationDLQed     NamespaceReplicationPhase = "dlqed"
+	NamespaceReplicationCreated      NamespaceReplicationPhase = "created"
+	NamespaceReplicationReceived     NamespaceReplicationPhase = "received"
+	NamespaceReplicationProcessed    NamespaceReplicationPhase = "processed"
+	NamespaceReplicationDLQed        NamespaceReplicationPhase = "dlqed"
+	NamespaceReplicationCompared     NamespaceReplicationPhase = "compared"
+	NamespaceReplicationPeerDelivery NamespaceReplicationPhase = "peer_delivery"
 
 	NamespaceReplicationOutcomeCreated     NamespaceReplicationOutcome = "created"
 	NamespaceReplicationOutcomeUpdated     NamespaceReplicationOutcome = "updated"
 	NamespaceReplicationOutcomeNotAdmitted NamespaceReplicationOutcome = "not_admitted"
 	NamespaceReplicationOutcomeDuplicate   NamespaceReplicationOutcome = "duplicate"
 	NamespaceReplicationOutcomeNoChange    NamespaceReplicationOutcome = "no_change"
+	NamespaceReplicationOutcomeMatch       NamespaceReplicationOutcome = "match"
+	NamespaceReplicationOutcomeMismatch    NamespaceReplicationOutcome = "mismatch"
+	NamespaceReplicationOutcomeError       NamespaceReplicationOutcome = "error"
 )
 
 // NamespaceReplicationTaskEventData contains the task-specific fields shared by every lifecycle phase.
@@ -104,44 +110,62 @@ func (p NamespaceReplicationLifecyclePayload) Attributes() []log.KeyValue {
 }
 
 type NamespaceReplicationLifecycleInput struct {
-	Phase                     NamespaceReplicationPhase
-	Outcome                   NamespaceReplicationOutcome
-	EventData                 NamespaceReplicationTaskEventData
-	SourceCluster             string
-	TargetCluster             string
-	SourceTaskID              *int64
-	AttemptCount              int
-	Error                     error
-	LocalNamespacePreMutation *persistencespb.NamespaceDetail
-	CreateNamespaceRequest    *persistence.CreateNamespaceRequest
-	UpdateNamespaceRequest    *persistence.UpdateNamespaceRequest
+	Phase         NamespaceReplicationPhase
+	Outcome       NamespaceReplicationOutcome
+	EventData     NamespaceReplicationTaskEventData
+	SourceCluster string
+	TargetCluster string
+	SourceTaskID  *int64
+	// AttemptCount is the transport's attempt number. CHASM uses the one-based
+	// component-managed peer retry attempt, which may be reused on redelivery.
+	AttemptCount                 int
+	Error                        error
+	EmitOnTaskSerializationError bool
+	LocalNamespacePreMutation    *persistencespb.NamespaceDetail
+	CreateNamespaceRequest       *persistence.CreateNamespaceRequest
+	UpdateNamespaceRequest       *persistence.UpdateNamespaceRequest
 }
 
 func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicationLifecycleInput) {
-	if in.EventData.TaskPayload == nil {
+	if in.EventData.TaskPayload == nil && !in.EmitOnTaskSerializationError {
 		return
 	}
 
-	taskJSON, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(in.EventData.TaskPayload)
-	if err != nil {
-		return
-	}
-	taskBytes := in.EventData.TaskFingerprintData
-	if len(taskBytes) == 0 {
-		taskBytes, err = proto.MarshalOptions{Deterministic: true}.Marshal(in.EventData.TaskPayload)
-		if err != nil {
-			return
-		}
-	}
-	fingerprint := sha256.Sum256(taskBytes)
-
-	details := make(map[string]any, len(in.EventData.Details)+12)
+	details := make(map[string]any, len(in.EventData.Details)+15)
 	maps.Copy(details, in.EventData.Details)
 	details["task_type"] = in.EventData.TaskType
 	details["task_kind"] = in.EventData.TaskKind
 	details["operation"] = in.EventData.Operation
-	details["task_fingerprint"] = hex.EncodeToString(fingerprint[:])
-	details["task"] = json.RawMessage(taskJSON)
+
+	if in.EventData.TaskPayload == nil {
+		details["task_payload_status"] = "unavailable"
+	} else {
+		taskJSON, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(in.EventData.TaskPayload)
+		if err == nil {
+			details["task"] = json.RawMessage(taskJSON)
+		} else {
+			if !in.EmitOnTaskSerializationError {
+				return
+			}
+			details["task_payload_status"] = "incomplete"
+			details["task_json_error"] = err.Error()
+		}
+	}
+	taskBytes := in.EventData.TaskFingerprintData
+	var fingerprintErr error
+	if len(taskBytes) == 0 && in.EventData.TaskPayload != nil {
+		taskBytes, fingerprintErr = proto.MarshalOptions{Deterministic: true}.Marshal(in.EventData.TaskPayload)
+	}
+	if fingerprintErr == nil && (len(taskBytes) > 0 || in.EventData.TaskPayload != nil) {
+		fingerprint := sha256.Sum256(taskBytes)
+		details["task_fingerprint"] = hex.EncodeToString(fingerprint[:])
+	} else if fingerprintErr != nil {
+		if !in.EmitOnTaskSerializationError {
+			return
+		}
+		details["task_payload_status"] = "incomplete"
+		details["task_fingerprint_error"] = fingerprintErr.Error()
+	}
 	if in.Outcome != "" {
 		details["outcome"] = in.Outcome
 	}
@@ -177,8 +201,8 @@ func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicatio
 	}
 	Emit(logger, NamespaceReplicationLifecyclePayload{
 		Phase:       string(in.Phase),
-		Namespace:   in.EventData.Namespace,
-		NamespaceID: in.EventData.NamespaceID,
+		Namespace:   strings.ToValidUTF8(in.EventData.Namespace, "�"),
+		NamespaceID: strings.ToValidUTF8(in.EventData.NamespaceID, "�"),
 		Details:     details,
 	})
 }
