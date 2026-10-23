@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protodiff"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
@@ -139,6 +140,7 @@ func runScheduleParity(t *testing.T, policy enumspb.ScheduleOverlapPolicy, steps
 				require.NoError(t, s.SdkClient().TerminateWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId(), "parity"))
 			case parityCancel:
 				require.NoError(t, s.SdkClient().CancelWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId()))
+			case parityValue, parityNoResult, parityFail, parityTimeout:
 			}
 			started[sched.name], closed[sched.name] = parityRunEvents(t, s, ctx, execution)
 		}
@@ -152,16 +154,16 @@ func runScheduleParity(t *testing.T, policy enumspb.ScheduleOverlapPolicy, steps
 			t.Errorf("%s: close event differs: v1=%s v2=%s", step, closed["v1"], closed["v2"])
 		}
 		// V1 refreshes completion state asynchronously, so compare once converged.
-		awaitParity(t, step+": DescribeSchedule", func() (proto.Message, proto.Message, []string) {
-			v1Desc := normalizeParityDescribe(describeParity(t, s, ctx, v1), v1)
-			v2Desc := normalizeParityDescribe(describeParity(t, s, ctx, v2), v2)
+		awaitParity(ctx, t, step+": DescribeSchedule", func(at *await.T) (proto.Message, proto.Message, []string) {
+			v1Desc := normalizeParityDescribe(describeParity(at, s, ctx, v1), v1)
+			v2Desc := normalizeParityDescribe(describeParity(at, s, ctx, v2), v2)
 			return v1Desc, v2Desc, reconcileDescribeGaps(v1Desc, v2Desc)
 		})
 	}
 
-	awaitParity(t, "ListSchedules", func() (proto.Message, proto.Message, []string) {
-		v1Entry := normalizeParityListEntry(listParity(t, s, ctx, v1))
-		v2Entry := normalizeParityListEntry(listParity(t, s, ctx, v2))
+	awaitParity(ctx, t, "ListSchedules", func(at *await.T) (proto.Message, proto.Message, []string) {
+		v1Entry := normalizeParityListEntry(listParity(at, s, ctx, v1))
+		v2Entry := normalizeParityListEntry(listParity(at, s, ctx, v2))
 		return v1Entry, v2Entry, reconcileListGaps(v1Entry, v2Entry)
 	})
 }
@@ -176,8 +178,9 @@ func triggerParityStep(
 	wantActions int,
 ) *commonpb.WorkflowExecution {
 	t.Helper()
-	// Generated workflow IDs have second resolution; keep triggers in distinct seconds.
-	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
+	// Generated workflow IDs have second resolution; keep triggers in distinct
+	// seconds. Nothing observable to await on, so sleep to the next boundary.
+	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second))) //nolint:forbidigo
 	_, err := s.FrontendClient().PatchSchedule(sched.newContext(ctx), &workflowservice.PatchScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sched.scheduleID,
@@ -188,13 +191,10 @@ func triggerParityStep(
 	require.NoError(t, err, sched.name)
 
 	var execution *commonpb.WorkflowExecution
-	require.Eventually(t, func() bool {
-		actions := describeParity(t, s, ctx, sched).GetInfo().GetRecentActions()
-		if len(actions) < wantActions {
-			return false
-		}
+	await.Requiref(ctx, t, func(at *await.T) {
+		actions := describeParity(at, s, ctx, sched).GetInfo().GetRecentActions()
+		require.GreaterOrEqual(at, len(actions), wantActions)
 		execution = actions[len(actions)-1].GetStartWorkflowResult()
-		return true
 	}, 20*time.Second, 100*time.Millisecond, "%s: action %d never started", sched.name, wantActions)
 	return execution
 }
@@ -207,9 +207,10 @@ func parityRunEvents(
 	execution *commonpb.WorkflowExecution,
 ) (*historypb.WorkflowExecutionStartedEventAttributes, enumspb.EventType) {
 	t.Helper()
-	require.Eventually(t, func() bool {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, execution.GetWorkflowId(), execution.GetRunId())
-		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(at.Context(), execution.GetWorkflowId(), execution.GetRunId())
+		require.NoError(at, err)
+		require.NotEqual(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 20*time.Second, 100*time.Millisecond, "run %s never closed", execution.GetWorkflowId())
 
 	var events []*historypb.HistoryEvent
@@ -223,8 +224,7 @@ func parityRunEvents(
 	return events[0].GetWorkflowExecutionStartedEventAttributes(), events[len(events)-1].GetEventType()
 }
 
-func describeParity(t *testing.T, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *workflowservice.DescribeScheduleResponse {
-	t.Helper()
+func describeParity(t require.TestingT, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *workflowservice.DescribeScheduleResponse {
 	resp, err := s.FrontendClient().DescribeSchedule(sched.newContext(ctx), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sched.scheduleID,
@@ -233,8 +233,7 @@ func describeParity(t *testing.T, s *testcore.TestEnv, ctx context.Context, sche
 	return resp
 }
 
-func listParity(t *testing.T, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *schedulepb.ScheduleListEntry {
-	t.Helper()
+func listParity(t require.TestingT, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *schedulepb.ScheduleListEntry {
 	resp, err := s.FrontendClient().ListSchedules(sched.newContext(ctx), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 100,
@@ -250,22 +249,23 @@ func listParity(t *testing.T, s *testcore.TestEnv, ctx context.Context, sched pa
 }
 
 // awaitParity retries until both sides match, then reports the last diff.
-func awaitParity(t *testing.T, what string, get func() (proto.Message, proto.Message, []string)) {
+func awaitParity(
+	ctx context.Context,
+	t *testing.T,
+	what string,
+	get func(*await.T) (proto.Message, proto.Message, []string),
+) {
 	t.Helper()
-	var diff string
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		v1, v2, gaps := get()
-		if diff = protodiff.Diff(v1, v2); diff == "" {
-			logParityGaps(t, what, gaps)
+	var gaps []string
+	await.Require(ctx, t, func(at *await.T) {
+		v1, v2, matched := get(at)
+		if diff := protodiff.Diff(v1, v2); diff != "" {
+			at.Errorf("%s differs (-v1 +v2):\n%s", what, diff)
 			return
 		}
-		if time.Now().After(deadline) {
-			t.Errorf("%s differs (-v1 +v2):\n%s", what, diff)
-			return
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+		gaps = matched
+	}, 15*time.Second, 200*time.Millisecond)
+	logParityGaps(t, what, gaps)
 }
 
 // normalizeParityStarted removes per-execution identity and wall-clock fields.
