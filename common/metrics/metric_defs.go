@@ -1324,6 +1324,7 @@ var (
 
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+	ExecutionTimeSkippingConfigUpdatedCounter     = NewCounterDef("execution_time_skipping_config_updated_count")
 
 	// Pagination of RespondWorkflowTaskCompleted requests
 	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
@@ -1625,9 +1626,9 @@ var (
 		"task_queue_user_data_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
 	)
-	TaskQueueUserDataReplicationIncomingPerTypeDataDropped = NewCounterDef(
-		"task_queue_user_data_replication_incoming_per_type_data_dropped",
-		WithDescription("The number of task queue user data replication merges that discarded incoming, non-empty per-type data."),
+	TaskQueueUserDataReplicationEqualRevisionConflicts = NewCounterDef(
+		"task_queue_user_data_replication_equal_revision_conflicts",
+		WithDescription("Number of conflicting user data found with same revision number during replication"),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")

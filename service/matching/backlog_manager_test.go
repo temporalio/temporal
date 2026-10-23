@@ -309,6 +309,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	updateBacklogStatsForTest(db, 2, time.Time{})
 	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
+	_, ackLevelBeforeGap := blm.subqueues[subqueueZero].getLevels()
+
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
 	// After direct-add, readLevel == old maxReadLevel == last task ID.
 	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
@@ -324,6 +326,12 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 		return rl >= maxRL
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// All three tasks are still unfinished, so only readLevel may advance.
+	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	s.Require().Equal(ackLevelBeforeGap, ackLevel)
+	s.Require().Equal(ackLevelBeforeGap, s.dbAckLevel(blm))
+	s.Require().EqualValues(5, totalApproximateBacklogCount(s.blm))
+
 	// Complete all tasks. On the last completion:
 	// - outstandingTasks is empty
 	// - readLevel >= maxReadLevel (pump already scanned)
@@ -334,7 +342,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 		t.finish(taskFinishResult{consumedToken: true})
 	}
 
-	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	_, ackLevel = blm.subqueues[subqueueZero].getLevels()
 	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
@@ -495,13 +503,65 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 	}
 }
 
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
+	s.testSetReadLevelAfterGapExpiredTail(2)
+}
+
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTailWithGap() {
+	s.testSetReadLevelAfterGapExpiredTail(100)
+}
+
+func (s *BacklogManagerTestSuite) testSetReadLevelAfterGapExpiredTail(maxReadLevelOffset int64) {
+	if s.fairness {
+		s.T().Skip("this test is only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	tr.signalNewTasks(s.createTasksAt(blm, start+1))
+	_, err := blm.db.CreateTasks(blm.tqCtx, []*writeTaskRequest{{
+		subqueue:  subqueueZero,
+		fairLevel: fairLevel{id: start + 2},
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+		},
+	}})
+	s.Require().NoError(err)
+	maxReadLevel := start + maxReadLevelOffset
+	blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+
+	// Complete the valid task before the reader scans the expired tail.
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 1)
+	tasks[0].finish(taskFinishResult{consumedToken: true})
+	s.Require().Equal(start+1, s.dbAckLevel(blm))
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Len(batch.tasks, 1)
+	tr.processTaskBatch(batch.tasks)
+
+	batch, err = tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	tr.setReadLevelAfterGap(batch.readLevel)
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(maxReadLevel, readLevel)
+	s.Require().Equal(maxReadLevel, ackLevel)
+	s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
+	s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
+}
+
 // TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
 // race: here the in-flight read does return the newly-written rows, but they get acked before the
 // pump processes them. outstandingTasks only remembers tasks above the ack level, so its dedup
 // check can't see them and they used to be dispatched and acked a second time.
 func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
 	if s.fairness {
-		s.T().Skip("only for fairness backlog manager")
+		s.T().Skip("this test is only for priority backlog manager")
 	}
 	s.setupToCaptureTasks()
 	blm, tr, start := s.initPriReaderAtEnd()
@@ -738,9 +798,6 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
-	if !s.fairness {
-		s.T().Skip("this case doesn't work with priTaskReader yet")
-	}
 	s.testSkipExpiredTasks(10, expiredBlock(33))
 }
 
