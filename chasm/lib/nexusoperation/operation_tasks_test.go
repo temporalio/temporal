@@ -80,12 +80,12 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				StateAccessBuffer:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
-				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-				CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				StateAccessBuffer:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
+				MaxOperationTokenLength:   dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+				MinOutboundRequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+				PayloadSizeLimit:          dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+				CallbackURLTemplate:       dynamicconfig.GetTypedPropertyFn(callbackTmpl),
+				UseNewFailureWireFormat:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
@@ -424,7 +424,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "task deadline less than MinRequestTimeout",
+			name:                  "task deadline less than MinOutboundRequestTimeout",
 			taskTimeout:           time.Nanosecond,
 			schedToCloseTimeout:   time.Hour,
 			expectedMetricOutcome: "request-timeout",
@@ -487,7 +487,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
+			name:                  "ScheduleToCloseTimeout less than MinOutboundRequestTimeout",
 			schedToCloseTimeout:   time.Microsecond,
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // Should not be called.
@@ -1031,7 +1031,41 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 		input                 *commonpb.Payload
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
+		// taskTimeout, if set, runs the task with this deadline and the default StateAccessBuffer and
+		// MinOutboundRequestTimeout.
+		taskTimeout time.Duration
 	}{
+		{
+			// The 3s transfer task deadline after 600ms of setup leaves 1.4s for the request after the default 1s
+			// StateAccessBuffer, which is less than the default MinOutboundRequestTimeout.
+			name:        "request is made below MinOutboundRequestTimeout",
+			taskTimeout: 2400 * time.Millisecond,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					&historyservice.StartNexusOperationResponse{
+						Response: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+								AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "system-op-token"},
+							},
+						},
+					}, nil)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "pending",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
+				require.Equal(t, "system-op-token", op.OperationToken)
+			},
+		},
 		{
 			name: "async start",
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
@@ -1266,7 +1300,11 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 
 			env := newInvocationTaskTestEnv(t, op,
 				InvocationData{Input: input, NexusLinks: []nexus.Link{callerLink}},
-				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
+				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			if tc.taskTimeout > 0 {
+				env.handler.config.StateAccessBuffer = StateAccessBuffer.Get(dynamicconfig.NewNoopCollection())
+				env.handler.config.MinOutboundRequestTimeout = MinOutboundRequestTimeout.Get(dynamicconfig.NewNoopCollection())
+			}
 
 			// Set up system endpoint dependencies.
 			historyClient := tc.setupHistoryClient(env.ctrl)
