@@ -111,7 +111,16 @@ func (a *Activity) currentRetryInterval(ctx chasm.Context, attempt *activitypb.A
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		if t := a.dispatchTimeForAttempt(attempt); t != nil {
 			if t.AsTime().After(ctx.Now(a)) {
-				return attempt.GetCurrentRetryInterval()
+				if interval := attempt.GetCurrentRetryInterval(); interval != nil {
+					return interval
+				}
+
+				// Without a stored retry interval (such as after unpause), use the time
+				// between the previous attempt's completion and the scheduled retry.
+				hasCompletedPreviousAttempt := attempt.GetCount() > 1 && attempt.GetCompleteTime() != nil
+				if hasCompletedPreviousAttempt {
+					return durationpb.New(t.AsTime().Sub(attempt.GetCompleteTime().AsTime()))
+				}
 			}
 		}
 	}
@@ -336,9 +345,16 @@ func startDelayBucket(delay time.Duration) activitypb.StartDelayBucket {
 // a SCHEDULED activity. Retries fire at the retry time; first attempts dispatch now, lifted to
 // honor any pending start_delay.
 func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
+	hasRetryDispatchTime := attempt.GetCount() > 1 && attempt.GetDispatchTime() != nil
+
+	// Use pending retry backoff first. Otherwise preserve an existing retry
+	// dispatch time, such as after unpause. If neither applies, dispatch
+	// now while honoring any pending initial start delay.
 	var dispatchTime time.Time
 	if retryDispatchTime := dispatchTimeForRetry(attempt); retryDispatchTime != nil {
 		dispatchTime = retryDispatchTime.AsTime()
+	} else if hasRetryDispatchTime {
+		dispatchTime = attempt.GetDispatchTime().AsTime()
 	} else {
 		dispatchTime = a.dispatchTimeRespectingStartDelay(ctx.Now(a))
 	}
