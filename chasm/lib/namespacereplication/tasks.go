@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
@@ -14,6 +15,7 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -772,7 +774,11 @@ func (h *applyPeerTaskHandler) Execute(
 	// (dial failure or apply failure) is classified here into retriable vs
 	// terminal, so the retry/gating policy stays in this package regardless of
 	// which transport the deployment injected.
-	result, applyErr := applyPeer(ctx, h.peerApplier, PeerApplyRequest{
+	// Leave time in the task context to persist the outcome and schedule a retry
+	// after a slow peer request times out.
+	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
+	defer cancel()
+	result, applyErr := applyPeer(callCtx, h.peerApplier, PeerApplyRequest{
 		TargetCluster:           task.GetTargetCell(),
 		Operation:               loaded.Operation,
 		Detail:                  loaded.Detail,

@@ -255,11 +255,12 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 	}
 }
 
-func TestTriggerNamespaceMutationModes(t *testing.T) {
+func TestTriggerNamespaceMutationIsShadow(t *testing.T) {
+	t.Parallel()
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
-	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 2)}
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	handler := &namespaceHandler{
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
@@ -270,31 +271,19 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
 	}
 
-	for _, tc := range []struct {
-		name       string
-		mode       namespaceMutationMode
-		wantShadow bool
-	}{
-		{name: "authoritative", mode: namespaceMutationModeAuthoritative},
-		{name: "shadow", mode: namespaceMutationModeShadow, wantShadow: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := handler.triggerNamespaceMutation(
-				context.Background(),
-				enumsspb.NAMESPACE_OPERATION_UPDATE,
-				detail,
-				7,
-				nil,
-				true,
-				tc.mode,
-				[]byte("legacy-reference"),
-			)
-			require.NoError(t, err)
-			request := <-client.requests
-			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
-			require.True(t, request.GetMutation().GetIsGlobalNamespace())
-		})
-	}
+	_, err := handler.triggerNamespaceMutation(
+		t.Context(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		detail,
+		7,
+		nil,
+		true,
+		[]byte("legacy-reference"),
+	)
+	require.NoError(t, err)
+	request := <-client.requests
+	require.True(t, request.GetMutation().GetShadow())
+	require.True(t, request.GetMutation().GetIsGlobalNamespace())
 }
 
 func TestPeerCellsFromClusters(t *testing.T) {

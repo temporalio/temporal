@@ -60,7 +60,6 @@ type (
 	}
 
 	namespaceReplicationTransportMode int
-	namespaceMutationMode             int
 )
 
 const (
@@ -71,13 +70,6 @@ const (
 const (
 	namespaceReplicationTransportLegacy namespaceReplicationTransportMode = iota
 	namespaceReplicationTransportShadow
-)
-
-const (
-	// Authoritative mutations write both the source namespace and its peers.
-	namespaceMutationModeAuthoritative namespaceMutationMode = iota
-	// Shadow mutations compare at peers but never write namespace state.
-	namespaceMutationModeShadow
 )
 
 var (
@@ -1497,7 +1489,6 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			expectedVersion,
 			previousClusters,
 			isGlobalNamespace,
-			namespaceMutationModeShadow,
 			legacyPayload,
 		); err != nil {
 			d.logger.Warn(
@@ -1532,7 +1523,6 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	expectedVersion int64,
 	previousClusters []string,
 	isGlobalNamespace bool,
-	mode namespaceMutationMode,
 	shadowLegacyPayload []byte,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	namespaceID := detail.GetInfo().GetId()
@@ -1550,7 +1540,7 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 				detail.GetReplicationConfig().GetClusters(),
 				previousClusters,
 			),
-			Shadow:                  mode == namespaceMutationModeShadow,
+			Shadow:                  true,
 			ShadowLegacyTaskPayload: shadowLegacyPayload,
 		},
 	})
