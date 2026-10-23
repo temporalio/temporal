@@ -67,18 +67,21 @@ TEST_RUNNER_TIMEOUT_ARG := $(if $(TEST_RUNNER_TIMEOUT),--total-timeout=$(TEST_RU
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
+TEST_RACE_ENABLED := $(filter 1 on y yes t true,$(TEST_RACE_FLAG))
 # Whether or not to shuffle tests. All of (1 on y yes t true) are true values.
 TEST_SHUFFLE_FLAG ?= on
 # Common test args used in the various test suite targets.
 COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
-		     $(if $(filter 1 on y yes t true, $(TEST_RACE_FLAG)),-race,) \
+		     $(if $(TEST_RACE_ENABLED),-race,) \
 		     $(if $(filter 1 on y yes t true, $(TEST_SHUFFLE_FLAG)),-shuffle on,) \
 		     $(TEST_PARALLEL_FLAGS) \
 		     $(TEST_ARGS) \
 		     $(TEST_TAG_FLAG)
-# -race requires cgo, so the test targets need it on whenever TEST_RACE_FLAG is set. CGO_ENABLED
-# itself stays ?= 0 so that `make bins` keeps producing static, portable release binaries.
-TEST_CGO_ENABLED := $(if $(filter 1 on y yes t true, $(TEST_RACE_FLAG)),1,$(CGO_ENABLED))
+# -race requires cgo everywhere except darwin, where the toolchain ships a cgo-free race
+# runtime (cmd/go/internal/work/init.go: "On macOS, -race does not require cgo"). CGO_ENABLED
+# itself stays ?= 0 so that `make bins` keeps producing static, portable release binaries, and
+# so that macOS keeps the faster cgo-free test builds that #7937 was after.
+TEST_CGO_ENABLED := $(if $(and $(TEST_RACE_ENABLED),$(filter-out darwin,$(GOOS))),1,$(CGO_ENABLED))
 
 ##### Variables ######
 
