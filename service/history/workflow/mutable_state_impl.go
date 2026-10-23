@@ -7939,6 +7939,9 @@ func (ms *MutableStateImpl) closeTransaction(
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
+	if err := ms.notifyWorkerOfBufferedEvents(transactionPolicy); err != nil {
+		return closeTransactionResult{}, err
+	}
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
@@ -8038,6 +8041,62 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) notifyWorkerOfBufferedEvents(transactionPolicy historyi.TransactionPolicy) error {
+	if transactionPolicy != historyi.TransactionPolicyActive ||
+		!ms.config.EnableWorkflowTaskHeartbeatNotification(ms.namespaceEntry.Name().String()) ||
+		!ms.hBuilder.HasNewBufferedEvent(needsWorkflowTaskNotification) ||
+		ms.hBuilder.HasPersistedBufferedEvent(needsWorkflowTaskNotification) {
+		return nil
+	}
+	controlQueue := ms.executionInfo.GetWorkflowTaskWorkerControlTaskQueue()
+	workflowTask := ms.GetStartedWorkflowTask()
+	if controlQueue == "" || workflowTask == nil {
+		return nil
+	}
+	return ms.AddWorkerCommandsTasks([]*workerpb.WorkerCommand{
+		NewWorkflowTaskHeartbeatNotificationCommand(ms.GetExecutionState().GetRunId(), workflowTask),
+	}, controlQueue)
+}
+
+// NewWorkflowTaskHeartbeatNotificationCommand targets one exact Workflow Task attempt.
+func NewWorkflowTaskHeartbeatNotificationCommand(runID string, workflowTask *historyi.WorkflowTaskInfo) *workerpb.WorkerCommand {
+	return &workerpb.WorkerCommand{
+		Type: &workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification{
+			WorkflowTaskHeartbeatNotification: &workerpb.WorkflowTaskHeartbeatNotificationCommand{
+				RunId:            runID,
+				ScheduledEventId: workflowTask.ScheduledEventID,
+				StartedEventId:   workflowTask.StartedEventID,
+				Attempt:          workflowTask.Attempt,
+				StartedTime:      timestamppb.New(workflowTask.StartedTime),
+			},
+		},
+	}
+}
+
+func needsWorkflowTaskNotification(event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_TIMER_FIRED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+		return true
+	default:
+		return false
+	}
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(

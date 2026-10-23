@@ -1225,6 +1225,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		WorkflowType:               matchingResp.WorkflowType,
 		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
 		StartedEventId:             matchingResp.StartedEventId,
+		ScheduledEventId:           matchingResp.ScheduledEventId,
 		Query:                      matchingResp.Query,
 		BacklogCountHint:           matchingResp.BacklogCountHint,
 		Attempt:                    matchingResp.Attempt,
