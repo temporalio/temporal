@@ -1980,6 +1980,55 @@ func (suite *ScheduleSuite) TestInput(chasmEnabled bool) {
 	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
+// A workflow with no return value must not hand the next run a last completion
+// result; V2 used to forward an empty, metadata-less payload that codecs reject.
+func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-no-result")
+	wid := testcore.RandomizeStr("sched-no-result-wf")
+	wt := testcore.RandomizeStr("sched-no-result-wt")
+
+	var runs, sawLastCompletionResult atomic.Int32
+	workflowFn := func(ctx workflow.Context) error {
+		if workflow.HasLastCompletionResult(ctx) {
+			sawLastCompletionResult.Store(1)
+		}
+		var n int32
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) }).Get(&n)
+		return nil
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(suite.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(3 * time.Second)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	await.RequireTrue(t, func() bool { return runs.Load() >= 3 }, 20*time.Second, 200*time.Millisecond)
+	require.Zero(t, sawLastCompletionResult.Load())
+}
+
 func (suite *ScheduleSuite) TestLastCompletionAndError(chasmEnabled bool) {
 	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)

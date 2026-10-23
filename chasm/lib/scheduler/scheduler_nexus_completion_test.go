@@ -18,9 +18,11 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -593,4 +595,48 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+// A workflow with no result arrives as an empty (or nil) success payload; V1
+// leaves completion state untouched in that case.
+func TestHandleNexusCompletion_EmptySuccessLeavesCompletionState(t *testing.T) {
+	previous := &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous failure"},
+	}
+	for _, tc := range []struct {
+		name    string
+		initial *schedulerpb.LastCompletionResult
+		success *commonpb.Payload
+	}{
+		{name: "empty payload, empty state", initial: &schedulerpb.LastCompletionResult{}, success: &commonpb.Payload{}},
+		{name: "nil payload, empty state", initial: &schedulerpb.LastCompletionResult{}, success: nil},
+		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}},
+		{name: "nil payload, previous state", initial: previous, success: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, node := setupSchedulerForTest(t)
+			sched.LastCompletionResult = chasm.NewDataField(ctx, common.CloneProto(tc.initial))
+			start := &schedulespb.BufferedStart{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+				ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+				StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+			}
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{start}
+
+			err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome:   &persistencespb.ChasmNexusCompletion_Success{Success: tc.success},
+				CloseTime: timestamppb.Now(),
+			})
+			require.NoError(t, err)
+			_, err = node.CloseTransaction(context.Background(), true)
+			require.NoError(t, err)
+
+			readCtx := chasm.NewContext(context.Background(), node)
+			require.True(t, proto.Equal(tc.initial, sched.LastCompletionResult.Get(readCtx)))
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.GetCompleted().GetStatus())
+		})
+	}
 }
