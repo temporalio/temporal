@@ -251,8 +251,10 @@ type WorkerControllerInstanceState struct {
 	MigrationToken string `protobuf:"bytes,11,opt,name=migration_token,json=migrationToken,proto3" json:"migration_token,omitempty"`
 	// PENDING_ACTIVATION only: PendingExpiryTask deadline.
 	PendingExpireTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=pending_expire_time,json=pendingExpireTime,proto3" json:"pending_expire_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Token that activated this instance; never overwritten, so a retried activation stays accepted.
+	ActivatedMigrationToken string `protobuf:"bytes,13,opt,name=activated_migration_token,json=activatedMigrationToken,proto3" json:"activated_migration_token,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *WorkerControllerInstanceState) Reset() {
@@ -367,6 +369,13 @@ func (x *WorkerControllerInstanceState) GetPendingExpireTime() *timestamppb.Time
 		return x.PendingExpireTime
 	}
 	return nil
+}
+
+func (x *WorkerControllerInstanceState) GetActivatedMigrationToken() string {
+	if x != nil {
+		return x.ActivatedMigrationToken
+	}
+	return ""
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -1089,7 +1098,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_message_proto protoreflect.FileD
 
 const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xc3\a\n" +
+	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xff\a\n" +
 	"\x1dWorkerControllerInstanceState\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12I\n" +
@@ -1104,7 +1113,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\x14next_validation_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\x12nextValidationTime\x12'\n" +
 	"\x0fmigration_token\x18\v \x01(\tR\x0emigrationToken\x12J\n" +
-	"\x13pending_expire_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x11pendingExpireTime\x1a~\n" +
+	"\x13pending_expire_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x11pendingExpireTime\x12:\n" +
+	"\x19activated_migration_token\x18\r \x01(\tR\x17activatedMigrationToken\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
 	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xa2\x05\n" +

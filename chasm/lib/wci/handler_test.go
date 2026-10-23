@@ -563,6 +563,46 @@ func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
 	require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
 }
 
+// The first activation commits but its response is lost; the retry must not read as an abort,
+// or the source workflow unfreezes and revives a WCI that has moved on.
+func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
+	tests := []struct {
+		name   string
+		moveOn func(*testing.T, *e2e)
+		status wcipb.WciStatus
+	}{
+		{name: "deleted", status: wcipb.WCI_STATUS_DELETED, moveOn: func(t *testing.T, e *e2e) {
+			_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+			require.NoError(t, err)
+		}},
+		{name: "implicitly_deleted", status: wcipb.WCI_STATUS_DELETED, moveOn: func(t *testing.T, e *e2e) {
+			_, err := e.update(nil, "g")
+			require.NoError(t, err)
+		}},
+		{name: "migrating_back", status: wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW, moveOn: func(t *testing.T, e *e2e) {
+			require.NoError(t, e.migrateToWorkflow())
+		}},
+		{name: "migrated_back", status: wcipb.WCI_STATUS_MIGRATED, moveOn: func(t *testing.T, e *e2e) {
+			require.NoError(t, e.migrateToWorkflow())
+			e.runMigrateTask(t)
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2E(t, fakeAlgo{})
+			require.NoError(t, e.prepare(testToken, time.Minute))
+			require.NoError(t, e.activate(testToken, 1))
+			tc.moveOn(t, e)
+			w, _ := e.live(t)
+			require.Equal(t, tc.status, w.Status)
+
+			require.NoError(t, e.activate(testToken, 1))
+			require.Equal(t, 1, fake.taskAddCalls, "the retry replays nothing")
+			require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
+		})
+	}
+}
+
 func groupUpsertSpecs(provider string) map[string]*wcipb.ScalingGroupSpec {
 	return map[string]*wcipb.ScalingGroupSpec{"g": groupUpsert(provider)["g"].GetSpec()}
 }
