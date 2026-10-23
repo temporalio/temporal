@@ -28,6 +28,8 @@ message WorkerControllerInstanceState {
   string migration_token = 11;
   // PENDING_ACTIVATION only: PendingExpiryTask deadline.
   google.protobuf.Timestamp pending_expire_time = 12;
+  // Token that activated this instance; never overwritten, so a retried activation stays accepted.
+  string activated_migration_token = 13;
 }
 
 // Per-group runtime state; the spec lives on the root.
