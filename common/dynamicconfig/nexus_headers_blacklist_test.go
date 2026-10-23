@@ -3,7 +3,7 @@ package dynamicconfig_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -15,12 +15,12 @@ func TestFrontendNexusRequestHeadersBlacklistDefault(t *testing.T) {
 		"temporal-nexus-failure-support",
 		"temporal-internal-foo",
 	} {
-		assert.True(t, re.MatchString(header), header)
+		require.True(t, re.MatchString(header), header)
 	}
 	for _, header := range []string{
 		"user-header",
 		"temporal-internal",
 	} {
-		assert.False(t, re.MatchString(header), header)
+		require.False(t, re.MatchString(header), header)
 	}
 }
