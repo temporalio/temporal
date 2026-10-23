@@ -134,15 +134,15 @@ func runScheduleParity(t *testing.T, policy enumspb.ScheduleOverlapPolicy, steps
 		closed := map[string]enumspb.EventType{}
 		for _, sched := range []paritySchedule{v1, v2} {
 			outcomes.Store(sched.workflowID, parityStep{Index: i, Outcome: outcome})
-			execution := triggerParityStep(t, s, ctx, sched, policy, i+1)
+			execution := triggerParityStep(ctx, t, s, sched, policy, i+1)
 			switch outcome {
 			case parityTerminate:
 				require.NoError(t, s.SdkClient().TerminateWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId(), "parity"))
 			case parityCancel:
 				require.NoError(t, s.SdkClient().CancelWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId()))
-			case parityValue, parityNoResult, parityFail, parityTimeout:
+			default:
 			}
-			started[sched.name], closed[sched.name] = parityRunEvents(t, s, ctx, execution)
+			started[sched.name], closed[sched.name] = parityRunEvents(ctx, t, s, execution)
 		}
 
 		v1Started, v2Started := normalizeParityStarted(started["v1"]), normalizeParityStarted(started["v2"])
@@ -155,24 +155,24 @@ func runScheduleParity(t *testing.T, policy enumspb.ScheduleOverlapPolicy, steps
 		}
 		// V1 refreshes completion state asynchronously, so compare once converged.
 		awaitParity(ctx, t, step+": DescribeSchedule", func(at *await.T) (proto.Message, proto.Message, []string) {
-			v1Desc := normalizeParityDescribe(describeParity(at, s, ctx, v1), v1)
-			v2Desc := normalizeParityDescribe(describeParity(at, s, ctx, v2), v2)
+			v1Desc := normalizeParityDescribe(describeParity(ctx, at, s, v1), v1)
+			v2Desc := normalizeParityDescribe(describeParity(ctx, at, s, v2), v2)
 			return v1Desc, v2Desc, reconcileDescribeGaps(v1Desc, v2Desc)
 		})
 	}
 
 	awaitParity(ctx, t, "ListSchedules", func(at *await.T) (proto.Message, proto.Message, []string) {
-		v1Entry := normalizeParityListEntry(listParity(at, s, ctx, v1))
-		v2Entry := normalizeParityListEntry(listParity(at, s, ctx, v2))
+		v1Entry := normalizeParityListEntry(listParity(ctx, at, s, v1))
+		v2Entry := normalizeParityListEntry(listParity(ctx, at, s, v2))
 		return v1Entry, v2Entry, reconcileListGaps(v1Entry, v2Entry)
 	})
 }
 
 // triggerParityStep fires one manual action and returns the run it started.
 func triggerParityStep(
+	ctx context.Context,
 	t *testing.T,
 	s *testcore.TestEnv,
-	ctx context.Context,
 	sched paritySchedule,
 	policy enumspb.ScheduleOverlapPolicy,
 	wantActions int,
@@ -192,7 +192,7 @@ func triggerParityStep(
 
 	var execution *commonpb.WorkflowExecution
 	await.Requiref(ctx, t, func(at *await.T) {
-		actions := describeParity(at, s, ctx, sched).GetInfo().GetRecentActions()
+		actions := describeParity(ctx, at, s, sched).GetInfo().GetRecentActions()
 		require.GreaterOrEqual(at, len(actions), wantActions)
 		execution = actions[len(actions)-1].GetStartWorkflowResult()
 	}, 20*time.Second, 100*time.Millisecond, "%s: action %d never started", sched.name, wantActions)
@@ -201,9 +201,9 @@ func triggerParityStep(
 
 // parityRunEvents waits for the run to close and returns its first and last events.
 func parityRunEvents(
+	ctx context.Context,
 	t *testing.T,
 	s *testcore.TestEnv,
-	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 ) (*historypb.WorkflowExecutionStartedEventAttributes, enumspb.EventType) {
 	t.Helper()
@@ -224,7 +224,7 @@ func parityRunEvents(
 	return events[0].GetWorkflowExecutionStartedEventAttributes(), events[len(events)-1].GetEventType()
 }
 
-func describeParity(t require.TestingT, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *workflowservice.DescribeScheduleResponse {
+func describeParity(ctx context.Context, t require.TestingT, s *testcore.TestEnv, sched paritySchedule) *workflowservice.DescribeScheduleResponse {
 	resp, err := s.FrontendClient().DescribeSchedule(sched.newContext(ctx), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sched.scheduleID,
@@ -233,7 +233,7 @@ func describeParity(t require.TestingT, s *testcore.TestEnv, ctx context.Context
 	return resp
 }
 
-func listParity(t require.TestingT, s *testcore.TestEnv, ctx context.Context, sched paritySchedule) *schedulepb.ScheduleListEntry {
+func listParity(ctx context.Context, t require.TestingT, s *testcore.TestEnv, sched paritySchedule) *schedulepb.ScheduleListEntry {
 	resp, err := s.FrontendClient().ListSchedules(sched.newContext(ctx), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 100,
