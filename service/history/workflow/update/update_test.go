@@ -1311,8 +1311,8 @@ func TestAttachCallbacks(t *testing.T) {
 	})
 
 	// An Update rebuilt from an UpdateAdmitted event, e.g. after a reset, has no original request
-	// ID, so every request is buffered. Applying that event recorded the admitting request's ID,
-	// so a retry of the admitting request is skipped when the buffer is flushed.
+	// ID, so every request with callbacks is buffered. Applying that event recorded the admitting
+	// request's ID, so a retry of the admitting request is skipped when the buffer is flushed.
 	for _, tc := range []struct {
 		name             string
 		requestID        string
