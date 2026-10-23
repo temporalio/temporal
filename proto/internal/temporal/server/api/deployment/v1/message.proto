@@ -625,3 +625,9 @@ message ForceCANVersionSignalArgs {
 message DemoteVersionSignalArgs {
   temporal.api.deployment.v1.RoutingConfig routing_config = 1;
 }
+
+// Version membership hints returned with an errTooManyVersions failure.
+message TooManyVersionsFailureDetails {
+  // A match only bypasses the cached failure; the workflow remains authoritative.
+  repeated int64 version_fingerprints = 1;
+}
