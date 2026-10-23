@@ -1,7 +1,6 @@
 package log
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,8 +94,8 @@ func TestSdkLoggerWithPreservesCallSite(t *testing.T) {
 	require.Len(t, entries, 3)
 	for _, e := range entries {
 		callAt := loggingCallAt(e)
-		require.Truef(t, strings.Contains(callAt, "sdk_logger_test.go"),
-			"logging-call-at for %q should point to this test file (the real caller), got %q", e.Message, callAt)
+		require.Containsf(t, callAt, "sdk_logger_test.go",
+			"logging-call-at for %q should point to this test file (the real caller)", e.Message)
 	}
 
 	// Tags accumulated through With() must also survive. Without this, a change that
