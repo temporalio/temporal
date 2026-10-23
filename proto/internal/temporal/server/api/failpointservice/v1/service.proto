@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package temporal.server.api.failpointservice.v1;
+
+import "temporal/server/api/failpointservice/v1/request_response.proto";
+
+option go_package = "go.temporal.io/server/api/failpointservice/v1;failpointservice";
+
+// FailpointService provides gRPC access to failpoint configuration for testing.
+// This service is only available when built with the test_dep build tag.
+service FailpointService {
+  // DisableFailpoint disables a failpoint, allowing normal execution.
+  rpc DisableFailpoint(DisableFailpointRequest) returns (DisableFailpointResponse);
+
+  // DisableAllFailpoints disables and removes all failpoints.
+  rpc DisableAllFailpoints(DisableAllFailpointsRequest) returns (DisableAllFailpointsResponse);
+
+  // InjectPanic configures a failpoint to panic with a specified value.
+  rpc InjectPanic(InjectPanicRequest) returns (InjectPanicResponse);
+
+  // InjectBlock configures a failpoint to block until unblocked.
+  rpc InjectBlock(InjectBlockRequest) returns (InjectBlockResponse);
+
+  // InjectReturn configures a failpoint to return an error.
+  rpc InjectReturn(InjectReturnRequest) returns (InjectReturnResponse);
+
+  // WaitForBlock waits for a block failpoint to be triggered.
+  rpc WaitForBlock(WaitForBlockRequest) returns (WaitForBlockResponse);
+
+  // ListFailpoints returns information about all registered failpoints.
+  rpc ListFailpoints(ListFailpointsRequest) returns (ListFailpointsResponse);
+}
