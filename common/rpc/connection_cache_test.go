@@ -24,16 +24,16 @@ func newCacheTestFactory() *RPCFactory {
 }
 
 func cachedConn(f *RPCFactory, hostName string) (*grpc.ClientConn, bool) {
-	f.internodeGRPCConnections.RLock()
-	defer f.internodeGRPCConnections.RUnlock()
-	c, ok := f.internodeGRPCConnections.conns[hostName]
+	f.connectionsMu.RLock()
+	defer f.connectionsMu.RUnlock()
+	c, ok := f.internodeGRPCConnections[hostName]
 	return c, ok
 }
 
 func cachedConnCount(f *RPCFactory) int {
-	f.internodeGRPCConnections.RLock()
-	defer f.internodeGRPCConnections.RUnlock()
-	return len(f.internodeGRPCConnections.conns)
+	f.connectionsMu.RLock()
+	defer f.connectionsMu.RUnlock()
+	return len(f.internodeGRPCConnections)
 }
 
 // dial returns nil after logging Fatal, which a no-op logger does not act on.
