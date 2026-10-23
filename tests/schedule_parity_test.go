@@ -146,7 +146,6 @@ func runScheduleParity(t *testing.T, policy enumspb.ScheduleOverlapPolicy, steps
 		}
 
 		v1Started, v2Started := normalizeParityStarted(started["v1"]), normalizeParityStarted(started["v2"])
-		logParityGaps(t, step+": started event", reconcileStartedGaps(v1Started, v2Started))
 		if diff := protodiff.Diff(v1Started, v2Started); diff != "" {
 			t.Errorf("%s: started event differs (-v1 +v2):\n%s", step, diff)
 		}
@@ -350,26 +349,11 @@ func normalizeParitySearchAttributes(sas *commonpb.SearchAttributes) {
 // the normalized copies and reports it, so new divergences still fail the test.
 // Remove an entry once the divergence is fixed.
 const (
-	// V1's watcher reports a failure only for FAILED; V2 records a synthesized
-	// Nexus failure for CANCELED, TERMINATED and TIMED_OUT, so GetLastError differs.
-	gapContinuedFailureFromNonFailedClose = "v2 continued_failure from canceled/terminated/timed-out run"
 	// V2 returns empty-but-present memo/search_attributes where V1 leaves them unset.
 	gapDescribeEmptyMemoAndSearchAttributes = "v2 describe returns empty memo/search_attributes instead of unset"
 	// V1's list entry carries an empty-but-present memo where V2 leaves it unset.
 	gapListEmptyMemo = "v1 list entry returns empty memo instead of unset"
 )
-
-func reconcileStartedGaps(v1, v2 *historypb.WorkflowExecutionStartedEventAttributes) []string {
-	failure := v2.GetContinuedFailure()
-	if failure == nil || proto.Equal(failure, v1.GetContinuedFailure()) {
-		return nil
-	}
-	if failure.GetCanceledFailureInfo() == nil && failure.GetTerminatedFailureInfo() == nil && failure.GetTimeoutFailureInfo() == nil {
-		return nil
-	}
-	v2.ContinuedFailure = v1.GetContinuedFailure()
-	return []string{gapContinuedFailureFromNonFailedClose}
-}
 
 func reconcileDescribeGaps(v1, v2 *workflowservice.DescribeScheduleResponse) []string {
 	var gaps []string
