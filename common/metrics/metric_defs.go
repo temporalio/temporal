@@ -353,6 +353,8 @@ const (
 	HistoryRespondActivityTaskCompletedScope = "RespondActivityTaskCompleted"
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
+	// HistoryRespondActivityTaskHandoffScope tracks RespondActivityTaskHandoff API calls received by History.
+	HistoryRespondActivityTaskHandoffScope = "RespondActivityTaskHandoff"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
 	// ActivityTerminatedScope identifies applied activity termination mutations.
@@ -1019,6 +1021,7 @@ var (
 	ActivityCancel                                   = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
 	ActivityTerminate                                = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityAsyncHandoff                             = NewCounterDef("activity_async_handoff", WithDescription("Number of durably recorded activity handoffs, excluding duplicate reports."))
 	ActivityUpdateOptions                            = NewCounterDef("activity_update_options", WithDescription("Number of activity update options calls."))
 	ActivityPause                                    = NewCounterDef("activity_pause", WithDescription("Number of activity pauses."))
 	ActivityUnpause                                  = NewCounterDef("activity_unpause", WithDescription("Number of activity unpauses."))

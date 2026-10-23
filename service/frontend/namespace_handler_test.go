@@ -2365,3 +2365,25 @@ func (s *namespaceHandlerCommonSuite) TestUpsertCustomSearchAttributesAliases() 
 		})
 	}
 }
+
+func (s *namespaceHandlerCommonSuite) TestAsyncHandoffCapabilities() {
+	for _, test := range []struct {
+		name                          string
+		standalone, handoff, workflow bool
+	}{
+		{name: "disabled"},
+		{name: "standalone enabled", standalone: true, handoff: true},
+		{name: "standalone unavailable", handoff: true},
+		{name: "workflow separate", standalone: true, workflow: true},
+	} {
+		s.Run(test.name, func() {
+			s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(test.standalone)
+			s.config.Activity.StandaloneAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.handoff)
+			s.config.Activity.WorkflowAsyncHandoffEnabled = dc.GetBoolPropertyFnFilteredByNamespace(test.workflow)
+			info, _, _, _ := s.handler.createResponse(&persistencespb.NamespaceInfo{Name: "namespace"}, &persistencespb.NamespaceConfig{}, &persistencespb.NamespaceReplicationConfig{})
+			s.Equal(test.standalone && test.handoff, info.GetCapabilities().GetStandaloneActivityAsyncHandoff())
+			// The workflow switch is reserved until its handoff handler is implemented.
+			s.False(info.GetCapabilities().GetWorkflowActivityAsyncHandoff())
+		})
+	}
+}

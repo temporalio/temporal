@@ -11,6 +11,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -842,4 +844,73 @@ func validateJitter(jitter *durationpb.Duration) error {
 		return serviceerror.NewInvalidArgumentf("invalid jitter: %v", err)
 	}
 	return nil
+}
+
+// validateAndExtractHandoffRequest validates public input and extracts the token and routing ID.
+func validateAndExtractHandoffRequest(
+	request *workflowservice.RespondActivityTaskHandoffRequest,
+	maxIDLength int,
+) (*tokenspb.Task, string, error) {
+	if len(request.GetTaskToken()) == 0 {
+		return nil, "", serviceerror.NewInvalidArgument("task token is required")
+	}
+
+	if len(request.GetIdentity()) > maxIDLength {
+		return nil, "", serviceerror.NewInvalidArgument("identity exceeds length limit")
+	}
+
+	token, err := tasktoken.NewSerializer().Deserialize(request.GetTaskToken())
+	if err != nil {
+		return nil, "", serviceerror.NewInvalidArgument("invalid activity task token")
+	}
+
+	businessID, err := validateAndExtractHandoffTaskToken(token)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return token, businessID, nil
+}
+
+func validateAndExtractHandoffTaskToken(token *tokenspb.Task) (string, error) {
+	if token.GetNamespaceId() == "" {
+		return "", serviceerror.NewInvalidArgument("invalid activity task token")
+	}
+
+	if token.GetAttempt() <= 0 {
+		return "", serviceerror.NewInvalidArgument("activity task token attempt must be positive")
+	}
+
+	businessID := token.GetWorkflowId()
+	if len(token.GetComponentRef()) != 0 {
+		ref, err := tasktoken.NewSerializer().DeserializeChasmComponentRef(token.GetComponentRef())
+		if err != nil {
+			return "", serviceerror.NewInvalidArgument("malformed activity component reference")
+		}
+
+		if ref.GetNamespaceId() == "" {
+			return "", serviceerror.NewInvalidArgument("activity component reference is missing namespace ID")
+		}
+
+		if ref.GetBusinessId() == "" {
+			return "", serviceerror.NewInvalidArgument("activity component reference is missing business ID")
+		}
+
+		// Standalone activity task tokens address the activity root, not another component.
+		if ref.GetArchetypeId() != ArchetypeID || len(ref.GetComponentPath()) != 0 {
+			return "", serviceerror.NewInvalidArgument("activity task token must reference the activity root")
+		}
+
+		if ref.GetNamespaceId() != token.GetNamespaceId() {
+			return "", serviceerror.NewInvalidArgument("token does not match namespace")
+		}
+
+		businessID = ref.GetBusinessId()
+	}
+
+	if businessID == "" {
+		return "", serviceerror.NewInvalidArgument("activity task token does not identify an activity execution")
+	}
+
+	return businessID, nil
 }

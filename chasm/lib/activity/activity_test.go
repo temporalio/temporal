@@ -1147,3 +1147,127 @@ func TestEffectiveUserMetadata_FallsBackToLegacy(t *testing.T) {
 	got := activity.effectiveUserMetadata(ctx)
 	require.Same(t, legacyMD, got)
 }
+
+func TestHandleHandoff(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		status  activitypb.ActivityExecutionStatus
+		options *apiactivitypb.AsyncHandoffOptions
+	}{
+		{name: "without handoff options", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED},
+		{name: "with options", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, options: &apiactivitypb.AsyncHandoffOptions{}},
+		{name: "pending pause", status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED},
+		{name: "pending cancellation", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED},
+		{name: "pending reset", status: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			now := defaultTime
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+				HandleNow:            func(chasm.Component) time.Time { return now },
+				HandleMetricsHandler: func() metrics.Handler { return metrics.NoopMetricsHandler },
+			}}
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id", BusinessId: "activity-id", ArchetypeId: ArchetypeID}).Marshal()
+			require.NoError(t, err)
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: test.status, AsyncHandoffOptions: test.options},
+				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
+			}
+			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
+				Token:   &tokenspb.Task{NamespaceId: "namespace-id", Attempt: 2, ActivityAttemptStamp: 6, ComponentRef: ref},
+				Request: &activitypb.RespondActivityTaskHandoffRequest{NamespaceId: "namespace-id"},
+			}
+
+			// A namespace mismatch is rejected without recording handoff.
+			input.Request.NamespaceId = "other-namespace-id"
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			require.False(t, act.GetAwaitingCompletion())
+			require.Nil(t, act.GetAsyncHandoffTime())
+
+			// A valid task token records handoff without changing the status or activity attempt.
+			input.Request.NamespaceId = "namespace-id"
+			result, err := act.HandleHandoff(ctx, input)
+			require.NoError(t, err)
+			require.True(t, result.NewlyRecorded)
+			require.True(t, act.GetAwaitingCompletion())
+			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+			require.Equal(t, test.status, act.GetStatus())
+			if test.options == nil {
+				require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
+			}
+			require.EqualValues(t, 2, act.LastAttempt.Get(ctx).GetCount())
+
+			// Repeating handoff preserves the original timestamp and does not count another handoff.
+			now = now.Add(time.Minute)
+			result, err = act.HandleHandoff(ctx, input)
+			require.NoError(t, err)
+			require.False(t, result.NewlyRecorded)
+			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+
+			// A stale task token is rejected even when handoff is already recorded.
+			input.Token.ActivityAttemptStamp--
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+			// Handoff requires a worker task token; by-ID tokens are rejected.
+			input.Token.Attempt = ByIDTokenAttempt
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		})
+	}
+}
+
+func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		status  activitypb.ActivityExecutionStatus
+		attempt int32
+	}{
+		{name: "scheduled", status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, attempt: 2},
+		{name: "fully paused", status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, attempt: 2},
+		{name: "completed", status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, attempt: 2},
+		{name: "failed", status: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, attempt: 2},
+		{name: "canceled", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, attempt: 2},
+		{name: "terminated", status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, attempt: 2},
+		{name: "timed out", status: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, attempt: 2},
+		{name: "wrong positive attempt", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, attempt: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+				HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+				HandleMetricsHandler: func() metrics.Handler { return metrics.NoopMetricsHandler },
+			}}
+			ref, err := (&persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: ArchetypeID,
+			}).Marshal()
+			require.NoError(t, err)
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: test.status},
+				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
+			}
+			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
+				Token: &tokenspb.Task{
+					NamespaceId:          "namespace-id",
+					Attempt:              test.attempt,
+					ActivityAttemptStamp: 6,
+					ComponentRef:         ref,
+				},
+				Request: &activitypb.RespondActivityTaskHandoffRequest{NamespaceId: "namespace-id"},
+			}
+
+			result, err := act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+			require.Nil(t, result)
+			require.False(t, act.GetAwaitingCompletion())
+			require.Nil(t, act.GetAsyncHandoffTime())
+		})
+	}
+}

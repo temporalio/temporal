@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/tasktoken"
 )
 
 var (
@@ -631,4 +632,45 @@ func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activ
 		return nil, err
 	}
 	return response, nil
+}
+
+func (h *handler) RespondActivityTaskHandoff(
+	ctx context.Context,
+	req *activitypb.RespondActivityTaskHandoffRequest,
+) (*activitypb.RespondActivityTaskHandoffResponse, error) {
+	token, err := tasktoken.NewSerializer().Deserialize(req.GetFrontendRequest().GetTaskToken())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid activity task token")
+	}
+
+	if _, err := validateAndExtractHandoffTaskToken(token); err != nil {
+		return nil, err
+	}
+
+	// TODO: Implement workflow activity handoff.
+	if len(token.GetComponentRef()) == 0 {
+		return nil, serviceerror.NewUnimplemented("workflow activity async handoff is not supported")
+	}
+
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceName := ns.Name().String()
+	if !h.config.Enabled(namespaceName) || !h.config.StandaloneAsyncHandoffEnabled(namespaceName) {
+		return nil, serviceerror.NewUnimplemented("standalone activity async handoff is disabled")
+	}
+
+	result, _, err := chasm.UpdateComponent(ctx, token.GetComponentRef(), (*Activity).HandleHandoff,
+		WithToken[*activitypb.RespondActivityTaskHandoffRequest]{Token: token, Request: req})
+	if err != nil {
+		return nil, err
+	}
+
+	if result.NewlyRecorded {
+		metrics.ActivityAsyncHandoff.With(result.MetricsHandler).Record(1)
+	}
+
+	return &activitypb.RespondActivityTaskHandoffResponse{FrontendResponse: result.Response}, nil
 }

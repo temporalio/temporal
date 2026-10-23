@@ -523,6 +523,8 @@ func (a *Activity) resetKeepPaused(
 	frontendReq *workflowservice.ResetActivityExecutionRequest,
 	metricsHandler metrics.Handler,
 ) (*activitypb.ResetActivityExecutionResponse, error) {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++

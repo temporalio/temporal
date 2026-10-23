@@ -1079,6 +1079,7 @@ func (d *namespaceHandler) createResponse(
 			WorkerHeartbeats:                   d.config.WorkerHeartbeatsEnabled(info.Name),
 			WorkflowPause:                      d.config.WorkflowPauseEnabled(info.Name),
 			StandaloneActivities:               d.config.Activity.Enabled(info.Name),
+			StandaloneActivityAsyncHandoff:     d.config.Activity.Enabled(info.Name) && d.config.Activity.StandaloneAsyncHandoffEnabled(info.Name),
 			StandaloneActivityStartDelay:       d.config.Activity.Enabled(info.Name) && d.config.Activity.StartDelayEnabled(info.Name),
 			StandaloneActivityOperatorCommands: d.config.Activity.Enabled(info.Name) && d.config.Activity.EnableStandaloneActivityOperatorCommands(info.Name),
 			StandaloneActivityBatchOperations:  d.config.Activity.Enabled(info.Name) && d.config.EnableBatchOperationsForStandaloneActivities(info.Name),

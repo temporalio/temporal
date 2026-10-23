@@ -29,9 +29,12 @@ func (a *Activity) StateMachineState() activitypb.ActivityExecutionStatus {
 	return a.Status
 }
 
-// SetStateMachineState sets the status of the activity.
+// SetStateMachineState sets the status and clears AwaitingCompletion when no activity task is in progress.
 func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus) {
 	a.Status = state
+	if !a.hasAttemptInProgress() {
+		a.AwaitingCompletion = false
+	}
 }
 
 type (
@@ -413,6 +416,8 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error
 }
 
 func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartEvent) error {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	a.EagerExecutionAccepted = true
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
@@ -471,6 +476,8 @@ func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEv
 }
 
 func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
 	attempt.StartedStamp = request.GetStamp()
@@ -737,6 +744,8 @@ func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event reschedule
 }
 
 func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
@@ -764,6 +773,8 @@ func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error 
 }
 
 func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, event rescheduleEvent) error {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	a.ResetShouldPause = false
 	a.applyDeferredOptionRestore(ctx)
@@ -781,6 +792,8 @@ func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, eve
 }
 
 func (a *Activity) applyResetAttemptFailedToScheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
+	a.clearHandoffState()
+
 	attempt := a.LastAttempt.Get(ctx)
 	currentTime := ctx.Now(a)
 
