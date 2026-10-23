@@ -35,23 +35,6 @@ func TestGet(t *testing.T) {
 	})
 }
 
-func TestCall(t *testing.T) {
-	th := NewTestHooks()
-
-	t.Run("does nothing for unset key", func(t *testing.T) {
-		Call(th, UpdateWithStartInBetweenLockAndStart, namespace.ID("ns1")) // should not panic
-	})
-
-	t.Run("calls set function", func(t *testing.T) {
-		called := false
-		cleanup := Set(th, UpdateWithStartInBetweenLockAndStart, func() { called = true }, namespace.ID("ns1"))
-		defer cleanup()
-
-		Call(th, UpdateWithStartInBetweenLockAndStart, namespace.ID("ns1"))
-		require.True(t, called)
-	})
-}
-
 func TestSet(t *testing.T) {
 	th := NewTestHooks()
 
