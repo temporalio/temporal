@@ -137,7 +137,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task, true)
 		if err != nil {
 			return nil, err
 		}
