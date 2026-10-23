@@ -317,21 +317,27 @@ func TestScheduleToCloseTimeoutTaskValidateStamp(t *testing.T) {
 		activityStamp int32
 		taskStamp     int32
 		wantValid     bool
+		paused        bool
 	}{
 		// A legacy activity (created before ScheduleToCloseStamp existed) has stamp 0 on both
 		// the state and the timer task. Its timer is valid only while the activity stamp is
 		// still 0; once an options update bumps the stamp, the zero-stamp timer must be rejected.
-		{"legacy task valid while activity stamp still zero", 0, 0, true},
-		{"legacy zero-stamp task invalid after stamp bumped", 5, 0, false},
-		{"matching stamp valid", 5, 5, true},
-		{"stale non-zero stamp invalid", 5, 3, false},
+		{"legacy task valid while activity stamp still zero", 0, 0, true, false},
+		{"legacy zero-stamp task invalid after stamp bumped", 5, 0, false, false},
+		{"matching stamp valid", 5, 5, true, false},
+		{"stale non-zero stamp invalid", 5, 3, false, false},
+		{"paused activity retains deadline", 5, 5, true, true},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			activity := newActivity(tc.activityStamp)
+			if tc.paused {
+				activity.Status = activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+			}
 			valid, err := handler.Validate(
 				nil,
-				newActivity(tc.activityStamp),
+				activity,
 				chasm.TaskInvocation{},
 				&activitypb.ScheduleToCloseTimeoutTask{Stamp: tc.taskStamp},
 			)
@@ -353,6 +359,24 @@ func TestTimeoutTaskTerminalFailure(t *testing.T) {
 		expectedRetryState  enumspb.RetryState
 		expectedMessage     string
 	}{
+		{
+			name:                "start to close non-retryable while reset pending",
+			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			startStatus:         activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			scheduleToClose:     time.Minute,
+			nonRetryable:        true,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+		},
+		{
+			name:                "heartbeat non-retryable while reset pending",
+			timeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			startStatus:         activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			scheduleToClose:     time.Minute,
+			nonRetryable:        true,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			expectedRetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+		},
 		{
 			name:                "start to close deadline exhausted",
 			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
@@ -423,7 +447,8 @@ func TestTimeoutTaskTerminalFailure(t *testing.T) {
 					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
-							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
+							MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
+							BreakdownMetricsByTaskQueue:               dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
 						},
 					}),
 				},
@@ -474,6 +499,7 @@ func TestTimeoutTaskTerminalFailure(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.GetStatus())
 			terminalFailure := activity.outcome(ctx).GetFailure()
 			require.Equal(t, tc.expectedTimeoutType, terminalFailure.GetTimeoutFailureInfo().GetTimeoutType())
 			require.Equal(t, tc.expectedRetryState, activity.outcome(ctx).GetRetryState())
