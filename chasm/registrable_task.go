@@ -23,6 +23,7 @@ type (
 		goType                   reflect.Type
 		componentGoType          reflect.Type // It is not clear how this one is used.
 		validateFn               validateFn
+		validateStandbyFn        validateFn
 		pureTaskExecuteFn        pureTaskExecuteFn
 		sideEffectTaskExecuteFn  sideEffectTaskExecuteFn
 		sideEffectTaskDiscardFn  sideEffectTaskDiscardFn
@@ -51,7 +52,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 	handler SideEffectTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
-	return newRegistrableTask(
+	rt := newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
@@ -84,6 +85,12 @@ func NewRegistrableSideEffectTask[C any, T any](
 		},
 		opts...,
 	)
+	if validator, ok := handler.(StandbyTaskValidator[C, T]); ok {
+		rt.validateStandbyFn = func(ctx Context, component any, invocation TaskInvocation, task any, _ *Registry) (bool, error) {
+			return validator.ValidateStandby(ctx, component.(C), invocation, task.(T))
+		}
+	}
+	return rt
 }
 
 func NewRegistrablePureTask[C any, T any](
@@ -145,6 +152,7 @@ func newRegistrableTask(
 		goType:                  goType,
 		componentGoType:         componentGoType,
 		validateFn:              validateFn,
+		validateStandbyFn:       validateFn,
 		pureTaskExecuteFn:       pureTaskExecuteFn,
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
 		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
