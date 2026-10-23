@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -222,8 +223,8 @@ func (v *VisibilityManagerDual) AddSearchAttributes(
 // AdminListExecutions implements [manager.AdminVisibilityManager].
 func (v *VisibilityManagerDual) AdminListExecutions(
 	ctx context.Context,
-	request *manager.AdminListExecutionsRequest,
-) (*manager.AdminListExecutionsResponse, error) {
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
 	// If namespace is not set in the request (ie., x-namespace request), and dual
 	// visibility is set, the read manager will select according to the default
 	// value of the dynamic config system.enableReadFromSecondaryVisibility since
@@ -231,7 +232,7 @@ func (v *VisibilityManagerDual) AdminListExecutions(
 	// This might produce unexpected results if a namespace is expected to read
 	// from secondary store, and the default value is to read from primary store
 	// (or vice-versa).
-	readManager := v.managerSelector.readManager(request.Namespace)
+	readManager := v.managerSelector.readManager(namespace.Name(request.GetNamespace()))
 	adminReadManager, ok := readManager.(manager.AdminVisibilityManager)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager
@@ -242,8 +243,8 @@ func (v *VisibilityManagerDual) AdminListExecutions(
 // AdminCountExecutions implements [manager.AdminVisibilityManager].
 func (v *VisibilityManagerDual) AdminCountExecutions(
 	ctx context.Context,
-	request *manager.AdminCountExecutionsRequest,
-) (*manager.AdminCountExecutionsResponse, error) {
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
 	// If namespace is not set in the request (ie., x-namespace request), and dual
 	// visibility is set, the read manager will select according to the default
 	// value of the dynamic config system.enableReadFromSecondaryVisibility since
@@ -251,7 +252,7 @@ func (v *VisibilityManagerDual) AdminCountExecutions(
 	// This might produce unexpected results if a namespace is expected to read
 	// from secondary store, and the default value is to read from primary store
 	// (or vice-versa).
-	readManager := v.managerSelector.readManager(request.Namespace)
+	readManager := v.managerSelector.readManager(namespace.Name(request.GetNamespace()))
 	adminReadManager, ok := readManager.(manager.AdminVisibilityManager)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager

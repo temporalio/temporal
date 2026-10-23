@@ -41,11 +41,10 @@ type (
 )
 
 const (
-	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
-	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
-	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
-	orphanedChildReplacementReplaced                                      = "replaced"
-	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
+	eagerStartDeniedReasonDynamicConfigDisabled    metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
+	orphanedChildReplacementReplaced                                    = "replaced"
 )
 
 const (
@@ -548,13 +547,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		s.request.StartRequest.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 	replaceOrphanedChild := orphanedChildReplacementRequested &&
 		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if orphanedChildReplacementRequested && !replaceOrphanedChild {
-		metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
-			1,
-			metrics.OutcomeTag(orphanedChildReplacementRejectedUnsupportedState),
-			metrics.StringTag("workflow_state", currentWorkflowConditionFailed.State.String()),
-		)
-	}
 	if replaceOrphanedChild {
 		currentExecutionUpdateAction = api.ReplaceOrphanedChildAction(
 			ctx,
