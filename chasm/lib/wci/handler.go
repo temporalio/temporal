@@ -387,15 +387,11 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 	defer log.CapturePanic(h.logger, &err)
 
 	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
-		if w.MigrationToken != req.GetMigrationToken() {
-			return struct{}{}, ErrMigrationNotPending
-		}
-		switch w.Status {
-		case wcipb.WCI_STATUS_RUNNING:
-			// A retried activation.
+		// A retried activation; the instance may since have been deleted or migrated back.
+		if w.ActivatedMigrationToken != "" && w.ActivatedMigrationToken == req.GetMigrationToken() {
 			return struct{}{}, nil
-		case wcipb.WCI_STATUS_PENDING_ACTIVATION:
-		default:
+		}
+		if w.MigrationToken != req.GetMigrationToken() || w.Status != wcipb.WCI_STATUS_PENDING_ACTIVATION {
 			return struct{}{}, ErrMigrationNotPending
 		}
 		if err := TransitionMigrationActivated.Apply(w, mctx, EventMigrationActivated{}); err != nil {

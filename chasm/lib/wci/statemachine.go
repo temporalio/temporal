@@ -57,6 +57,7 @@ var TransitionMigrationActivated = chasm.NewTransition(
 	wcipb.WCI_STATUS_RUNNING,
 	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventMigrationActivated) error {
 		w.PendingExpireTime = nil
+		w.ActivatedMigrationToken = w.MigrationToken
 		w.armTimersFromState(ctx)
 		wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
 		return nil
