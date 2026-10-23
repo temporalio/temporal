@@ -70,9 +70,9 @@ func newCancellationTaskTestEnv(
 	handler := &cancellationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				StateAccessBuffer:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
-				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				StateAccessBuffer:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
+				MinOutboundRequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+				UseNewFailureWireFormat:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
@@ -454,7 +454,7 @@ func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "task deadline less than MinRequestTimeout",
+			name:                  "task deadline less than MinOutboundRequestTimeout",
 			taskTimeout:           time.Nanosecond,
 			onCancelOperation:     nil, // Should not be called.
 			expectedMetricOutcome: "request-timeout",
@@ -676,7 +676,27 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 		registerProcessor     bool
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, c *Cancellation)
+		// taskTimeout, if set, runs the task with this deadline and the default StateAccessBuffer and
+		// MinOutboundRequestTimeout.
+		taskTimeout time.Duration
 	}{
+		{
+			// The 3s transfer task deadline after 600ms of setup leaves 1.4s for the request after the default 1s
+			// StateAccessBuffer, which is less than the default MinOutboundRequestTimeout.
+			name:              "request is made below MinOutboundRequestTimeout",
+			taskTimeout:       2400 * time.Millisecond,
+			registerProcessor: true,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CancelNexusOperation(gomock.Any(), gomock.Any()).
+					Return(&historyservice.CancelNexusOperationResponse{}, nil)
+				return client
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, c.Status)
+			},
+		},
 		{
 			name:              "success",
 			registerProcessor: true,
@@ -799,7 +819,11 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 
 			env := newCancellationTaskTestEnv(t, op, cancellation,
 				InvocationData{Input: mustToPayload(t, "test")},
-				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
+				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			if tc.taskTimeout > 0 {
+				env.handler.config.StateAccessBuffer = StateAccessBuffer.Get(dynamicconfig.NewNoopCollection())
+				env.handler.config.MinOutboundRequestTimeout = MinOutboundRequestTimeout.Get(dynamicconfig.NewNoopCollection())
+			}
 
 			// Set up system endpoint dependencies.
 			historyClient := tc.setupHistoryClient(env.ctrl)

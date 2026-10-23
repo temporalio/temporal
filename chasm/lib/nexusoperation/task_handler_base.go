@@ -102,7 +102,7 @@ func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespac
 }
 
 // newInvocation creates an invocation for the given endpoint, selecting the appropriate implementation
-// based on the time available for the request and the endpoint type.
+// based on the endpoint type and, for external endpoints, the time available for the request.
 //
 // ctx must be the call context returned by setupCallContext. remainingOpTimeout is the remaining operation timeout of
 // type timeoutType, or maxDuration if the operation has no timeout.
@@ -116,16 +116,18 @@ func (b *nexusTaskHandlerBase) newInvocation(
 	timeoutType enumspb.TimeoutType,
 	traceCtx invocationTraceContext,
 ) (invocation, error) {
-	minRequestTimeout := b.config.MinRequestTimeout(ns.Name().String())
+	// The system endpoint is served in-process and has no minimum request timeout: it makes the request with whatever
+	// time is left.
+	if endpointName == commonnexus.SystemEndpoint {
+		return b.newInvocationSystem(ns), nil
+	}
+	minRequestTimeout := b.config.MinOutboundRequestTimeout(ns.Name().String())
 	if remainingOpTimeout < minRequestTimeout {
 		return &invocationTimeout{timeoutType}, nil
 	}
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < minRequestTimeout {
 		// The operation has enough time left but the task doesn't. Fail this attempt only and let it be retried.
 		return invocationRequestDeadline{}, nil
-	}
-	if endpointName == commonnexus.SystemEndpoint {
-		return b.newInvocationSystem(ns), nil
 	}
 	return b.newInvocationHTTP(ctx, ns, endpoint, service, traceCtx)
 }
@@ -154,11 +156,8 @@ func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID n
 // setupCallContext creates the context for a single start or cancel request and attaches the failure source tracking
 // value.
 //
-// There is no request timeout config. The task executor sets a deadline on ctx that covers loading the component, the
-// request, and saving the result: 11s for tasks on the outbound queue and 3s for system endpoint tasks, which run on
-// the transfer queue (see taskDestination). The request gets the time left until that deadline minus
-// StateAccessBuffer, which is reserved for saving the result. It is further capped by remainingOpTimeout, unless that
-// is maxDuration.
+// The task executor sets a deadline on ctx that covers loading the component, the request, and saving the result. The
+// request gets the time left until that deadline minus StateAccessBuffer, further capped by remainingOpTimeout.
 func (b *nexusTaskHandlerBase) setupCallContext(
 	ctx context.Context,
 	ns *namespace.Namespace,

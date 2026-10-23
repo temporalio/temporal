@@ -82,19 +82,20 @@ outbound queue and 3s on the transfer queue, which runs system endpoint requests
 that deadline minus this buffer, further capped by the remaining operation timeout.`,
 )
 
-var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"nexusoperation.limit.request.timeout.min",
+var MinOutboundRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.limit.outboundRequest.timeout.min",
 	time.Millisecond*1500,
-	`Minimum time remaining for a request to complete for the server to make RPCs. If the remaining operation timeout is
-less than this value, the operation fails with a non-retryable timeout error. If the time left on the task deadline
-minus StateAccessBuffer is less than this value, the attempt fails with a retryable request timeout error.`,
+	`Minimum time remaining for a request to an external Nexus endpoint to complete for the server to make it. Does not
+apply to the system endpoint, which is served in-process. If the remaining operation timeout is less than this value,
+the operation fails with a non-retryable timeout error. If the time left on the task deadline minus StateAccessBuffer
+is less than this value, the attempt fails with a retryable request timeout error.`,
 )
 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.dispatch.task.timeout.min",
 	time.Second,
 	`Minimum time remaining for a request to be dispatched to the handler worker. If the remaining request timeout is less
-than this value, a timeout error will be returned. Working in conjunction with MinRequestTimeout, both configs help
+than this value, a timeout error will be returned. Working in conjunction with MinOutboundRequestTimeout, both configs help
 ensure that the server has enough time to complete a Nexus request.`,
 )
 
@@ -290,7 +291,7 @@ type Config struct {
 	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	StateAccessBuffer                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MinOutboundRequestTimeout                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -324,7 +325,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
 		StateAccessBuffer:                  StateAccessBuffer.Get(dc),
-		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
+		MinOutboundRequestTimeout:          MinOutboundRequestTimeout.Get(dc),
 		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),

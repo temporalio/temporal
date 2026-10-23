@@ -103,8 +103,8 @@ func (i *invocationTimeout) Cancel(
 	return &operationTimeoutBelowMinError{timeoutType: i.timeoutType}
 }
 
-// invocationRequestDeadline fails a single attempt with a retryable request timeout, without making a request, when the
-// task deadline, minus StateAccessBuffer, leaves less than MinRequestTimeout for the request.
+// invocationRequestDeadline fails a single attempt with a retryable request timeout, without making a request to an
+// external endpoint, when the task deadline, minus StateAccessBuffer, leaves less than MinOutboundRequestTimeout for it.
 type invocationRequestDeadline struct{}
 
 func (invocationRequestDeadline) Start(
