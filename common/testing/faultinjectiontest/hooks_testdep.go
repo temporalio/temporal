@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/testhooks"
 )
 
@@ -20,6 +21,8 @@ type Keys[Callback any] struct {
 type HookKeys[Req, Resp any] struct {
 	Request  Keys[faultinjection.RequestCallback[Req, Resp]]
 	Response Keys[faultinjection.ResponseCallback[Req, Resp]]
+	// Failpoint returns the key of the failpoint that runs before request callbacks.
+	Failpoint func(operation string) failpoint.Key
 }
 
 // Adapter connects a request and response generator to test hooks.
@@ -27,6 +30,7 @@ type Adapter[Req, Resp any] struct {
 	testHooks    testhooks.TestHooks
 	requestKeys  Keys[faultinjection.RequestCallback[Req, Resp]]
 	responseKeys Keys[faultinjection.ResponseCallback[Req, Resp]]
+	failpointKey func(operation string) failpoint.Key
 }
 
 // NewAdapter returns a request and response adapter.
@@ -35,6 +39,7 @@ func NewAdapter[Req, Resp any](testHooks testhooks.TestHooks, keys HookKeys[Req,
 		testHooks:    testHooks,
 		requestKeys:  keys.Request,
 		responseKeys: keys.Response,
+		failpointKey: keys.Failpoint,
 	}
 }
 
@@ -45,12 +50,25 @@ func (a Adapter[Req, Resp]) InstallRequestCallback(
 	return install(a.testHooks, a.requestKeys, scope, callback)
 }
 
+// GenerateRequest first executes the failpoint for the operation, scoped to the request's
+// namespace ID if it has one. An error from the failpoint becomes the outcome. Otherwise, it runs
+// the request callback for the request's namespace.
 func (a Adapter[Req, Resp]) GenerateRequest(
 	ctx context.Context,
 	operation string,
 	req Req,
 ) *faultinjection.Outcome[Resp] {
-	if generate, ok := get(a.testHooks, a.requestKeys, faultinjection.ScopeFromRequest(req)); ok {
+	scope := faultinjection.ScopeFromRequest(req)
+	if a.failpointKey != nil {
+		key := a.failpointKey(operation)
+		if scope.NamespaceID != "" {
+			key = key.ForNamespace(scope.NamespaceID)
+		}
+		if err := failpoint.Checkpoint(a.testHooks, key); err != nil {
+			return &faultinjection.Outcome[Resp]{Error: err}
+		}
+	}
+	if generate, ok := get(a.testHooks, a.requestKeys, scope); ok {
 		return generate(ctx, operation, req)
 	}
 	return nil

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
@@ -128,4 +129,50 @@ func TestNewCallbackGenerator_UnregisterRemovesHook(t *testing.T) {
 	unregister()
 	_, ok = testhooks.Get(testHooks, testhooks.GRPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
 	require.False(t, ok)
+}
+
+func TestUnaryServerInterceptor_Failpoint(t *testing.T) {
+	t.Parallel()
+
+	const fullMethod = "/test.Service/Method"
+	injectedErr := errors.New("injected")
+	tests := []struct {
+		name        string
+		key         failpoint.Key
+		namespaceID string
+		wantErr     error
+	}{
+		{name: "scoped to request namespace", key: failpoint.GRPCKey(fullMethod).ForNamespace("namespace-id"), namespaceID: "namespace-id", wantErr: injectedErr},
+		{name: "scoped to other namespace", key: failpoint.GRPCKey(fullMethod).ForNamespace("other"), namespaceID: "namespace-id", wantErr: nil},
+		{name: "unscoped", key: failpoint.GRPCKey(fullMethod), namespaceID: "namespace-id", wantErr: injectedErr},
+		{name: "unscoped without request namespace", key: failpoint.GRPCKey(fullMethod), namespaceID: "", wantErr: injectedErr},
+		{name: "other method", key: failpoint.GRPCKey("/test.Service/Other"), namespaceID: "namespace-id", wantErr: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testHooks := testhooks.NewTestHooks()
+			fp := failpoint.NewFailpoint[error](tc.key)
+			fp.Return(injectedErr, failpoint.Always)
+			testHooks.Failpoints().Set(tc.key, fp)
+			interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
+
+			response, err := interceptor(
+				context.Background(),
+				&matchingservice.AddWorkflowTaskRequest{NamespaceId: tc.namespaceID},
+				&grpc.UnaryServerInfo{FullMethod: fullMethod},
+				func(context.Context, any) (any, error) {
+					return "response", nil
+				},
+			)
+
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Nil(t, response)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "response", response)
+		})
+	}
 }
