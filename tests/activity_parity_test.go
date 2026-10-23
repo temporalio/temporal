@@ -799,6 +799,30 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	}
 }
 
+// A retryable failure ends the worker's ownership of the current attempt. Both implementations
+// must stop reporting that attempt's start time as soon as the activity enters retry backoff.
+func (s *activityParityTestSuite) TestLastStartedTimeClearedOnRetryableFailure() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		require.NotNil(t, handle.pendingActivityInfo(t).GetLastStartedTime())
+
+		handle.driveEvent(t, model.FailRetryably)
+		require.Nil(t, handle.pendingActivityInfo(t).GetLastStartedTime())
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		require.NotNil(t, handle.describe(t).GetInfo().GetLastStartedTime())
+
+		handle.driveEvent(t, model.FailRetryably)
+		require.Nil(t, handle.describe(t).GetInfo().GetLastStartedTime())
+	})
+}
+
 // Reset rewinds the attempt counter but carries the heartbeat checkpoint into the new attempt, so a
 // long-running activity resumes from where it got to. reset_heartbeat opts out of that: the
 // checkpoint is discarded, and the new attempt starts with none.

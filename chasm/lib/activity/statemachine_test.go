@@ -350,7 +350,10 @@ func TestTransitionRescheduled(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 			injectActivityContext(t, ctx)
-			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
+			attemptState := &activitypb.ActivityAttemptState{
+				Count:       tc.startingAttemptCount,
+				StartedTime: timestamppb.New(defaultTime),
+			}
 			outcome := &activitypb.ActivityOutcome{}
 
 			activity := &Activity{
@@ -380,6 +383,7 @@ func TestTransitionRescheduled(t *testing.T) {
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
 			protorequire.ProtoEqual(t, durationpb.New(tc.expectedRetryInterval), attemptState.GetCurrentRetryInterval())
+			require.Nil(t, attemptState.GetStartedTime())
 
 			// Verify attempt state failure details updated correctly
 			lastFailureDetails := attemptState.GetLastFailureDetails()
