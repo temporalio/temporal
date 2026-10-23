@@ -487,6 +487,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(w.opts.MaxConcurrentWorkflowTaskExecutionSize, 1000)
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(w.opts.MaxConcurrentWorkflowTaskPollers, 2), 2)
 	sdkoptions.StickyScheduleToStartTimeout = w.opts.StickyScheduleToStartTimeout
+	sdkoptions.DeadlockDetectionTimeout = w.opts.DeadlockDetectionTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo(nsName))
 	sdkoptions.Identity = fmt.Sprintf("temporal-system@%s@%s", w.wm.hostName, nsName)
