@@ -192,10 +192,10 @@ const (
 	// FAILED_* so it doesn't read as an error.
 	PEER_APPLY_OUTCOME_NOT_ADMITTED PeerApplyOutcome = 6
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload passed integrity validation and matched the legacy reference.
+	// received payload matched the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MATCH PeerApplyOutcome = 7
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload failed integrity validation or differed from the legacy reference.
+	// received payload differed from the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
 )
 
@@ -299,10 +299,9 @@ type NamespaceMutation struct {
 	// Shadow mutations exercise the full component and peer transport without
 	// writing namespace state in either the source or destination cell.
 	Shadow bool `protobuf:"varint,6,opt,name=shadow,proto3" json:"shadow,omitempty"`
-	// Field 7 is used by replicate_only in the authoritative transport change.
 	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
 	// Required for shadow mutations and preserved unchanged through peer delivery.
-	ShadowLegacyTaskPayload []byte `protobuf:"bytes,8,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
+	ShadowLegacyTaskPayload []byte `protobuf:"bytes,7,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -653,7 +652,7 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12.\n" +
 	"\x13is_global_namespace\x18\x05 \x01(\bR\x11isGlobalNamespace\x12\x16\n" +
 	"\x06shadow\x18\x06 \x01(\bR\x06shadow\x12;\n" +
-	"\x1ashadow_legacy_task_payload\x18\b \x01(\fR\x17shadowLegacyTaskPayload\"\xd6\x04\n" +
+	"\x1ashadow_legacy_task_payload\x18\a \x01(\fR\x17shadowLegacyTaskPayload\"\xd6\x04\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +

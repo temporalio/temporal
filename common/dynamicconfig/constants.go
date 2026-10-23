@@ -84,8 +84,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
-	NamespaceReplicationTransportMode = NewGlobalStringSetting(
+	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
 		NamespaceReplicationTransportModeLegacy,
 		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
 	)

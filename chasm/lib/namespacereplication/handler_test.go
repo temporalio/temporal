@@ -166,6 +166,14 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			wantValid: true,
 		},
 		{name: "valid update", wantValid: true},
+		{
+			name: "removing last peer leaves one target cluster",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.Mutation.NamespaceDetail.ReplicationConfig.Clusters = []string{"cell-a"}
+				req.Mutation.PeerCells = []string{"cell-b"}
+			},
+			wantValid: true,
+		},
 	}
 
 	for _, tc := range testCases {

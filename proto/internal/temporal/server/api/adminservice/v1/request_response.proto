@@ -211,14 +211,9 @@ message ApplyNamespaceMutationRequest {
   // Shadow requests validate transport equivalence but never mutate receiver state.
   bool shadow = 2;
 
-  // SHA-256 of namespace_task_payload computed by the sender. The receiver
-  // hashes the original bytes rather than re-encoding the decoded task, because
-  // protobuf deterministic encoding is not canonical across schema versions.
-  bytes fingerprint = 3;
-
   // Fields 4-7 are used by observability metadata in the shadow metrics change.
   // Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
-  // verifies these bytes before decoding them with its local schema.
+  // decodes this payload with its local schema for shadow comparison.
   bytes namespace_task_payload = 8;
 
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
@@ -244,11 +239,11 @@ message ApplyNamespaceMutationResponse {
     // The admitter rejected the namespace (cluster's admission policy says
     // not to accept this namespace). No write was performed.
     OUTCOME_NOT_ADMITTED = 5;
-    // The shadow payload passed integrity validation and matched the original
-    // legacy task reference. No write was performed.
+    // The shadow payload matched the original legacy task reference.
+    // No write was performed.
     OUTCOME_SHADOW_MATCH = 6;
-    // The shadow payload failed integrity validation or differed from the
-    // original legacy task reference. No write was performed.
+    // The shadow payload differed from the original legacy task reference.
+    // No write was performed.
     OUTCOME_SHADOW_MISMATCH = 7;
   }
   // Result of applying or shadow-validating the mutation on the receiving cluster.

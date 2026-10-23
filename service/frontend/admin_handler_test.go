@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -243,11 +244,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
 	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		Shadow:                  true,
-		Fingerprint:             fingerprint,
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: namespaceTaskPayload,
 	})
@@ -262,23 +261,29 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
 	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(&replicationspb.NamespaceTaskAttributes{Id: "legacy-namespace-id"})
+	s.Require().NoError(err)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		Shadow:                  true,
-		Fingerprint:             []byte("incorrect-fingerprint"),
 		NamespaceTaskPayload:    namespaceTaskPayload,
-		ShadowLegacyTaskPayload: namespaceTaskPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
 	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Warn,
 		Message: "namespace replication shadow receive mismatch",
-		Tags:    map[string]any{"reason": "integrity"},
+		Tags: map[string]any{
+			"reason":             "legacy_payload_mismatch",
+			"differing_fields":   []string{"id"},
+			"legacy_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(legacyPayload)),
+			"actual_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)),
+		},
 	})
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesVerifiedPayloadInsteadOfTypedTask() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesPayloadInsteadOfTypedTask() {
 	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
 	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(payloadTask)
 	s.Require().NoError(err)
@@ -286,7 +291,6 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesVerifiedPayload
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:           &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
 		Shadow:                  true,
-		Fingerprint:             nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: namespaceTaskPayload,
 	})
@@ -294,7 +298,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesVerifiedPayload
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowHashesOriginalPayloadBytes() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowComparesDecodedPayloads() {
 	canonicalPayload, err := nsreplication.MarshalNamespaceTask(
 		&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
 	)
@@ -310,7 +314,6 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowHashesOriginalPaylo
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		Shadow:                  true,
-		Fingerprint:             nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: reencodedPayload,
 	})
@@ -344,7 +347,6 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload()
 	s.Require().NoError(err)
 	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		Shadow:                  true,
-		Fingerprint:             nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: legacyPayload,
 	})
@@ -417,7 +419,6 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutationDetectsLegacyDivergence() 
 			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 				Shadow:                  true,
 				NamespaceTaskPayload:    chasmPayload,
-				Fingerprint:             nsreplication.NamespaceTaskFingerprintFromPayload(chasmPayload),
 				ShadowLegacyTaskPayload: legacyPayload,
 			})
 			s.Require().NoError(err)
@@ -454,7 +455,6 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutationIgnoresTypedUnknownMapEnco
 		NamespaceTask:           typedTask,
 		Shadow:                  true,
 		NamespaceTaskPayload:    legacyPayload,
-		Fingerprint:             nsreplication.NamespaceTaskFingerprintFromPayload(legacyPayload),
 		ShadowLegacyTaskPayload: legacyPayload,
 	})
 	s.Require().NoError(err)

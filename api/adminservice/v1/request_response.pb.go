@@ -60,11 +60,11 @@ const (
 	ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED ApplyNamespaceMutationResponse_Outcome = // The admitter rejected the namespace (cluster's admission policy says
 	// not to accept this namespace). No write was performed.
 	5
-	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload passed integrity validation and matched the original
-	// legacy task reference. No write was performed.
+	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload matched the original legacy task reference.
+	// No write was performed.
 	6
-	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload failed integrity validation or differed from the
-	// original legacy task reference. No write was performed.
+	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload differed from the original legacy task reference.
+	// No write was performed.
 	7
 )
 
@@ -1743,13 +1743,9 @@ type ApplyNamespaceMutationRequest struct {
 	NamespaceTask *v15.NamespaceTaskAttributes `protobuf:"bytes,1,opt,name=namespace_task,json=namespaceTask,proto3" json:"namespace_task,omitempty"`
 	// Shadow requests validate transport equivalence but never mutate receiver state.
 	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
-	// SHA-256 of namespace_task_payload computed by the sender. The receiver
-	// hashes the original bytes rather than re-encoding the decoded task, because
-	// protobuf deterministic encoding is not canonical across schema versions.
-	Fingerprint []byte `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	// Fields 4-7 are used by observability metadata in the shadow metrics change.
 	// Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
-	// verifies these bytes before decoding them with its local schema.
+	// decodes this payload with its local schema for shadow comparison.
 	NamespaceTaskPayload []byte `protobuf:"bytes,8,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
 	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
 	// Shadow requests compare this reference with the decoded namespace_task_payload.
@@ -1800,13 +1796,6 @@ func (x *ApplyNamespaceMutationRequest) GetShadow() bool {
 		return x.Shadow
 	}
 	return false
-}
-
-func (x *ApplyNamespaceMutationRequest) GetFingerprint() []byte {
-	if x != nil {
-		return x.Fingerprint
-	}
-	return nil
 }
 
 func (x *ApplyNamespaceMutationRequest) GetNamespaceTaskPayload() []byte {
@@ -6595,11 +6584,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xb0\x02\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\x8e\x02\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
 	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
-	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12 \n" +
-	"\vfingerprint\x18\x03 \x01(\fR\vfingerprint\x124\n" +
+	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x124\n" +
 	"\x16namespace_task_payload\x18\b \x01(\fR\x14namespaceTaskPayload\x12;\n" +
 	"\x1ashadow_legacy_task_payload\x18\t \x01(\fR\x17shadowLegacyTaskPayload\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +

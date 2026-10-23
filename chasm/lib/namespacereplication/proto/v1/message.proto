@@ -37,10 +37,9 @@ message NamespaceMutation {
   // writing namespace state in either the source or destination cell.
   bool shadow = 6;
 
-  // Field 7 is used by replicate_only in the authoritative transport change.
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
   // Required for shadow mutations and preserved unchanged through peer delivery.
-  bytes shadow_legacy_task_payload = 8;
+  bytes shadow_legacy_task_payload = 7;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -99,10 +98,10 @@ enum PeerApplyOutcome {
   // FAILED_* so it doesn't read as an error.
   PEER_APPLY_OUTCOME_NOT_ADMITTED = 6;
   // The peer processed a shadow request without writing receiver state and the
-  // received payload passed integrity validation and matched the legacy reference.
+  // received payload matched the legacy reference.
   PEER_APPLY_OUTCOME_SHADOW_MATCH = 7;
   // The peer processed a shadow request without writing receiver state and the
-  // received payload failed integrity validation or differed from the legacy reference.
+  // received payload differed from the legacy reference.
   PEER_APPLY_OUTCOME_SHADOW_MISMATCH = 8;
 }
 

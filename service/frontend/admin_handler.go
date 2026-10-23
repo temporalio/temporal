@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -1059,32 +1058,24 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
 	}
 
-	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
-	reason := "integrity"
-	var differingFields []string
-	if bytes.Equal(request.GetFingerprint(), actualFingerprint) {
-		payloadTask := &replicationspb.NamespaceTaskAttributes{}
-		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
-		}
-		// Compare the byte payloads after decoding with the same schema. The typed
-		// gRPC field can encode unknown map fields in a different order.
-		if proto.Equal(legacyTask, payloadTask) {
-			return &adminservice.ApplyNamespaceMutationResponse{
-				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
-			}, nil
-		}
-		reason = "legacy_payload_mismatch"
-		differingFields = nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)
+	payloadTask := &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		return &adminservice.ApplyNamespaceMutationResponse{
+			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+		}, nil
 	}
 	adh.logger.Warn(
 		"namespace replication shadow receive mismatch",
 		tag.WorkflowNamespaceID(legacyTask.GetId()),
-		tag.NewStringTag("reason", reason),
-		tag.NewStringsTag("differing_fields", differingFields),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
 		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
-		tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
-		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
 	)
 
 	return &adminservice.ApplyNamespaceMutationResponse{

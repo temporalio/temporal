@@ -778,7 +778,7 @@ func (h *applyPeerTaskHandler) Execute(
 	// after a slow peer request times out.
 	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
 	defer cancel()
-	result, applyErr := applyPeer(callCtx, h.peerApplier, PeerApplyRequest{
+	result, applyErr := h.peerApplier.Apply(callCtx, PeerApplyRequest{
 		TargetCluster:           task.GetTargetCell(),
 		Operation:               loaded.Operation,
 		Detail:                  loaded.Detail,
