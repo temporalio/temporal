@@ -8,8 +8,11 @@ option go_package = "go.temporal.io/server/api/failpointservice/v1;failpointserv
 
 // FailpointInfo describes the state of a failpoint.
 message FailpointInfo {
-  // key is the failpoint identifier.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the failpoint name.
+  string key = 5;
+  // namespace_id is the namespace the failpoint is scoped to. Empty means all namespaces.
+  string namespace_id = 6;
   // enabled indicates whether the failpoint is active.
   bool enabled = 2;
   // action describes what the failpoint does.

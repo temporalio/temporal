@@ -9,8 +9,11 @@ option go_package = "go.temporal.io/server/api/failpointservice/v1;failpointserv
 
 // DisableFailpointRequest specifies which failpoint to disable.
 message DisableFailpointRequest {
-  // key is the failpoint key to disable.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the name of the failpoint to disable.
+  string key = 2;
+  // namespace_id scopes the key to a namespace. Empty means all namespaces.
+  string namespace_id = 3;
 }
 
 // DisableFailpointResponse is returned after disabling a failpoint.
@@ -24,8 +27,11 @@ message DisableAllFailpointsResponse {}
 
 // InjectPanicRequest configures a failpoint to panic.
 message InjectPanicRequest {
-  // key is the failpoint key to configure.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the name of the failpoint to configure.
+  string key = 4;
+  // namespace_id scopes the key to a namespace. Empty means all namespaces.
+  string namespace_id = 5;
   // panic_value is the string value passed to panic(errors.New(...)).
   string panic_value = 2;
   // recurrence specifies whether this triggers once or always.
@@ -37,8 +43,11 @@ message InjectPanicResponse {}
 
 // InjectBlockRequest configures a failpoint to block.
 message InjectBlockRequest {
-  // key is the failpoint key to configure.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the name of the failpoint to configure.
+  string key = 3;
+  // namespace_id scopes the key to a namespace. Empty means all namespaces.
+  string namespace_id = 4;
   // recurrence specifies whether this triggers once or always.
   temporal.server.api.enums.v1.FailpointRecurrence recurrence = 2;
 }
@@ -48,8 +57,11 @@ message InjectBlockResponse {}
 
 // WaitForBlockRequest specifies which block failpoint to wait for.
 message WaitForBlockRequest {
-  // key is the failpoint key to wait for.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the name of the failpoint to wait for.
+  string key = 2;
+  // namespace_id scopes the key to a namespace. Empty means all namespaces.
+  string namespace_id = 3;
 }
 
 // WaitForBlockResponse is returned when a block failpoint is triggered.
@@ -57,8 +69,11 @@ message WaitForBlockResponse {}
 
 // InjectReturnRequest configures a failpoint to return an error.
 message InjectReturnRequest {
-  // key is the failpoint key to configure.
-  temporal.server.api.enums.v1.FailpointKey key = 1;
+  reserved 1;
+  // key is the name of the failpoint to configure.
+  string key = 4;
+  // namespace_id scopes the key to a namespace. Empty means all namespaces.
+  string namespace_id = 5;
   // error_message is the error message for the returned error.
   string error_message = 2;
   // recurrence specifies whether this triggers once or always.

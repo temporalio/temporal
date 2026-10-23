@@ -6,23 +6,6 @@ import (
 )
 
 var (
-	FailpointKey_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-	}
-)
-
-// FailpointKeyFromString parses a FailpointKey value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to FailpointKey
-func FailpointKeyFromString(s string) (FailpointKey, error) {
-	if v, ok := FailpointKey_value[s]; ok {
-		return FailpointKey(v), nil
-	} else if v, ok := FailpointKey_shorthandValue[s]; ok {
-		return FailpointKey(v), nil
-	}
-	return FailpointKey(0), fmt.Errorf("%s is not a valid FailpointKey", s)
-}
-
-var (
 	FailpointAction_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Off":         1,

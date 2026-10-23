@@ -23,57 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// FailpointKey identifies a specific failpoint in the system.
-// Keys are added together with the failpoints that use them.
-type FailpointKey int32
-
-const (
-	FAILPOINT_KEY_UNSPECIFIED FailpointKey = 0
-)
-
-// Enum value maps for FailpointKey.
-var (
-	FailpointKey_name = map[int32]string{
-		0: "FAILPOINT_KEY_UNSPECIFIED",
-	}
-	FailpointKey_value = map[string]int32{
-		"FAILPOINT_KEY_UNSPECIFIED": 0,
-	}
-)
-
-func (x FailpointKey) Enum() *FailpointKey {
-	p := new(FailpointKey)
-	*p = x
-	return p
-}
-
-func (x FailpointKey) String() string {
-	switch x {
-	case FAILPOINT_KEY_UNSPECIFIED:
-		return "Unspecified"
-	default:
-		return strconv.Itoa(int(x))
-	}
-
-}
-
-func (FailpointKey) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[0].Descriptor()
-}
-
-func (FailpointKey) Type() protoreflect.EnumType {
-	return &file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[0]
-}
-
-func (x FailpointKey) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use FailpointKey.Descriptor instead.
-func (FailpointKey) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP(), []int{0}
-}
-
 // FailpointAction defines what a failpoint should do when triggered.
 type FailpointAction int32
 
@@ -145,11 +94,11 @@ func (x FailpointAction) String() string {
 }
 
 func (FailpointAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[1].Descriptor()
+	return file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[0].Descriptor()
 }
 
 func (FailpointAction) Type() protoreflect.EnumType {
-	return &file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[1]
+	return &file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[0]
 }
 
 func (x FailpointAction) Number() protoreflect.EnumNumber {
@@ -158,7 +107,7 @@ func (x FailpointAction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FailpointAction.Descriptor instead.
 func (FailpointAction) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP(), []int{0}
 }
 
 // FailpointRecurrence specifies how many times a failpoint should trigger.
@@ -208,11 +157,11 @@ func (x FailpointRecurrence) String() string {
 }
 
 func (FailpointRecurrence) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[2].Descriptor()
+	return file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[1].Descriptor()
 }
 
 func (FailpointRecurrence) Type() protoreflect.EnumType {
-	return &file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[2]
+	return &file_temporal_server_api_enums_v1_failpoint_proto_enumTypes[1]
 }
 
 func (x FailpointRecurrence) Number() protoreflect.EnumNumber {
@@ -221,16 +170,14 @@ func (x FailpointRecurrence) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FailpointRecurrence.Descriptor instead.
 func (FailpointRecurrence) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP(), []int{1}
 }
 
 var File_temporal_server_api_enums_v1_failpoint_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_failpoint_proto_rawDesc = "" +
 	"\n" +
-	",temporal/server/api/enums/v1/failpoint.proto\x12\x1ctemporal.server.api.enums.v1*-\n" +
-	"\fFailpointKey\x12\x1d\n" +
-	"\x19FAILPOINT_KEY_UNSPECIFIED\x10\x00*\xd9\x01\n" +
+	",temporal/server/api/enums/v1/failpoint.proto\x12\x1ctemporal.server.api.enums.v1*\xd9\x01\n" +
 	"\x0fFailpointAction\x12 \n" +
 	"\x1cFAILPOINT_ACTION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14FAILPOINT_ACTION_OFF\x10\x01\x12\x1b\n" +
@@ -256,11 +203,10 @@ func file_temporal_server_api_enums_v1_failpoint_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_enums_v1_failpoint_proto_rawDescData
 }
 
-var file_temporal_server_api_enums_v1_failpoint_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_temporal_server_api_enums_v1_failpoint_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_temporal_server_api_enums_v1_failpoint_proto_goTypes = []any{
-	(FailpointKey)(0),        // 0: temporal.server.api.enums.v1.FailpointKey
-	(FailpointAction)(0),     // 1: temporal.server.api.enums.v1.FailpointAction
-	(FailpointRecurrence)(0), // 2: temporal.server.api.enums.v1.FailpointRecurrence
+	(FailpointAction)(0),     // 0: temporal.server.api.enums.v1.FailpointAction
+	(FailpointRecurrence)(0), // 1: temporal.server.api.enums.v1.FailpointRecurrence
 }
 var file_temporal_server_api_enums_v1_failpoint_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -280,7 +226,7 @@ func file_temporal_server_api_enums_v1_failpoint_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_failpoint_proto_rawDesc), len(file_temporal_server_api_enums_v1_failpoint_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      2,
 			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,

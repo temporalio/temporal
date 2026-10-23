@@ -23,9 +23,9 @@ func TestRegistry_SetAndGet(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	fp := new(failpoint.Failpoint[error])
-	registry.Set(1, fp)
+	registry.Set(key1, fp)
 
-	retrieved := registry.Get(1)
+	retrieved := registry.Get(key1)
 	require.NotNil(t, retrieved)
 	require.Equal(t, fp, retrieved)
 }
@@ -34,31 +34,31 @@ func TestRegistry_Delete(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	fp := new(failpoint.Failpoint[error])
-	registry.Set(1, fp)
-	require.NotNil(t, registry.Get(1))
+	registry.Set(key1, fp)
+	require.NotNil(t, registry.Get(key1))
 
-	registry.Delete(1)
-	require.Nil(t, registry.Get(1))
+	registry.Delete(key1)
+	require.Nil(t, registry.Get(key1))
 }
 
 func TestRegistry_List(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
-	fp1 := failpoint.NewFailpoint[error](1)
-	fp2 := failpoint.NewFailpoint[error](2)
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key2)
 
-	registry.Set(1, fp1)
-	registry.Set(2, fp2)
+	registry.Set(key1, fp1)
+	registry.Set(key2, fp2)
 
 	resp, err := registry.ListFailpoints(t.Context(), &failpointservice.ListFailpointsRequest{})
 	require.NoError(t, err)
 	require.Len(t, resp.Failpoints, 2)
 
-	keys := map[enumsspb.FailpointKey]bool{}
+	keys := map[string]bool{}
 	for _, info := range resp.Failpoints {
 		keys[info.Key] = true
 	}
-	require.True(t, keys[1] && keys[2])
+	require.True(t, keys["1"] && keys["2"])
 }
 
 // gRPC service methods
@@ -67,13 +67,13 @@ func TestRegistry_InjectPanic(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectPanic(t.Context(), &failpointservice.InjectPanicRequest{
-		Key:        1,
+		Key:        "1",
 		PanicValue: "test panic",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
-	fp, ok := registry.Get(1).(*failpoint.Failpoint[error])
+	fp, ok := registry.Get(key1).(*failpoint.Failpoint[error])
 	require.True(t, ok)
 	require.Panics(t, func() { _, _ = fp.Execute() })
 }
@@ -82,12 +82,12 @@ func TestRegistry_InjectBlock(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectBlock(t.Context(), &failpointservice.InjectBlockRequest{
-		Key:        1,
+		Key:        "1",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
 
-	fp, ok := registry.Get(1).(*failpoint.Failpoint[error])
+	fp, ok := registry.Get(key1).(*failpoint.Failpoint[error])
 	require.True(t, ok)
 
 	blocked := make(chan struct{})
@@ -123,13 +123,13 @@ func TestRegistry_InjectReturn(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          1,
+		Key:          "1",
 		ErrorMessage: "test error",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
-	fp, ok := registry.Get(1).(*failpoint.Failpoint[error])
+	fp, ok := registry.Get(key1).(*failpoint.Failpoint[error])
 	require.True(t, ok)
 
 	result, executed := fp.Execute()
@@ -141,22 +141,22 @@ func TestRegistry_Disable(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          1,
+		Key:          "1",
 		ErrorMessage: "test error",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
 
-	fp, ok := registry.Get(1).(*failpoint.Failpoint[error])
+	fp, ok := registry.Get(key1).(*failpoint.Failpoint[error])
 	require.True(t, ok)
 	_, executed := fp.Execute()
 	require.True(t, executed)
 
-	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 
 	// After disable, the failpoint should be removed from registry
-	require.Nil(t, registry.Get(1))
+	require.Nil(t, registry.Get(key1))
 }
 
 func TestRegistry_DisableAll(t *testing.T) {
@@ -164,14 +164,14 @@ func TestRegistry_DisableAll(t *testing.T) {
 
 	// Inject multiple failpoints
 	_, err := registry.InjectPanic(t.Context(), &failpointservice.InjectPanicRequest{
-		Key:        1,
+		Key:        "1",
 		PanicValue: "panic1",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
 	_, err = registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          2,
+		Key:          "2",
 		ErrorMessage: "error1",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
@@ -195,17 +195,17 @@ func TestRegistry_WaitForBlock(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectBlock(t.Context(), &failpointservice.InjectBlockRequest{
-		Key:        1,
+		Key:        "1",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
 
-	fp, ok := registry.Get(1).(*failpoint.Failpoint[error])
+	fp, ok := registry.Get(key1).(*failpoint.Failpoint[error])
 	require.True(t, ok)
 
 	waitDone := make(chan error, 1)
 	go func() {
-		_, err := registry.WaitForBlock(t.Context(), &failpointservice.WaitForBlockRequest{Key: 1})
+		_, err := registry.WaitForBlock(t.Context(), &failpointservice.WaitForBlockRequest{Key: "1"})
 		waitDone <- err
 	}()
 
@@ -244,20 +244,20 @@ func TestRegistry_ListFailpoints(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectPanic(t.Context(), &failpointservice.InjectPanicRequest{
-		Key:        1,
+		Key:        "1",
 		PanicValue: "panic1",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
 	_, err = registry.InjectBlock(t.Context(), &failpointservice.InjectBlockRequest{
-		Key:        2,
+		Key:        "2",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
 
 	_, err = registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          3,
+		Key:          "3",
 		ErrorMessage: "error1",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
@@ -267,12 +267,12 @@ func TestRegistry_ListFailpoints(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Failpoints, 3)
 
-	keys := map[enumsspb.FailpointKey]bool{}
+	keys := map[string]bool{}
 	for _, fp := range resp.Failpoints {
 		keys[fp.Key] = true
 		require.True(t, fp.Enabled)
 	}
-	require.True(t, keys[1] && keys[2] && keys[3])
+	require.True(t, keys["1"] && keys["2"] && keys["3"])
 }
 
 func TestRegistry_RecurrenceConversion(t *testing.T) {
@@ -289,7 +289,7 @@ func TestRegistry_RecurrenceConversion(t *testing.T) {
 
 	for _, tt := range tests {
 		_, err := registry.InjectPanic(t.Context(), &failpointservice.InjectPanicRequest{
-			Key:        100,
+			Key:        "100",
 			PanicValue: "test",
 			Recurrence: tt.proto,
 		})
@@ -300,7 +300,7 @@ func TestRegistry_RecurrenceConversion(t *testing.T) {
 		require.Len(t, resp.Failpoints, 1)
 		require.Equal(t, tt.expected, resp.Failpoints[0].Recurrence)
 
-		_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 100})
+		_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "100"})
 		require.NoError(t, err)
 	}
 }
@@ -309,7 +309,7 @@ func TestRegistry_GetInfo(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectPanic(t.Context(), &failpointservice.InjectPanicRequest{
-		Key:        1,
+		Key:        "1",
 		PanicValue: "test",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
@@ -319,13 +319,13 @@ func TestRegistry_GetInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Failpoints, 1)
 	info := resp.Failpoints[0]
-	require.Equal(t, enumsspb.FailpointKey(1), info.Key)
+	require.Equal(t, "1", info.Key)
 	require.True(t, info.Enabled)
 	require.Equal(t, enumsspb.FAILPOINT_ACTION_PANIC, info.Action)
 	require.Equal(t, enumsspb.FAILPOINT_RECURRENCE_ONCE, info.Recurrence)
 
 	// Disable and check again - it should be removed from the registry
-	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 
 	resp, err = registry.ListFailpoints(t.Context(), &failpointservice.ListFailpointsRequest{})
@@ -351,7 +351,7 @@ func TestRegistry_ContextInjection(t *testing.T) {
 func TestRegistry_ExecuteCtxWithRegistry(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          1,
+		Key:          "1",
 		ErrorMessage: "test error",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
@@ -359,7 +359,7 @@ func TestRegistry_ExecuteCtxWithRegistry(t *testing.T) {
 
 	ctx := failpoint.InjectRegistry(t.Context(), registry)
 
-	result, executed := failpoint.ExecuteCtx[error](ctx, 1)
+	result, executed := failpoint.ExecuteCtx[error](ctx, key1)
 	require.True(t, executed)
 	require.Error(t, result)
 	require.Equal(t, "test error", result.Error())
@@ -369,12 +369,12 @@ func TestRegistry_ExecuteCtxFallbackToDirectInjection(t *testing.T) {
 	// Create context with directly injected failpoint (no registry)
 	ctx, fp := failpoint.InjectReturn(
 		t.Context(),
-		1,
+		key1,
 		errors.New("direct injection"),
 		failpoint.Once,
 	)
 
-	result, executed := failpoint.ExecuteCtx[error](ctx, 1)
+	result, executed := failpoint.ExecuteCtx[error](ctx, key1)
 	require.True(t, executed)
 	require.Error(t, result)
 	require.Equal(t, "direct injection", result.Error())
@@ -387,7 +387,7 @@ func TestRegistry_ExecuteCtxFallbackToDirectInjection(t *testing.T) {
 func TestRegistry_ExecuteCtxRegistryTakesPrecedence(t *testing.T) {
 	registry := failpoint.NewRegistry()
 	_, err := registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          1,
+		Key:          "1",
 		ErrorMessage: "from registry",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
@@ -397,13 +397,13 @@ func TestRegistry_ExecuteCtxRegistryTakesPrecedence(t *testing.T) {
 	ctx := failpoint.InjectRegistry(t.Context(), registry)
 	ctx, _ = failpoint.InjectReturn(
 		ctx,
-		1,
+		key1,
 		errors.New("direct injection"),
 		failpoint.Once,
 	)
 
 	// Registry should take precedence
-	result, executed := failpoint.ExecuteCtx[error](ctx, 1)
+	result, executed := failpoint.ExecuteCtx[error](ctx, key1)
 	require.True(t, executed)
 	require.Error(t, result)
 	require.Equal(t, "from registry", result.Error())
@@ -415,21 +415,21 @@ func TestRegistry_ExecuteCtxRegistryTakesPrecedence(t *testing.T) {
 func TestRegistry_DisableFailpoint_Idempotent(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
-	_, err := registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err := registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 
 	_, err = registry.InjectReturn(t.Context(), &failpointservice.InjectReturnRequest{
-		Key:          1,
+		Key:          "1",
 		ErrorMessage: "x",
 		Recurrence:   enumsspb.FAILPOINT_RECURRENCE_ONCE,
 	})
 	require.NoError(t, err)
 
-	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 
 	// Second disable on the same key must also succeed.
-	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 }
 
@@ -465,7 +465,7 @@ func TestRegistry_WaitForBlock_DisabledMidWait(t *testing.T) {
 	registry := failpoint.NewRegistry()
 
 	_, err := registry.InjectBlock(t.Context(), &failpointservice.InjectBlockRequest{
-		Key:        1,
+		Key:        "1",
 		Recurrence: enumsspb.FAILPOINT_RECURRENCE_ALWAYS,
 	})
 	require.NoError(t, err)
@@ -474,7 +474,7 @@ func TestRegistry_WaitForBlock_DisabledMidWait(t *testing.T) {
 	waitDone := make(chan error, 1)
 	go func() {
 		close(waitStarted)
-		_, err := registry.WaitForBlock(t.Context(), &failpointservice.WaitForBlockRequest{Key: 1})
+		_, err := registry.WaitForBlock(t.Context(), &failpointservice.WaitForBlockRequest{Key: "1"})
 		waitDone <- err
 	}()
 
@@ -489,7 +489,7 @@ func TestRegistry_WaitForBlock_DisabledMidWait(t *testing.T) {
 		}
 	}, 50*time.Millisecond, 10*time.Millisecond)
 
-	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: 1})
+	_, err = registry.DisableFailpoint(t.Context(), &failpointservice.DisableFailpointRequest{Key: "1"})
 	require.NoError(t, err)
 
 	var waitErr error
@@ -509,7 +509,7 @@ func TestRegistry_WaitForBlock_DisabledMidWait(t *testing.T) {
 // it after a concurrent Disable closed the channel.
 func TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic(t *testing.T) {
 	for range 100 {
-		fp := failpoint.NewFailpoint[error](1)
+		fp := failpoint.NewFailpoint[error](key1)
 		fp.Block(failpoint.Always)
 
 		var wg sync.WaitGroup
@@ -523,7 +523,7 @@ func TestFailpoint_UnblockOne_AfterDisable_DoesNotPanic(t *testing.T) {
 // the deferred disableLocked in Execute would clobber state belonging to a
 // fresh Block() that landed during the wait.
 func TestFailpoint_OnceBlock_ConcurrentReinject(t *testing.T) {
-	fp := failpoint.NewFailpoint[error](1)
+	fp := failpoint.NewFailpoint[error](key1)
 	fp.Block(failpoint.Once)
 
 	executed := make(chan struct{})

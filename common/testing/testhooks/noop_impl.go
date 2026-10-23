@@ -3,6 +3,7 @@
 package testhooks
 
 import (
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.uber.org/fx"
 )
 
@@ -20,6 +21,11 @@ type TestHooks struct{}
 
 func NewTestHooks() TestHooks {
 	return TestHooks{}
+}
+
+// Failpoints returns nil. Failpoints never fire in production mode.
+func (TestHooks) Failpoints() failpoint.Registry {
+	return nil
 }
 
 // Get gets the value of a test hook. In production mode it always returns the zero value and
