@@ -599,20 +599,27 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 
 // A workflow with no result arrives as an empty (or nil) success payload; V1
 // leaves completion state untouched in that case.
-func TestHandleNexusCompletion_EmptySuccessLeavesCompletionState(t *testing.T) {
+// TestHandleNexusCompletion_SuccessPayload covers both sides of the empty-payload
+// check: a value replaces the result and clears the failure, no value leaves both.
+func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
+	empty := &schedulerpb.LastCompletionResult{}
 	previous := &schedulerpb.LastCompletionResult{
 		Success: &commonpb.Payload{Data: []byte("previous-result")},
 		Failure: &failurepb.Failure{Message: "previous failure"},
 	}
+	value := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("json/plain")}, Data: []byte(`"new"`)}
 	for _, tc := range []struct {
 		name    string
 		initial *schedulerpb.LastCompletionResult
 		success *commonpb.Payload
+		want    *schedulerpb.LastCompletionResult
 	}{
-		{name: "empty payload, empty state", initial: &schedulerpb.LastCompletionResult{}, success: &commonpb.Payload{}},
-		{name: "nil payload, empty state", initial: &schedulerpb.LastCompletionResult{}, success: nil},
-		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}},
-		{name: "nil payload, previous state", initial: previous, success: nil},
+		{name: "empty payload, empty state", initial: empty, success: &commonpb.Payload{}, want: empty},
+		{name: "nil payload, empty state", initial: empty, success: nil, want: empty},
+		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}, want: previous},
+		{name: "nil payload, previous state", initial: previous, success: nil, want: previous},
+		{name: "value, empty state", initial: empty, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
+		{name: "value, previous state", initial: previous, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sched, ctx, node := setupSchedulerForTest(t)
@@ -635,7 +642,7 @@ func TestHandleNexusCompletion_EmptySuccessLeavesCompletionState(t *testing.T) {
 			require.NoError(t, err)
 
 			readCtx := chasm.NewContext(context.Background(), node)
-			require.True(t, proto.Equal(tc.initial, sched.LastCompletionResult.Get(readCtx)))
+			require.True(t, proto.Equal(tc.want, sched.LastCompletionResult.Get(readCtx)))
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.GetCompleted().GetStatus())
 		})
 	}

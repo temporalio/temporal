@@ -1998,8 +1998,7 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 		if workflow.HasLastCompletionResult(ctx) {
 			sawLastCompletionResult.Store(1)
 		}
-		var n int32
-		_ = workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) }).Get(&n)
+		workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) })
 		return nil
 	}
 	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
