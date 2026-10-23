@@ -694,12 +694,17 @@ type statusOnlyError struct{ st *status.Status }
 func (e *statusOnlyError) Error() string          { return e.st.Message() }
 func (e *statusOnlyError) Status() *status.Status { return e.st }
 
-// GetRPCStatus treats the two status conventions differently, and
-// IsRetryableRPCError inherits that. Neither had a test, and the doc comment on
-// IsRetryableRPCError had already drifted into claiming it never unwraps, so
-// the behaviour is pinned here rather than left to prose. Nexus operation
-// retryability is decided from it (chasm/lib/nexusoperation, hsm/nexusoperations),
-// which is why both callers unwrap before they call.
+// GetRPCStatus handles two status conventions, and handles them differently.
+// The canonical GRPCStatus() is found by status.FromError through errors.As,
+// so it is found on a wrapped error too. The older Status() is matched with a
+// direct type assertion, so it is found only on a bare error: wrapped, it is
+// not recognized as a gRPC error at all.
+//
+// IsRetryableRPCError inherits both behaviours, and an unrecognized error is
+// not retryable. Nexus operation retryability is decided from it
+// (chasm/lib/nexusoperation, hsm/nexusoperations), which is why both callers
+// unwrap before they call. The cases below cover each convention bare and
+// wrapped, so a change to either path shows up here.
 func TestGetRPCStatusWrapping(t *testing.T) {
 	unavailable := status.New(codes.Unavailable, "down")
 
