@@ -181,7 +181,10 @@ func AliasFields(
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
-// UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
+// UnaliasFields returns SearchAttributes struct where each search attribute
+// alias is replaced with field name.
+// If the map contains the key sadefs.TemporalAliasedSearchAttributes, it is not
+// mapped to any field and it is removed.
 func UnaliasFields(
 	mapperProvider MapperProvider,
 	searchAttributes *commonpb.SearchAttributes,
@@ -193,12 +196,29 @@ func UnaliasFields(
 	}
 
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return searchAttributes, nil
+		if _, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; !ok {
+			return searchAttributes, nil
+		}
+
+		newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+		for saName, saPayload := range searchAttributes.GetIndexedFields() {
+			if saName != sadefs.TemporalAliasedSearchAttributes {
+				newIndexedFields[saName] = saPayload
+			}
+		}
+		return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		if saName == sadefs.TemporalAliasedSearchAttributes {
+			// TemporalAliasedSearchAttributes is a wildcard name to indicate the search
+			// attributes map is aliased. It does not map to any field, so skip it.
+			mapped = true
+			continue
+		}
+
 		if !sadefs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
 			continue
