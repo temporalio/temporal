@@ -55,6 +55,7 @@ func httpCallerProviderProvider(
 
 	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		scope := httpfaults.Scope{NamespaceID: namespace.ID(key.NamespaceID)}
+		routingLogger := log.With(logger, tag.WorkflowNamespaceID(key.NamespaceID))
 		caller := func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
@@ -63,7 +64,7 @@ func httpCallerProviderProvider(
 				callbackTokenGenerator,
 				externalClient,
 				localClient,
-				logger,
+				routingLogger,
 				config.InspectSourceHeader(),
 			)
 		}
