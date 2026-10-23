@@ -25,6 +25,7 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, time.Duration(0)),
 	)
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
@@ -42,6 +43,23 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 
 	eagerActivity := response.GetActivityTasks()[0]
 	require.Equal(t, tv.ActivityID(), eagerActivity.GetActivityId())
+
+	// The eager activity is reported separately from matching traffic, aggregated across partitions.
+	await.Require(t.Context(), t, func(t *await.T) {
+		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		require.NoError(t, err)
+		stats := response.GetStats()
+		require.Greater(t, stats.GetEagerDispatchRate(), float32(0))
+		require.Zero(t, stats.GetTasksAddRate())
+		require.Zero(t, stats.GetTasksDispatchRate())
+		require.Zero(t, stats.GetApproximateBacklogCount())
+	}, 10*time.Second, 100*time.Millisecond)
+
 	_, err = poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
 	require.NoError(t, err)
 
