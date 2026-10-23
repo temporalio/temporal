@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -580,6 +581,52 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				require.Len(t, descResp.GetCallbacks(), 1)
 				require.Equal(t, callbackAddress, descResp.GetCallbacks()[0].GetInfo().GetCallback().GetNexus().GetUrl())
 				protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
+			})
+			t.Run("ConcurrentAttachesWithSameRequestIdAttachOnce", func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+				startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+				requestID := env.Tv().Any().String()
+
+				const attempts = 2
+				var wg sync.WaitGroup
+				responses := make([]*workflowservice.StartActivityExecutionResponse, attempts)
+				errs := make([]error, attempts)
+				for i := range attempts {
+					wg.Go(func() {
+						responses[i], errs[i] = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+							Namespace:           env.Namespace().String(),
+							ActivityId:          activityID,
+							ActivityType:        env.Tv().ActivityType(),
+							Identity:            env.Tv().WorkerIdentity(),
+							Input:               defaultInput,
+							TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+							StartToCloseTimeout: durationpb.New(time.Minute),
+							IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+							RequestId:           requestID,
+							CompletionCallbacks: []*commonpb.Callback{{
+								Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/concurrent-cb"}},
+							}},
+							Links:             []*commonpb.Link{workflowEventLink("concurrent")},
+							OnConflictOptions: onConflictOpts,
+						})
+					})
+				}
+				wg.Wait()
+
+				for i := range attempts {
+					require.NoError(t, errs[i])
+					require.False(t, responses[i].GetStarted())
+					require.Equal(t, startResp.GetRunId(), responses[i].GetRunId())
+				}
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.GetCallbacks(), 1, "the same request ID must attach only once")
+				require.Len(t, descResp.GetInfo().GetLinks(), 1, "the same request ID must attach only once")
 			})
 		})
 
