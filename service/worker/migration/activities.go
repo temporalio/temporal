@@ -730,7 +730,7 @@ func (a *activities) CountWorkflow(ctx context.Context, request *workflowservice
 	}, nil
 }
 
-func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
+func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) (retErr error) {
 	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(request.NamespaceID))
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
@@ -738,6 +738,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	metricsHandler := a.forceReplicationMetricsHandler
 	defer func() {
 		metricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
+		recordMigrationActivityMetrics(ctx, metricsHandler, start, retErr)
 	}()
 
 	startIndex := 0
@@ -752,8 +753,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		a.Logger.Error("force-replication failed to translate namespaceID to name", tag.WorkflowNamespaceID(request.NamespaceID))
 		return err
 	}
-	// SDK activity metrics are tagged with the worker's namespace, not the namespace being replicated.
-	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String()))
+	metricsHandler = metricsHandler.WithTags(metrics.MigrationNamespaceTag(namespaceName.String()))
 
 	generateViaFrontend := a.generateMigrationTaskViaFrontend()
 	for i := startIndex; i < len(request.Executions); i++ {
@@ -964,7 +964,7 @@ func (a *activities) verifySingleReplicationTask(
 		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
-	a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
+	a.forceReplicationMetricsHandler.WithTags(metrics.MigrationNamespaceTag(request.Namespace)).Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
 	switch e := err.(type) {
 	case nil:
@@ -1024,7 +1024,7 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		heartbeat(*details)
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.WithTags(metrics.MigrationNamespaceTag(request.Namespace)).Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
@@ -1048,12 +1048,36 @@ func (a *activities) verifyReplicationTasks(
 	return true, nil
 }
 
+// recordMigrationActivityMetrics mirrors the SDK activity metrics (activity_execution_latency,
+// activity_execution_failed, activity_succeed_endtoend_latency). The SDK metrics are tagged with
+// the namespace the worker runs in, and the SDK provides no way to add the migration namespace tag
+// to them. metricsHandler is expected to carry the migration namespace tag.
+func recordMigrationActivityMetrics(
+	ctx context.Context,
+	metricsHandler metrics.Handler,
+	start time.Time,
+	err error,
+) {
+	info := activity.GetInfo(ctx)
+	metricsHandler = metricsHandler.WithTags(metrics.ActivityTypeTag(info.ActivityType.Name))
+	metricsHandler.Timer(metrics.MigrationActivityExecutionLatency.Name()).Record(time.Since(start))
+	if err != nil {
+		metricsHandler.Counter(metrics.MigrationActivityExecutionFailed.Name()).Record(1)
+		return
+	}
+	metricsHandler.Timer(metrics.MigrationActivitySucceedEndToEndLatency.Name()).Record(time.Since(info.ScheduledTime))
+}
+
 const (
 	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
 )
 
-func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
-	var response verifyReplicationTasksResponse
+func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (response verifyReplicationTasksResponse, retErr error) {
+	start := time.Now()
+	defer func() {
+		recordMigrationActivityMetrics(ctx, a.forceReplicationMetricsHandler.WithTags(metrics.MigrationNamespaceTag(request.Namespace)), start, retErr)
+	}()
+
 	var details replicationTasksHeartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {

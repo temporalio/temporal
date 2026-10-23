@@ -1788,6 +1788,11 @@ var (
 	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
 	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
 
+	// Migration activity metrics, mirroring the SDK activity metrics with the migration_namespace tag.
+	MigrationActivityExecutionLatency       = NewTimerDef("migration_activity_execution_latency")
+	MigrationActivityExecutionFailed        = NewCounterDef("migration_activity_execution_failed")
+	MigrationActivitySucceedEndToEndLatency = NewTimerDef("migration_activity_succeed_endtoend_latency")
+
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")
 	NamespaceReplicationDLQAckLevelGauge  = NewGaugeDef("namespace_dlq_ack_level")
