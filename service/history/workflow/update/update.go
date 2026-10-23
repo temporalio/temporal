@@ -407,12 +407,13 @@ func (u *Update) Admit(
 //   - Accepted: writes a WorkflowExecutionOptionsUpdatedEvent with the callbacks.
 //   - Completed: attaches nothing. The caller receives the outcome synchronously.
 //
-// The admitting request's own callbacks are written with the UpdateAccepted event,
-// so they are not attached here.
+// The admitting request's own callbacks are written with its UpdateAdmitted or
+// UpdateAccepted event, so they are not attached here.
 //
 // Returns true if the request is fully handled, and false if the caller should
 // continue processing it, e.g. by scheduling a workflow task. Returns an error if
-// the Update is in a provisional state; the caller should retry.
+// the request has callbacks but no request ID, or if the Update is in a provisional
+// state. In the latter case the caller should retry.
 func (u *Update) AttachCallbacks(
 	req *updatepb.Request,
 	eventStore EventStore,
@@ -473,8 +474,8 @@ func (u *Update) AttachCallbacks(
 		return true, nil
 
 	default:
-		// Callbacks cannot be attached in the remaining states. Only another request's
-		// callbacks are dropped, because the admitting request's travel with u.request.
+		// Callbacks cannot be attached in the remaining states. Log only for another request's
+		// callbacks. The admitting request's caller observes the Update's outcome directly.
 		if req.GetRequestId() != u.originalReqID {
 			u.instrumentation.logCallbacksNotAttached(u.id, req.GetRequestId(), u.state.String(), len(req.GetCompletionCallbacks()))
 		}
