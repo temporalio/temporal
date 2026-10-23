@@ -11,6 +11,7 @@ import (
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -109,6 +110,8 @@ func newOpenTelemetryProvider(
 	provider := sdkmetrics.NewMeterProvider(
 		sdkmetrics.WithReader(reader),
 		sdkmetrics.WithView(views...),
+		// Temporal adapters record without trace context, so exemplar reservoirs stay empty.
+		sdkmetrics.WithExemplarFilter(exemplar.AlwaysOffFilter),
 	)
 	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
