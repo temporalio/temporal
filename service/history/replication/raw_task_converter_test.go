@@ -150,6 +150,12 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 }
 
+// SetupSubTest makes assertion failures report on the active subtest.
+func (s *rawTaskConverterSuite) SetupSubTest() {
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+}
+
 func (s *rawTaskConverterSuite) TearDownTest() {
 	s.controller.Finish()
 	s.shardContext.StopForTest()
