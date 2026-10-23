@@ -735,8 +735,9 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
 	start := time.Now()
+	metricsHandler := a.forceReplicationMetricsHandler
 	defer func() {
-		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
+		metricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	startIndex := 0
@@ -751,6 +752,8 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		a.Logger.Error("force-replication failed to translate namespaceID to name", tag.WorkflowNamespaceID(request.NamespaceID))
 		return err
 	}
+	// SDK activity metrics are tagged with the worker's namespace, not the namespace being replicated.
+	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String()))
 
 	generateViaFrontend := a.generateMigrationTaskViaFrontend()
 	for i := startIndex; i < len(request.Executions); i++ {
@@ -961,7 +964,7 @@ func (a *activities) verifySingleReplicationTask(
 		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
-	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
+	a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
 	switch e := err.(type) {
 	case nil:
@@ -1021,7 +1024,7 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		heartbeat(*details)
-		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
