@@ -193,7 +193,11 @@ func (s *Scheduler) completeAction(
 			previousResult := s.LastCompletionResult.Get(ctx)
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
 		case *persistencespb.ChasmNexusCompletion_Success:
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+			// A no-result workflow arrives as an empty payload; like V1, leave the
+			// previous result and continued failure in place.
+			if !internal.IsEmptyPayload(outcome.Success) {
+				s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+			}
 		default:
 		}
 	}
