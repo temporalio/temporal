@@ -17,6 +17,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -1301,4 +1302,34 @@ func newEagerActivityDispatchTestConfig(checkEnabled bool) *configs.Config {
 	configClient := dynamicconfig.NewMemoryClient()
 	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, checkEnabled)
 	return configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 100)
+}
+
+func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	registry := namespace.NewMockRegistry(ctrl)
+	logger := log.NewNoopLogger()
+	client := dynamicconfig.NewMemoryClient()
+	client.OverrideSetting(dynamicconfig.EnableStickyActivityExecution, true)
+	config := configs.NewConfig(dynamicconfig.NewCollection(client, logger), 1)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue",
+	})
+	registry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
+	handler := &workflowTaskCompletedHandler{
+		mutableState:  ms,
+		attrValidator: api.NewCommandAttrValidator(registry, config, nil),
+	}
+	event, response, err := handler.handleCommandScheduleActivity(t.Context(), &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId: "activity", ActivityType: &commonpb.ActivityType{Name: "activity"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "normal-queue"},
+		StartToCloseTimeout: durationpb.New(time.Second),
+		SessionOptions:      &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}},
+	})
+	require.NoError(t, err)
+	require.Nil(t, event)
+	require.Nil(t, response)
+	require.True(t, handler.stopProcessing)
+	require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
 }

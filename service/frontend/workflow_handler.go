@@ -26,6 +26,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -1143,6 +1144,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+		return nil, err
+	}
+
 	callTime := time.Now().UTC()
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -1397,6 +1402,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+		return nil, err
+	}
+
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
@@ -7964,4 +7973,17 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 		return nil, err
 	}
 	return histResp.GetResponse(), nil
+}
+
+func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue) error {
+	if options == nil {
+		return nil
+	}
+	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
+	}
+	if options.GetIsolation() != nil {
+		return serviceerror.NewUnimplemented("Single-session isolation is not supported")
+	}
+	return nil
 }

@@ -710,6 +710,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
 		activityTask,
+		pushActivityInfo.taskQueue,
 		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,

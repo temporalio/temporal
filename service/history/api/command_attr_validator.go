@@ -129,6 +129,15 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		return failedCause, err
 	}
 
+	if attributes.GetSessionOptions().GetUseWorkflowSession() {
+		if !v.config.EnableStickyActivityExecution(namespaceEntry.Name().String()) {
+			return failedCause, serviceerror.NewInvalidArgument("Workflow-session activities are not enabled for this namespace")
+		}
+		if attributes.GetTaskQueue().GetName() != workflowTaskQueue {
+			return failedCause, serviceerror.NewInvalidArgument("Workflow-session activities must use the workflow task queue")
+		}
+	}
+
 	attributes.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
 	attributes.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
 	attributes.StartToCloseTimeout = opts.StartToCloseTimeout
