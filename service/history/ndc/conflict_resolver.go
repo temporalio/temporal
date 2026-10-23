@@ -160,6 +160,8 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = r.mutableState.GetExecutionInfo().MutableStateRebuildTime
 	rebuildMutableState.GetExecutionInfo().LastBranchTime = r.mutableState.GetExecutionInfo().LastBranchTime
+	rebuildMutableState.GetExecutionInfo().LastSupersedeTime = r.mutableState.GetExecutionInfo().LastSupersedeTime
+	rebuildMutableState.GetExecutionInfo().LastSupersededRunId = r.mutableState.GetExecutionInfo().LastSupersededRunId
 	if err != nil {
 		return nil, err
 	}

@@ -126,6 +126,9 @@
       "TemporalLastBranchTime": {
         "type": "date_nanos"
       },
+      "TemporalLastSupersedeTime": {
+        "type": "date_nanos"
+      },
       "TemporalBool01": {
         "type": "boolean"
       },

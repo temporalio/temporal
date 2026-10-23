@@ -1183,27 +1183,34 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 	s.Len(capture.Snapshot()[metrics.VisibilityCloseRecordSkipped.Name()], 1)
 }
 
-func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLastBranchTime() {
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLocalConflictResolutionState() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
 	}
 	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
 	lastBranchTime := time.Unix(1700000000, 0).UTC()
+	lastSupersedeTime := time.Unix(1700000001, 0).UTC()
 	mutableState.GetExecutionInfo().LastBranchTime = timestamppb.New(lastBranchTime)
+	mutableState.GetExecutionInfo().LastSupersedeTime = timestamppb.New(lastSupersedeTime)
 	visibilityTask := s.closeVisibilityTaskForTest(execution)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
-			value, err := sadefs.DecodeValue(
-				request.SearchAttributes.GetIndexedFields()[sadefs.TemporalLastBranchTime],
-				enumspb.INDEXED_VALUE_TYPE_DATETIME,
-				false,
-			)
-			s.NoError(err)
-			s.Equal(lastBranchTime, value)
+			for name, expected := range map[string]time.Time{
+				sadefs.TemporalLastBranchTime:    lastBranchTime,
+				sadefs.TemporalLastSupersedeTime: lastSupersedeTime,
+			} {
+				value, err := sadefs.DecodeValue(
+					request.SearchAttributes.GetIndexedFields()[name],
+					enumspb.INDEXED_VALUE_TYPE_DATETIME,
+					false,
+				)
+				s.NoError(err)
+				s.Equal(expected, value, name)
+			}
 			return nil
 		},
 	)

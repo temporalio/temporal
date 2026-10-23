@@ -327,6 +327,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 ) error {
 
 	metricsHandler := r.shardContext.GetMetricsHandler()
+	targetWasRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
+	newWasRunning := false
 	targetPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow, metricsHandler)
 	if err != nil {
 		return err
@@ -341,6 +343,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	if newWorkflow != nil {
 		// currentWorkflow is nil on the deleted-current-run (orphan) path; suppressNewWorkflowPolicy
 		// handles that by parking the successor as a zombie instead of suppressing against a current.
+		newWasRunning = newWorkflow.GetMutableState().IsWorkflowExecutionRunning()
 		newWorkflowPolicy, err := suppressNewWorkflowPolicy(newWorkflow, currentWorkflow, metricsHandler)
 		if err != nil {
 			return err
@@ -377,6 +380,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	}
 
 	if currentWorkflow != nil {
+		if err := r.recordCurrentSupersede(ctx, currentWorkflow, targetWorkflow, targetWasRunning, newWorkflow, newWasRunning); err != nil {
+			return err
+		}
 		// release lock on current workflow, since current cluster maybe the active cluster
 		//  and events maybe reapplied to current workflow
 		currentWorkflow.GetReleaseFn()(nil)
@@ -394,6 +400,30 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	)
 }
 
+// recordCurrentSupersede stamps the current run with the target or successor run that suppression
+// just ended, and persists it, since the current run is not part of the zombie transaction.
+func (r *nDCTransactionMgrForExistingWorkflowImpl) recordCurrentSupersede(
+	ctx context.Context,
+	currentWorkflow Workflow,
+	targetWorkflow Workflow,
+	targetWasRunning bool,
+	newWorkflow Workflow,
+	newWasRunning bool,
+) error {
+	if !targetWasRunning && !newWasRunning {
+		return nil
+	}
+	if err := recordSupersede(currentWorkflow, targetWorkflow, targetWasRunning); err != nil {
+		return err
+	}
+	if newWorkflow != nil {
+		if err := recordSupersede(currentWorkflow, newWorkflow, newWasRunning); err != nil {
+			return err
+		}
+	}
+	return persistLocalState(ctx, r.shardContext, currentWorkflow)
+}
+
 func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCurrent(
 	ctx context.Context,
 	currentWorkflow Workflow,
@@ -404,7 +434,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	var err error
 	resetWorkflowPolicy := historyi.TransactionPolicyPassive
 	currentWorkflowPolicy := historyi.TransactionPolicyPassive
-	if currentWorkflow.GetMutableState().IsWorkflowExecutionRunning() {
+	currentWasRunning := currentWorkflow.GetMutableState().IsWorkflowExecutionRunning()
+	if currentWasRunning {
 		currentWorkflowPolicy, err = currentWorkflow.SuppressBy(
 			targetWorkflow,
 			r.shardContext.GetMetricsHandler(),
@@ -427,6 +458,15 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 			return err
 		}
 		newWorkflowPolicy = historyi.TransactionPolicyPassive.Ptr()
+	}
+	// Stamp the run that becomes current: the target's successor when it has one. After Revive, so a
+	// run revived from zombie gets a visibility update for the stamp.
+	winner := targetWorkflow
+	if newWorkflow != nil {
+		winner = newWorkflow
+	}
+	if err := recordSupersede(winner, currentWorkflow, currentWasRunning); err != nil {
+		return err
 	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
@@ -485,6 +525,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 ) error {
 
 	metricsHandler := r.shardContext.GetMetricsHandler()
+	targetWasRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
+	newWasRunning := false
 	targetWorkflowPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow, metricsHandler)
 	if err != nil {
 		return err
@@ -499,6 +541,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	if newWorkflow != nil {
 		// currentWorkflow is nil on the deleted-current-run (orphan) path; suppressNewWorkflowPolicy
 		// handles that by parking the successor as a zombie instead of suppressing against a current.
+		newWasRunning = newWorkflow.GetMutableState().IsWorkflowExecutionRunning()
 		newWorkflowPolicy, err = suppressNewWorkflowPolicy(newWorkflow, currentWorkflow, metricsHandler)
 		if err != nil {
 			return err
@@ -533,6 +576,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	}
 
 	if currentWorkflow != nil {
+		if err := r.recordCurrentSupersede(ctx, currentWorkflow, targetWorkflow, targetWasRunning, newWorkflow, newWasRunning); err != nil {
+			return err
+		}
 		// release lock on current workflow, since current cluster maybe the active cluster
 		//  and events maybe reapplied to current workflow
 		currentWorkflow.GetReleaseFn()(nil)

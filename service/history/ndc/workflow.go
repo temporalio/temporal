@@ -186,6 +186,37 @@ func (r *WorkflowImpl) SuppressBy(
 	return historyi.TransactionPolicyPassive, err
 }
 
+// recordSupersede stamps winner with loser's run ID when suppression ended a running loser.
+// Suppressing a closed or zombie run changes nothing, so callers pass whether loser was running.
+func recordSupersede(winner Workflow, loser Workflow, loserWasRunning bool) error {
+	if !loserWasRunning {
+		return nil
+	}
+	return winner.GetMutableState().RecordRunSuperseded(loser.GetMutableState().GetExecutionState().GetRunId())
+}
+
+// persistLocalState writes a cluster-local change to a workflow that is not otherwise part of the
+// replication transaction. Passive, so nothing is replicated.
+func persistLocalState(ctx context.Context, shardContext historyi.ShardContext, wf Workflow) error {
+	if wf.GetMutableState().IsWorkflowExecutionRunning() {
+		return wf.GetContext().UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	}
+	return wf.GetContext().SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
+}
+
+// terminatedByVersionConflict reports whether the run was terminated by conflict resolution on the
+// cluster that wrote it, i.e. it was already superseded there before reaching this cluster.
+func terminatedByVersionConflict(ctx context.Context, mutableState historyi.MutableState) bool {
+	if mutableState.GetExecutionState().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+		return false
+	}
+	event, err := mutableState.GetCompletionEvent(ctx)
+	if err != nil {
+		return false
+	}
+	return event.GetWorkflowExecutionTerminatedEventAttributes().GetReason() == common.FailureReasonWorkflowTerminationDueToVersionConflict
+}
+
 func (r *WorkflowImpl) FlushBufferedEvents() error {
 
 	if !r.mutableState.IsWorkflow() {

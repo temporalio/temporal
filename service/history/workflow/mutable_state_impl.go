@@ -7178,6 +7178,18 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 
 func (ms *MutableStateImpl) RecordHistoryBranch() error {
 	ms.executionInfo.LastBranchTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+	return ms.generateLocalStateVisibilityTask()
+}
+
+func (ms *MutableStateImpl) RecordRunSuperseded(supersededRunID string) error {
+	ms.executionInfo.LastSupersedeTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+	ms.executionInfo.LastSupersededRunId = supersededRunID
+	return ms.generateLocalStateVisibilityTask()
+}
+
+// generateLocalStateVisibilityTask re-records visibility for conflict-resolution state, which is
+// cluster-local and so only indexed by the cluster that set it.
+func (ms *MutableStateImpl) generateLocalStateVisibilityTask() error {
 	switch ms.executionState.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -9798,6 +9810,8 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.CloseVisibilityTaskId,
 			&info.RelocatableAttributesRemoved,
 			&info.LastBranchTime,
+			&info.LastSupersedeTime,
+			&info.LastSupersededRunId,
 			&info.WorkflowExecutionTimerTaskStatus,
 			&info.SubStateMachinesByType,
 			&info.StateMachineTimers,

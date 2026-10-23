@@ -70,6 +70,8 @@ func sanitizeExecutionInfo(
 	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
 	// Branches are cluster-local; the receiving cluster records its own.
 	executionInfo.LastBranchTime = nil
+	executionInfo.LastSupersedeTime = nil
+	executionInfo.LastSupersededRunId = ""
 }
 
 func sanitizeChildExecutionInfo(

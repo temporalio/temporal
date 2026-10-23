@@ -308,6 +308,10 @@ type (
 		// RecordHistoryBranch stamps LastBranchTime and schedules a visibility update for it. Called
 		// when conflict resolution creates or switches to a history branch.
 		RecordHistoryBranch() error
+		// RecordRunSuperseded stamps LastSupersedeTime and LastSupersededRunId and schedules a
+		// visibility update for them. Called when conflict resolution supersedes another run of
+		// this workflow ID with this one.
+		RecordRunSuperseded(supersededRunID string) error
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 		RefreshExpirationTimeoutTask(ctx context.Context) error

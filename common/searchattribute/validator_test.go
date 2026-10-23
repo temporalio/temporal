@@ -167,13 +167,15 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
 	}
 
-	// Server-derived from conflict resolution; a user value would fake a branch.
-	attr.IndexedFields = map[string]*commonpb.Payload{
-		sadefs.TemporalLastBranchTime: sadefs.MustEncodeValue(time.Now(), enumspb.INDEXED_VALUE_TYPE_DATETIME),
+	// Server-derived from conflict resolution; a user value would fake a branch or supersede.
+	for _, derivedAttr := range []string{sadefs.TemporalLastBranchTime, sadefs.TemporalLastSupersedeTime} {
+		attr.IndexedFields = map[string]*commonpb.Payload{
+			derivedAttr: sadefs.MustEncodeValue(time.Now(), enumspb.INDEXED_VALUE_TYPE_DATETIME),
+		}
+		err = saValidator.Validate(attr, namespace)
+		s.Error(err)
+		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", derivedAttr), err.Error())
 	}
-	err = saValidator.Validate(attr, namespace)
-	s.Error(err)
-	s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", sadefs.TemporalLastBranchTime), err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_EmitInvalidListValues() {

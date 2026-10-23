@@ -3474,6 +3474,20 @@ func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
 }
 
+// RecordRunSuperseded mocks base method.
+func (m *MockMutableState) RecordRunSuperseded(supersededRunID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordRunSuperseded", supersededRunID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordRunSuperseded indicates an expected call of RecordRunSuperseded.
+func (mr *MockMutableStateMockRecorder) RecordRunSuperseded(supersededRunID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordRunSuperseded", reflect.TypeOf((*MockMutableState)(nil).RecordRunSuperseded), supersededRunID)
+}
+
 // RecordTimeSkippingTransition mocks base method.
 func (m *MockMutableState) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
 	m.ctrl.T.Helper()

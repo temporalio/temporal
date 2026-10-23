@@ -2519,6 +2519,8 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
 	mutableState.executionInfo.LastBranchTime = timestamppb.Now()
+	mutableState.executionInfo.LastSupersedeTime = timestamppb.Now()
+	mutableState.executionInfo.LastSupersededRunId = "superseded-run"
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2537,6 +2539,8 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
 	s.Nil(sanitizedMutableState.executionInfo.LastBranchTime)
+	s.Nil(sanitizedMutableState.executionInfo.LastSupersedeTime)
+	s.Empty(sanitizedMutableState.executionInfo.LastSupersededRunId)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -10260,19 +10264,41 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
 	s.NoError(err)
 	localBranchTime := timestamppb.New(time.Unix(1700000000, 0))
-	current := &persistencespb.WorkflowExecutionInfo{LastBranchTime: localBranchTime}
-	// The source's branches are its own, so its branch time must never replace the local one.
+	localSupersedeTime := timestamppb.New(time.Unix(1700000001, 0))
+	current := &persistencespb.WorkflowExecutionInfo{
+		LastBranchTime:      localBranchTime,
+		LastSupersedeTime:   localSupersedeTime,
+		LastSupersededRunId: "local-superseded-run",
+	}
+	// The source's conflict resolution is its own, so its values must never replace the local ones.
 	incoming := &persistencespb.WorkflowExecutionInfo{
-		LastBranchTime:   timestamppb.New(time.Unix(1800000000, 0)),
-		WorkflowTypeName: "synced",
+		LastBranchTime:      timestamppb.New(time.Unix(1800000000, 0)),
+		LastSupersedeTime:   timestamppb.New(time.Unix(1800000001, 0)),
+		LastSupersededRunId: "source-superseded-run",
+		WorkflowTypeName:    "synced",
 	}
 
-	s.NoError(ms.syncExecutionInfo(current, incoming, false))
-	s.Equal("synced", current.WorkflowTypeName)
-	s.Equal(localBranchTime, current.LastBranchTime)
+	for _, includeFinal := range []bool{false, true} {
+		s.NoError(ms.syncExecutionInfo(current, incoming, includeFinal))
+		s.Equal("synced", current.WorkflowTypeName)
+		s.Equal(localBranchTime, current.LastBranchTime)
+		s.Equal(localSupersedeTime, current.LastSupersedeTime)
+		s.Equal("local-superseded-run", current.LastSupersededRunId)
+	}
+}
 
-	s.NoError(ms.syncExecutionInfo(current, incoming, true))
-	s.Equal(localBranchTime, current.LastBranchTime)
+func (s *mutableStateSuite) TestRecordRunSuperseded() {
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordRunSuperseded("superseded-run"))
+	s.WithinRange(ms.GetExecutionInfo().GetLastSupersedeTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+	s.Equal("superseded-run", ms.GetExecutionInfo().GetLastSupersededRunId())
+	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
 }
 
 func (s *mutableStateSuite) TestRecordHistoryBranch_IgnoresTimeSkipping() {

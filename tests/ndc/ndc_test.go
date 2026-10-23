@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -227,6 +228,10 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 	}
 	// Only the last run is current; older ones were suppressed and are not visible.
 	s.verifyLastBranchTime(workflowID, lastRunID, false)
+	// Lower-version runs (2, 502, 902, 702) arrive while a newer run is current and become zombies,
+	// so some current run must have recorded superseding one. Which run depends on the generated
+	// histories (continue-as-new successors), so only check that the records are consistent.
+	s.verifySupersededRuns(workflowID)
 }
 
 func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
@@ -2364,6 +2369,35 @@ func (s *NDCFunctionalTestSuite) verifyLastBranchTime(
 	)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
+}
+
+// verifySupersededRuns checks that some run of the workflow is indexed with
+// TemporalLastSupersedeTime, and that each such run records a different run it superseded.
+func (s *NDCFunctionalTestSuite) verifySupersededRuns(workflowID string) {
+	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalLastSupersedeTime >= '%s'",
+		workflowID, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano))
+	var executions []*workflowpb.WorkflowExecutionInfo
+	await.Require(testcontext.For(s.T()), s.T(), func(t *await.T) {
+		resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(
+			t.Context(),
+			&workflowservice.ListWorkflowExecutionsRequest{Namespace: s.namespace.String(), Query: query},
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.GetExecutions())
+		executions = resp.GetExecutions()
+	}, 30*time.Second, 200*time.Millisecond)
+
+	for _, execution := range executions {
+		resp, err := s.cluster.AdminClient().DescribeMutableState(s.newContext(), &adminservice.DescribeMutableStateRequest{
+			Namespace: s.namespace.String(),
+			Execution: execution.GetExecution(),
+		})
+		s.NoError(err)
+		info := resp.GetDatabaseMutableState().GetExecutionInfo()
+		s.NotNil(info.GetLastSupersedeTime())
+		s.NotEmpty(info.GetLastSupersededRunId())
+		s.NotEqual(execution.GetExecution().GetRunId(), info.GetLastSupersededRunId())
+	}
 }
 
 func (s *NDCFunctionalTestSuite) verifyVersionHistory(
