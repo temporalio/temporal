@@ -30,6 +30,7 @@ const (
 	ActivityService_UnpauseActivityExecution_FullMethodName       = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/UnpauseActivityExecution"
 	ActivityService_ResetActivityExecution_FullMethodName         = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/ResetActivityExecution"
 	ActivityService_UpdateActivityExecutionOptions_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/UpdateActivityExecutionOptions"
+	ActivityService_RespondActivityTaskHandoff_FullMethodName     = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/RespondActivityTaskHandoff"
 )
 
 // ActivityServiceClient is the client API for ActivityService service.
@@ -46,6 +47,7 @@ type ActivityServiceClient interface {
 	UnpauseActivityExecution(ctx context.Context, in *UnpauseActivityExecutionRequest, opts ...grpc.CallOption) (*UnpauseActivityExecutionResponse, error)
 	ResetActivityExecution(ctx context.Context, in *ResetActivityExecutionRequest, opts ...grpc.CallOption) (*ResetActivityExecutionResponse, error)
 	UpdateActivityExecutionOptions(ctx context.Context, in *UpdateActivityExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityExecutionOptionsResponse, error)
+	RespondActivityTaskHandoff(ctx context.Context, in *RespondActivityTaskHandoffRequest, opts ...grpc.CallOption) (*RespondActivityTaskHandoffResponse, error)
 }
 
 type activityServiceClient struct {
@@ -146,6 +148,15 @@ func (c *activityServiceClient) UpdateActivityExecutionOptions(ctx context.Conte
 	return out, nil
 }
 
+func (c *activityServiceClient) RespondActivityTaskHandoff(ctx context.Context, in *RespondActivityTaskHandoffRequest, opts ...grpc.CallOption) (*RespondActivityTaskHandoffResponse, error) {
+	out := new(RespondActivityTaskHandoffResponse)
+	err := c.cc.Invoke(ctx, ActivityService_RespondActivityTaskHandoff_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ActivityServiceServer is the server API for ActivityService service.
 // All implementations must embed UnimplementedActivityServiceServer
 // for forward compatibility
@@ -160,6 +171,7 @@ type ActivityServiceServer interface {
 	UnpauseActivityExecution(context.Context, *UnpauseActivityExecutionRequest) (*UnpauseActivityExecutionResponse, error)
 	ResetActivityExecution(context.Context, *ResetActivityExecutionRequest) (*ResetActivityExecutionResponse, error)
 	UpdateActivityExecutionOptions(context.Context, *UpdateActivityExecutionOptionsRequest) (*UpdateActivityExecutionOptionsResponse, error)
+	RespondActivityTaskHandoff(context.Context, *RespondActivityTaskHandoffRequest) (*RespondActivityTaskHandoffResponse, error)
 	mustEmbedUnimplementedActivityServiceServer()
 }
 
@@ -196,6 +208,9 @@ func (UnimplementedActivityServiceServer) ResetActivityExecution(context.Context
 }
 func (UnimplementedActivityServiceServer) UpdateActivityExecutionOptions(context.Context, *UpdateActivityExecutionOptionsRequest) (*UpdateActivityExecutionOptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityExecutionOptions not implemented")
+}
+func (UnimplementedActivityServiceServer) RespondActivityTaskHandoff(context.Context, *RespondActivityTaskHandoffRequest) (*RespondActivityTaskHandoffResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondActivityTaskHandoff not implemented")
 }
 func (UnimplementedActivityServiceServer) mustEmbedUnimplementedActivityServiceServer() {}
 
@@ -390,6 +405,24 @@ func _ActivityService_UpdateActivityExecutionOptions_Handler(srv interface{}, ct
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ActivityService_RespondActivityTaskHandoff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondActivityTaskHandoffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityServiceServer).RespondActivityTaskHandoff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ActivityService_RespondActivityTaskHandoff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityServiceServer).RespondActivityTaskHandoff(ctx, req.(*RespondActivityTaskHandoffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ActivityService_ServiceDesc is the grpc.ServiceDesc for ActivityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -436,6 +469,10 @@ var ActivityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateActivityExecutionOptions",
 			Handler:    _ActivityService_UpdateActivityExecutionOptions_Handler,
+		},
+		{
+			MethodName: "RespondActivityTaskHandoff",
+			Handler:    _ActivityService_RespondActivityTaskHandoff_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

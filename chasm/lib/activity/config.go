@@ -15,6 +15,18 @@ var (
 		`Toggles standalone activity functionality on the server.`,
 	)
 
+	StandaloneAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
+		"activity.standaloneAsyncHandoffEnabled",
+		false,
+		`Enables standalone activity handoff reporting and new async handoff options.`,
+	)
+
+	WorkflowAsyncHandoffEnabled = dynamicconfig.NewNamespaceBoolSetting(
+		"activity.workflowAsyncHandoffEnabled",
+		false,
+		`Enables workflow activity handoff reporting and new async handoff options.`,
+	)
+
 	LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 		"activity.longPollTimeout",
 		common.DefaultLongPollTimeout,
@@ -66,22 +78,24 @@ type Config struct {
 	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
-	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	EnableActivityEagerDispatchCheck          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
-	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerStart                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	StandaloneAsyncHandoffEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StartDelayEnabled                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowAsyncHandoffEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -92,19 +106,21 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableActivityEagerDispatchCheck:          dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
-		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
-		Enabled:                                   Enabled.Get(dc),
 		EnableEagerStart:                          EnableEagerStart.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
+		Enabled:                                   Enabled.Get(dc),
+		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		LongPollBuffer:                            LongPollBuffer.Get(dc),
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
-		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
-		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
-		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
+		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
+		StandaloneAsyncHandoffEnabled:             StandaloneAsyncHandoffEnabled.Get(dc),
+		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
 		VisibilityMaxPageSize:                     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		WorkflowAsyncHandoffEnabled:               WorkflowAsyncHandoffEnabled.Get(dc),
 	}
 }
 

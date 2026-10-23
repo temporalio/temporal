@@ -1393,3 +1393,80 @@ func TestResetDuringRetryBackoff(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, valid)
 }
+
+func TestHandoffLifecycle(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name               string
+		status             activitypb.ActivityExecutionStatus
+		awaitingCompletion bool
+		keepPaused         bool
+		retainTime         bool
+		apply              func(*Activity, chasm.MutableContext) error
+	}{
+		{
+			name:   "worker pickup",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			apply: func(a *Activity, ctx chasm.MutableContext) error {
+				return TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{Stamp: 2})
+			},
+		},
+		{
+			name:   "applied reset",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			apply: func(a *Activity, ctx chasm.MutableContext) error {
+				return TransitionReset.Apply(a, ctx, resetEvent{req: &workflowservice.ResetActivityExecutionRequest{}, resetTime: defaultTime, metricsHandler: metrics.NoopMetricsHandler})
+			},
+		},
+		{
+			name:               "deferred reset to paused",
+			status:             activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			awaitingCompletion: true,
+			keepPaused:         true,
+			apply: func(a *Activity, ctx chasm.MutableContext) error {
+				return TransitionResetAttemptFailedToPaused.Apply(a, ctx, rescheduleEvent{})
+			},
+		},
+		{
+			name:               "deferred reset to scheduled",
+			status:             activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			awaitingCompletion: true,
+			apply: func(a *Activity, ctx chasm.MutableContext) error {
+				return TransitionResetAttemptFailedToScheduled.Apply(a, ctx, rescheduleEvent{})
+			},
+		},
+		{
+			name:               "full pause retains handoff time",
+			status:             activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			awaitingCompletion: true,
+			retainTime:         true,
+			apply: func(a *Activity, ctx chasm.MutableContext) error {
+				return TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, rescheduleEvent{})
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return defaultTime }}}
+			injectActivityContext(t, ctx)
+			handoffTime := timestamppb.New(defaultTime.Add(-time.Minute))
+			a := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:             test.status,
+					AwaitingCompletion: test.awaitingCompletion,
+					ResetShouldPause:   test.keepPaused,
+					AsyncHandoffTime:   handoffTime,
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+			}
+			require.NoError(t, test.apply(a, ctx))
+			require.False(t, a.GetAwaitingCompletion())
+			if test.retainTime {
+				require.Same(t, handoffTime, a.GetAsyncHandoffTime())
+			} else {
+				require.Nil(t, a.GetAsyncHandoffTime())
+			}
+		})
+	}
+}

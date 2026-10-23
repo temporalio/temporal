@@ -101,6 +101,13 @@ type RespondCancelledEvent struct {
 	Token   *tokenspb.Task
 }
 
+// HandoffResult defers the accepted-handoff metric until the mutation has persisted.
+type HandoffResult struct {
+	Response       *workflowservice.RespondActivityTaskHandoffResponse
+	NewlyRecorded  bool
+	MetricsHandler metrics.Handler
+}
+
 // errClosed is the error returned by an operator command on a closed activity.
 func (a *Activity) errClosed() error {
 	return serviceerror.NewNotFoundf("no running activity execution: it closed with status %v", a.GetStatus())
@@ -703,4 +710,35 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 		chasm.SearchAttributeExecutionTime.Value(a.firstDispatchTime()),
 	}
+}
+
+// HandleHandoff durably records the first handoff of the current activity task.
+func (a *Activity) HandleHandoff(
+	ctx chasm.MutableContext,
+	input WithToken[*activitypb.RespondActivityTaskHandoffRequest],
+) (*HandoffResult, error) {
+	if input.Token.GetAttempt() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("activity task token attempt must be positive")
+	}
+
+	if err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId(), false); err != nil {
+		return nil, err
+	}
+
+	result := &HandoffResult{Response: &workflowservice.RespondActivityTaskHandoffResponse{}}
+	if a.GetAwaitingCompletion() {
+		return result, nil
+	}
+
+	a.AwaitingCompletion = true
+	a.AsyncHandoffTime = timestamppb.New(ctx.Now(a))
+	result.NewlyRecorded = true
+	result.MetricsHandler = a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskHandoffScope)
+
+	return result, nil
+}
+
+func (a *Activity) clearHandoffState() {
+	a.AwaitingCompletion = false
+	a.AsyncHandoffTime = nil
 }
