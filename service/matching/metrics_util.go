@@ -36,6 +36,11 @@ func (r dropReason) tag() metrics.Tag {
 	}
 }
 
+// implement error to allow dropReason to be used as an error in internalTask.finish
+func (r dropReason) Error() string {
+	return r.tag().Value
+}
+
 // getDroppedTaskExpiryReason returns the drop reason for a task being dropped due to
 // in-memory expiry or validation failure.
 func getDroppedTaskExpiryReason(task *internalTask) dropReason {

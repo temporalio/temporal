@@ -312,7 +312,7 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 	}
 
 	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(taskFinishResult{})
+		task.finish(nil)
 	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
@@ -360,12 +360,12 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(taskFinishResult{})
+				task.finish(nil)
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
 			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(taskFinishResult{})
+				task.finish(nil)
 			} else if retry {
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
 				return err
