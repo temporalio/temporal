@@ -1,9 +1,12 @@
 package tests
 
 import (
+	"time"
+
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -55,7 +58,9 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 		}),
 	}
 	if l.retention != nil {
-		opts = append(opts, chasm.WithRetention(l.retention))
+		opts = append(opts, chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
+			return l.retention(ns.Name().String())
+		}))
 	}
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*PayloadStore](componentName, opts...),

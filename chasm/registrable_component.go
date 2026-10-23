@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -26,7 +27,7 @@ type (
 		detached         bool
 		recordPrincipals bool
 		executionType    enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
-		retention        func(namespaceName string) time.Duration
+		retention        func(*namespace.Namespace) time.Duration
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -110,7 +111,7 @@ func WithExecutionType(
 // The returned value replaces the namespace retention and may be shorter or longer than it, but is
 // floored at the namespace min retention. A non-positive value falls back to the namespace retention.
 func WithRetention(
-	retention func(namespaceName string) time.Duration,
+	retention func(*namespace.Namespace) time.Duration,
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.retention = retention
@@ -119,11 +120,11 @@ func WithRetention(
 
 // Retention returns the retention registered via WithRetention for the given namespace, and
 // whether one is registered and positive.
-func (rc *RegistrableComponent) Retention(namespaceName string) (time.Duration, bool) {
+func (rc *RegistrableComponent) Retention(ns *namespace.Namespace) (time.Duration, bool) {
 	if rc.retention == nil {
 		return 0, false
 	}
-	retention := rc.retention(namespaceName)
+	retention := rc.retention(ns)
 	if retention <= 0 {
 		return 0, false
 	}
