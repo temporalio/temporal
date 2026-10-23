@@ -128,11 +128,14 @@ func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
 	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
-		w.logger.Error("Persistent store operation failure",
-			tag.StoreOperationCreateTask,
-			tag.Error(err),
-			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
-			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
+		// Context canceled is expected if the task queue unloads during a write.
+		if !common.IsContextCanceledErr(err) {
+			w.logger.Error("Persistent store operation failure",
+				tag.StoreOperationCreateTask,
+				tag.Error(err),
+				tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
+				tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
+		}
 		return err
 	}
 
