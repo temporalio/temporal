@@ -6,7 +6,7 @@ import (
 )
 
 type CallerRateLimitInterceptor interface {
-	Allow(handlerNamespace *namespace.Namespace, apiName string, headerGetter headers.HeaderGetter) error
+	Allow(handlerNamespace namespace.Name, apiName string, headerGetter headers.HeaderGetter) error
 }
 
 type noopCallerRateLimitInterceptor struct{}
@@ -15,6 +15,6 @@ func NewNoopCallerRateLimitInterceptor() CallerRateLimitInterceptor {
 	return noopCallerRateLimitInterceptor{}
 }
 
-func (noopCallerRateLimitInterceptor) Allow(*namespace.Namespace, string, headers.HeaderGetter) error {
+func (noopCallerRateLimitInterceptor) Allow(namespace.Name, string, headers.HeaderGetter) error {
 	return nil
 }

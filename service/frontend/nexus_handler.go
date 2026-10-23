@@ -235,7 +235,7 @@ func (c *operationContext) interceptRequest(
 		}
 	})
 
-	if err := c.callerRateLimitInterceptor.Allow(c.namespace, c.apiName, header); err != nil {
+	if err := c.callerRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("caller_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
