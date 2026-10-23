@@ -192,10 +192,10 @@ const (
 	// FAILED_* so it doesn't read as an error.
 	PEER_APPLY_OUTCOME_NOT_ADMITTED PeerApplyOutcome = 6
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload matched the sender's fingerprint.
+	// received payload passed integrity validation and matched the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MATCH PeerApplyOutcome = 7
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload did not match the sender's fingerprint.
+	// received payload failed integrity validation or differed from the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
 )
 
@@ -298,9 +298,13 @@ type NamespaceMutation struct {
 	IsGlobalNamespace bool `protobuf:"varint,5,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
 	// Shadow mutations exercise the full component and peer transport without
 	// writing namespace state in either the source or destination cell.
-	Shadow        bool `protobuf:"varint,6,opt,name=shadow,proto3" json:"shadow,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Shadow bool `protobuf:"varint,6,opt,name=shadow,proto3" json:"shadow,omitempty"`
+	// Field 7 is used by replicate_only in the authoritative transport change.
+	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
+	// Required for shadow mutations and preserved unchanged through peer delivery.
+	ShadowLegacyTaskPayload []byte `protobuf:"bytes,8,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *NamespaceMutation) Reset() {
@@ -373,6 +377,13 @@ func (x *NamespaceMutation) GetShadow() bool {
 		return x.Shadow
 	}
 	return false
+}
+
+func (x *NamespaceMutation) GetShadowLegacyTaskPayload() []byte {
+	if x != nil {
+		return x.ShadowLegacyTaskPayload
+	}
+	return nil
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -633,7 +644,7 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto p
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xd5\x02\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\x92\x03\n" +
 	"\x11NamespaceMutation\x12N\n" +
 	"\toperation\x18\x01 \x01(\x0e20.temporal.server.api.enums.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
@@ -641,7 +652,8 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\n" +
 	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12.\n" +
 	"\x13is_global_namespace\x18\x05 \x01(\bR\x11isGlobalNamespace\x12\x16\n" +
-	"\x06shadow\x18\x06 \x01(\bR\x06shadow\"\xd6\x04\n" +
+	"\x06shadow\x18\x06 \x01(\bR\x06shadow\x12;\n" +
+	"\x1ashadow_legacy_task_payload\x18\b \x01(\fR\x17shadowLegacyTaskPayload\"\xd6\x04\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +

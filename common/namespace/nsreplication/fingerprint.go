@@ -61,5 +61,8 @@ func DifferingNamespaceTaskFields(
 	}) {
 		fields = append(fields, "failover_history")
 	}
+	if len(fields) == 0 && !proto.Equal(a, b) {
+		fields = append(fields, "unknown_fields")
+	}
 	return fields
 }

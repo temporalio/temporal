@@ -379,6 +379,72 @@ func TestRecordActivityCompletionMetrics_SkipsFutureStartTime(t *testing.T) {
 	)
 }
 
+func TestRecordActivityCompletionMetrics_HasTimeSkippingClockOffset(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  ActivityExecutionStatus
+		counter string
+		closed  bool
+	}{
+		{name: "succeeded", status: ActivityStatusSucceeded, counter: metrics.ActivitySuccess.Name(), closed: true},
+		{name: "failed attempt", status: ActivityStatusFailed, counter: metrics.ActivityTaskFail.Name()},
+		{name: "canceled", status: ActivityStatusCanceled, counter: metrics.ActivityCancel.Name(), closed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			handler := metrics.NewMockHandler(controller)
+			shard := newActivityMetricsTestShard(controller, handler)
+			expectActivityMetricsScope(handler, metrics.HistoryRespondActivityTaskCompletedScope)
+
+			counter := metrics.NewMockCounterIface(controller)
+			counter.EXPECT().Record(int64(1))
+			handler.EXPECT().Counter(tc.counter).Return(counter)
+
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				ActivityCompletionMetrics{
+					Status:                     tc.status,
+					AttemptStartedTime:         time.Now().Add(-time.Minute),
+					FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+					HasTimeSkippingClockOffset: true,
+					Closed:                     tc.closed,
+				},
+				testActivityMetricTags(metrics.HistoryRespondActivityTaskCompletedScope)...,
+			)
+		})
+	}
+}
+
+func TestRecordActivityCompletionMetrics_TimeoutWithAccumulatedTimeSkip(t *testing.T) {
+	controller := gomock.NewController(t)
+	handler := metrics.NewMockHandler(controller)
+	shard := newActivityMetricsTestShard(controller, handler)
+	expectActivityMetricsScope(handler, metrics.TimerActiveTaskActivityTimeoutScope)
+
+	for _, metricName := range []string{metrics.ActivityTaskTimeout.Name(), metrics.ActivityTimeout.Name()} {
+		counter := metrics.NewMockCounterIface(controller)
+		counter.EXPECT().Record(int64(1), metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_HEARTBEAT.String()))
+		handler.EXPECT().Counter(metricName).Return(counter)
+	}
+
+	RecordActivityCompletionMetrics(
+		shard,
+		namespace.Name("test-namespace"),
+		"test-task-queue",
+		ActivityCompletionMetrics{
+			Status:                     ActivityStatusTimeout,
+			AttemptStartedTime:         time.Now().Add(-time.Minute),
+			FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+			HasTimeSkippingClockOffset: true,
+			Closed:                     true,
+			TimerType:                  enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		},
+		testActivityMetricTags(metrics.TimerActiveTaskActivityTimeoutScope)...,
+	)
+}
+
 func TestRecordActivityCompletionMetrics_RecordsLargeLatency(t *testing.T) {
 	controller := gomock.NewController(t)
 	handler := metrics.NewMockHandler(controller)

@@ -5,23 +5,25 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives"
+	"google.golang.org/protobuf/proto"
 )
 
-type handler struct {
+type serviceHandler struct {
 	namespacereplicationpb.UnimplementedNamespaceReplicationServiceServer
 
 	logger log.Logger
 }
 
-func newHandler(logger log.Logger) *handler {
-	return &handler{logger: logger}
+func newServiceHandler(logger log.Logger) *serviceHandler {
+	return &serviceHandler{logger: logger}
 }
 
-func (h *handler) TriggerNamespaceMutation(
+func (h *serviceHandler) TriggerNamespaceMutation(
 	ctx context.Context,
 	req *namespacereplicationpb.TriggerNamespaceMutationRequest,
 ) (response *namespacereplicationpb.TriggerNamespaceMutationResponse, retErr error) {
@@ -85,6 +87,12 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 	}
 	if !req.GetMutation().GetShadow() {
 		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	}
+	if len(req.GetMutation().GetShadowLegacyTaskPayload()) == 0 {
+		return serviceerror.NewInvalidArgument("mutation.shadow_legacy_task_payload is required")
+	}
+	if err := proto.Unmarshal(req.GetMutation().GetShadowLegacyTaskPayload(), &replicationspb.NamespaceTaskAttributes{}); err != nil {
+		return serviceerror.NewInvalidArgumentf("decode mutation.shadow_legacy_task_payload: %v", err)
 	}
 	if req.GetNamespaceId() == "" {
 		return serviceerror.NewInvalidArgument("namespace_id is required")

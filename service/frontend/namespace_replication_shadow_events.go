@@ -3,149 +3,140 @@ package frontend
 import (
 	"encoding/hex"
 	"encoding/json"
-	"maps"
 
-	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/wideevents"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
-const (
-	namespaceReplicationShadowTransport = "chasm"
-	namespaceReplicationShadowMode      = "shadow"
-
-	namespaceReplicationComparisonBoundaryBuild   = "build"
-	namespaceReplicationComparisonBoundaryReceive = "receive"
-)
-
-func emitNamespaceReplicationShadowComparison(
-	eventLogger otellog.Logger,
-	task *replicationspb.NamespaceTaskAttributes,
-	boundary string,
-	outcome string,
-	sourceCluster string,
-	targetCluster string,
-	attemptCount int,
-	details map[string]any,
-	comparisonErr error,
-) {
-	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(
-		&replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: task,
-			},
-		},
-	)
-	if !ok {
-		return
+func shadowReplicationEventData(task *replicationspb.NamespaceTaskAttributes, payload []byte, details map[string]any) wideevents.NamespaceReplicationTaskEventData {
+	missingTask := task == nil
+	if task == nil {
+		task = &replicationspb.NamespaceTaskAttributes{}
+		details["task_payload_status"] = "unavailable"
 	}
-	eventData.Details = maps.Clone(details)
-	if eventData.Details == nil {
-		eventData.Details = make(map[string]any)
-	}
-	eventData.Details["transport"] = namespaceReplicationShadowTransport
-	eventData.Details["mode"] = namespaceReplicationShadowMode
-	eventData.Details["comparison_boundary"] = boundary
-
-	wideevents.EmitNamespaceReplicationLifecycle(eventLogger, wideevents.NamespaceReplicationLifecycleInput{
-		Phase:                        wideevents.NamespaceReplicationCompared,
-		Outcome:                      wideevents.NamespaceReplicationOutcome(outcome),
-		EventData:                    eventData,
-		SourceCluster:                sourceCluster,
-		TargetCluster:                targetCluster,
-		AttemptCount:                 attemptCount,
-		Error:                        comparisonErr,
-		EmitOnTaskSerializationError: true,
+	data, _ := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(&replicationspb.ReplicationTask{
+		TaskType:   enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{NamespaceTaskAttributes: task},
 	})
+	data.TaskFingerprintData = payload
+	if missingTask {
+		data.TaskPayload = nil
+		data.ConfigVersion = nil
+		data.FailoverVersion = nil
+	}
+	data.Details = details
+	data.Details["transport"] = "chasm"
+	data.Details["mode"] = "shadow"
+	return data
 }
 
-func (d *namespaceHandler) emitShadowBuildComparison(
-	legacyTask *replicationspb.NamespaceTaskAttributes,
-	chasmTask *replicationspb.NamespaceTaskAttributes,
-	legacyFingerprint []byte,
-	chasmFingerprint []byte,
-	differingFields []string,
-	componentBusinessID string,
-	sourceCluster string,
-	targetClusters []string,
-	outcome string,
-	comparisonErr error,
-) {
+func (d *namespaceHandler) recordShadowSourceOutcome(task *replicationspb.NamespaceTaskAttributes, payload []byte, businessID string, peers []string, stage string, observationErr error) {
+	var telemetryPanic error
+	defer log.CapturePanic(d.logger, &telemetryPanic)
+
+	outcome := "prepared"
+	metric := metrics.NamespaceReplicationShadowPreparationOutcomes
+	if stage == "trigger" {
+		metric = metrics.NamespaceReplicationShadowTriggerOutcomes
+		outcome = "rpc_completed"
+	}
+	if observationErr != nil {
+		outcome = "error"
+		if stage == "trigger" {
+			outcome = "rpc_error"
+		}
+	}
+	source := d.clusterMetadata.GetCurrentClusterName()
+	if d.metricsHandler != nil {
+		metric.With(d.metricsHandler).Record(1, metrics.SourceClusterTag(source),
+			metrics.OperationTag(nsreplication.OperationMetricValue(task.GetNamespaceOperation())), metrics.OutcomeTag(outcome))
+	}
 	if d.config == nil || d.config.EmitNamespaceLifecycleEvents == nil || !d.config.EmitNamespaceLifecycleEvents() {
 		return
 	}
-	details := make(map[string]any, 6)
-	if componentBusinessID != "" {
-		details["component_business_id"] = componentBusinessID
+	details := map[string]any{"component_business_id": businessID, "target_clusters": peers, "apply_stage": stage}
+	if stage == "trigger" && observationErr != nil {
+		// A lost start/poll response does not establish whether creation committed.
+		details["component_creation_outcome"] = "unknown"
 	}
-	details["target_clusters"] = targetClusters
-	if len(legacyFingerprint) > 0 {
-		details["legacy_task_fingerprint"] = hex.EncodeToString(legacyFingerprint)
+	wideevents.EmitNamespaceReplicationLifecycle(d.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
+		Phase: wideevents.NamespaceReplicationPhase(stage), Outcome: wideevents.NamespaceReplicationOutcome(outcome),
+		EventData: shadowReplicationEventData(task, payload, details), SourceCluster: source,
+		Error: observationErr, EmitOnTaskSerializationError: true,
+	})
+}
+
+func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.ApplyNamespaceMutationRequest, task, legacyTask *replicationspb.NamespaceTaskAttributes, outcome, reason string, comparisonErr error) {
+	// Telemetry failures must not change the RPC result.
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
+
+	// Validation may reject the request before decoding its payload. Decode only
+	// for diagnostics here; the recorded validation outcome remains unchanged.
+	if task == nil && len(request.GetNamespaceTaskPayload()) > 0 {
+		task = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), task); err != nil {
+			task = nil
+		}
 	}
-	if len(chasmFingerprint) > 0 {
-		details["chasm_task_fingerprint"] = hex.EncodeToString(chasmFingerprint)
+	if task == nil && legacyTask == nil && len(request.GetShadowLegacyTaskPayload()) > 0 {
+		legacyTask = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+			legacyTask = nil
+		}
 	}
-	if len(differingFields) > 0 {
-		details["differing_fields"] = differingFields
+	metadataTask := task
+	if task == nil || reason == "integrity" {
+		metadataTask = legacyTask
 	}
-	if len(differingFields) > 0 || comparisonErr != nil && len(legacyFingerprint) == 0 {
-		legacyTaskJSON, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(legacyTask)
+	if adh.metricsHandler != nil {
+		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(1,
+			metrics.SourceClusterTag(request.GetSourceCluster()), metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
+			metrics.OperationTag(nsreplication.OperationMetricValue(metadataTask.GetNamespaceOperation())), metrics.OutcomeTag(outcome), metrics.StringTag("reason", reason))
+	}
+	if adh.config == nil || adh.config.EmitNamespaceLifecycleEvents == nil || !adh.config.EmitNamespaceLifecycleEvents() {
+		return
+	}
+	details := map[string]any{
+		"comparison_boundary": "receive", "reason": reason,
+		"component_business_id": request.GetComponentBusinessId(), "component_run_id": request.GetComponentRunId(),
+		"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
+	}
+	if len(request.GetShadowLegacyTaskPayload()) > 0 {
+		details["legacy_task_fingerprint"] = hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))
+	}
+	if outcome == "mismatch" && legacyTask != nil {
+		if task != nil && reason == "legacy_payload_mismatch" {
+			details["differing_fields"] = nsreplication.DifferingNamespaceTaskFields(legacyTask, task)
+		}
+		encoded, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(legacyTask)
 		if err == nil {
-			details["legacy_task"] = json.RawMessage(legacyTaskJSON)
+			details["legacy_task"] = json.RawMessage(encoded)
 		} else {
 			details["legacy_task_payload_status"] = "incomplete"
 			details["legacy_task_json_error"] = err.Error()
 		}
 	}
-	emitNamespaceReplicationShadowComparison(
-		d.eventLogger,
-		chasmTask,
-		namespaceReplicationComparisonBoundaryBuild,
-		outcome,
-		sourceCluster,
-		"",
-		0,
-		details,
-		comparisonErr,
-	)
-}
-
-func (adh *AdminHandler) emitShadowReceiveComparison(
-	request *adminservice.ApplyNamespaceMutationRequest,
-	expectedFingerprint []byte,
-	actualFingerprint []byte,
-	outcome string,
-	comparisonErr error,
-) {
-	if adh.config == nil || adh.config.EmitNamespaceLifecycleEvents == nil || !adh.config.EmitNamespaceLifecycleEvents() {
-		return
+	data := shadowReplicationEventData(task, request.GetNamespaceTaskPayload(), details)
+	if metadataTask != task {
+		data.NamespaceID = metadataTask.GetId()
+		data.Namespace = metadataTask.GetInfo().GetName()
+		data.Operation = metadataTask.GetNamespaceOperation().String()
+		data.ConfigVersion = proto.Int64(metadataTask.GetConfigVersion())
+		data.FailoverVersion = proto.Int64(metadataTask.GetFailoverVersion())
+		data.Details["metadata_source"] = "legacy_reference"
 	}
-	details := make(map[string]any, 4)
-	if request.GetComponentBusinessId() != "" {
-		details["component_business_id"] = request.GetComponentBusinessId()
-	}
-	if request.GetComponentRunId() != "" {
-		details["component_run_id"] = request.GetComponentRunId()
-	}
-	if len(expectedFingerprint) > 0 {
-		details["expected_task_fingerprint"] = hex.EncodeToString(expectedFingerprint)
-	}
-	if len(actualFingerprint) > 0 {
-		details["actual_task_fingerprint"] = hex.EncodeToString(actualFingerprint)
-	}
-	emitNamespaceReplicationShadowComparison(
-		adh.eventLogger,
-		request.GetNamespaceTask(),
-		namespaceReplicationComparisonBoundaryReceive,
-		outcome,
-		request.GetSourceCluster(),
-		adh.clusterMetadata.GetCurrentClusterName(),
-		int(request.GetAttemptCount()),
-		details,
-		comparisonErr,
-	)
+	wideevents.EmitNamespaceReplicationLifecycle(adh.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
+		Phase: wideevents.NamespaceReplicationCompared, Outcome: wideevents.NamespaceReplicationOutcome(outcome),
+		EventData:     data,
+		SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+		AttemptCount: int(request.GetAttemptCount()), Error: comparisonErr, EmitOnTaskSerializationError: true,
+	})
 }
