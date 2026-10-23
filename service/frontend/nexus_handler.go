@@ -59,6 +59,7 @@ type nexusContext struct {
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
+	callerRateLimitInterceptor           interceptor.CallerRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
@@ -233,6 +234,11 @@ func (c *operationContext) interceptRequest(
 			}
 		}
 	})
+
+	if err := c.callerRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("caller_rate_limited"))
+		return commonnexus.ConvertGRPCError(err, true)
+	}
 
 	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(
 		c.namespace.Name(),
@@ -686,7 +692,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
 			tag.URL(httpClient.BaseURL()),
 			tag.WorkflowNamespace(oc.namespaceName),
-			tag.NexusTaskQueueName(oc.taskQueue),
+			tag.WorkflowTaskQueueName(oc.taskQueue),
 			tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
