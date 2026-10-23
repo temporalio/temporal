@@ -728,6 +728,68 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 }
 
+func TestRejectUnprocessedWithBufferedCallbacks(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		bufferAfterSend bool
+		rollback        bool
+	}{
+		{name: "buffered while admitted"},
+		{name: "buffered while sent", bufferAfterSend: true},
+		{name: "rejection rolled back", rollback: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			tv := testvars.New(t)
+			reg := update.NewRegistry(emptyUpdateStore)
+			effects := &effect.Buffer{}
+			store := mockEventStore{Controller: effects}
+			upd, _, err := reg.FindOrCreate(ctx, tv.UpdateID())
+			require.NoError(t, err)
+			mustAdmit(t, store, upd)
+			effects.Apply(ctx)
+
+			if tc.bufferAfterSend {
+				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
+			}
+			handled, err := upd.AttachCallbacks(&updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+				Input:               &updatepb.Input{Name: tv.HandlerName()},
+				RequestId:           tv.RequestID(),
+				CompletionCallbacks: []*commonpb.Callback{{}},
+			}, store)
+			require.NoError(t, err)
+			require.True(t, handled)
+			if !tc.bufferAfterSend {
+				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
+			}
+
+			require.Equal(t, []string{tv.UpdateID()}, reg.RejectUnprocessed(ctx, effects))
+			if tc.rollback {
+				effects.Cancel(ctx)
+				inFlight, err := reg.InFlightCallbacks()
+				require.NoError(t, err)
+				require.Len(t, inFlight, 1, "rollback must preserve buffered callbacks")
+				require.Equal(t, tv.RequestID(), inFlight[0].RequestID)
+				require.Equal(t, []string{tv.UpdateID()}, reg.RejectUnprocessed(ctx, effects))
+			}
+			effects.Apply(ctx)
+
+			require.Zero(t, reg.Len())
+			status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 0)
+			require.NoError(t, err)
+			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+			require.Equal(t,
+				"Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
+				status.Outcome.GetFailure().GetMessage())
+		})
+	}
+}
+
 // NOTE: tests for various update states can be found in the update tests
 func TestAbort(t *testing.T) {
 	tv := testvars.New(t)

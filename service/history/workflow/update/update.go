@@ -64,7 +64,7 @@ type (
 		admittedTime    time.Time
 		// pendingCallbacks buffers AttachCallbacks requests that arrive while
 		// the Update is in stateAdmitted or stateSent. Flushed to the event store in onAcceptanceMsg.
-		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
+		// Cleared when the Update is rejected or aborted. In-memory only; lost on lock release.
 		pendingCallbacks []pendingCallback
 		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
 		// Update. Callers don't need to load it: it is populated on every path that produces an Update, i.e.
@@ -770,30 +770,26 @@ func (u *Update) onRejectionMsg(
 	if err := eventStore.RejectWorkflowExecutionUpdate(u.id, rej.Failure); err != nil {
 		return err
 	}
-	// Clear any buffered AttachCallbacks callbacks — they cannot be delivered for a rejected update.
-	u.pendingCallbacks = nil
-	return u.reject(rej.Failure, eventStore)
+	// NOTE: u.pendingCallbacks is not cleared here because the rejection is not committed yet.
+	// reject clears it on commit, so a rolled back rejection keeps the buffered callbacks.
+	u.reject(rej.Failure, eventStore)
+	return nil
 }
 
 // rejects an Update with provided failure.
 func (u *Update) reject(
 	rejectionFailure *failurepb.Failure,
 	effects effect.Controller,
-) error {
-	if len(u.pendingCallbacks) > 0 {
-		// Invariant: buffer must be cleared before reject. If we reach here,
-		// there is a bug in the caller (onRejectionMsg should clear the buffer).
-		return serviceerror.NewInternalf(
-			"update %s: reject called with %d pending AttachCallbacks callbacks",
-			u.id, len(u.pendingCallbacks),
-		)
-	}
+) {
 	prevState := u.setState(stateProvisionallyCompleted)
 	effects.OnAfterCommit(func(context.Context) {
 		if u.state != stateProvisionallyCompleted {
 			return
 		}
 
+		// Callers of a rejected Update receive the rejection synchronously, so buffered
+		// callbacks are not attached. They are kept if the rejection is rolled back.
+		u.pendingCallbacks = nil
 		u.request = nil
 		u.setState(stateCompleted)
 		outcome := updatepb.Outcome{
@@ -809,7 +805,6 @@ func (u *Update) reject(
 		}
 		u.setState(prevState)
 	})
-	return nil
 }
 
 // onResponseMsg expects the Update to be in either stateProvisionallyAccepted

@@ -333,9 +333,7 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(unprocessedUpdateFailure, effects); err != nil {
-			return nil
-		}
+		upd.reject(unprocessedUpdateFailure, effects)
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 	}
 	return rejectedUpdateIDs
