@@ -1152,12 +1152,10 @@ func TestHandleHandoff(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
-		name    string
-		status  activitypb.ActivityExecutionStatus
-		options *apiactivitypb.AsyncHandoffOptions
+		name   string
+		status activitypb.ActivityExecutionStatus
 	}{
 		{name: "without handoff options", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED},
-		{name: "with options", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, options: &apiactivitypb.AsyncHandoffOptions{}},
 		{name: "pending pause", status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED},
 		{name: "pending cancellation", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED},
 		{name: "pending reset", status: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED},
@@ -1168,11 +1166,17 @@ func TestHandleHandoff(t *testing.T) {
 			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
 				HandleNow:            func(chasm.Component) time.Time { return now },
 				HandleMetricsHandler: func() metrics.Handler { return metrics.NoopMetricsHandler },
+				HandleNamespaceEntry: testNamespaceEntry,
+				GoCtx: context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{
+					config: &Config{
+						BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
+					},
+				}),
 			}}
 			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id", BusinessId: "activity-id", ArchetypeId: ArchetypeID}).Marshal()
 			require.NoError(t, err)
 			act := &Activity{
-				ActivityState: &activitypb.ActivityState{Status: test.status, AsyncHandoffOptions: test.options},
+				ActivityState: &activitypb.ActivityState{Status: test.status},
 				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
 			}
 			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
@@ -1195,9 +1199,7 @@ func TestHandleHandoff(t *testing.T) {
 			require.True(t, act.GetAwaitingCompletion())
 			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
 			require.Equal(t, test.status, act.GetStatus())
-			if test.options == nil {
-				require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
-			}
+			require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
 			require.EqualValues(t, 2, act.LastAttempt.Get(ctx).GetCount())
 
 			// Repeating handoff preserves the original timestamp and does not count another handoff.

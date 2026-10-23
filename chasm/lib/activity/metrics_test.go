@@ -101,10 +101,19 @@ func TestHandoffMetrics(t *testing.T) {
 		alreadyRecorded     bool
 		updateError         error
 		expectedMetricCount int
+		taskQueueBreakdown  bool
+		expectedTaskQueue   string
 	}{
 		{
 			name:                "EmitsMetricForNewHandoff",
 			expectedMetricCount: 1,
+			expectedTaskQueue:   "__omitted__",
+		},
+		{
+			name:                "EmitsMetricWithTaskQueueBreakdown",
+			expectedMetricCount: 1,
+			taskQueueBreakdown:  true,
+			expectedTaskQueue:   "test-task-queue",
 		},
 		{
 			name:            "NoMetricForDuplicateHandoff",
@@ -125,9 +134,17 @@ func TestHandoffMetrics(t *testing.T) {
 			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
 				HandleNow:            func(chasm.Component) time.Time { return defaultTime },
 				HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+				HandleNamespaceEntry: testNamespaceEntry,
+				GoCtx: context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{
+					config: &Config{
+						BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(test.taskQueueBreakdown),
+					},
+				}),
 			}}
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
+					ActivityType:       &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 					Status:             activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 					AwaitingCompletion: test.alreadyRecorded,
 				},
@@ -187,6 +204,14 @@ func TestHandoffMetrics(t *testing.T) {
 			require.Len(t, recordings, test.expectedMetricCount)
 			if test.expectedMetricCount > 0 {
 				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, map[string]string{
+					metrics.NamespaceTag("").Key:                                               ns.Name().String(),
+					metrics.OperationTag("").Key:                                               metrics.HistoryRespondActivityTaskHandoffScope,
+					metrics.ActivityTypeTag("").Key:                                            "test-activity-type",
+					metrics.UnsafeTaskQueueTag("").Key:                                         test.expectedTaskQueue,
+					metrics.WorkflowTypeTag("").Key:                                            WorkflowTypeTag,
+					metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED).Key: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED.String(),
+				}, recordings[0].Tags)
 			}
 		})
 	}

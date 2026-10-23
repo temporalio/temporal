@@ -1457,7 +1457,7 @@ func TestValidateAndExtractHandoffRequest(t *testing.T) {
 				TaskToken: validToken,
 				Identity:  strings.Repeat("x", defaultMaxIDLengthLimit+1),
 			},
-			expectedError: "identity exceeds length limit",
+			expectedError: fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit),
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

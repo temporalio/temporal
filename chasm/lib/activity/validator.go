@@ -856,7 +856,8 @@ func validateAndExtractHandoffRequest(
 	}
 
 	if len(request.GetIdentity()) > maxIDLength {
-		return nil, "", serviceerror.NewInvalidArgument("identity exceeds length limit")
+		return nil, "", serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(request.GetIdentity()), maxIDLength)
 	}
 
 	token, err := tasktoken.NewSerializer().Deserialize(request.GetTaskToken())

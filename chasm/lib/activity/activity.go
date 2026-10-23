@@ -733,7 +733,7 @@ func (a *Activity) HandleHandoff(
 	a.AwaitingCompletion = true
 	a.AsyncHandoffTime = timestamppb.New(ctx.Now(a))
 	result.NewlyRecorded = true
-	result.MetricsHandler = a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskHandoffScope)
+	result.MetricsHandler = a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskHandoffScope)
 
 	return result, nil
 }

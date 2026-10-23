@@ -936,10 +936,8 @@ func (x *UpdateActivityExecutionOptionsResponse) GetFrontendResponse() *v1.Updat
 }
 
 type RespondActivityTaskHandoffRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace containing the activity.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Original worker request.
+	state           protoimpl.MessageState                `protogen:"open.v1"`
+	NamespaceId     string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	FrontendRequest *v1.RespondActivityTaskHandoffRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
 	// Activity ID for a standalone activity, or workflow ID for a workflow activity.
 	BusinessId    string `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
@@ -999,8 +997,7 @@ func (x *RespondActivityTaskHandoffRequest) GetBusinessId() string {
 }
 
 type RespondActivityTaskHandoffResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Response to the worker.
+	state            protoimpl.MessageState                 `protogen:"open.v1"`
 	FrontendResponse *v1.RespondActivityTaskHandoffResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
