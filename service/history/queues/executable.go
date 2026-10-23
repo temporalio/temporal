@@ -246,7 +246,11 @@ func NewExecutable(
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
-				return tasks.Tags(task)
+				tags := tasks.Tags(task)
+				if chasmTask, ok := task.(*tasks.ChasmTask); ok {
+					tags = append(tags, tag.ChasmTaskType(getCHASMTaskTypeTagValue(chasmTask, chasmRegistry)))
+				}
+				return tags
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
