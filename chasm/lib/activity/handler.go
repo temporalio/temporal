@@ -11,13 +11,16 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -37,6 +40,7 @@ type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
@@ -47,6 +51,7 @@ type handler struct {
 func newHandler(
 	config *Config,
 	historyHandler historyservice.HistoryServiceServer,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -56,6 +61,7 @@ func newHandler(
 	return &handler{
 		config:            config,
 		historyHandler:    historyHandler,
+		callbackValidator: callbackValidator,
 		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
@@ -76,7 +82,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 	// TODO: Reconcile the Matching grant when the subsequent start does not create an eager task.
 	if frontendReq.GetRequestEagerExecution() &&
 		h.config.EnableActivityEagerDispatchCheck(frontendReq.GetNamespace()) &&
@@ -93,7 +98,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
-			newActivity, newEagerTaskData, err := h.newActivityForStartExecution(mutableContext, request, req.GetNamespaceId(), maxCallbacks)
+			newActivity, newEagerTaskData, err := h.newActivityForStartExecution(mutableContext, request, req.GetNamespaceId())
 			if err != nil {
 				return nil, err
 			}
@@ -154,7 +159,10 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 					existing := a.RequestData.Get(ctx).GetPropagatedNexusSerializationContext()
 					incoming := frontendReq.GetPropagatedNexusSerializationContext()
 					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+
+					regTime := timestamppb.New(ctx.Now(a))
+					err := callback.ValidateAndAttach(ctx, a, requestID, regTime, cbs, frontendReq.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+					if err != nil {
 						return nil, err
 					}
 				}
@@ -201,7 +209,6 @@ func (h *handler) newActivityForStartExecution(
 	mutableContext chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
 	namespaceID string,
-	maxCallbacks int,
 ) (*Activity, *eagerActivityTaskData, error) {
 	newActivity, err := NewStandaloneActivity(mutableContext, request)
 	if err != nil {
@@ -209,7 +216,9 @@ func (h *handler) newActivityForStartExecution(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+		regTime := timestamppb.New(mutableContext.Now(newActivity))
+		err := callback.ValidateAndAttach(mutableContext, newActivity, request.GetRequestId(), regTime, cbs, request.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+		if err != nil {
 			return nil, nil, err
 		}
 	}

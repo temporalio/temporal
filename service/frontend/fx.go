@@ -115,6 +115,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewNoopCallerRateLimitInterceptor),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(SlowRequestLoggerInterceptorProvider),
@@ -133,7 +134,7 @@ var Module = fx.Options(
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
-	fx.Provide(callbackValidatorProvider),
+	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
@@ -955,11 +956,12 @@ func OperatorHandlerProvider(
 	return NewOperatorHandlerImpl(args)
 }
 
-// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (callbacks.Validator, error) {
+func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (callbacks.Validator, error) {
 	cfg := callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            chasmcallback.TotalMaxSizePerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
 		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),

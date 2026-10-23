@@ -56,6 +56,8 @@ type (
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerConfigEvents                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerMetricsEvents                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
 		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
@@ -98,11 +100,13 @@ type (
 		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		BacklogTaskForwardTimeout   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		ForwardPollRetryMaxInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		MaxTaskDeleteBatchSize      dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		TaskDeleteInterval          dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		LongPollExpirationInterval   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogTaskForwardTimeout    dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		ValidatorBatchSize           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ValidatorValidationThreshold dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		ForwardPollRetryMaxInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MaxTaskDeleteBatchSize       dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskDeleteInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -162,6 +166,8 @@ type (
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval     func() time.Duration
 		BacklogTaskForwardTimeout      func() time.Duration
+		ValidatorBatchSize             func() int
+		ValidatorValidationThreshold   func() time.Duration
 		ForwardPollRetryMaxInterval    func() time.Duration
 		RangeSize                      int64
 		EnableFairness                 bool
@@ -291,6 +297,8 @@ func NewConfig(
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
+		ValidatorBatchSize:                       dynamicconfig.MatchingValidatorBatchSize.Get(dc),
+		ValidatorValidationThreshold:             dynamicconfig.MatchingValidatorValidationThreshold.Get(dc),
 		ForwardPollRetryMaxInterval:              dynamicconfig.MatchingForwardPollRetryMaxInterval.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
 		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
@@ -306,6 +314,8 @@ func NewConfig(
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableWorkerConfigEvents:                 dynamicconfig.MatchingEnableWorkerConfigEvents.Get(dc),
+		EnableWorkerMetricsEvents:                dynamicconfig.MatchingEnableWorkerMetricsEvents.Get(dc),
 		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
 		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
@@ -434,6 +444,12 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		BacklogTaskForwardTimeout: func() time.Duration {
 			return config.BacklogTaskForwardTimeout(ns.String(), taskQueueName, taskType)
+		},
+		ValidatorBatchSize: func() int {
+			return config.ValidatorBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		ValidatorValidationThreshold: func() time.Duration {
+			return config.ValidatorValidationThreshold(ns.String(), taskQueueName, taskType)
 		},
 		ForwardPollRetryMaxInterval: func() time.Duration {
 			return config.ForwardPollRetryMaxInterval(ns.String(), taskQueueName, taskType)

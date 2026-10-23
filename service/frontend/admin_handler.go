@@ -2238,9 +2238,10 @@ func (adh *AdminHandler) getDLQWorkflowID(
 
 // validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
 // It performs the following checks:
-// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
-// 2. If both archetypeID and archetype are specified, validates they match each other
-// 3. If only archetype is specified, converts it to an ID
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry.
+// 2. If both archetypeID and archetype are specified, validates they match each other.
+// 3. If only archetype is specified, converts it to an ID.
+// 4. If neither is specified (archetypeID is zero and archetype is empty), defaults to WorkflowArchetypeID.
 func (adh *AdminHandler) validateAndResolveArchetypeID(
 	archetype chasm.Archetype,
 	archetypeID uint32,
@@ -2444,28 +2445,13 @@ func (adh *AdminHandler) ListExecutions(
 		return nil, errRequestNotSet
 	}
 
-	pageSize := int(request.GetPageSize())
-	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if pageSize <= 0 || pageSize > maxPageSize {
-		pageSize = maxPageSize
+		request.PageSize = maxPageSize
 	}
 
-	resp, err := adh.visibilityMgr.AdminListExecutions(
-		ctx, &manager.AdminListExecutionsRequest{
-			Namespace:     namespace.Name(request.GetNamespace()),
-			Query:         request.GetQuery(),
-			PageSize:      pageSize,
-			NextPageToken: request.GetNextPageToken(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.ListExecutionsResponse{
-		Executions:    resp.Executions,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
 }
 
 func (adh *AdminHandler) CountExecutions(
@@ -2478,18 +2464,5 @@ func (adh *AdminHandler) CountExecutions(
 		return nil, errRequestNotSet
 	}
 
-	resp, err := adh.visibilityMgr.AdminCountExecutions(
-		ctx, &manager.AdminCountExecutionsRequest{
-			Namespace: namespace.Name(request.GetNamespace()),
-			Query:     request.GetQuery(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.CountExecutionsResponse{
-		Count:  resp.Count,
-		Groups: resp.Groups,
-	}, nil
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }

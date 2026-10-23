@@ -36,6 +36,9 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
 	}
+	if err := h.config.validateAndPopulateWorkflowTimeSkippingConfig(req.GetTimeSkippingConfig(), req.GetNamespace()); err != nil {
+		return nil, err
+	}
 	res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            nsID.String(),
 		SignalWithStartRequest: req,

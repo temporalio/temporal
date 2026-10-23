@@ -434,6 +434,12 @@ func (tv *TestVars) Service() string {
 	return getOrCreate(tv, "service", tv.uniqueString, tv.stringNSetter)
 }
 
+func (tv *TestVars) NexusEndpointName() string {
+	return getOrCreate(tv, "nexus_endpoint_name", func(key string) string {
+		return "endpoint-" + tv.uuidString(key)
+	}, unsupportedNSetter[string])
+}
+
 func (tv *TestVars) Operation() string {
 	return getOrCreate(tv, "operation", tv.uniqueString, tv.stringNSetter)
 }
