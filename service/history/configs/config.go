@@ -357,7 +357,7 @@ type Config struct {
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
 	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
-	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryReplicationRateLimiter                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -704,7 +704,7 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
 		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
-		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
+		HistoryReplicationRateLimiter:                       dynamicconfig.HistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
