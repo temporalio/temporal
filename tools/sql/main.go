@@ -64,6 +64,21 @@ func BuildCLIOptions() *cli.App {
 			EnvVar: "SQL_PASSWORD",
 		},
 		cli.StringFlag{
+			Name:   schema.CLIFlagPasswordCommand,
+			Usage:  "executable whose stdout is used as the password on every new connection; mutually exclusive with password",
+			EnvVar: "SQL_PASSWORD_COMMAND",
+		},
+		cli.StringSliceFlag{
+			Name:   schema.CLIFlagPasswordCommandArg,
+			Usage:  "argument passed to the password command; repeat for multiple arguments (env var is comma-separated)",
+			EnvVar: "SQL_PASSWORD_COMMAND_ARGS",
+		},
+		cli.DurationFlag{
+			Name:   schema.CLIFlagPasswordCommandTimeout,
+			Usage:  "maximum duration to wait for the password command; 0 uses the default of 30s",
+			EnvVar: "SQL_PASSWORD_COMMAND_TIMEOUT",
+		},
+		cli.StringFlag{
 			Name:   schema.CLIFlagDatabase,
 			Value:  "temporal",
 			Usage:  "name of the sql database",
