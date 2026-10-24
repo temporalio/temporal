@@ -915,6 +915,10 @@ func updateIndexSearchAttributes(
 			continue
 		}
 
+		// Empty custom search attributes aren't serialized, so the map is nil when loaded.
+		if isa.CustomSearchAttributes == nil {
+			isa.CustomSearchAttributes = make(map[string]enumspb.IndexedValueType)
+		}
 		for k, v := range initialValue.CustomSearchAttributes {
 			if _, ok := isa.CustomSearchAttributes[k]; !ok {
 				isa.CustomSearchAttributes[k] = v
