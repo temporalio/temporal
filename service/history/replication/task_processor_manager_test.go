@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"errors"
 	"math"
 	"math/rand"
 	"testing"
@@ -184,5 +185,195 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 		},
 	).Return(nil).Times(1)
 	err := s.taskProcessorManager.cleanupReplicationTasks()
+	s.NoError(err)
+}
+
+// TestCleanupReplicationTask_NoQueueState verifies that when GetQueueState returns !ok,
+// minAckedTaskID is clamped to 0 for every reader and cleanup still proceeds up to that
+// conservative bound (ExclusiveMaxTaskKey = 1), updating minTxAckedTaskID to 0.
+func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_NoQueueState() {
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).
+		Return(tasks.NewImmediateKey(100)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).
+		Return(nil, false)
+
+	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		gomock.Any(),
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.shardID,
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(1),
+		},
+	).Return(nil)
+
+	err := s.taskProcessorManager.cleanupReplicationTasks()
+	s.NoError(err)
+	s.Equal(int64(0), s.taskProcessorManager.minTxAckedTaskID)
+}
+
+// TestCleanupReplicationTask_MissingReaderState verifies the !ok branch inside the
+// targetReaderIDs loop: when the queue state exists but contains no entry for a reader,
+// minAckedTaskID clamps to 0 and cleanup runs up to ExclusiveMaxTaskKey = 1.
+func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_MissingReaderState() {
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).
+		Return(tasks.NewImmediateKey(100)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(
+		&persistencespb.QueueState{
+			ExclusiveReaderHighWatermark: nil,
+			ReaderStates:                 map[int64]*persistencespb.QueueReaderState{},
+		}, true,
+	)
+
+	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		gomock.Any(),
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.shardID,
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(1),
+		},
+	).Return(nil)
+
+	err := s.taskProcessorManager.cleanupReplicationTasks()
+	s.NoError(err)
+	s.Equal(int64(0), s.taskProcessorManager.minTxAckedTaskID)
+}
+
+// TestCleanupReplicationTask_PersistenceError verifies that an error from
+// RangeCompleteHistoryTasks is surfaced to the caller and that minTxAckedTaskID
+// is NOT updated when the persistence call fails.
+func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_PersistenceError() {
+	const ackedTaskID = int64(12345)
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).
+		Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+				cluster.TestAllClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+				cluster.TestAllClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+				s.shardID,
+			)[0]): {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(ackedTaskID + 1),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
+		},
+	}, true)
+
+	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
+	persistenceErr := errors.New("persistence failure")
+	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		gomock.Any(),
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.shardID,
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
+		},
+	).Return(persistenceErr)
+
+	err := s.taskProcessorManager.cleanupReplicationTasks()
+	s.ErrorIs(err, persistenceErr)
+	s.Equal(ackedTaskID-1, s.taskProcessorManager.minTxAckedTaskID)
+}
+
+// TestCleanupReplicationTask_ScaleOut_TwoReaders verifies that when the alternative cluster
+// has 2× the shard count of the current cluster, targetReaderIDs produces two reader IDs
+// and both are consulted when computing the minimum acked task ID.
+func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_ScaleOut_TwoReaders() {
+	const (
+		specificShardID = int32(3) // fixed so MapShardID output is deterministic
+		currentShards   = int32(4)
+		pollingShards   = int32(8) // 2× current → MapShardID(4, 8, 3) = [3, 7]
+		ackedTaskID     = int64(200)
+		pollingFailover = cluster.TestAlternativeClusterInitialFailoverVersion
+	)
+
+	customClusterInfo := map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
+			ShardCount:             currentShards,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: pollingFailover,
+			ShardCount:             pollingShards,
+		},
+	}
+
+	// Use fresh mocks to avoid the AnyTimes() expectation from SetupTest shadowing
+	// the custom cluster info required for this test.
+	ctrl := gomock.NewController(s.T())
+	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
+	mockShard := historyi.NewMockShardContext(ctrl)
+	mockExecutionManager := persistence.NewMockExecutionManager(ctrl)
+
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(customClusterInfo).AnyTimes()
+	mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
+	mockShard.EXPECT().GetShardID().Return(specificShardID).AnyTimes()
+	mockShard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+	mockShard.EXPECT().GetExecutionManager().Return(mockExecutionManager).AnyTimes()
+
+	// MapShardID(4, 8, 3): (3-1) + i*4 + 1 → [3, 7]
+	readerID1 := shard.ReplicationReaderIDFromClusterShardID(pollingFailover, 3)
+	readerID2 := shard.ReplicationReaderIDFromClusterShardID(pollingFailover, 7)
+
+	readerState := &persistencespb.QueueReaderState{
+		Scopes: []*persistencespb.QueueSliceScope{{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(ackedTaskID + 1),
+				),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(math.MaxInt64),
+				),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}},
+	}
+
+	mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).
+		Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID1: readerState,
+			readerID2: readerState,
+		},
+	}, true)
+
+	mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		gomock.Any(),
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             specificShardID,
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
+		},
+	).Return(nil).Times(1)
+
+	manager := &taskProcessorManagerImpl{
+		shard:            mockShard,
+		logger:           log.NewNoopLogger(),
+		metricsHandler:   metrics.NoopMetricsHandler,
+		minTxAckedTaskID: ackedTaskID - 1,
+	}
+
+	err := manager.cleanupReplicationTasks()
 	s.NoError(err)
 }
