@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -975,4 +976,80 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 	s.ErrorAs(err, &notFound)
 	s.Nil(ctx)
 	s.Nil(release)
+}
+
+func (s *workflowCacheSuite) TestLockFailureUsesCachedSize() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
+	c := NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}).(*cacheImpl)
+	s.T().Cleanup(c.stop)
+	key := Key{WorkflowKey: tests.WorkflowKey}
+	wfContext := workflow.NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetThrottledLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+	_, err := c.PutIfNotExist(key, &cacheItem{wfContext: wfContext})
+	s.NoError(err)
+	s.NoError(wfContext.Lock(s.T().Context(), locks.PriorityHigh))
+	defer func() {
+		wfContext.MutableState = nil
+		wfContext.Unlock()
+		c.Release(key)
+	}()
+
+	// A failed acquisition must release its cache reference without reading state owned by the current holder.
+	wfContext.MutableState = historyi.NewMockMutableState(s.controller)
+	s.NotNil(c.Get(key))
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+	s.ErrorIs(c.lockWorkflowExecution(ctx, wfContext, key, locks.PriorityHigh), consts.ErrResourceExhaustedBusyWorkflow)
+}
+
+func (s *workflowCacheSuite) TestMakeReleaseFuncRefreshesCacheSizeBeforeUnlock() {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		panics bool
+	}{
+		{name: "clean"},
+		{name: "error", err: errors.New("release error")},
+		{name: "panic", panics: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			controller := gomock.NewController(t)
+			wfContext := historyi.NewMockWorkflowContext(controller)
+			c := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}).(*cacheImpl)
+			t.Cleanup(c.stop)
+
+			var prepare *gomock.Call
+			if tc.err != nil || tc.panics {
+				prepare = wfContext.EXPECT().Clear()
+			} else {
+				prepare = wfContext.EXPECT().IsDirty().Return(false)
+			}
+			gomock.InOrder(
+				prepare,
+				wfContext.EXPECT().RefreshCacheSize(),
+				wfContext.EXPECT().Unlock(),
+			)
+
+			release := c.makeReleaseFunc(Key{WorkflowKey: tests.WorkflowKey}, s.mockShard, wfContext, false, metrics.NoopMetricsHandler, time.Now())
+			if tc.panics {
+				require.PanicsWithValue(t, "boom", func() {
+					defer release(nil)
+					panic("boom")
+				})
+			} else {
+				release(tc.err)
+			}
+		})
+	}
 }
