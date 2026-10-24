@@ -84,7 +84,7 @@ const (
 func NewScavenger(
 	numShards int32,
 	db persistence.ExecutionManager,
-	rps int,
+	rps dynamicconfig.IntPropertyFn,
 	client historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
@@ -103,7 +103,7 @@ func NewScavenger(
 		adminClient: adminClient,
 		registry:    registry,
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(rps) },
+			func() float64 { return float64(rps()) },
 		),
 		historyDataMinAge:           historyDataMinAge,
 		executionDataDurationBuffer: executionDataDurationBuffer,
