@@ -1485,6 +1485,12 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand poller autoscaling adoption.
+	WorkerHeartbeatCount = NewCounterDef(
+		"worker_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats, per task type polled by the worker. poller_autoscaling_heartbeat_count is a subset of this. "+
+				"Dimensions: namespace, taskqueue, task_type"),
+	)
 	PollerAutoscalingHeartbeatCount = NewCounterDef(
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
