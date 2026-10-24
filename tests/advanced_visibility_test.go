@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -3325,36 +3324,6 @@ func (s *AdvancedVisibilitySuite) getBuildIds(env *testcore.TestEnv, execution *
 	err = payload.Decode(attr, &buildIDs)
 	s.NoError(err)
 	return buildIDs
-}
-
-func (s *AdvancedVisibilitySuite) updateMaxResultWindow(env *testcore.TestEnv) {
-	esConfig := env.GetTestClusterConfig().ESConfig
-
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, env.Logger)
-	s.NoError(err)
-
-	acknowledged, err := esClient.IndexPutSettings(
-		s.Context(),
-		esConfig.GetVisibilityIndex(),
-		fmt.Sprintf(`{"max_result_window" : %d}`, testcore.DefaultPageSize))
-	s.NoError(err)
-	s.True(acknowledged)
-
-	s.Awaitf(
-		func(s *AdvancedVisibilitySuite) {
-			settings, err := esClient.IndexGetSettings(s.Context(), esConfig.GetVisibilityIndex())
-			s.NoError(err)
-			indexSettings, ok := settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]any)
-			s.True(ok)
-			maxResultWindow, ok := indexSettings["max_result_window"].(string)
-			s.True(ok)
-			s.Equal(strconv.Itoa(testcore.DefaultPageSize), maxResultWindow)
-		},
-		testcore.WaitForESToSettle,
-		esPollInterval,
-		"ES max result window size hasn't reach target size within %v",
-		testcore.WaitForESToSettle,
-	)
 }
 
 func (s *AdvancedVisibilitySuite) addCustomSearchAttribute(

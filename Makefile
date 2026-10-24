@@ -137,8 +137,9 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
 
-# Packages with a file constrained by temporal_minimal.
-MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
+# Packages with a temporal_minimal variant: a file built only with temporal_minimal, which replaces
+# the files of an integration. Packages that temporal_minimal compiles out entirely aren't included.
+MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -l '^//go:build temporal_minimal &&' -- '*.go'))))
 # The unit test packages among MINIMAL_DIRS.
 MINIMAL_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
@@ -542,6 +543,7 @@ comma := ,
 # Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
 # end of the variable name is set. Each temporal_with_* tag needs one.
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
+EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
@@ -647,7 +649,7 @@ unit-test-coverage: prepare-coverage-test
 
 # Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
 unit-test-build-tags:
-	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a temporal_minimal variant))
 	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
