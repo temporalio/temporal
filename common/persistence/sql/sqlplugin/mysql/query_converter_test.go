@@ -209,6 +209,65 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			queryArgs: []any{20},
 		},
 		{
+			name: "default namespace division",
+			queryExpr: &sqlparser.IsExpr{
+				Operator: sqlparser.IsNullStr,
+				Expr: query.NewSAColumn(
+					sadefs.TemporalNamespaceDivision,
+					sadefs.TemporalNamespaceDivision,
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				),
+			},
+			pageSize: 20,
+			stmt: fmt.Sprintf(
+				"SELECT %s FROM executions_visibility ev FORCE INDEX (by_temporal_namespace_division) LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE TemporalNamespaceDivision is null ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				strings.Join(dbFields, ", "),
+			),
+			queryArgs: []any{20},
+		},
+		{
+			name: "filtered default namespace division",
+			queryExpr: &sqlparser.AndExpr{
+				Left: &sqlparser.IsExpr{
+					Operator: sqlparser.IsNullStr,
+					Expr: query.NewSAColumn(
+						sadefs.TemporalNamespaceDivision,
+						sadefs.TemporalNamespaceDivision,
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    query.NewUnsafeSQLString("foo"),
+				},
+			},
+			pageSize: 20,
+			stmt: fmt.Sprintf(
+				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE TemporalNamespaceDivision is null and Keyword01 = 'foo' ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				strings.Join(dbFields, ", "),
+			),
+			queryArgs: []any{20},
+		},
+		{
+			name: "specific namespace division",
+			queryExpr: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.EqualStr,
+				Left: query.NewSAColumn(
+					sadefs.TemporalNamespaceDivision,
+					sadefs.TemporalNamespaceDivision,
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				),
+				Right: query.NewUnsafeSQLString("1"),
+			},
+			pageSize: 20,
+			stmt: fmt.Sprintf(
+				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE TemporalNamespaceDivision = '1' ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				strings.Join(dbFields, ", "),
+			),
+			queryArgs: []any{20},
+		},
+		{
 			name: "token",
 			queryExpr: &sqlparser.ComparisonExpr{
 				Operator: sqlparser.EqualStr,
