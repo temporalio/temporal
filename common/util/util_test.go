@@ -2,6 +2,7 @@ package util
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -156,4 +157,26 @@ func TestMapSlice(t *testing.T) {
 			require.Equal(t, xs[i]+1, y, "mapping over slice did not apply function expected {2, 3, 4, 5} got %v", ys)
 		}
 	})
+}
+
+func TestNextAlignedTime(t *testing.T) {
+	tests := []struct {
+		name  string
+		input time.Time
+		align time.Duration
+		want  time.Time
+	}{
+		{"before epoch, fractional", time.Unix(-1, 500_000_000), time.Second, time.Unix(0, 0)},
+		{"before epoch, multiple intervals", time.Unix(-2, 500_000_000), time.Second, time.Unix(-1, 0)},
+		{"before epoch, aligned", time.Unix(-1, 0), time.Second, time.Unix(0, 0)},
+		{"before epoch, three-second alignment", time.Unix(-4, 0), 3 * time.Second, time.Unix(-3, 0)},
+		{"at epoch", time.Unix(0, 0), time.Second, time.Unix(1, 0)},
+		{"after epoch, fractional", time.Unix(0, 500_000_000), time.Second, time.Unix(1, 0)},
+		{"after epoch, aligned", time.Unix(1, 0), time.Second, time.Unix(2, 0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, NextAlignedTime(tt.input, tt.align))
+		})
+	}
 }
