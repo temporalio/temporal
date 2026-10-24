@@ -2,19 +2,23 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -326,14 +330,23 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================
 
-// isWorkflowSkippable checks if current workflow can skip time,
-// if checks if time skipping is enabled, if the workflow has in-flight work,
-// and if the workflow is at the correct state and status to skip time.
-// And if there is a time point to skip to is not the scope of this method.
-func (ms *MutableStateImpl) isWorkflowSkippable() bool {
+type workflowSkipEligibility struct {
+	eligible          bool
+	nexusTimerTargets []time.Time
+}
+
+type nexusOperationSkipEvaluation struct {
+	timerTargets   []time.Time
+	blocksSkipping bool
+}
+
+// evaluateWorkflowSkipEligibility evaluates the workflow gates and returns the Nexus timer
+// targets discovered by the final, comparatively expensive gate. The close path passes those
+// targets directly to findNextSkipTargetWithNexus so CHASM/HSM operations are loaded only once.
+func (ms *MutableStateImpl) evaluateWorkflowSkipEligibility() workflowSkipEligibility {
 	// (1) gate by time skipping configuration; runs for every workflow, so it is not logged
 	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() {
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	noSkippingReason := ""
@@ -346,24 +359,24 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	// The feature flag may be disabled after a workflow enabled time skipping.
 	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
 		noSkippingReason = "time skipping feature flag is disabled"
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	// (2) gate by workflow state and status
 	if !ms.IsWorkflowExecutionRunning() {
 		noSkippingReason = "workflow is not running"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if ms.IsWorkflowExecutionStatusPaused() {
 		noSkippingReason = "workflow is paused"
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	// (3) gate by inflight work
 	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
 	if ms.HasPendingWorkflowTask() {
 		noSkippingReason = "has pending workflow task"
-		return false
+		return workflowSkipEligibility{}
 	}
 	// A pending activity blocks time skipping unless it has failed and is still
 	// waiting out its retry backoff (next attempt strictly in the future) — that one
@@ -376,78 +389,60 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 			continue
 		}
 		noSkippingReason = "has pending activity"
-		return false
-	}
-	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
-		noSkippingReason = "has pending nexus operations"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if len(ms.GetPendingChildExecutionInfos()) > 0 {
 		noSkippingReason = "has pending child execution"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if len(ms.GetPendingSignalExternalInfos()) > 0 {
 		noSkippingReason = "has pending signal external"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
 		noSkippingReason = "has pending request cancel external"
-		return false
+		return workflowSkipEligibility{}
 	}
-	return true
+
+	nexusEvaluation, err := ms.evaluateNexusOperationsForTimeSkipping()
+	if err != nil {
+		ms.logger.Error("failed to inspect Nexus operations while checking workflow time skipping", tag.Error(err))
+		return workflowSkipEligibility{}
+	}
+	if nexusEvaluation.blocksSkipping {
+		noSkippingReason = "has pending nexus operations"
+		return workflowSkipEligibility{}
+	}
+	return workflowSkipEligibility{
+		eligible:          true,
+		nexusTimerTargets: nexusEvaluation.timerTargets,
+	}
 }
 
 // findNextSkipTarget finds the earliest future target time among pending timers, activity retries,
 // workflow backoff, and execution timeouts, then applies the fast-forward bound. A pending task due
-// now or earlier blocks time skipping until it is processed. Call only after isWorkflowSkippable returns true.
+// now or earlier blocks time skipping until it is processed. Call only after
+// evaluateWorkflowSkipEligibility returns an eligible result.
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
-	transition := chasm.NewTimeSkippingTransition(ms.Now())
-	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerInfo.ExpiryTime.AsTime(), "user timer") {
-			return nil
-		}
+	nexusEvaluation, err := ms.evaluateNexusOperationsForTimeSkipping()
+	if err != nil {
+		ms.logger.Error("failed to inspect Nexus operations while finding workflow time-skipping target", tag.Error(err))
+		return nil
 	}
+	if nexusEvaluation.blocksSkipping {
+		return nil
+	}
+	return ms.findNextSkipTargetWithNexus(nexusEvaluation.timerTargets)
+}
 
-	// Activities waiting out a retry backoff are skip targets: advance to the earliest
-	// next-attempt time.
-	for _, ai := range ms.GetPendingActivityInfos() {
-		if !activityPendingRetry(ai) {
-			continue
-		}
-		if ms.trackFutureOrReportDueTaskForWorkflow(transition, ai.GetScheduledTime().AsTime(), "activity retry") {
-			return nil
-		}
-	}
-	if !ms.HadOrHasWorkflowTask() {
-		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
-		// waiting on a WorkflowBackoffTimerTask. ExecutionTime > StartTime means a backoff
-		// is configured. A child workflow can have no workflow task yet without a backoff;
-		// in that case ExecutionTime == StartTime.
-		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
-		startTime := ms.executionInfo.GetStartTime().AsTime()
-		if executionTime.After(startTime) {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, executionTime, "workflow backoff") {
-				return nil
-			}
-		}
-	}
-	if ms.HadOrHasWorkflowTask() {
-		// The run/execution timeout is a valid skip target, but only once the workflow has
-		// actually started executing (it has had a workflow task). For example, a freshly-created child has a
-		// brief window — start event applied, first workflow task not yet scheduled — where it
-		// looks idle with no timers. If the timeout were an unconditional target, the child would
-		// skip all the way to its run timeout before ever running its first task, so it never sets
-		// its internal timers.
-		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow run timeout") {
-				return nil
-			}
-		}
-		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow execution timeout") {
-				return nil
-			}
-		}
+func (ms *MutableStateImpl) findNextSkipTargetWithNexus(
+	nexusTimerTargets []time.Time,
+) *chasm.TimeSkippingTransition {
+	transition := chasm.NewTimeSkippingTransition(ms.Now())
+	if ms.trackWorkflowTimerTargets(transition, nexusTimerTargets) ||
+		ms.trackWorkflowBackoffTarget(transition) ||
+		ms.trackWorkflowTimeoutTargets(transition) {
+		return nil
 	}
 
 	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
@@ -460,6 +455,64 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		return transition
 	}
 	return nil
+}
+
+func (ms *MutableStateImpl) trackWorkflowTimerTargets(
+	transition *chasm.TimeSkippingTransition,
+	nexusTimerTargets []time.Time,
+) bool {
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerInfo.ExpiryTime.AsTime(), "user timer") {
+			return true
+		}
+	}
+
+	// Activities waiting out a retry backoff are skip targets: advance to the earliest
+	// next-attempt time.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if !activityPendingRetry(ai) {
+			continue
+		}
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, ai.GetScheduledTime().AsTime(), "activity retry") {
+			return true
+		}
+	}
+	for _, targetTime := range nexusTimerTargets {
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, targetTime, "nexus operation timer") {
+			return true
+		}
+	}
+	return false
+}
+
+func (ms *MutableStateImpl) trackWorkflowBackoffTarget(transition *chasm.TimeSkippingTransition) bool {
+	if ms.HadOrHasWorkflowTask() {
+		return false
+	}
+	// Support start-with-delay, cron, retry, and CaN-with-backoff. A child workflow can
+	// have no workflow task yet without a backoff; then ExecutionTime == StartTime.
+	executionTime := ms.executionInfo.GetExecutionTime().AsTime()
+	if !executionTime.After(ms.executionInfo.GetStartTime().AsTime()) {
+		return false
+	}
+	return ms.trackFutureOrReportDueTaskForWorkflow(transition, executionTime, "workflow backoff")
+}
+
+func (ms *MutableStateImpl) trackWorkflowTimeoutTargets(transition *chasm.TimeSkippingTransition) bool {
+	if !ms.HadOrHasWorkflowTask() {
+		return false
+	}
+	// Run/execution timeouts are valid targets only after the workflow has started executing.
+	// Otherwise, a newly created child could skip to its timeout before its first workflow task.
+	if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() &&
+		ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow run timeout") {
+		return true
+	}
+	if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() &&
+		ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow execution timeout") {
+		return true
+	}
+	return false
 }
 
 // trackFutureOrReportDueTaskForWorkflow reports whether a due task blocks skipping and tracks a
@@ -489,11 +542,12 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
-		if !ms.isWorkflowSkippable() {
+		eligibility := ms.evaluateWorkflowSkipEligibility()
+		if !eligibility.eligible {
 			return false
 		}
 		// 2. find the next skip target; if there is none, time skipping is not needed
-		transition := ms.findNextSkipTarget()
+		transition := ms.findNextSkipTargetWithNexus(eligibility.nexusTimerTargets)
 		if !transition.IsValid() {
 			return false
 		}
@@ -587,6 +641,105 @@ func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(
 	}
 }
 
+// evaluateNexusOperationsForTimeSkipping returns retry and timeout targets for pending Nexus
+// operations and reports whether any operation blocks skipping.
+func (ms *MutableStateImpl) evaluateNexusOperationsForTimeSkipping() (nexusOperationSkipEvaluation, error) {
+	now := ms.Now()
+	hsmEvaluation, err := ms.evaluateHSMNexusOperationsForTimeSkipping(now)
+	if err != nil || hsmEvaluation.blocksSkipping || !ms.ChasmEnabled() {
+		return hsmEvaluation, err
+	}
+	chasmEvaluation, err := ms.evaluateCHASMNexusOperationsForTimeSkipping(now)
+	if err != nil {
+		return nexusOperationSkipEvaluation{}, err
+	}
+	if chasmEvaluation.blocksSkipping {
+		return chasmEvaluation, nil
+	}
+	hsmEvaluation.timerTargets = append(hsmEvaluation.timerTargets, chasmEvaluation.timerTargets...)
+	return hsmEvaluation, nil
+}
+
+func (ms *MutableStateImpl) evaluateHSMNexusOperationsForTimeSkipping(
+	now time.Time,
+) (nexusOperationSkipEvaluation, error) {
+	var evaluation nexusOperationSkipEvaluation
+	for _, node := range nexusoperations.MachineCollection(ms.HSM()).List() {
+		op, err := hsm.MachineData[nexusoperations.Operation](node)
+		if err != nil {
+			return nexusOperationSkipEvaluation{}, err
+		}
+		if op.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
+			return nexusOperationSkipEvaluation{blocksSkipping: true}, nil
+		}
+		operationTargets, allTargetsFuture := collectFutureNexusOperationTargets(
+			now,
+			op.GetScheduledTime().AsTime(),
+			op.GetNextAttemptScheduleTime().AsTime(),
+			op.GetScheduleToCloseTimeout().AsDuration(),
+			op.GetScheduleToStartTimeout().AsDuration(),
+		)
+		if !allTargetsFuture {
+			return nexusOperationSkipEvaluation{blocksSkipping: true}, nil
+		}
+		evaluation.timerTargets = append(evaluation.timerTargets, operationTargets...)
+	}
+	return evaluation, nil
+}
+
+func (ms *MutableStateImpl) evaluateCHASMNexusOperationsForTimeSkipping(
+	now time.Time,
+) (nexusOperationSkipEvaluation, error) {
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			return nexusOperationSkipEvaluation{}, nil
+		}
+		return nexusOperationSkipEvaluation{}, err
+	}
+	var evaluation nexusOperationSkipEvaluation
+	for _, field := range wf.Operations {
+		op := field.Get(chasmCtx)
+		if op.GetStatus() != nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
+			return nexusOperationSkipEvaluation{blocksSkipping: true}, nil
+		}
+		operationTargets, allTargetsFuture := collectFutureNexusOperationTargets(
+			now,
+			op.GetScheduledTime().AsTime(),
+			op.GetNextAttemptScheduleTime().AsTime(),
+			op.GetScheduleToCloseTimeout().AsDuration(),
+			op.GetScheduleToStartTimeout().AsDuration(),
+		)
+		if !allTargetsFuture {
+			return nexusOperationSkipEvaluation{blocksSkipping: true}, nil
+		}
+		evaluation.timerTargets = append(evaluation.timerTargets, operationTargets...)
+	}
+	return evaluation, nil
+}
+
+func collectFutureNexusOperationTargets(
+	now time.Time,
+	scheduledTime time.Time,
+	nextAttemptTime time.Time,
+	scheduleToCloseTimeout time.Duration,
+	scheduleToStartTimeout time.Duration,
+) ([]time.Time, bool) {
+	targetTimes := []time.Time{nextAttemptTime}
+	if scheduleToCloseTimeout > 0 {
+		targetTimes = append(targetTimes, scheduledTime.Add(scheduleToCloseTimeout))
+	}
+	if scheduleToStartTimeout > 0 {
+		targetTimes = append(targetTimes, scheduledTime.Add(scheduleToStartTimeout))
+	}
+	for _, targetTime := range targetTimes {
+		if !now.Before(targetTime) {
+			return nil, false
+		}
+	}
+	return targetTimes, true
+}
+
 // =============================================================================
 // Time Skipping Runtime Methods for Chasm-based Executions
 // =============================================================================
@@ -633,6 +786,9 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 	}
 
 	tsi.SessionSkipCount++
+	// Retrying work can deliberately consume multiple skips in quick succession. The session
+	// limit is the runaway guard: once exhausted, later retries observe their normal wall-clock
+	// backoff instead of keeping the server in an unbounded skip/retry loop.
 	if tsi.SessionSkipCount >= tsi.GetConfig().GetMaxSessionSkipCount() && tsi.GetConfig().GetEnabled() {
 		tsi.Config.Enabled = false
 		ms.logger.Info("execution time skipping disabled: max session skip count reached",
@@ -653,10 +809,6 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 	preAccumulatedSkipDuration time.Duration,
 ) {
-	if ms.IsWorkflow() {
-		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
-		return
-	}
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
 		return
@@ -664,8 +816,10 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
 		return
 	}
-	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
-	ms.addTimeSkippingFastForwardTask()
+	ms.chasmTree.RequestTimerTaskRegenerationOnClose()
+	if !ms.IsWorkflow() {
+		ms.addTimeSkippingFastForwardTask()
+	}
 }
 
 // =============================================================================

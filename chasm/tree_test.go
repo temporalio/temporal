@@ -6367,8 +6367,8 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		// Two side-effect timer tasks are each regenerated, plus the single earliest pure task
 		// (only one physical pure task is generated regardless of pure-task count) => 3 total.
 		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
-		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
-			"pure-task deletion is anchored at the earliest pure scheduled time")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+			"regeneration removes the old physical pure timer before adding the new one")
 	})
 
 	s.Run("AccumulatedDurationCap_RejectsTransition", func() {
@@ -6503,10 +6503,81 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 
 // TestRegenerateTimerTasksForTimeSkipping verifies task regeneration: every timer side-effect task
 // is re-created (non-timer ones are skipped), only the single earliest pure task across the tree
-// gets a physical pure task, and pure-task deletion is anchored at the earliest scheduled time (or
-// the maximum key when there are no pure tasks).
+// gets a physical pure task, and regeneration deletes the old physical pure-task row before
+// adding the current earliest task.
 func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("DefersRegenerationUntilClose", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:                    testSideEffectTaskTypeID,
+								ScheduledTime:             timestamppb.New(baseTime.Add(2 * time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		s.False(root.IsDirty())
+
+		root.RequestTimerTaskRegenerationOnClose()
+
+		s.Equal(0, s.nodeBackend.NumTasksAdded(), "regeneration must wait for close-time task validation")
+		s.False(root.IsDirty(), "requesting timer re-stamping must not create a replicated CHASM mutation")
+
+		// The existing side-effect timer is invalidated during close while a new one is added.
+		// Deferred regeneration must only see the finalized logical task set.
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestSideEffectTask) (bool, error) {
+				return len(task.Data) > 0, nil
+			}).AnyTimes()
+		mutableContext.AddTask(
+			component,
+			TaskAttributes{ScheduledTime: baseTime.Add(3 * time.Hour)},
+			&TestSideEffectTask{Data: []byte("new-timer")},
+		)
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+		mutableContext.AddTask(
+			component,
+			TaskAttributes{ScheduledTime: baseTime.Add(30 * time.Minute)},
+			&TestPureTask{Data: []byte("new-earliest-pure-task")},
+		)
+
+		_, err = root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.Equal(2, s.nodeBackend.NumTasksAdded(),
+			"the invalid old timer is omitted and each new surviving timer is emitted once")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+			"regeneration removes the old pure timer even when its old wall-clock time is later")
+	})
 
 	s.Run("RegeneratesSideEffectTimersAndEarliestPureTask", func() {
 		s.nodeBackend = &MockNodeBackend{}
@@ -6576,8 +6647,8 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 
 		// One physical task for the timer side-effect task + one for the single earliest pure task.
 		s.Equal(2, s.nodeBackend.NumTasksAdded())
-		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
-			"pure-task deletion is anchored at the earliest pure scheduled time")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+			"regeneration deletes every previously emitted pure timer")
 
 		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus,
@@ -6664,8 +6735,8 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 
 		s.Equal(1, s.nodeBackend.NumTasksAdded(),
 			"the already-created earliest pure task is reset and regenerated, not short-circuited")
-		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
-			"pure-task deletion is anchored at the earliest pure scheduled time")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+			"regeneration deletes every previously emitted pure timer")
 
 		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
 		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus,
@@ -6673,12 +6744,12 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 	})
 }
 
-// TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive verifies the passive path: after a
-// skip transition is applied via replication, MutableState calls MarkTotalTimeSkippedUpdatedInPassive
+// TestCloseTransaction_RequestTimerTaskRegenerationOnClose verifies the passive path: after a
+// skip transition is applied via replication, MutableState requests timer task regeneration
 // so the next CloseTransaction re-stamps pending timer/pure physical tasks against the replicated
 // accumulated skip. Without the flag those already-created tasks are left untouched (nothing to do);
 // with the flag they are regenerated, and the flag is cleared afterwards.
-func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() {
+func (s *nodeSuite) TestCloseTransaction_RequestTimerTaskRegenerationOnClose() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	// newTree builds a root component holding one timer side-effect task and one pure task, both
@@ -6736,8 +6807,8 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 	s.Run("WithFlagRegeneratesTimerAndPureTasks", func() {
 		root := newTree()
 
-		root.MarkTotalTimeSkippedUpdatedInPassive()
-		s.True(root.totalTimeSkippedUpdatedInPassive)
+		root.RequestTimerTaskRegenerationOnClose()
+		s.True(root.regenerateTimerTasksOnClose)
 
 		_, err := root.CloseTransaction(context.Background(), true)
 		s.Require().NoError(err)
@@ -6761,7 +6832,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
 		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
 
-		s.False(root.totalTimeSkippedUpdatedInPassive,
+		s.False(root.regenerateTimerTasksOnClose,
 			"the flag is reset after the transaction closes")
 	})
 }

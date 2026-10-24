@@ -1052,10 +1052,10 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	}
 
 	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
-	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
-	// because time skipping pauses when there is in-flight work. Activity retry
-	// timers are the exception: an activity in retry backoff does not block skipping,
-	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
+	// WorkflowTask timer tasks won't be regenerated because time skipping pauses when
+	// there is in-flight work. Activity retry timers are the exception:
+	// an activity in retry backoff does not block skipping, so its retry timer must be
+	// re-stamped against the new accumulated skip (see (5)).
 	//
 	// NOTE: blocks (1)-(4) below construct their tasks inline rather than calling the
 	// canonical generators (GenerateUserTimerTasks, GenerateWorkflowStartTasks,
@@ -1151,8 +1151,26 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
-	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// (6) HSM timers. More than one timer group can already have a physical task (for
+	// example, a long schedule-to-close timeout followed by an earlier retry backoff).
+	// Re-emit every scheduled group so each physical timer uses the new wall-clock time.
+	for _, timerGroup := range r.mutableState.GetExecutionInfo().GetStateMachineTimers() {
+		if !timerGroup.GetScheduled() {
+			continue
+		}
+		deadline := timerGroup.GetDeadline().AsTime()
+		version := r.mutableState.GetCurrentVersion()
+		if r.mutableState.HasStateMachineTimerTask(deadline, version) {
+			continue
+		}
+		r.mutableState.AddTasks(&tasks.StateMachineTimerTask{
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: deadline,
+			Version:             version,
+		})
+	}
+
+	// WorkflowTaskTimeoutTask and ActivityTimeoutTask are treated as in-flight work and won't be regenerated.
 	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
 	return nil
 }

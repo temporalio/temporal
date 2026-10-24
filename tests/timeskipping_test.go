@@ -24,6 +24,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -1051,32 +1052,36 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 		wallElapsed)
 }
 
-// TestTimeSkipping_PendingNexusOperationBlocksSkip verifies that a pending nexus operation —
-// including one parked in retry backoff — blocks time skipping. This is what makes the
-// StateMachineTimerTask (nexus HSM) exclusion in RegenerateTimerTasksForTimeSkipping safe: a skip
-// can never happen while such a timer is live, so a nexus HSM timer can never be left stale by one.
+// runTimeSkippingNexusOperationRetryBackoffScenario verifies that an otherwise-idle workflow skips a
+// Nexus operation's retry backoff. The test runs against both the HSM and CHASM implementations.
 //
 // Sequence:
 //
 //	WT1 → schedule nexus operation + start a 1h timer. Close tx: nexus op pending → no skip.
-//	Nexus attempt 1 → retryable handler error → operation parks in BACKING_OFF, still pending.
+//	Nexus attempt 1 → retryable handler error → operation parks in BACKING_OFF → skip to retry.
 //	Nexus attempt 2 → sync success → NexusOperationCompleted → WT2.
 //	WT2 → drain. Close tx: no pending nexus op, only the 1h timer → skip fires.
 //	WT3 → timer fired via skip → complete workflow.
 //
-// The load-bearing assertion is ordering: TIME_SKIPPING_TRANSITIONED must appear *after*
-// NEXUS_OPERATION_COMPLETED. That is timing-independent — were the nexus gate missing, the skip
-// would fire at WT1 close, well ahead of the operation completing.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip() {
+// The load-bearing assertion is ordering: the first TIME_SKIPPING_TRANSITIONED event is after
+// NEXUS_OPERATION_SCHEDULED but before NEXUS_OPERATION_COMPLETED.
+func (s *TimeSkippingTestSuite) runTimeSkippingNexusOperationRetryBackoffScenario(chasmEnabled bool) {
+	rolloutPercent := 0
+	if chasmEnabled {
+		rolloutPercent = 100
+	}
 	env := newNexusTestEnv(s.T(), true,
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, chasmEnabled),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmEnabled),
+		testcore.WithDynamicConfig(chasmnexus.Enabled, chasmEnabled),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, chasmEnabled),
+		testcore.WithDynamicConfig(chasmnexus.ChasmWorkflowOperationsRolloutPercent, rolloutPercent),
 	)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
-	// Attempt 1 fails retryably so the operation parks in BACKING_OFF with a live nexus HSM
-	// timer; attempt 2 succeeds so the workflow can make progress and the test can observe the
-	// skip that follows.
+	// Attempt 1 fails retryably so the operation parks in BACKING_OFF. Attempt 2 succeeds.
 	var attempts atomic.Int32
 	handler := nexustest.Handler{
 		OnStartOperation: func(
@@ -1120,8 +1125,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 	})
 	s.NoError(err)
 
-	// WT2 arrives once the nexus operation completes (after the retry). Draining it is the
-	// first close transaction where the workflow is idle, so the skip fires here.
+	// WT2 arrives once the nexus operation completes after its skipped retry backoff. Draining it
+	// lets the workflow skip the remaining 1h user timer.
 	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
@@ -1139,22 +1144,35 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 		RunId:      runID,
 	})
 
-	// The operation really did fail once and retry, so a nexus HSM timer was live while the
-	// workflow was otherwise idle.
+	// The operation really did fail once and retry while the workflow was otherwise idle.
 	s.GreaterOrEqual(int(attempts.Load()), 2, "nexus operation must have been retried at least once")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED), "nexus operation must complete")
 
+	nexusScheduledIdx := indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 	nexusCompletedIdx := indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	transitionIdx := indexOfEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED)
-	s.NotEqual(-1, transitionIdx, "skip must fire once the nexus operation is no longer pending")
-	s.Greater(transitionIdx, nexusCompletedIdx,
-		"skip must not happen while the nexus operation is pending: TIME_SKIPPING_TRANSITIONED at index %d must follow NEXUS_OPERATION_COMPLETED at index %d",
+	s.NotEqual(-1, transitionIdx, "the Nexus retry backoff must produce a time-skipping transition")
+	s.Greater(transitionIdx, nexusScheduledIdx,
+		"the retry skip must follow NEXUS_OPERATION_SCHEDULED: transition index %d, scheduled index %d",
+		transitionIdx, nexusScheduledIdx)
+	s.Less(transitionIdx, nexusCompletedIdx,
+		"the retry backoff must be skipped before NEXUS_OPERATION_COMPLETED: transition index %d, completed index %d",
 		transitionIdx, nexusCompletedIdx)
+	s.GreaterOrEqual(len(timeSkippingTransitions(history)), 2,
+		"expected one skip for the Nexus retry and another for the user timer")
 
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED), "timer must fire via the post-nexus skip")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
 	s.Less(wallElapsed, 5*time.Minute,
-		"wall elapsed = %v; the 1h timer must be skipped once the nexus operation completes", wallElapsed)
+		"wall elapsed = %v; both Nexus retry backoff and the 1h timer must be skipped", wallElapsed)
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_HSMNexusOperationRetryBackoff() {
+	s.runTimeSkippingNexusOperationRetryBackoffScenario(false)
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_CHASMNexusOperationRetryBackoff() {
+	s.runTimeSkippingNexusOperationRetryBackoffScenario(true)
 }
 
 // TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no

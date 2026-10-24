@@ -46,7 +46,7 @@ func (*noopChasmTree) RefreshTasks() error {
 	return nil
 }
 
-func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
+func (*noopChasmTree) RequestTimerTaskRegenerationOnClose() {}
 
 func (*noopChasmTree) IsStateDirty() bool {
 	return false

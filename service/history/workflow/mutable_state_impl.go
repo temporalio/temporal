@@ -7570,6 +7570,15 @@ func (ms *MutableStateImpl) AddTasks(
 	}
 }
 
+func (ms *MutableStateImpl) HasStateMachineTimerTask(deadline time.Time, version int64) bool {
+	realDeadline := ms.ToRealTimeWithCurrentOffset(deadline)
+	return slices.ContainsFunc(ms.InsertTasks[tasks.CategoryTimer], func(existing tasks.Task) bool {
+		stateMachineTimerTask, ok := existing.(*tasks.StateMachineTimerTask)
+		return ok && stateMachineTimerTask.Version == version &&
+			stateMachineTimerTask.GetVisibilityTime().Equal(realDeadline)
+	})
+}
+
 func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	insertTasks := ms.InsertTasks
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
@@ -7577,9 +7586,11 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 }
 
 func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	// CHASM logical task deadlines are in workflow virtual time, while chasmPureTasks have
+	// already crossed the AddTasks boundary and carry wall-clock visibility timestamps.
+	maxVisibilityTime := ms.ToRealTimeWithCurrentOffset(maxScheduledTime)
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
-
-		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+		if !task.GetVisibilityTime().Before(maxVisibilityTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
 		}
@@ -7590,8 +7601,7 @@ func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
 		)
 	}
 
-	// If we reach here, all tasks have visibility time before maxScheduledTime
-	// and need to be deleted.
+	// Every retained task precedes the wall-clock cutoff.
 	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 
@@ -7965,6 +7975,12 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
 		return closeTransactionResult{}, err
+	}
+	// Workflow time skipping updates the virtual-to-wall-clock offset before CHASM closes its
+	// transaction. Ask the tree to re-stamp timers after it has removed invalid tasks and
+	// materialized new ones, so each surviving logical timer is emitted exactly once.
+	if regenTimerTasksForWorkflowTimeSkipping && ms.ChasmEnabled() {
+		ms.chasmTree.RequestTimerTaskRegenerationOnClose()
 	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,
