@@ -5062,6 +5062,54 @@ func (s *UpdateWithStartSuite) updateWithStartReq(env testcore.Env, tv *testvars
 	}
 }
 
+func requireWorkflowEventLink(
+	t *testing.T,
+	link *commonpb.Link,
+	namespace string,
+	workflowID string,
+	runID string,
+	eventID int64,
+	eventType enumspb.EventType,
+) {
+	t.Helper()
+	protorequire.ProtoEqual(t, &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  namespace,
+				WorkflowId: workflowID,
+				RunId:      runID,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   eventID,
+						EventType: eventType,
+					},
+				},
+			},
+		},
+	}, link)
+}
+
+func requireWorkflowLink(
+	t *testing.T,
+	link *commonpb.Link,
+	namespace string,
+	workflowID string,
+	runID string,
+	reason string,
+) {
+	t.Helper()
+	protorequire.ProtoEqual(t, &commonpb.Link{
+		Variant: &commonpb.Link_Workflow_{
+			Workflow: &commonpb.Link_Workflow{
+				Namespace:  namespace,
+				WorkflowId: workflowID,
+				RunId:      runID,
+				Reason:     reason,
+			},
+		},
+	}, link)
+}
+
 func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 	for _, p := range []enumspb.WorkflowIdConflictPolicy{
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
@@ -5091,6 +5139,12 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp)
 				s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+				requireWorkflowEventLink(s.T(), startResp.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				acceptedEvent := s.RequireHistoryEvent(
+					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				)
+				requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 				// poll update to ensure same outcome is returned
 				pollRes, err := pollUpdate(env, env.Tv(),
@@ -5128,6 +5182,8 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp)
 				s.Equal("rejection-of-"+env.Tv().UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
+				requireWorkflowEventLink(s.T(), startResp.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				requireWorkflowLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), "Update rejected")
 
 				// poll update to ensure same outcome is returned
 				_, err = pollUpdate(env, env.Tv(),
@@ -5185,6 +5241,11 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+			acceptedEvent := s.RequireHistoryEvent(
+				env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp.GetRunId()}),
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			)
+			requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 			// poll update to ensure same outcome is returned
 			pollRes, err := pollUpdate(env, env.Tv(),
@@ -5242,6 +5303,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("rejection-of-"+env.Tv().UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
+			requireWorkflowLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), "Update rejected")
 
 			// poll update to ensure same outcome is returned
 			_, err = pollUpdate(env, env.Tv(),
@@ -5404,6 +5466,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 
 				s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 				s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), uwsRes2.response.Responses[1].GetUpdateWorkflow().Outcome.String())
+				runID := uwsRes2.response.Responses[0].GetStartWorkflow().GetRunId()
+				acceptedEvent := s.RequireHistoryEvent(
+					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: runID}),
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				)
+				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[0].GetStartWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[1].GetUpdateWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 				// poll update to ensure same outcome is returned
 				pollRes, err := pollUpdate(env, env.Tv(),
@@ -5582,6 +5651,10 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 				startResp1 := uwsRes.response.Responses[0].GetStartWorkflow()
 				_ = uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp1)
+				acceptedEvent := s.RequireHistoryEvent(
+					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: startResp1.GetRunId()}),
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				)
 
 				// terminate workflow
 				_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(),
@@ -5602,6 +5675,8 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, startResp.Status)
 				// TODO: check startResp.Running
 				s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+				requireWorkflowEventLink(s.T(), startResp.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 			})
 		}
 	})

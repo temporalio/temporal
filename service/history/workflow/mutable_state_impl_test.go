@@ -2992,24 +2992,13 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		"expected 1 completed update + 1 accepted in mutation")
 
 	// this must be done after the transaction is closed
-	// as GetUpdateOutcome relies on event version history which is only updated when closing the transaction
-	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
+	// as GetCompletedUpdate relies on event version history which is only updated when closing the transaction
+	completedUpdate, err := s.mutableState.GetCompletedUpdate(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
 	s.NoError(err)
-	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
+	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), completedUpdate.Outcome)
+	s.Equal(acptEvent1.GetEventId(), completedUpdate.AcceptedEventID)
 
-	acceptedEventID, err := s.mutableState.GetUpdateAcceptedEventID(ctx, updateID1)
-	s.Require().NoError(err)
-	s.Equal(acptEvent1.GetEventId(), acceptedEventID)
-
-	acceptedEventID, err = s.mutableState.GetUpdateAcceptedEventID(ctx, updateID2)
-	s.Require().NoError(err)
-	s.Equal(acptEvent2.GetEventId(), acceptedEventID)
-
-	_, err = s.mutableState.GetUpdateAcceptedEventID(ctx, "not_an_update_id")
-	s.Require().Error(err)
-	s.ErrorIs(err, errUpdateNotFound)
-
-	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
+	_, err = s.mutableState.GetCompletedUpdate(ctx, "not_an_update_id")
 	s.Error(err)
 	s.IsType((*serviceerror.NotFound)(nil), err)
 }

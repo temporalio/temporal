@@ -138,14 +138,16 @@ func TestFind(t *testing.T) {
 
 	t.Run("return update when found in registry", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return &updatepb.Outcome{
-					Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()},
+			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
+				return &update.CompletedUpdate{
+					Outcome:         &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}},
+					AcceptedEventID: testAcceptedEventID,
 				}, nil
 			},
 		})
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
+		require.Equal(t, testAcceptedEventID, upd.AcceptedEventID())
 	})
 
 	t.Run("return update when found in store", func(t *testing.T) {
@@ -173,7 +175,7 @@ func TestFind(t *testing.T) {
 		internalErr := serviceerror.NewInternal("internal error")
 
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
 				return nil, internalErr
 			},
 		})
@@ -256,8 +258,10 @@ func TestNexusSerializationContext(t *testing.T) {
 
 	t.Run("completed update found in store", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}}, nil
+			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
+				return &update.CompletedUpdate{
+					Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}},
+				}, nil
 			},
 			GetUpdateNexusContextFunc: func(updateID string) *nexuspb.PropagatedSerializationContext {
 				require.Equal(t, tv.UpdateID(), updateID)
@@ -1144,8 +1148,10 @@ func TestIsCompleted(t *testing.T) {
 
 	t.Run("an update completed in the store is completed", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return &updatepb.Outcome{Value: &updatepb.Outcome_Success{}}, nil
+			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
+				return &update.CompletedUpdate{
+					Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{}},
+				}, nil
 			},
 		})
 		upd := reg.Find(context.Background(), "u1")

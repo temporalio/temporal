@@ -266,37 +266,53 @@ func (u *Updater) applyRequest(
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
 func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
+	requestID, ok := u.requestIDWithCompletionCallbacks()
+	if !ok {
+		return nil
+	}
+
+	if link := u.existingRequestIDLink(ms, u.wfKey, requestID); link != nil {
+		return link
+	}
+
+	updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()]
+	if updateInfo.GetCompletion() != nil {
+		// If the update is already completed, the request's callbacks are not
+		// recorded so the requestIDRef is not captured as it will not resolve.
+		return nil
+	}
+	return u.requestIDEventLink(u.wfKey, requestID, u.upd.EventLinkType(requestID))
+}
+
+func (u *Updater) requestIDWithCompletionCallbacks() (string, bool) {
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
-	if requestID == "" {
+	return requestID, requestID != "" && len(request.GetCompletionCallbacks()) != 0
+}
+
+func (u *Updater) existingRequestIDLink(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	requestID string,
+) *commonpb.Link {
+	requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]
+	if requestIDInfo == nil {
 		return nil
 	}
+	return u.requestIDEventLink(wfKey, requestID, requestIDInfo.GetEventType())
+}
 
-	// If there are no completion callbacks, dont set the
-	// requestIDRef link as it is not guaranteed to resolve.
-	if len(request.CompletionCallbacks) == 0 {
-		return nil
-	}
-
-	var eventType enumspb.EventType
-	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
-		eventType = requestIDInfo.GetEventType()
-	} else {
-		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
-		if updateInfo.GetCompletion() != nil {
-			// If the update is already completed, the request's callbacks are not
-			// recorded so the requestIDRef is not captured as it will not resolve.
-			return nil
-		}
-		eventType = u.upd.EventLinkType(requestID)
-	}
-
+func (u *Updater) requestIDEventLink(
+	wfKey definition.WorkflowKey,
+	requestID string,
+	eventType enumspb.EventType,
+) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
 					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 						RequestId: requestID,
@@ -427,12 +443,16 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 	}
 	// If there isnt a requestIdRef link- due to empty callbacks/requestID- link
 	// to the Accepted event itself.
+	return u.acceptedEventLink(u.wfKey, acceptedEventID)
+}
+
+func (u *Updater) acceptedEventLink(wfKey definition.WorkflowKey, acceptedEventID int64) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_EventRef{
 					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						EventId:   acceptedEventID,
@@ -492,4 +512,25 @@ func (u *Updater) CreateResponse(
 			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}
+}
+
+// CreateCompletedResponse creates a completed Update response linked to its callback attachment or acceptance event when available.
+func (u *Updater) CreateCompletedResponse(
+	ms historyi.MutableState,
+	wfKey definition.WorkflowKey,
+	outcome *updatepb.Outcome,
+	acceptedEventID int64,
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
+) *historyservice.UpdateWorkflowExecutionResponse {
+	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext)
+	if requestID, ok := u.requestIDWithCompletionCallbacks(); ok {
+		if link := u.existingRequestIDLink(ms, wfKey, requestID); link != nil {
+			resp.Response.Link = link
+			return resp
+		}
+	}
+	if acceptedEventID != common.EmptyEventID {
+		resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	}
+	return resp
 }
