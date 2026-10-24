@@ -201,6 +201,8 @@ func (f *transferQueueFactory) CreateQueue(
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
+			RangeCompleteBatchSize:              f.Config.QueueRangeCompleteBatchSize,
+			RangeCompleteTimeout:                f.Config.QueueRangeCompleteTimeout,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},
