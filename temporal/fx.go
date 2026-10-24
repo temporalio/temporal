@@ -960,7 +960,7 @@ type SpanExporterInputs struct {
 
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
-// types can be overriden/augmented with fx.Replace/fx.Decorate:
+// types can be overridden/augmented with fx.Replace/fx.Decorate:
 //
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
