@@ -34,6 +34,19 @@ type defaultTokenKeyProvider struct {
 
 var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 
+// jwksHTTPClient bounds how long a single JWKS retrieval may take. openURI previously used the
+// package-level http.Get, which has no overall timeout, so an endpoint that accepted the
+// connection and never responded blocked updateKeys indefinitely - including the synchronous
+// call from initialize, which runs inside NewDefaultTokenKeyProvider.
+//
+// No Transport is set, so this uses http.DefaultTransport, whose dial timeout is 30s and TLS
+// handshake budget 10s; 30s overall therefore does not cut off a legitimately slow connection
+// mid-handshake. Client.Timeout also covers reading the response body, which openURI returns to
+// updateKeysFromURI, so a slow-trickling body is bounded too. The refresh goroutine fetches
+// sequentially, so a slow fetch delays the next tick rather than overlapping with it. A var
+// rather than a const so tests can shorten it.
+var jwksHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *defaultTokenKeyProvider {
 	provider := defaultTokenKeyProvider{config: cfg.JWTKeyProvider, logger: logger}
 	provider.initialize()
@@ -179,7 +192,7 @@ func (a *defaultTokenKeyProvider) openURI(uri string) (io.ReadCloser, error) {
 		}
 		return os.Open(u.Path)
 	}
-	resp, err := http.Get(uri)
+	resp, err := jwksHTTPClient.Get(uri)
 	if err != nil {
 		return nil, err
 	}
