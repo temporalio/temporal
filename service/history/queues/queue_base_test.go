@@ -139,10 +139,12 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
 						},
 						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
-							Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
-								TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-									TaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER},
+							PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK,
+							Attributes: &persistencespb.Predicate_OutboundTaskPredicateAttributes{
+								OutboundTaskPredicateAttributes: &persistencespb.OutboundTaskPredicateAttributes{
+									Groups: []*persistencespb.OutboundTaskPredicateAttributes_Group{
+										{TaskGroup: "g1", NamespaceId: "n1", Destination: "d1"},
+									},
 								},
 							},
 						},
@@ -557,7 +559,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
 	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
-	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
+	scopes[2].Predicate = tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"}})
 	initialQueueState := &queueState{
 		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,

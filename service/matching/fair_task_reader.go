@@ -45,6 +45,10 @@ type (
 		ackLevel         fairLevel                      // inclusive: task exactly at ackLevel _has_ been acked
 		atEnd            bool                           // whether we believe outstandingTasks represents the entire queue right now
 
+		// Completed tasks already excluded by a backlog count reset. Consume these before
+		// applying ack deltas to avoid subtracting the same completions twice.
+		acksExcludedFromBacklog int64
+
 		// Small cache of acked task levels that were evicted from outstandingTasks. When tasks
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
@@ -268,6 +272,7 @@ func (tr *fairTaskReader) readTasksImpl() {
 		// ack level would have been pinned here, we may be able to advance it now (if it's not
 		// explicitly pinned by another write)
 		tr.advanceAckLevelLocked()
+		tr.maybeResetBacklogCountLocked()
 	}
 
 	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
@@ -416,7 +421,10 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	//
 	// The bug that led to this is fixed, but we'll leave this check defensively in case other
 	// bugs produce the same state.
-	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
+	//
+	// Don't softassert if we're unloading: that state is benign and the reader is being torn down.
+	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending &&
+		tr.backoffTimer == nil && tr.backlogMgr.tqCtx.Err() == nil {
 		softassert.Fail(tr.logger, "fair reader stuck")
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
 		tr.maybeReadTasksLocked()
@@ -434,16 +442,14 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) []*internalTask {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize()
 
-	// Work on a copy-on-write snapshot of the outstanding tasks: merge the newly read/written
-	// tasks into it, trim it back to batchSize loaded tasks, and install the result as the new set
-	// of outstanding tasks. The btree does the trimming for us.
-	merged := tr.outstandingTasks.Copy()
+	// Merge the newly read/written tasks into the outstanding tasks, then trim back to batchSize
+	// loaded tasks. The btree does the trimming for us.
 
-	// The merged operations below all touch nearby levels, so share one path hint across the Get,
-	// Set, and Delete point operations on merged.
+	// The operations below all touch nearby levels, so share one path hint across the Get, Set, and
+	// Delete point operations on outstandingTasks.
 	var hint btree.PathHint
 
-	// (1) Merge the newly read/written tasks into the snapshot. Already-acked tasks (expired, or
+	// (1) Merge the newly read/written tasks into the tree. Already-acked tasks (expired, or
 	// re-read after their ack was evicted) go in as acks; the rest become loaded tasks. We create
 	// the internalTask now so the tree can order it by level, and remember the ones we created so
 	// we can drop any that don't survive the trim below.
@@ -458,7 +464,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// If we're writing and we're not at the end, ignore tasks above readLevel since we
 			// don't know what's in between readLevel and there.
 			continue
-		} else if _, have := merged.GetHint(outstandingTask{level: level}, &hint); have {
+		} else if _, have := tr.outstandingTasks.GetHint(outstandingTask{level: level}, &hint); have {
 			// On a write/read race or a re-read of a range we may see a task we already have
 			// (loaded or acked). Ignore tasks we already track.
 			continue
@@ -466,15 +472,15 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// This task was already acked, but its ack was evicted from memory before it could
 			// advance the ack level, and now we've re-read it. Insert it as a pre-acked (nil) entry
 			// so it advances the ack level instead of being re-delivered to the matcher.
-			merged.SetHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level}, &hint)
 		} else if IsTaskExpired(t) {
 			// Expired tasks are inserted pre-acked so they advance ackLevel and get GC'd.
-			merged.SetHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level}, &hint)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 		} else {
 			task := newInternalTaskFromBacklog(t, tr.completeTask)
 			tr.backlogMgr.setPriority(task)
-			merged.SetHint(outstandingTask{level: level, task: task}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level, task: task}, &hint)
 			created = append(created, task)
 		}
 	}
@@ -484,7 +490,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// batchSize, cut stays at maxFairLevel, meaning nothing is trimmed.
 	cut := outstandingTask{level: maxFairLevel}
 	loaded := 0
-	merged.Scan(func(o outstandingTask) bool {
+	tr.outstandingTasks.Scan(func(o outstandingTask) bool {
 		if o.acked() {
 			return true
 		} else if loaded++; loaded > batchSize {
@@ -500,7 +506,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// eventually call task.finish/finishForwarded, which calls tr.completeTask.
 	created = slices.DeleteFunc(created, func(task *internalTask) bool {
 		if level := task.fairLevel(); !level.less(cut.level) {
-			merged.DeleteHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.DeleteHint(outstandingTask{level: level}, &hint)
 			return true
 		}
 		tr.loadedTasks++
@@ -511,7 +517,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// (4) Chop the pre-existing entries at or above the cut and evict them. The overflow we created
 	// is already gone, so everything chopped here was in the matcher (a loaded task) or is an ack.
 	// When there's no cut, cut is maxFairLevel and this range is empty.
-	chopped := merged.DeleteRange(cut, outstandingTask{level: maxFairLevel}, nil)
+	chopped := tr.outstandingTasks.DeleteRange(cut, outstandingTask{level: maxFairLevel}, nil)
 	chopped.Scan(func(o outstandingTask) bool {
 		if o.task != nil {
 			// A loaded task we're dropping from memory. It may already have been matched and
@@ -533,12 +539,9 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.evictedAcks.PopMax()
 	}
 
-	// Install the trimmed snapshot as the new outstanding tasks.
-	tr.outstandingTasks = merged
-
 	// readLevel is the highest level we track, loaded or acked. If we track nothing, leave it where
 	// it is so we resume reading from there.
-	if maxItem, ok := merged.Max(); ok {
+	if maxItem, ok := tr.outstandingTasks.Max(); ok {
 		tr.readLevel = maxItem.level
 	}
 
@@ -557,10 +560,8 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.atEnd = true
 	}
 
-	// If we're at the end, then outstandingTasks is the whole queue so we can set count.
-	if count := tr.knownCountLocked(); count >= 0 {
-		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
-	}
+	// If we're at the end and all writes are accounted for, we can set the count.
+	tr.maybeResetBacklogCountLocked()
 
 	return created
 
@@ -604,6 +605,9 @@ func (tr *fairTaskReader) isDrained() bool {
 	return tr.atEnd && tr.loadedTasks == 0
 }
 
+// Returns true if the ack level is pinned (which happens during the whole lifecycle of a
+// write, so we ensure we don't delete just-written tasks), or if it's unpinned but we haven't
+// merged the tasks that were just written into outstandingTasks yet.
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
 	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }
@@ -631,8 +635,13 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 		tr.numToGC += int(numAcked)
 		tr.maybeGCLocked()
 
+		// Apply the exclusions to the next acks. If these are different tasks,
+		// the estimate remains conservative until the excluded tasks are acked.
+		excluded := min(numAcked, tr.acksExcludedFromBacklog)
+		tr.acksExcludedFromBacklog -= excluded
+		countDelta := excluded - numAcked
 		tr.backlogMgr.db.updateFairAckLevel(
-			tr.subqueue, tr.ackLevel, -numAcked, tr.knownCountLocked(), tr.backlogAge.oldestTime())
+			tr.subqueue, tr.ackLevel, countDelta, tr.knownCountForResetLocked(), tr.backlogAge.oldestTime())
 	}
 }
 
@@ -660,6 +669,7 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
 	tr.ackLevelPinnedByWriter = false
 	tr.advanceAckLevelLocked()
+	tr.maybeResetBacklogCountLocked()
 }
 
 func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
@@ -668,11 +678,28 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 	return tr.readLevel, tr.ackLevel
 }
 
-func (tr *fairTaskReader) knownCountLocked() int64 {
-	if tr.atEnd {
+// knownCountForResetLocked returns the backlog count if we know it, or -1 if we don't. The
+// caller must write a known count to the db: it excludes completed tasks above the ack level,
+// so this also records those in acksExcludedFromBacklog.
+func (tr *fairTaskReader) knownCountForResetLocked() int64 {
+	// Pending writes may have incremented the backlog count without being merged into
+	// outstandingTasks yet. Do not overwrite their increments with the reader's count.
+	if tr.atEnd && !tr.ackLevelPinnedLocked() {
+		tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
 		return int64(tr.loadedTasks)
 	}
 	return -1
+}
+
+func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
+	if count := tr.knownCountForResetLocked(); count >= 0 {
+		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
+	}
+}
+
+// completedTaskCountLocked counts known completions above the ack level, including evicted acks.
+func (tr *fairTaskReader) completedTaskCountLocked() int64 {
+	return int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
 }
 
 // gc
@@ -725,6 +752,7 @@ func (tr *fairTaskReader) doGCAt(ackLevel fairLevel) (int, error) {
 	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
 	if err != nil {
 		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+		tr.backlogMgr.signalIfFatal(err)
 	}
 	return n, err
 }

@@ -474,7 +474,7 @@ func (e *Engine) startNew(
 		return chasm.StartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -518,7 +518,7 @@ func (e *Engine) startAndUpdateNew(
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -550,6 +550,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
+		HandleNow: e.timeSource.Now,
 		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
@@ -566,6 +567,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			}
 		},
 		HandleGetCurrentVersion: func() int64 { return 1 },
+		// Always run the post-execution validation for scheduled pure tasks so that
+		// FirePureTasks surfaces a TaskNotInvalidatedError when a component fails to
+		// invalidate its task after a successful Execute. Nothing is DLQ'd in unit tests
+		// (there is no queue executor here); the error is returned for tests to assert on.
+		HandleChasmDLQScheduledPureTaskOnValidationEnabled: func() bool { return true },
 		HandleGetWorkflowKey: func() definition.WorkflowKey {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
@@ -603,7 +609,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,
@@ -619,8 +624,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 
 // closeTransaction closes the execution's transaction, commits its transition
 // count, and validates the resulting clean tree.
-func (e *Engine) closeTransaction(x *execution) error {
-	if _, err := x.node.CloseTransaction(); err != nil {
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
+	if _, err := x.node.CloseTransaction(ctx, true); err != nil {
 		return err
 	}
 	x.commitTransition()
@@ -678,7 +683,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(execution); err != nil {
+	if err = e.closeTransaction(ctx, execution); err != nil {
 		return nil, err
 	}
 	execution.recordRequestID(requestID)

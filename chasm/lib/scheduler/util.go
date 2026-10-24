@@ -66,6 +66,16 @@ const (
 // identical.
 const reasonNone metrics.ReasonString = "none"
 
+// Outcomes and reasons for ScheduleCallbackReattach. not_found synthesizes a
+// completion, so it is recorded distinctly from already_closed.
+const (
+	outcomeReattachAttached  = "attached"
+	outcomeReattachCompleted = "completed"
+
+	reasonReattachNotFound      metrics.ReasonString = "not_found"
+	reasonReattachAlreadyClosed metrics.ReasonString = "already_closed"
+)
+
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.
 // Immediate tasks (zero scheduled time) are always valid since they execute inline.

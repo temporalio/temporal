@@ -136,7 +136,7 @@ func TestSharedClusterPoison(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &FunctionalTestBase{}
+			s := &functionalTestBase{}
 			s.t = &sharedClusterT{name: t.Name()}
 			tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 			tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)

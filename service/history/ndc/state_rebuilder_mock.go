@@ -45,9 +45,9 @@ func (m *MockStateRebuilder) EXPECT() *MockStateRebuilderMockRecorder {
 }
 
 // Rebuild mocks base method.
-func (m *MockStateRebuilder) Rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string) (interfaces.MutableState, RebuildStats, error) {
+func (m *MockStateRebuilder) Rebuild(ctx context.Context, startTime time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string) (interfaces.MutableState, RebuildStats, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
+	ret := m.ctrl.Call(m, "Rebuild", ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
 	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(RebuildStats)
 	ret2, _ := ret[2].(error)
@@ -55,15 +55,15 @@ func (m *MockStateRebuilder) Rebuild(ctx context.Context, now time.Time, baseWor
 }
 
 // Rebuild indicates an expected call of Rebuild.
-func (mr *MockStateRebuilderMockRecorder) Rebuild(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID any) *gomock.Call {
+func (mr *MockStateRebuilderMockRecorder) Rebuild(ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rebuild", reflect.TypeOf((*MockStateRebuilder)(nil).Rebuild), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rebuild", reflect.TypeOf((*MockStateRebuilder)(nil).Rebuild), ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
 }
 
 // RebuildWithCurrentMutableState mocks base method.
-func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, currentMutableState *persistence.WorkflowMutableState) (interfaces.MutableState, RebuildStats, error) {
+func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context, startTime time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, currentMutableState *persistence.WorkflowMutableState) (interfaces.MutableState, RebuildStats, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RebuildWithCurrentMutableState", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState)
+	ret := m.ctrl.Call(m, "RebuildWithCurrentMutableState", ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState)
 	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(RebuildStats)
 	ret2, _ := ret[2].(error)
@@ -71,7 +71,7 @@ func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context,
 }
 
 // RebuildWithCurrentMutableState indicates an expected call of RebuildWithCurrentMutableState.
-func (mr *MockStateRebuilderMockRecorder) RebuildWithCurrentMutableState(ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState any) *gomock.Call {
+func (mr *MockStateRebuilderMockRecorder) RebuildWithCurrentMutableState(ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildWithCurrentMutableState", reflect.TypeOf((*MockStateRebuilder)(nil).RebuildWithCurrentMutableState), ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildWithCurrentMutableState", reflect.TypeOf((*MockStateRebuilder)(nil).RebuildWithCurrentMutableState), ctx, startTime, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, currentMutableState)
 }

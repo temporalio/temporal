@@ -22,6 +22,7 @@ type CapturedRecording struct {
 type Capture struct {
 	recordings     CaptureSnapshot
 	recordingsLock sync.RWMutex
+	filter         func(string, *CapturedRecording) bool
 }
 
 type CaptureSnapshot = map[string][]*CapturedRecording
@@ -37,7 +38,17 @@ func (c *Capture) Snapshot() CaptureSnapshot {
 	return ret
 }
 
+// SnapshotMetric returns a copy of the recordings for one metric.
+func (c *Capture) SnapshotMetric(name string) []*CapturedRecording {
+	c.recordingsLock.RLock()
+	defer c.recordingsLock.RUnlock()
+	return slices.Clone(c.recordings[name])
+}
+
 func (c *Capture) record(name string, r *CapturedRecording) {
+	if c.filter != nil && !c.filter(name, r) {
+		return
+	}
 	c.recordingsLock.Lock()
 	defer c.recordingsLock.Unlock()
 	c.recordings[name] = append(c.recordings[name], r)
@@ -65,7 +76,14 @@ func NewCaptureHandler() *CaptureHandler {
 // StartCapture returns a started capture. StopCapture should be called on
 // complete.
 func (c *CaptureHandler) StartCapture() *Capture {
-	capture := &Capture{recordings: make(CaptureSnapshot)}
+	return c.StartCaptureWithFilter(nil)
+}
+
+// StartCaptureWithFilter retains only recordings accepted by filter. A nil filter
+// accepts all recordings. The filter must be safe for concurrent calls and must
+// not call back into the handler. StopCapture should be called on completion.
+func (c *CaptureHandler) StartCaptureWithFilter(filter func(string, *CapturedRecording) bool) *Capture {
+	capture := &Capture{recordings: make(CaptureSnapshot), filter: filter}
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
 

@@ -112,7 +112,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          1,
+				TransitionCount:          3,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -147,6 +147,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -164,8 +165,8 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 	s.Equal(int32(TimerTaskStatusCreated), mutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
 
 	err = RefreshTasksForWorkflowStart(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		// TransitionCount is higher than workflow state's last update versioned transition,
-		// no task should be generated and no call to task generator should be made.
+		// The replicated range starts after the workflow-start transition. A later
+		// execution-state update must not regenerate workflow-start tasks.
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,
 	})
@@ -225,6 +226,7 @@ func (s *taskRefresherSuite) TestRefreshRecordWorkflowStartedTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -276,6 +278,10 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, false)
 	s.NoError(err)
+
+	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false, true).Return(nil)
+	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, true)
+	s.Require().NoError(err)
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		// TransitionCount is higher than workflow state's last update versioned transition,
@@ -1217,6 +1223,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,
@@ -1303,6 +1310,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,
@@ -1323,7 +1331,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
 			VisibilityLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          3,
+				TransitionCount:          1,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -1346,6 +1354,14 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 
 	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask().Return(nil).Times(1)
 
+	// Workflow start uses StartExecutionVisibilityTask and must not also produce an upsert.
+	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
+
+	mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		TransitionCount:          3,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	}
 	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,

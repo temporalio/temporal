@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
@@ -18,13 +19,29 @@ func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.
 	namespaceEntry := ctx.NamespaceEntry()
 	namespaceName := namespaceEntry.Name().String()
 	taskQueue := a.GetTaskQueue().GetName()
-	return metrics.GetPerTaskQueuePartitionTypeScope(
+	return withUnversionedWorkerDeploymentMetricTags(metrics.GetPerTaskQueuePartitionTypeScope(
 		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
 		namespaceName,
 		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
 			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
 			RootPartition(),
 		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	))
+}
+
+func eagerActivityMetricsHandler(
+	handler metrics.Handler,
+	config *Config,
+	request *workflowservice.StartActivityExecutionRequest,
+) metrics.Handler {
+	namespaceName := request.GetNamespace()
+	taskQueueName := request.GetTaskQueue().GetName()
+	return metrics.GetPerActivityEagerExecutionScope(
+		handler,
+		namespaceName,
+		taskQueueName,
+		config.BreakdownMetricsByTaskQueue(namespaceName, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		"StartActivityExecution",
 	)
 }
 
@@ -41,15 +58,29 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) m
 	actCtx := activityContextFromChasm(ctx)
 	breakdownMetricsByTaskQueue := actCtx.config.BreakdownMetricsByTaskQueue
 	taskQueueFamily := a.GetTaskQueue().GetName()
-	return metrics.GetPerTaskQueueFamilyScope(
+	return metrics.GetPerActivityScope(
 		ctx.MetricsHandler(),
 		namespaceName.String(),
 		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
 		breakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-		metrics.OperationTag(operation),
-		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
-		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-		metrics.WorkflowTypeTag(WorkflowTypeTag),
+		operation,
+		a.GetActivityType().GetName(),
+		WorkflowTypeTag,
+		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+	)
+}
+
+func (a *Activity) completionMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
+	return withUnversionedWorkerDeploymentMetricTags(a.enrichedMetricsHandler(ctx, operation))
+}
+
+func withUnversionedWorkerDeploymentMetricTags(handler metrics.Handler) metrics.Handler {
+	// TODO: Populate these labels when Standalone Activities support Worker Versioning.
+	// Until then, preserve label-key parity with Workflow Activity metrics so Prometheus does
+	// not reject samples emitted under the same metric names.
+	return handler.WithTags(
+		metrics.WorkerDeploymentNameTag("", false),
+		metrics.WorkerDeploymentBuildIDTag("", false),
 	)
 }
 

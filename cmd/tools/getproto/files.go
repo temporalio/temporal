@@ -21,6 +21,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	namespace "go.temporal.io/api/namespace/v1"
 	nexus "go.temporal.io/api/nexus/v1"
+	nexusoperation "go.temporal.io/api/nexusoperation/v1"
 	protocol "go.temporal.io/api/protocol/v1"
 	query "go.temporal.io/api/query/v1"
 	replication "go.temporal.io/api/replication/v1"
@@ -82,6 +83,7 @@ func init() {
 	importMap["temporal/api/history/v1/message.proto"] = history.File_temporal_api_history_v1_message_proto
 	importMap["temporal/api/namespace/v1/message.proto"] = namespace.File_temporal_api_namespace_v1_message_proto
 	importMap["temporal/api/nexus/v1/message.proto"] = nexus.File_temporal_api_nexus_v1_message_proto
+	importMap["temporal/api/nexusoperation/v1/message.proto"] = nexusoperation.File_temporal_api_nexusoperation_v1_message_proto
 	importMap["temporal/api/protocol/v1/message.proto"] = protocol.File_temporal_api_protocol_v1_message_proto
 	importMap["temporal/api/query/v1/message.proto"] = query.File_temporal_api_query_v1_message_proto
 	importMap["temporal/api/replication/v1/message.proto"] = replication.File_temporal_api_replication_v1_message_proto

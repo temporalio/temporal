@@ -19,6 +19,7 @@ var (
 	MalformedSqlQueryErrMessage = "malformed SQL query"
 	NotSupportedErrMessage      = "operation is not supported"
 	InvalidExpressionErrMessage = "invalid expression"
+	InvalidSearchAttribute      = "invalid search attribute"
 )
 
 func NewConverterError(format string, a ...any) error {

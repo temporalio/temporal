@@ -38,7 +38,7 @@ type (
 		GenerateWorkflowCloseTasks(
 			closedTime time.Time,
 			deleteAfterClose bool,
-			skipCloseTransferTask bool,
+			skipParentVerification bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
 		// This task is used to delete the history events of the workflow execution after the retention period expires.
@@ -196,30 +196,20 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
-	skipCloseTransferTask bool,
+	skipParentVerification bool,
 ) error {
 	closeVersion, err := r.mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
 
-	var closeTasks []tasks.Task
-
-	if !skipCloseTransferTask {
-		closeExecutionTask := &tasks.CloseExecutionTask{
-			// TaskID, Visiblitytimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			Version:          closeVersion,
-			DeleteAfterClose: deleteAfterClose,
-		}
-		closeTasks = append(closeTasks, closeExecutionTask)
-	} else {
-		r.logger.Info("Skipping close transfer task generation - already acked on active cluster",
-			tag.WorkflowNamespaceID(r.mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(r.mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(r.mutableState.GetExecutionState().GetRunId()),
-		)
-	}
+	closeTasks := []tasks.Task{&tasks.CloseExecutionTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:            r.mutableState.GetWorkflowKey(),
+		Version:                closeVersion,
+		DeleteAfterClose:       deleteAfterClose,
+		SkipParentVerification: skipParentVerification,
+	}}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
 	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
@@ -827,9 +817,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         nextEventID,
-				TaskEquivalents:     taskEquivalents,
-				TargetClusters:      targetClusters,
-				IsForceReplication:  true,
+				CurrentVersionHistory: &historyspb.VersionHistory{
+					Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+				},
+				TaskEquivalents:    taskEquivalents,
+				TargetClusters:     targetClusters,
+				IsForceReplication: true,
 			}}, 1, nil
 		}
 		if !isWorkflow {
@@ -889,9 +882,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         nextEventID,
-			TaskEquivalents:     taskEquivalents,
-			TargetClusters:      targetClusters,
-			IsForceReplication:  true,
+			CurrentVersionHistory: &historyspb.VersionHistory{
+				Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+			},
+			TaskEquivalents:    taskEquivalents,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		}}, 1, nil
 	}
 	if !isWorkflow {
@@ -1166,7 +1162,7 @@ func (r *TaskGeneratorImpl) GenerateTimeSkippingFastForwardTimerTask() error {
 	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
 		return nil
 	}
-	r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+	r.mutableState.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),

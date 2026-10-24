@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -740,17 +739,47 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 }
 
 // TestPollWorkerCommandsWithDeploymentOptions verifies that cancel commands are delivered
-// when the worker commands poller has DeploymentOptions set in versioned mode.
-// EnableDeploymentVersions is disabled to skip deployment workflow registration in the
-// physical queue layer, which is orthogonal to the versioning skip in the partition manager.
+// when the worker commands poller has DeploymentOptions set in versioned mode, and that
+// the worker commands TQ is NOT registered in the deployment version.
 func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() {
 	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("deployment version registration"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	tv := env.Tv()
+	tv := env.Tv().
+		WithTaskQueue("worker-commands-tq").
+		WithDeploymentSeries("worker-commands-deployment").
+		WithBuildID("worker-commands-build")
 	poller := env.TaskPoller()
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+	deploymentOptions := tv.WorkerDeploymentOptions(true)
+
+	// Poll workflow TQ with deployment options to register the deployment version.
+	wfPollCtx, wfPollCancel := context.WithCancel(s.Context())
+	defer wfPollCancel()
+	go func() {
+		_, _ = env.FrontendClient().PollWorkflowTaskQueue(wfPollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         env.Namespace().String(),
+			TaskQueue:         tv.TaskQueue(),
+			Identity:          tv.WorkerIdentity(),
+			DeploymentOptions: deploymentOptions,
+		})
+	}()
+
+	// Wait for the deployment version to be created.
+	s.Awaitf(func(s *WorkerCommandsTaskSuite) {
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace:         env.Namespace().String(),
+			DeploymentVersion: tv.ExternalDeploymentVersion(),
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+	}, 30*time.Second, 500*time.Millisecond, "Timed out waiting for deployment version to be created")
+	wfPollCancel()
 
 	activityPollResp := s.startWorkflowAndCancelActivity(env, tv, poller, controlQueueName)
 
@@ -760,14 +789,10 @@ func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() 
 		pollCtx, pollCancel := context.WithTimeout(s.Context(), 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
-			Identity:  tv.WorkerIdentity(),
-			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-				DeploymentName:       "test-deployment",
-				BuildId:              "test-build-1",
-				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-			},
+			Namespace:         env.Namespace().String(),
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:          tv.WorkerIdentity(),
+			DeploymentOptions: deploymentOptions,
 		})
 		s.NoError(err)
 		s.NotNil(resp)
@@ -776,6 +801,19 @@ func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() 
 	}, 120*time.Second, 100*time.Millisecond, "Timed out waiting for cancel command")
 
 	s.verifyCancelCommand(nexusPollResp, activityPollResp.TaskToken)
+
+	// Verify the normal TQ is registered but the worker commands TQ is not.
+	descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace:         env.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+	})
+	s.NoError(err)
+	tqNames := make([]string, 0, len(descResp.GetVersionTaskQueues()))
+	for _, tq := range descResp.GetVersionTaskQueues() {
+		tqNames = append(tqNames, tq.GetName())
+	}
+	s.Contains(tqNames, tv.TaskQueue().GetName(), "normal TQ should be registered in the deployment version")
+	s.NotContains(tqNames, controlQueueName, "worker commands TQ should NOT be registered in the deployment version")
 }
 
 // TestPollWorkerCommandsWithWorkerVersionCapabilities verifies that cancel commands are

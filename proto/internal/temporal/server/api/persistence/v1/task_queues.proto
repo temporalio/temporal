@@ -125,7 +125,8 @@ message TaskQueueTypeUserData {
 
   temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
 
-  temporal.server.api.enums.v1.FairnessState fairness_state = 3;
+  // Deprecated. Retained for compatibility with older servers during rolling upgrades.
+  temporal.server.api.enums.v1.FairnessState fairness_state = 3 [deprecated = true];
 }
 
 // Container for all persistent user provided data for a task queue family.

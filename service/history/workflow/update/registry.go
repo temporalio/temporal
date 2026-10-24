@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
@@ -70,6 +71,27 @@ type (
 
 		// Len observes the number of incomplete (not completed or rejected) Updates in this Registry.
 		Len() int
+
+		// InFlightCallbacks returns every set of completion callbacks held by an Update that is
+		// admitted but not yet accepted: its original request's callbacks, and any
+		// buffered by AttachCallbacks while it was with the worker.
+		//
+		// These callbacks are not yet persisted, so they are missing from the execution's
+		// persisted callback totals, yet they will be persisted if the Update is accepted. By
+		// then the worker has already accepted the Update and run its handler, so they are
+		// attached without further checks. Admission therefore reserves them against the limits,
+		// so that concurrent Updates cannot each pass admission and then jointly exceed them.
+		//
+		// Holding this in memory is sound for the same reason the Registry itself is. An execution
+		// is owned by a single history host at a time, and every Update to it is admitted under
+		// the workflow lock, so no other host or request can admit a competing Update concurrently.
+		// Whenever the Registry is lost (shard movement, cache eviction, failover) its in-flight
+		// Updates are aborted along with it and are re-admitted on retry, against persisted state.
+		//
+		// Accepted Updates are excluded, including those provisionally accepted in the current
+		// transaction: applying the accepted event already added their callbacks to the persisted
+		// totals, and counting them here as well would double count them.
+		InFlightCallbacks() ([]chasmworkflow.CallbackAddition, error)
 
 		// GetSize returns approximate size of the Registry in bytes.
 		GetSize() int
@@ -201,6 +223,7 @@ func NewRegistry(
 				nil,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			u := newAccepted(
@@ -208,6 +231,7 @@ func NewRegistry(
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
 				// If the Workflow is completed, accepted Update will never be completed
@@ -274,7 +298,9 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		reqAny,
 		r.remover(updateID),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(reqMsg.GetPropagatedNexusSerializationContext()),
 	)
+	upd.originalReqID = reqMsg.RequestId
 	r.updates[updateID] = upd
 
 	return upd, nil
@@ -366,6 +392,18 @@ func (r *registry) Clear() {
 
 func (r *registry) Len() int {
 	return len(r.updates)
+}
+
+func (r *registry) InFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
+	var inFlight []chasmworkflow.CallbackAddition
+	for _, upd := range r.updates {
+		updInFlight, err := upd.inFlightCallbacks()
+		if err != nil {
+			return nil, err
+		}
+		inFlight = append(inFlight, updInFlight...)
+	}
+	return inFlight, nil
 }
 
 // remover is called when an Update gets into a terminal state (completed or rejected).
@@ -470,12 +508,18 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
+	acceptedEventID := common.EmptyEventID
+	if err == nil {
+		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.
 	return newCompleted(
 		id,
+		acceptedEventID,
 		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(r.store.GetUpdateNexusSerializationContext(id)),
 	)
 }
 

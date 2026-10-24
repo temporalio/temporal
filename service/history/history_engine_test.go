@@ -18,6 +18,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -56,11 +58,12 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -83,6 +86,21 @@ import (
 const (
 	esIndexName = ""
 )
+
+func TestWithWorkflowResendScheduler(t *testing.T) {
+	scheduler := workflowresend.NewBoundedWorkflowScheduler(
+		func() int { return 1 },
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	t.Cleanup(func() {
+		scheduler.InitiateShutdown()
+		scheduler.WaitShutdown()
+	})
+
+	options := applyEngineOptions([]EngineOption{WithWorkflowResendScheduler(scheduler)})
+	require.Same(t, scheduler, options.workflowResendScheduler)
+}
 
 type (
 	engineSuite struct {
@@ -168,7 +186,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	s.eventsCache = events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
@@ -5543,6 +5561,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(),
 	).Return(nil)
@@ -5559,6 +5578,11 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
@@ -5576,13 +5600,14 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowId:            "test",
-				Namespace:             tests.Namespace.String(),
-				WorkflowType:          &commonpb.WorkflowType{Name: "test"},
-				TaskQueue:             &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
-				Identity:              "test",
-				RequestId:             "test",
-				RequestEagerExecution: true,
+				WorkflowId:                          "test",
+				Namespace:                           tests.Namespace.String(),
+				WorkflowType:                        &commonpb.WorkflowType{Name: "test"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
+				Identity:                            "test",
+				RequestId:                           "test",
+				RequestEagerExecution:               true,
+				PropagatedNexusSerializationContext: serializationContext,
 			},
 		})
 		return response, err
@@ -5756,6 +5781,11 @@ func (s *engineSuite) TestGetHistory() {
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 	newRunID := uuid.NewString()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5785,12 +5815,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		},
 		NextEventId: 6,
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId:         tests.NamespaceID.String(),
-			WorkflowId:          we.WorkflowId,
-			VersionHistories:    versionHistories,
-			WorkflowTypeName:    "mytype",
-			LastFirstEventId:    5,
-			LastFirstEventTxnId: 100,
+			NamespaceId:                         tests.NamespaceID.String(),
+			WorkflowId:                          we.WorkflowId,
+			VersionHistories:                    versionHistories,
+			WorkflowTypeName:                    "mytype",
+			LastFirstEventId:                    5,
+			LastFirstEventTxnId:                 100,
+			PropagatedNexusSerializationContext: serializationContext,
 		},
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
@@ -5842,6 +5873,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
+	s.ProtoEqual(serializationContext, resp.Response.GetPropagatedNexusSerializationContext())
 	event := resp.Response.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
@@ -5857,6 +5889,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
+	s.ProtoEqual(serializationContext, resp.Response.GetPropagatedNexusSerializationContext())
 	event = resp.Response.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
@@ -7045,6 +7078,37 @@ func (s *engineSuite) mockExecutionWithForeignBranchToken(
 	foreignBranchToken, err := branchUtil.NewHistoryBranch(
 		tests.NamespaceID.String(), we.WorkflowId, we.RunId, treeID, &foreignBranchID, nil, 0, 0, 0)
 	s.NoError(err)
+	s.mockExecutionWithCurrentBranchToken(we, ownedBranchToken)
+
+	return ownedBranchToken, foreignBranchToken
+}
+
+func (s *engineSuite) mockExecutionWithRewrittenBranchToken(
+	we *commonpb.WorkflowExecution,
+) (currentToken []byte, previousToken []byte) {
+	branchUtil := persistence.NewHistoryBranchUtil(serialization.NewSerializer())
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
+
+	currentBranchToken, err := branchUtil.NewHistoryBranch(
+		tests.NamespaceID.String(), we.WorkflowId, we.RunId, treeID, &branchID, nil, 0, 0, 0)
+	s.NoError(err)
+	previousBranchToken, err := branchUtil.NewHistoryBranch(
+		tests.NamespaceID.String(), we.WorkflowId, we.RunId, treeID, &branchID,
+		[]*persistencespb.HistoryBranchRange{{BranchId: uuid.NewString(), BeginNodeId: 1, EndNodeId: 2}}, 0, 0, 0)
+	s.NoError(err)
+	s.mockExecutionWithCurrentBranchToken(we, currentBranchToken)
+
+	return currentBranchToken, previousBranchToken
+}
+
+func (s *engineSuite) mockExecutionWithCurrentBranchToken(
+	we *commonpb.WorkflowExecution,
+	currentBranchToken []byte,
+) {
+	s.mockExecutionMgr.EXPECT().GetHistoryBranchUtil().Return(
+		persistence.NewHistoryBranchUtil(serialization.NewSerializer()),
+	).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistencespb.WorkflowMutableState{
@@ -7057,11 +7121,16 @@ func (s *engineSuite) mockExecutionWithForeignBranchToken(
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  we.WorkflowId,
+				PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "operation",
+				},
 				VersionHistories: &historyspb.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
 						{
-							BranchToken: ownedBranchToken,
+							BranchToken: currentBranchToken,
 							Items: []*historyspb.VersionHistoryItem{
 								{EventId: 4, Version: 0},
 							},
@@ -7072,8 +7141,6 @@ func (s *engineSuite) mockExecutionWithForeignBranchToken(
 		},
 		MutableStateStats: persistence.MutableStateStatistics{},
 	}, nil).AnyTimes()
-
-	return ownedBranchToken, foreignBranchToken
 }
 
 func (s *engineSuite) getHistoryRequestWithPageToken(
@@ -7082,7 +7149,7 @@ func (s *engineSuite) getHistoryRequestWithPageToken(
 	waitNewEvent bool,
 ) *historyservice.GetWorkflowExecutionHistoryRequest {
 	nextPageToken, err := api.SerializeHistoryToken(continuation)
-	s.NoError(err)
+	s.Require().NoError(err)
 	return &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -7109,6 +7176,29 @@ func (s *engineSuite) expectHistoryReadWithBranchToken(branchToken []byte) {
 	).MinTimes(1)
 }
 
+func (s *engineSuite) expectRawHistoryReadWithBranchToken(branchToken []byte) {
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.ReadHistoryBranchRequest) (*persistence.ReadRawHistoryBranchResponse, error) {
+			s.Equal(branchToken, request.BranchToken)
+			return &persistence.ReadRawHistoryBranchResponse{}, nil
+		},
+	).MinTimes(1)
+}
+
+func (s *engineSuite) expectReverseHistoryReadWithBranchToken(branchToken []byte) {
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchReverse(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.ReadHistoryBranchReverseRequest) (*persistence.ReadHistoryBranchReverseResponse, error) {
+			s.Equal(branchToken, request.BranchToken)
+			s.Equal([]byte("some random persistence token"), request.NextPageToken)
+			return &persistence.ReadHistoryBranchReverseResponse{}, nil
+		},
+	)
+}
+
 func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecution() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid-foreign-branch", RunId: uuid.NewString()}
 
@@ -7133,8 +7223,10 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecu
 	for _, sendRawHistory := range []bool{false, true} {
 		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
 		_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
-		var branchErr *serviceerrors.CurrentBranchChanged
-		s.ErrorAs(err, &branchErr, "sendRawHistory=%v", sendRawHistory)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.Require().ErrorAs(err, &invalidArgument, "sendRawHistory=%v", sendRawHistory)
+		s.Require().Equal("request branchToken is not current.", err.Error())
+		s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
 	}
 }
 
@@ -7159,7 +7251,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_ForeignBranchTokenServedWh
 	} {
 		s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(tc.validation)
 		s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(tc.shadow)
-		_, err = engine.GetWorkflowExecutionHistory(
+		resp, err := engine.GetWorkflowExecutionHistory(
 			context.Background(),
 			s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
 				RunId:             we.GetRunId(),
@@ -7170,7 +7262,120 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_ForeignBranchTokenServedWh
 				IsWorkflowRunning: true,
 			}, false),
 		)
-		s.NoError(err, tc.name)
+		s.Require().NoError(err, tc.name)
+		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}, resp.Response.GetPropagatedNexusSerializationContext())
+	}
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenUsesCurrentToken() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
+	currentBranchToken, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+	s.expectHistoryReadWithBranchToken(currentBranchToken)
+	s.expectRawHistoryReadWithBranchToken(currentBranchToken)
+
+	for _, sendRawHistory := range []bool{false, true} {
+		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
+
+		_, err = engine.GetWorkflowExecutionHistory(
+			context.Background(),
+			s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+				RunId:             we.GetRunId(),
+				FirstEventId:      common.FirstEventID,
+				NextEventId:       5,
+				PersistenceToken:  []byte("some random persistence token"),
+				BranchToken:       previousBranchToken,
+				IsWorkflowRunning: true,
+			}, false),
+		)
+		s.Require().NoError(err, "sendRawHistory=%v", sendRawHistory)
+	}
+	recordings := capture.Snapshot()[metrics.PaginationTokenBranchMismatchCounter.Name()]
+	s.Require().Len(recordings, 2)
+	for _, recording := range recordings {
+		s.Equal("same_branch_metadata_mismatch", recording.Tags[metrics.ReasonTag("").Key])
+	}
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenRejectedWhenReplacementDisabled() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch-rejected", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(false)
+	_, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err = engine.GetWorkflowExecutionHistory(
+		context.Background(),
+		s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+			RunId:             we.GetRunId(),
+			FirstEventId:      common.FirstEventID,
+			NextEventId:       5,
+			PersistenceToken:  []byte("some random persistence token"),
+			BranchToken:       previousBranchToken,
+			IsWorkflowRunning: true,
+		}, false),
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenPreservedInShadowMode() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch-shadow", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
+	_, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+	s.expectHistoryReadWithBranchToken(previousBranchToken)
+	s.expectRawHistoryReadWithBranchToken(previousBranchToken)
+
+	for _, sendRawHistory := range []bool{false, true} {
+		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
+		_, err = engine.GetWorkflowExecutionHistory(
+			context.Background(),
+			s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+				RunId:             we.GetRunId(),
+				FirstEventId:      common.FirstEventID,
+				NextEventId:       5,
+				PersistenceToken:  []byte("some random persistence token"),
+				BranchToken:       previousBranchToken,
+				IsWorkflowRunning: true,
+			}, false),
+		)
+		s.Require().NoError(err, "sendRawHistory=%v", sendRawHistory)
+	}
+	recordings := capture.Snapshot()[metrics.PaginationTokenBranchMismatchCounter.Name()]
+	s.Require().Len(recordings, 2)
+	for _, recording := range recordings {
+		s.Equal("same_branch_metadata_mismatch", recording.Tags[metrics.ReasonTag("").Key])
 	}
 }
 
@@ -7196,8 +7401,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_LongPollDiscardsRequestBra
 		IsWorkflowRunning: true,
 	}, true)
 
-	_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
-	s.NoError(err)
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	s.Require().NoError(err)
+	s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}, resp.Response.GetPropagatedNexusSerializationContext())
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwnedByExecution() {
@@ -7232,6 +7442,78 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwned
 			},
 		},
 	)
-	var branchErr *serviceerrors.CurrentBranchChanged
-	s.ErrorAs(err, &branchErr)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+	s.Require().Equal("request branchToken is not current.", err.Error())
+	s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_RewrittenBranchTokenUsesCurrentToken() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch-reverse", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
+	currentBranchToken, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+	s.expectReverseHistoryReadWithBranchToken(currentBranchToken)
+
+	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: []byte("some random persistence token"),
+		BranchToken:      previousBranchToken,
+	})
+	s.Require().NoError(err)
+
+	_, err = engine.GetWorkflowExecutionHistoryReverse(
+		context.Background(),
+		&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+				Execution:       &we,
+				MaximumPageSize: 10,
+				NextPageToken:   nextPageToken,
+			},
+		},
+	)
+	s.Require().NoError(err)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_RewrittenBranchTokenPreservedInShadowMode() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch-reverse-shadow", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
+	_, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+	s.expectReverseHistoryReadWithBranchToken(previousBranchToken)
+
+	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: []byte("some random persistence token"),
+		BranchToken:      previousBranchToken,
+	})
+	s.Require().NoError(err)
+
+	_, err = engine.GetWorkflowExecutionHistoryReverse(
+		context.Background(),
+		&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+				Execution:       &we,
+				MaximumPageSize: 10,
+				NextPageToken:   nextPageToken,
+			},
+		},
+	)
+	s.Require().NoError(err)
 }

@@ -4,11 +4,15 @@ import (
 	"fmt"
 
 	"github.com/sony/gobreaker"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
+	hsmcallbacks "go.temporal.io/server/service/history/hsm/callbacks"
+	hsmnexus "go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
@@ -60,15 +64,28 @@ func OutboundQueueCircuitBreakerPoolProvider(
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
-	logger log.SnTaggedLogger,
+	logger log.Logger,
 ) func(name string, from gobreaker.State, to gobreaker.State) {
+	logger = log.With(
+		logger,
+		tag.ComponentOutboundQueue,
+		tag.WorkflowNamespace(nsName),
+		tag.WorkflowNamespaceID(key.NamespaceID),
+		tag.Destination(key.Destination),
+		tag.NewStringTag("task-group", key.TaskGroup),
+	)
+
+	switch key.TaskGroup {
+	case chasmnexus.TaskGroupName, hsmnexus.TaskTypeInvocation, hsmnexus.TaskTypeCancelation:
+		logger = log.With(logger, tag.NexusStageCallerOutbound)
+	case hsmcallbacks.TaskTypeInvocation, chasmcallback.InvocationTaskGroup:
+		logger = log.With(logger, tag.NexusStageHandlerOutbound)
+	default:
+	}
+
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
 		logger.Warn(
 			"outbound queue circuit breaker state change",
-			tag.WorkflowNamespace(nsName),
-			tag.WorkflowNamespaceID(key.NamespaceID),
-			tag.Destination(key.Destination),
-			tag.NewStringTag("task-group", key.TaskGroup),
 			tag.NewStringTag("from-state", from.String()),
 			tag.NewStringTag("to-state", to.String()),
 		)

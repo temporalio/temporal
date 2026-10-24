@@ -34,21 +34,33 @@ func (c *GradualChange[T]) Value(key []byte, now time.Time) T {
 		return c.New
 	} else if !now.After(c.Start) {
 		return c.Old
-	}
-	fraction := float64(now.Sub(c.Start)) / float64(c.End.Sub(c.Start))
-	threshold := uint32(fraction * float64(math.MaxUint32))
-	if farm.Fingerprint32(key) < threshold {
+	} else if !now.Before(c.switchTime(key)) {
 		return c.New
 	}
 	return c.Old
 }
 
 // When returns the time when the value for key will switch from old to new. It may be the zero
-// time for a static GradualChange.
+// time for a static GradualChange. Value is guaranteed to return New at (and after) this time,
+// so a timer set for this time can rely on observing the new value when it fires.
 func (c *GradualChange[T]) When(key []byte) time.Time {
-	fraction := float64(farm.Fingerprint32(key)) / float64(math.MaxUint32)
-	when := time.Duration(fraction * float64(c.End.Sub(c.Start)))
-	return c.Start.Add(when)
+	return c.switchTime(key)
+}
+
+// switchTime returns the time at which the value for key switches from Old to New. Switch times
+// are distributed uniformly over (Start, End] based on a fingerprint of the key. Both Value and
+// When derive the transition from this single computation so that they can never disagree about
+// whether a key has switched at a given time.
+func (c *GradualChange[T]) switchTime(key []byte) time.Time {
+	window := c.End.Sub(c.Start)
+	if window <= 0 {
+		return c.End
+	}
+	// Use fingerprint+1 and Ceil so the switch time is strictly after Start (Value returns Old
+	// at Start), and cap the offset at the window so it never exceeds End.
+	fraction := (float64(farm.Fingerprint32(key)) + 1) / float64(math.MaxUint32)
+	offset := time.Duration(math.Ceil(fraction * float64(window)))
+	return c.Start.Add(min(offset, window))
 }
 
 // ConvertGradualChange is a conversion function that can handle a plain T (which represents a

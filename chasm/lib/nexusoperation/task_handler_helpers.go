@@ -141,7 +141,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 // Always returns a non-nil failure.
 func callErrorToFailure(callErr error) (*failurepb.Failure, bool, error) {
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -233,7 +233,7 @@ func newInvocationResult(
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -270,11 +270,12 @@ func newInvocationResult(
 	}
 
 	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
-		failure, err := operationErrorToFailure(opErr)
+		failure, err := commonnexus.OperationErrorToTemporalFailure(opErr)
 		if err != nil {
 			return nil, err
 		}
 		if opErr.State == nexus.OperationStateCanceled {
+			failure = commonnexus.CoerceToCanceledFailure(failure)
 			return invocationResultCancel{failure: failure}, nil
 		}
 		return invocationResultFail{failure: failure}, nil
@@ -309,22 +310,7 @@ func newInvocationResult(
 	return invocationResultRetry{failure: failure}, nil
 }
 
-func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
-	var nf nexus.Failure
-	if opErr.OriginalFailure != nil {
-		nf = *opErr.OriginalFailure
-	} else {
-		var err error
-		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(&nf))
-}
-
 func buildCallbackURL(
-	useSystemCallback bool,
 	callbackTemplate *template.Template,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
@@ -333,9 +319,6 @@ func buildCallbackURL(
 		return commonnexus.SystemCallbackURL, nil
 	}
 	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !useSystemCallback {
-		return buildCallbackFromTemplate(callbackTemplate, ns)
-	}
 	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		return commonnexus.SystemCallbackURL, nil

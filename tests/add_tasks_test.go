@@ -16,7 +16,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/tasks"
@@ -88,7 +87,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.NoError(err)
 
 			// Get the task that we skipped, and add it back
-			task := await.Rcv(s.T(), skippedTasks)
+			task := s.Rcv(skippedTasks)
 
 			shouldSkip.Store(false)
 			blob, err := serialization.NewSerializer().SerializeTask(task)

@@ -90,7 +90,7 @@ func newNexusCompletionHandler(
 	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
-		Logger:                               logger,
+		Logger:                               log.With(logger, tag.NexusStageCallerInbound),
 		MetricsHandler:                       metricsHandler,
 		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,
@@ -110,11 +110,11 @@ func newNexusCompletionHandler(
 	}
 }
 
-func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler, logger log.Logger) *nexusCompletionHTTPHandler {
+func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusCompletionHTTPHandler {
 	return &nexusCompletionHTTPHandler{
 		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 			Handler:    handler,
-			Logger:     log.NewSlogLogger(logger),
+			Logger:     log.NewSlogLogger(handler.Logger),
 			Serializer: commonnexus.PayloadSerializer,
 		}),
 	}
@@ -222,7 +222,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
-			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request")
+			logger.Warn("payload size exceeds error limit")
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		successPayload = result
@@ -381,6 +381,10 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
+		}
+		// A canceled completion must carry CanceledFailureInfo so that it is recorded as canceled instead of failed.
+		if req.State == nexus.OperationStateCanceled {
+			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,

@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -1589,14 +1590,14 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	// Cancel the context before the transaction has finished.
 	cancel()
 
+	// database/sql rolls back asynchronously on cancel, so Commit may observe either error.
 	err = tx.Commit()
-	assert.ErrorIs(t, err, context.Canceled)
+	require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, gosql.ErrTxDone), "unexpected error: %v", err)
 
 	// Check if we still have a connection to the db.
 	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{
 		RangeHash:   0,
 		TaskQueueID: []byte("test-queue"),
 	}, sqlplugin.MatchingTaskVersion1)
-	assert.NotContains(t, err.Error(), "no such table")
-	assert.ErrorAs(t, err, &gosql.ErrNoRows)
+	require.ErrorIs(t, err, gosql.ErrNoRows)
 }

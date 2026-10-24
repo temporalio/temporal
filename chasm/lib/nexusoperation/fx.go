@@ -21,15 +21,17 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/httpfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
-
-const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
+	fx.Provide(linkValidatorProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
@@ -50,6 +52,7 @@ var Module = fx.Module(
 var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
 	fx.Provide(configProvider),
+	fx.Provide(linkValidatorProvider),
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(newComponentOnlyLibrary),
@@ -126,6 +129,7 @@ func clientProviderFactory(
 	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	testHooks testhooks.TestHooks,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -136,6 +140,7 @@ func clientProviderFactory(
 	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 		clusterID = clusterInfo.ClusterID
 	}
+	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
@@ -147,8 +152,6 @@ func clientProviderFactory(
 		var url string
 		var targetNamespaceID string
 		var httpClient *http.Client
-		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
-		needsCallbackSourceHeader := false
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -160,7 +163,6 @@ func clientProviderFactory(
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
-			needsCallbackSourceHeader = true
 			targetNamespaceID = variant.Worker.GetNamespaceId()
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
@@ -169,9 +171,6 @@ func clientProviderFactory(
 		httpCaller := httpClient.Do
 		if clusterID != "" {
 			httpCaller = func(r *http.Request) (*http.Response, error) {
-				if needsCallbackSourceHeader {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
-				}
 				resp, callErr := httpClient.Do(r)
 				// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
 				commonnexus.SetFailureSourceOnContext(ctx, resp)
@@ -194,6 +193,11 @@ func clientProviderFactory(
 				return baseHTTPCaller(r)
 			}
 		}
+		httpCaller = httpfaults.Wrap(
+			httpFaultGenerator,
+			httpfaults.Scope{NamespaceID: namespace.ID(namespaceID)},
+			httpCaller,
+		)
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,

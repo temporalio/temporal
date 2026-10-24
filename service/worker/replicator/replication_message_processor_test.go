@@ -15,16 +15,22 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -153,6 +159,10 @@ func TestHandleNamespaceReplicationTaskCountsRetries(t *testing.T) {
 
 func TestHandleNamespaceReplicationTaskEmitsDLQed(t *testing.T) {
 	p, task, executor, queue, eventLogger := newReplicationEventTestProcessor(t, true, 1)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.metricsHandler = metricsHandler
+	p.applyOutcomeMetricsHandler = metricsHandler
 	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).Return(serviceerror.NewInvalidArgument("bad task"))
 	queue.EXPECT().PublishToDLQ(gomock.Any(), task).Return(nil)
 
@@ -162,21 +172,195 @@ func TestHandleNamespaceReplicationTaskEmitsDLQed(t *testing.T) {
 	require.InDelta(t, float64(1), dlqed["attempt_count"], 0)
 	require.Equal(t, "bad task", dlqed["error"])
 	require.NotContains(t, dlqed, "persistence_request")
+	recordings := capture.Snapshot()[metrics.ReplicatorFailures.Name()]
+	require.Len(t, recordings, 1)
+	taskTypeTag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	require.Equal(t, taskTypeTag.Value, recordings[0].Tags[taskTypeTag.Key])
+	terminalFailures := capture.Snapshot()[metrics.NamespaceReplicationApplyOutcomes.Name()]
+	require.Len(t, terminalFailures, 1)
+	require.Equal(t, "terminal_failure", terminalFailures[0].Tags[metrics.OutcomeTag("").Key])
+	require.Equal(t, "update", terminalFailures[0].Tags[metrics.OperationTag("").Key])
+	require.Equal(t, nsreplication.LegacyMetricsTransport, terminalFailures[0].Tags[metrics.TransportTag("").Key])
+	require.Len(t, capture.Snapshot()[metrics.NamespaceReplicationApplyEndToEndLatency.Name()], 1)
+}
+
+func TestHandleNamespaceReplicationTaskDLQFailureDoesNotEmitTerminalOutcome(t *testing.T) {
+	p, task, executor, queue, _ := newReplicationEventTestProcessor(t, false, 1)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.metricsHandler = metricsHandler
+	p.applyOutcomeMetricsHandler = metricsHandler
+	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).Return(serviceerror.NewInvalidArgument("bad task"))
+	queue.EXPECT().PublishToDLQ(gomock.Any(), task).Return(serviceerror.NewInvalidArgument("dlq unavailable"))
+
+	p.handleReplicationTasks()
+
+	require.Empty(t, capture.Snapshot()[metrics.NamespaceReplicationApplyOutcomes.Name()])
+	require.Empty(t, capture.Snapshot()[metrics.NamespaceReplicationApplyEndToEndLatency.Name()])
+}
+
+func TestHandleTaskQueueUserDataDLQEmitsTerminalOutcome(t *testing.T) {
+	p, task, _, queue, _ := newReplicationEventTestProcessor(t, false, 1)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.metricsHandler = metricsHandler
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	p.matchingClient = matchingClient
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	ns := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
+	)
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
+	matchingClient.EXPECT().ApplyTaskQueueUserDataReplicationEvent(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInvalidArgument("bad task queue data"))
+	queue.EXPECT().PublishToDLQ(gomock.Any(), task).Return(nil)
+
+	p.handleReplicationTasks()
+
+	require.Empty(t, capture.Snapshot()[metrics.NamespaceReplicationApplyOutcomes.Name()])
+	require.Empty(t, capture.Snapshot()[metrics.NamespaceReplicationApplyEndToEndLatency.Name()])
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeTerminalFailure, outcomes[0].Tags[metrics.OutcomeTag("").Key])
+	require.Equal(t, "namespace-id", outcomes[0].Tags[metrics.NamespaceIDTag("").Key])
+	require.Equal(t, "cluster-a", outcomes[0].Tags[metrics.SourceClusterTag("").Key])
+	require.Equal(t, "cluster-b", outcomes[0].Tags[metrics.TargetClusterTag("").Key])
+	require.Equal(t, nsreplication.LegacyMetricsTransport, outcomes[0].Tags[metrics.TransportTag("").Key])
+	latencies := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyEndToEndLatency.Name()]
+	require.Len(t, latencies, 1)
+	require.NotContains(t, latencies[0].Tags, metrics.NamespaceIDTag("").Key)
+}
+
+func TestHandleTaskQueueUserDataAppliedOutcome(t *testing.T) {
+	p, task, _, _, _ := newReplicationEventTestProcessor(t, false, 2)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	p.matchingClient = matchingClient
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	ns := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
+	)
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
+	gomock.InOrder(
+		matchingClient.EXPECT().ApplyTaskQueueUserDataReplicationEvent(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewUnavailable("retry")),
+		matchingClient.EXPECT().ApplyTaskQueueUserDataReplicationEvent(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, nil),
+	)
+
+	p.handleReplicationTasks()
+
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeApplied, outcomes[0].Tags[metrics.OutcomeTag("").Key])
+	require.Len(t, capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyEndToEndLatency.Name()], 1)
+}
+
+func TestHandleTaskQueueUserDataNotAdmittedOutcome(t *testing.T) {
+	p, task, _, _, _ := newReplicationEventTestProcessor(t, false, 1)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).
+		Return(nil, serviceerror.NewNamespaceNotFound("namespace-id"))
+
+	p.handleReplicationTasks()
+
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
+	require.Len(t, capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyEndToEndLatency.Name()], 1)
+}
+
+func TestHandleTaskQueueUserDataLocalNamespaceNotAdmitted(t *testing.T) {
+	p, task, _, _, _ := newReplicationEventTestProcessor(t, false, 1)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
+		namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+			nil,
+			"cluster-b",
+		),
+		nil,
+	)
+
+	p.handleReplicationTasks()
+
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
 }
 
 func TestHandleNamespaceReplicationTaskEventsDisabled(t *testing.T) {
 	p, task, executor, _, eventLogger := newReplicationEventTestProcessor(t, false, 1)
-	processingContextSet := false
+	wideEventContextSet := false
+	var metricsContext nsreplication.TaskMetricsContext
+	var metricsContextSet bool
 	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).DoAndReturn(
 		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) error {
-			_, processingContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+			_, wideEventContextSet = wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+			metricsContext, metricsContextSet = nsreplication.TaskMetricsContextFromContext(ctx)
 			return nil
 		},
 	)
 
 	p.handleReplicationTasks()
 	require.Empty(t, eventLogger.records)
-	require.False(t, processingContextSet)
+	require.False(t, wideEventContextSet)
+	require.True(t, metricsContextSet)
+	require.Equal(t, "cluster-a", metricsContext.SourceCluster)
+	require.Equal(t, "cluster-b", metricsContext.TargetCluster)
+	require.Equal(t, nsreplication.LegacyMetricsTransport, metricsContext.Transport)
+	require.Equal(t, task.GetVisibilityTime(), metricsContext.VisibilityTime)
 }
 
 func TestCustomNamespaceReplicationTaskUsesEventDataProvider(t *testing.T) {
@@ -235,6 +419,7 @@ func newReplicationEventTestProcessor(
 		remotePeer:                   remotePeer,
 		namespaceTaskExecutor:        executor,
 		metricsHandler:               metrics.NoopMetricsHandler,
+		applyOutcomeMetricsHandler:   metrics.NoopMetricsHandler,
 		retryPolicyForTask:           func(*replicationspb.ReplicationTask) backoff.RetryPolicy { return policy },
 		lastProcessedMessageID:       -1,
 		lastRetrievedMessageID:       -1,
@@ -245,8 +430,9 @@ func newReplicationEventTestProcessor(
 
 func namespaceReplicationTaskForProcessorTest() *replicationspb.ReplicationTask {
 	return &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-		SourceTaskId: 42,
+		TaskType:       enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		SourceTaskId:   42,
+		VisibilityTime: timestamppb.New(time.Now().Add(-time.Minute)),
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
 				NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
