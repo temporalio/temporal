@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -18,6 +19,8 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
+
+var compareProgress = cmp.AllowUnexported(ReplicationProgress{})
 
 type (
 	progressCacheSuite struct {
@@ -109,7 +112,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	// get existing progress
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected, cachedProgress)
+	s.DeepEqual(expected, cachedProgress, compareProgress)
 
 	// update existing versioned transition and version history
 	versionedTransitions2 := []*persistencespb.VersionedTransition{
@@ -131,7 +134,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		lastEventVersionHistoryIndex: 0,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected2, cachedProgress)
+	s.DeepEqual(expected2, cachedProgress, compareProgress)
 
 	// add new versioned transition and version history
 	versionedTransitions3 := []*persistencespb.VersionedTransition{
@@ -154,14 +157,14 @@ func (s *progressCacheSuite) TestProgressCache() {
 		lastEventVersionHistoryIndex: 1,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected3, cachedProgress)
+	s.DeepEqual(expected3, cachedProgress, compareProgress)
 
 	// noop update: versioned transition and version history are already included in the existing progress
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
 	s.NoError(err)
 
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected3, cachedProgress)
+	s.DeepEqual(expected3, cachedProgress, compareProgress)
 }
 
 // TestProgressCache_ConcurrentGetAndUpdate verifies a progress returned by Get can be read while Update runs. The stream

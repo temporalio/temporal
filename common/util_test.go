@@ -657,6 +657,7 @@ func TestGrantEagerDispatchWithoutClient(t *testing.T) {
 		nil,
 		"namespace-id",
 		"task-queue",
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		nil,
 		nil,
 	))
