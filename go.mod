@@ -73,6 +73,7 @@ require (
 	go.temporal.io/api v1.63.8-0.20261014221631-25d6833c5701
 	go.temporal.io/auto-scaled-workers v0.0.0-20261013231030-67ffdef6330d
 	go.temporal.io/sdk v1.49.0
+	go.temporal.io/testx v0.0.0-20261006214824-82f8c622179b
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -224,3 +225,6 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+// Use the local testx; consumers of the server ignore this replace.
+replace go.temporal.io/testx => ./testx
