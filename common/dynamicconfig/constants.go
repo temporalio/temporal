@@ -161,7 +161,7 @@ errors. When false (the default), these calls follow the standard 2-attempt cap.
 true, they ignore the attempt cap and keep retrying for up to the policy's expiration
 interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
 	)
-	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
+	ClusterMetadataRefreshInterval = NewGlobalPositiveDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
 		`ClusterMetadataRefreshInterval is config to manage cluster metadata table refresh interval`,
@@ -258,7 +258,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		false,
 		`EnableWorkflowEagerDispatchCheck controls whether history asks matching for a grant before eagerly starting a workflow.`,
 	)
-	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
+	NamespaceCacheRefreshInterval = NewGlobalPositiveDurationSetting(
 		"system.namespaceCacheRefreshInterval",
 		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
@@ -1348,7 +1348,7 @@ See DynamicRateLimitingParams comments for more details.`,
 		primitives.GetHistoryMaxPageSize,
 		`MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests`,
 	)
-	MatchingUpdateAckInterval = NewTaskQueueDurationSettingWithConstrainedDefault(
+	MatchingUpdateAckInterval = NewTaskQueuePositiveDurationSettingWithConstrainedDefault(
 		"matching.updateAckInterval",
 		[]TypedConstrainedValue[time.Duration]{
 			// Use a longer default interval for the per-namespace internal worker queues.
@@ -1476,7 +1476,7 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
-	MatchingGetUserDataRefresh = NewGlobalDurationSetting(
+	MatchingGetUserDataRefresh = NewGlobalPositiveDurationSetting(
 		"matching.getUserDataRefresh",
 		5*time.Minute,
 		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
@@ -1532,7 +1532,7 @@ like partition and worker-version) instead of being emitted at the matcher level
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
 	)
-	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
+	MatchingNexusEndpointsRefreshInterval = NewGlobalPositiveDurationSetting(
 		"matching.nexusEndpointsRefreshInterval",
 		10*time.Second,
 		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
@@ -2269,7 +2269,7 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		nil, // actual default is in service/history/configs package
 		`TimerProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by timer task scheduler for standby namespaces`,
 	)
-	TimerProcessorUpdateAckInterval = NewGlobalDurationSetting(
+	TimerProcessorUpdateAckInterval = NewGlobalPositiveDurationSetting(
 		"history.timerProcessorUpdateAckInterval",
 		30*time.Second,
 		`TimerProcessorUpdateAckInterval is update interval for timer processor`,
@@ -2289,7 +2289,7 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		0,
 		`TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host`,
 	)
-	TimerProcessorMaxPollInterval = NewGlobalDurationSetting(
+	TimerProcessorMaxPollInterval = NewGlobalPositiveDurationSetting(
 		"history.timerProcessorMaxPollInterval",
 		5*time.Minute,
 		`TimerProcessorMaxPollInterval is max poll interval for timer processor`,
@@ -2613,7 +2613,7 @@ When enabled, the archival store must allow reading object metadata in addition 
 		`ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
 archivalQueueProcessor`,
 	)
-	ArchivalProcessorMaxPollInterval = NewGlobalDurationSetting(
+	ArchivalProcessorMaxPollInterval = NewGlobalPositiveDurationSetting(
 		"history.archivalProcessorMaxPollInterval",
 		5*time.Minute,
 		`ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor`,
@@ -2623,7 +2623,7 @@ archivalQueueProcessor`,
 		0.15,
 		`ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient`,
 	)
-	ArchivalProcessorUpdateAckInterval = NewGlobalDurationSetting(
+	ArchivalProcessorUpdateAckInterval = NewGlobalPositiveDurationSetting(
 		"history.archivalProcessorUpdateAckInterval",
 		30*time.Second,
 		`ArchivalProcessorUpdateAckInterval is update interval for archivalQueueProcessor`,
@@ -2743,7 +2743,7 @@ execution for UpdateComponent idempotency; the oldest are swept beyond this limi
 		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
 UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
 	)
-	ShardUpdateMinInterval = NewGlobalDurationSetting(
+	ShardUpdateMinInterval = NewGlobalPositiveDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
