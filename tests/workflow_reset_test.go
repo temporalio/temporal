@@ -177,6 +177,32 @@ func (s *WorkflowResetSuite) TestRepeatedResets() {
 	s.assertMutableStateStatus(env, workflowID, newRunID1, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED) // newRunID1 was the current run.
 }
 
+// A retried reset request returns the run created by the first attempt and leaves it running.
+func (s *WorkflowResetSuite) TestRetriedResetIsDeduplicated() {
+	env := testcore.NewEnv(s.T())
+	workflowID := env.Tv().WorkflowID()
+	baseRunID := s.prepareSingleRun(env, workflowID, true)
+	reset := func(requestID string) string {
+		resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+			Namespace:                 env.Namespace().String(),
+			WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: baseRunID},
+			Reason:                    "testing-reset",
+			RequestId:                 requestID,
+			WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, baseRunID),
+		})
+		s.Require().NoError(err)
+		return resp.RunId
+	}
+
+	requestID := uuid.NewString()
+	newRunID := reset(requestID)
+	s.Equal(newRunID, reset(requestID))
+	s.assertMutableStateStatus(env, workflowID, newRunID, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+
+	s.NotEqual(newRunID, reset(uuid.NewString()))
+	s.assertMutableStateStatus(env, workflowID, newRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+}
+
 // Resetting a failed workflow must not re-emit workflow_failed: the counter stays at 1 regardless of the number of resets.
 func (s *WorkflowResetSuite) TestRepeatedResets_FailedWorkflowDoesNotDoubleCountFailedMetric() {
 	env := testcore.NewEnv(s.T())

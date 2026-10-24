@@ -2007,6 +2007,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		return err
 	}
 	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
+	var resetRequestID string
+	if t.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+		resetRequestID = uuid.New().String()
+	}
 	baseWorkflow := ndc.NewWorkflow(
 		t.shardContext.GetClusterMetadata(),
 		baseContext,
@@ -2023,6 +2027,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		resetRequestID,
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),
