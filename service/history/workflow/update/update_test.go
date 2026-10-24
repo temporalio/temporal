@@ -1291,16 +1291,66 @@ func TestAttachCallbacks(t *testing.T) {
 		require.False(t, *eventCreated)
 	})
 
-	t.Run("on stateAdmitted returns false without creating event", func(t *testing.T) {
+	t.Run("on stateAdmitted buffers callbacks and returns true", func(t *testing.T) {
 		effects := &effect.Buffer{}
-		store, eventCreated := trackingStore(effects)
-		upd := update.NewAdmitted(tv.UpdateID(), nil)
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
 
 		fired, err := upd.AttachCallbacks(testRequest, store)
 		require.NoError(t, err)
-		require.False(t, fired)
-		require.False(t, *eventCreated)
+		require.True(t, fired)
+		require.Equal(t, 0, *optionsEventCount)
+
+		require.NotNil(t, send(t, upd, skipAlreadySent))
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "should flush one buffered callback on acceptance")
 	})
+
+	// An Update rebuilt from an UpdateAdmitted event, e.g. after a reset, has no original request
+	// ID, so every request with callbacks is buffered. Applying that event recorded the admitting
+	// request's ID, so a retry of the admitting request is skipped when the buffer is flushed.
+	for _, tc := range []struct {
+		name             string
+		requestID        string
+		wantOptionsEvent bool
+	}{
+		{name: "another request", requestID: "other-" + tv.RequestID(), wantOptionsEvent: true},
+		{name: "retry of the admitting request", requestID: tv.RequestID()},
+	} {
+		t.Run("on stateAdmitted from history buffers "+tc.name, func(t *testing.T) {
+			effects := &effect.Buffer{}
+			store, capturedOptions := capturingStore(effects)
+			store.HasRequestIDFunc = func(requestID string) bool {
+				return requestID == tv.RequestID()
+			}
+			upd := update.NewAdmitted(tv.UpdateID(), nil)
+			req := &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+				Input:               &updatepb.Input{Name: "not_empty"},
+				RequestId:           tc.requestID,
+				CompletionCallbacks: testCallbacks,
+			}
+
+			fired, err := upd.AttachCallbacks(req, store)
+			require.NoError(t, err)
+			require.True(t, fired)
+
+			require.NoError(t, accept(t, store, upd))
+			effects.Apply(context.Background())
+
+			if !tc.wantOptionsEvent {
+				require.Empty(t, *capturedOptions)
+				return
+			}
+			require.Len(t, *capturedOptions, 1)
+			require.Equal(t, tc.requestID, (*capturedOptions)[0].AttachedRequestId)
+			require.Equal(t, testCallbacks, (*capturedOptions)[0].AttachedCompletionCallbacks)
+		})
+	}
 
 	// The admitting request carries its callbacks in the Update's request, so only a
 	// different request's callbacks are dropped in these states.
@@ -1330,14 +1380,6 @@ func TestAttachCallbacks(t *testing.T) {
 			state: "ProvisionallyAdmitted",
 			setup: func(t *testing.T, store mockEventStore, _ *effect.Buffer, upd *update.Update) {
 				admitWithRequest(t, store, upd)
-			},
-		},
-		{
-			name:  "stateAdmitted",
-			state: "Admitted",
-			setup: func(t *testing.T, store mockEventStore, effects *effect.Buffer, upd *update.Update) {
-				admitWithRequest(t, store, upd)
-				effects.Apply(context.Background())
 			},
 		},
 		{
@@ -1379,25 +1421,34 @@ func TestAttachCallbacks(t *testing.T) {
 		})
 	}
 
-	t.Run("on stateAdmitted does not log for the admitting request", func(t *testing.T) {
-		tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-		capture := tl.StartCapture()
-		reg := update.NewRegistry(&emptyUpdateStore, update.WithLogger(tl))
-		effects := &effect.Buffer{}
-		store, eventCreated := trackingStore(effects)
-		upd, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
-		require.NoError(t, err)
-		admitWithRequest(t, store, upd)
-		effects.Apply(context.Background())
+	for _, tc := range []struct {
+		name string
+		sent bool
+	}{
+		{name: "stateAdmitted"},
+		{name: "stateSent", sent: true},
+	} {
+		t.Run("on "+tc.name+" does not buffer the admitting request's callbacks", func(t *testing.T) {
+			reg := update.NewRegistry(&emptyUpdateStore)
+			effects := &effect.Buffer{}
+			store, eventCreated := trackingStore(effects)
+			upd, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
+			require.NoError(t, err)
+			admitWithRequest(t, store, upd)
+			effects.Apply(context.Background())
+			if tc.sent {
+				require.NotNil(t, send(t, upd, skipAlreadySent))
+			}
 
-		fired, err := upd.AttachCallbacks(testRequest, store)
-		require.NoError(t, err)
-		require.False(t, fired)
-		require.False(t, *eventCreated)
-		for _, record := range capture.Snapshot() {
-			require.NotEqual(t, "update completion callbacks were not attached", record.Message)
-		}
-	})
+			fired, err := upd.AttachCallbacks(testRequest, store)
+			require.NoError(t, err)
+			require.False(t, fired)
+			require.False(t, *eventCreated)
+			inFlight, err := reg.InFlightCallbacks()
+			require.NoError(t, err)
+			require.Len(t, inFlight, 1, "only the admitting request's own callbacks are in flight")
+		})
+	}
 
 	t.Run("on stateSent buffers callbacks and returns true", func(t *testing.T) {
 		effects := &effect.Buffer{}

@@ -199,8 +199,11 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 	if callbacksAttached {
+		// Only attaching callbacks to an accepted Update writes an event. Buffering them changes
+		// nothing durable. Persisting mutable state anyway would convert a speculative workflow
+		// task to a normal one.
 		return &api.UpdateWorkflowAction{
-			Noop:               false,
+			Noop:               !ms.IsDirty(),
 			CreateWorkflowTask: false,
 		}, nil
 	}
