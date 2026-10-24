@@ -11,6 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -418,18 +419,17 @@ func signalWorkflow(
 				createWorkflowTask = false
 			}
 
-			message := "Skipped first workflow task backoff for signalWithStart request"
-			if !createWorkflowTask {
-				message = "Honored first workflow task backoff for signalWithStart request"
-			}
-
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
-			shardContext.GetThrottledLogger().Info(
-				message,
+			throttledLogger := log.With(shardContext.GetThrottledLogger(),
 				tag.WorkflowNamespace(request.GetNamespace()),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
 			)
+			if createWorkflowTask {
+				throttledLogger.Info("Skipped first workflow task backoff for signalWithStart request")
+			} else {
+				throttledLogger.Info("Honored first workflow task backoff for signalWithStart request")
+			}
 		}
 
 		if createWorkflowTask {
