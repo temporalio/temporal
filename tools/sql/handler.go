@@ -17,12 +17,15 @@ import (
 // using the given command line arguments
 // as input
 func setupSchema(cli *cli.Context, logger log.Logger) error {
+	if cli.Bool("visibility") && cli.Bool(schema.CLIOptOverwrite) {
+		return schema.NewConfigError("--visibility cannot be combined with --overwrite because overwrite drops all database tables")
+	}
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	conn, err := NewConnection(cfg, logger)
+	conn, err := newConnection(cfg, logger, cli.Bool("visibility"))
 	if err != nil {
 		logger.Error("Unable to connect to SQL database.", tag.Error(err))
 		return err
@@ -43,7 +46,7 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	conn, err := NewConnection(cfg, logger)
+	conn, err := newConnection(cfg, logger, cli.Bool("visibility"))
 	if err != nil {
 		logger.Error("Unable to connect to SQL database.", tag.Error(err))
 		return err
