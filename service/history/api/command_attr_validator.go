@@ -643,7 +643,7 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 		if closeCommand != enumspb.COMMAND_TYPE_UNSPECIFIED {
 			return serviceerror.NewInvalidArgumentf(
 				"invalid command sequence: [%v], command %s must be the last command.",
-				strings.Join(v.commandTypes(commands), ", "), closeCommand.String(),
+				v.commandTypesSummary(commands), closeCommand.String(),
 			)
 		}
 
@@ -677,12 +677,33 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 	return nil
 }
 
-func (v *CommandAttrValidator) commandTypes(
+// maxCommandTypesInErrorMessage bounds how many command type names are listed
+// in ValidateCommandSequence's error message. Without a bound, a workflow
+// task with a large number of commands (e.g. thousands of RecordMarker
+// commands followed by a misplaced close command) produces an error message
+// long enough to exceed the gRPC/HTTP2 header size limit, causing the
+// connection to be dropped (RST_STREAM) instead of the intended error being
+// returned to the worker.
+const maxCommandTypesInErrorMessage = 50
+
+// commandTypesSummary returns a bounded, comma-separated list of the given
+// commands' types, truncating (with a count of the omitted commands) if
+// there are more than maxCommandTypesInErrorMessage. See its doc comment.
+func (v *CommandAttrValidator) commandTypesSummary(
 	commands []*commandpb.Command,
-) []string {
-	result := make([]string, len(commands))
-	for index, command := range commands {
-		result[index] = command.GetCommandType().String()
+) string {
+	n := len(commands)
+	truncated := n > maxCommandTypesInErrorMessage
+	if truncated {
+		n = maxCommandTypesInErrorMessage
 	}
-	return result
+	types := make([]string, n)
+	for index := 0; index < n; index++ {
+		types[index] = commands[index].GetCommandType().String()
+	}
+	summary := strings.Join(types, ", ")
+	if truncated {
+		summary = fmt.Sprintf("%s, ... (%d more)", summary, len(commands)-n)
+	}
+	return summary
 }
