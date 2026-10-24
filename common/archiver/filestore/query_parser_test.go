@@ -39,6 +39,13 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			},
 		},
 		{
+			query:     `WorkflowId = 'order-o''brien C:\\workflows'`,
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				workflowID: new(`order-o'brien C:\workflows`),
+			},
+		},
+		{
 			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
