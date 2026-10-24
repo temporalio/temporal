@@ -5,7 +5,6 @@ import (
 	"database/sql"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -161,10 +160,7 @@ func (uds *userDataStore) txExecute(ctx context.Context, operation string, f fun
 	}
 	err = f(tx)
 	if err != nil {
-		rollBackErr := tx.Rollback()
-		if rollBackErr != nil {
-			uds.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
+		uds.rollback(tx)
 
 		switch err.(type) {
 		case *persistence.ConditionFailedError,
