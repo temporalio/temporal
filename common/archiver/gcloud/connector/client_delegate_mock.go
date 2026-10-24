@@ -242,6 +242,18 @@ func (mr *MockWriterWrapperMockRecorder) CloseWithError(err any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockWriterWrapper)(nil).CloseWithError), err)
 }
 
+// SetChunkSize mocks base method.
+func (m *MockWriterWrapper) SetChunkSize(chunkSize int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetChunkSize", chunkSize)
+}
+
+// SetChunkSize indicates an expected call of SetChunkSize.
+func (mr *MockWriterWrapperMockRecorder) SetChunkSize(chunkSize any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetChunkSize", reflect.TypeOf((*MockWriterWrapper)(nil).SetChunkSize), chunkSize)
+}
+
 // SetMetadata mocks base method.
 func (m *MockWriterWrapper) SetMetadata(metadata map[string]string) {
 	m.ctrl.T.Helper()
