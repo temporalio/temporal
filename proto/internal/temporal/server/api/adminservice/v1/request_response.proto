@@ -666,6 +666,8 @@ message GetTaskQueueUserDataRequest {
 }
 
 message GetTaskQueueUserDataResponse {
+  // Full family-level user data for verifying cross-cluster replication.
+  temporal.server.api.persistence.v1.TaskQueueUserData task_queue_user_data = 3;
   temporal.server.api.persistence.v1.TaskQueueTypeUserData user_data = 1;
   int64 version = 2;
 }

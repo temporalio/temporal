@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -17,15 +18,18 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -141,8 +145,9 @@ func (s *activitiesSuite) SetupTest() {
 		MetricsHandler:                   s.mockMetricsHandler,
 		forceReplicationMetricsHandler:   s.mockMetricsHandler,
 		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
-		enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
-		workflowVerifier:                 workflowVerifierProvider(),
+		enableTaskQueueUserDataReplicationVerification: dynamicconfig.GetBoolPropertyFn(false),
+		enableHistoryRateLimiter:                       dynamicconfig.GetBoolPropertyFn(false),
+		workflowVerifier:                               workflowVerifierProvider(),
 	}
 }
 
@@ -991,4 +996,107 @@ func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotR
 	ready, err := s.a.checkReplicationOnce(context.Background(), req)
 	s.NoError(err)
 	s.False(ready)
+}
+
+func TestSeedReplicationQueueWithUserDataEntriesVerification(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		remoteError error
+		useEndpoint bool
+		disabled    bool
+	}{
+		{name: "replication catches up"},
+		{name: "target endpoint", useEndpoint: true},
+		{name: "verification disabled", disabled: true},
+		{name: "verification disabled with endpoint", disabled: true, useEndpoint: true},
+		{name: "remote error", remoteError: serviceerror.NewUnavailable("remote unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			frontend := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+			tasks := persistence.NewMockTaskManager(ctrl)
+			queue := persistence.NewMockNamespaceReplicationQueue(ctrl)
+			bean := client.NewMockBean(ctrl)
+			remote := adminservicemock.NewMockAdminServiceClient(ctrl)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			a := &activities{forceReplicationMetricsHandler: metricsHandler, frontendClient: frontend, taskManager: tasks, namespaceReplicationQueue: queue, clientBean: bean, Logger: log.NewNoopLogger(), enableTaskQueueUserDataReplicationVerification: dynamicconfig.GetBoolPropertyFn(!tc.disabled)}
+			frontend.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(&workflowservice.DescribeNamespaceResponse{
+				NamespaceInfo: &namespacepb.NamespaceInfo{Id: "namespace-id"},
+			}, nil)
+			params := TaskQueueUserDataReplicationParamsWithNamespace{
+				Namespace:                          "namespace",
+				TaskQueueUserDataReplicationParams: TaskQueueUserDataReplicationParams{RPS: 100, TargetClusterName: "remote"},
+			}
+			if tc.useEndpoint {
+				factory := client.NewMockFactory(ctrl)
+				a.clientFactory = factory
+				params.TargetClusterName = ""
+				params.TargetClusterEndpoint = "remote-endpoint"
+				if !tc.disabled {
+					factory.EXPECT().NewRemoteAdminClientWithTimeout("remote-endpoint", gomock.Any(), gomock.Any()).Return(remote)
+				}
+			} else if !tc.disabled {
+				bean.EXPECT().GetRemoteAdminClient("remote").Return(remote, nil)
+			}
+			first := &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 1}}
+			second := &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 2}}
+			tasks.EXPECT().ListTaskQueueUserDataEntries(gomock.Any(), gomock.Any()).Return(&persistence.ListTaskQueueUserDataEntriesResponse{
+				Entries: []*persistence.TaskQueueUserDataEntry{
+					{TaskQueue: "first", UserData: &persistencespb.VersionedTaskQueueUserData{Data: first}},
+					{TaskQueue: "second", UserData: &persistencespb.VersionedTaskQueueUserData{Data: second}},
+				},
+			}, nil)
+			request := func(name string) gomock.Matcher {
+				return protomock.Eq(&adminservice.GetTaskQueueUserDataRequest{Namespace: "namespace", TaskQueue: name, TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW})
+			}
+			publish := func(name string, data *persistencespb.TaskQueueUserData) *gomock.Call {
+				return queue.EXPECT().Publish(gomock.Any(), protomock.Eq(&replicationspb.ReplicationTask{
+					TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+					Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+						NamespaceId: "namespace-id", TaskQueueName: name, UserData: data,
+					}},
+				})).Return(nil)
+			}
+			if tc.disabled {
+				gomock.InOrder(publish("first", first), publish("second", second))
+			} else if tc.remoteError != nil {
+				gomock.InOrder(publish("first", first), remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("first")).Return(nil, tc.remoteError))
+			} else {
+				gomock.InOrder(
+					publish("first", first),
+					remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("first")).Return(nil, serviceerror.NewNotFound("not yet replicated")),
+					remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("first")).Return(&adminservice.GetTaskQueueUserDataResponse{}, nil),
+					remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("first")).Return(&adminservice.GetTaskQueueUserDataResponse{TaskQueueUserData: first}, nil),
+					publish("second", second),
+					remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("second")).Return(&adminservice.GetTaskQueueUserDataResponse{TaskQueueUserData: first}, nil),
+					remote.EXPECT().GetTaskQueueUserData(gomock.Any(), request("second")).Return(&adminservice.GetTaskQueueUserDataResponse{TaskQueueUserData: second}, nil),
+				)
+			}
+			testSuite := &testsuite.WorkflowTestSuite{}
+			env := testSuite.NewTestActivityEnvironment()
+			env.RegisterActivity(a.SeedReplicationQueueWithUserDataEntries)
+			_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
+			if tc.remoteError != nil {
+				require.ErrorContains(t, err, tc.remoteError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+			recordings := capture.SnapshotMetric(metrics.TaskQueueUserDataReplicationNotReady.Name())
+			if tc.disabled || tc.remoteError != nil {
+				require.Empty(t, recordings)
+			} else {
+				require.Len(t, recordings, 3)
+				for _, recording := range recordings {
+					require.Equal(t, int64(1), recording.Value)
+					require.Equal(t, map[string]string{
+						metrics.NamespaceTag(params.Namespace).Key:             metrics.NamespaceTag(params.Namespace).Value,
+						metrics.TargetClusterTag(params.TargetClusterName).Key: metrics.TargetClusterTag(params.TargetClusterName).Value,
+					}, recording.Tags)
+				}
+			}
+		})
+	}
 }

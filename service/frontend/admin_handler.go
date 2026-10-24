@@ -1757,10 +1757,12 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 	// User data is a family-level map keyed by TaskQueueType (int32).
 	// Extract only the entry for the requested type and return it alongside the version,
 	// so callers can compare versions across partitions to check replication lag.
+	// Include full family data for cross-cluster replication verification.
 	perType := resp.GetUserData().GetData().GetPerType()
 	return &adminservice.GetTaskQueueUserDataResponse{
-		UserData: perType[int32(request.GetTaskQueueType())],
-		Version:  resp.GetUserData().GetVersion(),
+		UserData:          perType[int32(request.GetTaskQueueType())],
+		Version:           resp.GetUserData().GetVersion(),
+		TaskQueueUserData: resp.GetUserData().GetData(),
 	}, nil
 }
 

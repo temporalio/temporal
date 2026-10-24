@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -108,7 +109,10 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{VerifiedWorkflowCount: 1}, nil).Times(totalPageCount)
 
-	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, TaskQueueUserDataReplicationParamsWithNamespace{
+		TaskQueueUserDataReplicationParams: TaskQueueUserDataReplicationParams{TargetClusterEndpoint: "test-target"},
+		Namespace:                          "test-ns",
+	}).Return(nil).Times(1)
 	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
@@ -670,6 +674,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 		taskManager:               mockTaskManager,
 		frontendClient:            mockFrontendClient,
 		Logger:                    log.NewCLILogger(),
+		enableTaskQueueUserDataReplicationVerification: dynamicconfig.GetBoolPropertyFn(false),
 	}
 
 	// Once per attempt

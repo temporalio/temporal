@@ -2649,8 +2649,11 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 			PartitionId:   0,
 		})
 		s.NoError(err)
-		s.Equal(perTypeData, resp.UserData)
-		s.Equal(int64(5), resp.Version)
+		s.ProtoEqual(&adminservice.GetTaskQueueUserDataResponse{
+			UserData:          perTypeData,
+			Version:           5,
+			TaskQueueUserData: matchingResp.UserData.Data,
+		}, resp)
 	})
 
 	// Non-root partition (partition_id=1) sends mangled name /_sys/my-queue/1 to matching.

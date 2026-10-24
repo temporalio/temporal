@@ -21,6 +21,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/wideevents"
+	"go.temporal.io/server/service/matching"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -113,24 +115,25 @@ type (
 	}
 
 	activities struct {
-		HistoryShardCount                int32
-		executionManager                 persistence.ExecutionManager
-		taskManager                      persistence.TaskManager
-		NamespaceRegistry                namespace.Registry
-		HistoryClient                    historyservice.HistoryServiceClient
-		frontendClient                   workflowservice.WorkflowServiceClient
-		adminClient                      adminservice.AdminServiceClient
-		clientFactory                    serverClient.Factory
-		clientBean                       serverClient.Bean
-		Logger                           log.Logger
-		EventLogger                      otellog.Logger
-		MetricsHandler                   metrics.Handler
-		forceReplicationMetricsHandler   metrics.Handler
-		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
-		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
-		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
-		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
-		workflowVerifier                 WorkflowVerifier
+		HistoryShardCount                              int32
+		executionManager                               persistence.ExecutionManager
+		taskManager                                    persistence.TaskManager
+		NamespaceRegistry                              namespace.Registry
+		HistoryClient                                  historyservice.HistoryServiceClient
+		frontendClient                                 workflowservice.WorkflowServiceClient
+		adminClient                                    adminservice.AdminServiceClient
+		clientFactory                                  serverClient.Factory
+		clientBean                                     serverClient.Bean
+		Logger                                         log.Logger
+		EventLogger                                    otellog.Logger
+		MetricsHandler                                 metrics.Handler
+		forceReplicationMetricsHandler                 metrics.Handler
+		namespaceReplicationQueue                      persistence.NamespaceReplicationQueue
+		generateMigrationTaskViaFrontend               dynamicconfig.BoolPropertyFn
+		enableTaskQueueUserDataReplicationVerification dynamicconfig.BoolPropertyFn
+		enableHistoryRateLimiter                       dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents                   dynamicconfig.BoolPropertyFn
+		workflowVerifier                               WorkflowVerifier
 	}
 
 	shardStatus struct {
@@ -823,6 +826,18 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 		return err
 	}
 
+	var remoteAdminClient adminservice.AdminServiceClient
+	if a.enableTaskQueueUserDataReplicationVerification() {
+		if params.TargetClusterName != "" {
+			remoteAdminClient, err = a.clientBean.GetRemoteAdminClient(params.TargetClusterName)
+			if err != nil {
+				return err
+			}
+		} else if params.TargetClusterEndpoint != "" {
+			remoteAdminClient = a.clientFactory.NewRemoteAdminClientWithTimeout(params.TargetClusterEndpoint, admin.DefaultTimeout, admin.DefaultLargeTimeout)
+		}
+	}
+
 	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
 	heartbeatDetails := seedReplicationQueueWithUserDataEntriesHeartbeatDetails{}
 
@@ -866,6 +881,36 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 			if err != nil {
 				a.Logger.Error("Inserting into namespace replication queue failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
 				return err
+			}
+			if a.enableTaskQueueUserDataReplicationVerification() && remoteAdminClient != nil {
+				for {
+					activity.RecordHeartbeat(ctx, heartbeatDetails)
+					if err := rateLimiter.Wait(ctx); err != nil {
+						return err
+					}
+					remote, err := remoteAdminClient.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+						Namespace:     params.Namespace,
+						TaskQueue:     entry.TaskQueue,
+						TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // TASK_QUEUE_TYPE_WORKFLOW routes the request to the workflow root partition, which owns the full task queue family’s user data.
+					})
+					if err != nil && !common.IsNotFoundError(err) {
+						return err
+					}
+					if err == nil && remote.GetTaskQueueUserData() != nil && matching.IsTaskQueueUserDataReplicated(remote.GetTaskQueueUserData(), entry.UserData.GetData()) {
+						break
+					}
+					a.Logger.Info("Task queue user data replication not ready",
+						tag.WorkflowNamespace(params.Namespace),
+						tag.WorkflowNamespaceID(request.NamespaceID),
+						tag.WorkflowTaskQueueName(entry.TaskQueue),
+						tag.TargetCluster(params.TargetClusterName),
+						tag.Endpoint(params.TargetClusterEndpoint),
+					)
+					a.forceReplicationMetricsHandler.WithTags(
+						metrics.NamespaceTag(params.Namespace),
+						metrics.TargetClusterTag(params.TargetClusterName),
+					).Counter(metrics.TaskQueueUserDataReplicationNotReady.Name()).Record(1)
+				}
 			}
 		}
 		if len(response.NextPageToken) == 0 {
