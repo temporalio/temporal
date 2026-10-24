@@ -197,7 +197,7 @@ func (a *Activities) processNamespaceEntry(
 				// Intentionally don't fail the activity on other single entry errors.
 				a.logger.Error("Failed to update task queue user data",
 					tag.WorkflowNamespace(ns.Name().String()),
-					tag.WorkflowTaskQueueName(entry.TaskQueue),
+					tag.TaskQueueName(entry.TaskQueue),
 					tag.Error(err))
 			}
 			heartbeat.TaskQueueIdx++
@@ -296,7 +296,7 @@ func (a *Activities) findBuildIdsToRemove(
 			if !exists {
 				a.logger.Info("Found build ID to remove",
 					tag.WorkflowNamespace(ns.Name().String()),
-					tag.WorkflowTaskQueueName(entry.TaskQueue),
+					tag.TaskQueueName(entry.TaskQueue),
 					tag.BuildId(buildId.Id),
 				)
 				buildIdsToRemove = append(buildIdsToRemove, buildId.Id)

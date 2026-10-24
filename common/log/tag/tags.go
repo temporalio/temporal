@@ -301,14 +301,14 @@ func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCau
 	return NewStringerTag("workflow-task-fail-cause", workflowTaskFailCause)
 }
 
-// WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
-func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
-	return NewStringTag("wf-task-queue-type", taskQueueType.String())
+// TaskQueueType returns tag for the type of a task queue: workflow, activity or Nexus.
+func TaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
+	return NewStringTag("task-queue-type", taskQueueType.String())
 }
 
-// WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
-func WorkflowTaskQueueName(taskQueueName string) ZapTag {
-	return NewStringTag("wf-task-queue-name", taskQueueName)
+// TaskQueueName returns tag for the name of a task queue of any type.
+func TaskQueueName(taskQueueName string) ZapTag {
+	return NewStringTag("task-queue-name", taskQueueName)
 }
 
 // WorkerVersion returns tag for worker build ID
