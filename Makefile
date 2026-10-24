@@ -121,13 +121,16 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 MIXED_BRAIN_TEST_ROOT         := ./tests/mixedbrain
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
+# tests/mixedbrain is a separate Go module, so `go test` from the repo root cannot resolve its
+# packages; mixed-brain-test cds into the directory instead. Keep it out of TEST_DIRS, whose only
+# other consumer already filters it out by name.
+TEST_DIRS       := $(filter-out $(MIXED_BRAIN_TEST_ROOT)%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
 TESTCORE_UNITTESTS := ./tests/testcore
 ifeq ($(UNIT_TEST_DIRS),)
