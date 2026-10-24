@@ -355,13 +355,7 @@ func (w *Workflow) AddCompletionCallbacks(
 	return callback.Attach(ctx, w, requestID, eventTime, completionCallbacks, callback.WithReusedRequestID())
 }
 
-// AddUpdateCompletionCallbacks attaches completion callbacks to the given update, creating its
-// WorkflowUpdate component if needed. Re-attaching a request that is already present is a no-op,
-// which keeps the totals accurate when the same callbacks arrive on more than one event (an
-// update's admitted and accepted events, say).
-//
-// NOTE: Aggregate limits are NOT checked here. See [Workflow.ValidateCallbackAddition].
-func (w *Workflow) AddUpdateCompletionCallbacks(
+func (w *Workflow) addUpdateCompletionCallbacks(
 	ctx chasm.MutableContext,
 	eventTime *timestamppb.Timestamp,
 	updateID string,
@@ -389,13 +383,13 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	return callback.Attach(ctx, wfUpdateHost, requestID, eventTime, completionCallbacks, callback.WithReusedRequestID())
 }
 
-// AddUpdateCompletionCallbacksWithAttachmentEventReference attaches completion callbacks to the
-// given update, creating its WorkflowUpdate component if needed, and records the history event that
-// attached them. Re-attaching a request that is already present is a no-op. Legacy request ID
-// information deduplicates mixed-version retries.
+// AddUpdateCompletionCallbacks attaches completion callbacks to the given update, creating its
+// WorkflowUpdate component if needed, and records the history event that attached them. Re-attaching
+// a request that is already present is a no-op. Legacy request ID information deduplicates
+// mixed-version retries.
 //
 // NOTE: Aggregate limits are NOT checked here. See [Workflow.ValidateCallbackAddition].
-func (w *Workflow) AddUpdateCompletionCallbacksWithAttachmentEventReference(
+func (w *Workflow) AddUpdateCompletionCallbacks(
 	ctx chasm.MutableContext,
 	eventTime *timestamppb.Timestamp,
 	attachment UpdateCallbackAttachment,
@@ -422,7 +416,7 @@ func (w *Workflow) AddUpdateCompletionCallbacksWithAttachmentEventReference(
 	if len(attachment.Callbacks) == 0 {
 		return nil
 	}
-	if err := w.AddUpdateCompletionCallbacks(ctx, eventTime, updateID, requestID, attachment.Callbacks); err != nil {
+	if err := w.addUpdateCompletionCallbacks(ctx, eventTime, updateID, requestID, attachment.Callbacks); err != nil {
 		return err
 	}
 	if requestID != "" {

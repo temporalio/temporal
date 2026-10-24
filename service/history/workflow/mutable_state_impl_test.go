@@ -34,6 +34,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -3131,6 +3132,115 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_PersistsChasm
 			protorequire.ProtoEqual(s.T(), ms.CurrentVersionedTransition(), rootNode.GetMetadata().GetLastUpdateVersionedTransition())
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestApplyUpdateAcceptedEventDualWritesRequestIDDuringTransition() {
+	registry := chasm.NewRegistry(s.logger)
+	s.NoError(registry.Register(&chasm.CoreLibrary{}))
+	s.NoError(registry.Register(chasmcallback.NewNilLibrary()))
+	s.NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	s.mockShard.SetChasmRegistry(registry)
+	s.mockConfig.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableCHASMWorkflowRootOnStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	for _, tc := range []struct {
+		name                  string
+		enableCHASMCallbacks  bool
+		enableUpdateCallbacks bool
+		wantCHASMRequestID    bool
+	}{
+		{
+			name:                  "CHASM update callbacks enabled",
+			enableCHASMCallbacks:  true,
+			enableUpdateCallbacks: true,
+			wantCHASMRequestID:    true,
+		},
+		{
+			name:                  "CHASM callbacks disabled",
+			enableUpdateCallbacks: true,
+		},
+		{
+			name:                 "Update callbacks disabled",
+			enableCHASMCallbacks: true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mockConfig.EnableCHASMCallbacks =
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.enableCHASMCallbacks)
+			s.mockConfig.EnableWorkflowUpdateCallbacks =
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.enableUpdateCallbacks)
+			ms := NewMutableState(
+				s.mockShard,
+				s.mockEventsCache,
+				s.logger,
+				s.namespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now().UTC(),
+			)
+			_, err := ms.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+			)
+			s.NoError(err)
+
+			const (
+				updateID  = "transition-update-id"
+				requestID = "transition-request-id"
+			)
+			acceptedRequest := &updatepb.Request{
+				Meta:      &updatepb.Meta{UpdateId: updateID},
+				RequestId: requestID,
+				CompletionCallbacks: []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"}},
+				}},
+			}
+			_, err = ms.AddWorkflowExecutionUpdateAcceptedEvent(updateID, "message-id", 1, acceptedRequest)
+			s.NoError(err)
+
+			_, legacyRequestIDFound := ms.GetExecutionState().GetRequestIds()[requestID]
+			s.True(legacyRequestIDFound)
+			wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+			s.NoError(err)
+			reference, found := wf.LookupCallbackAttachmentEventReference(chasmCtx, updateID, requestID)
+			s.Equal(tc.wantCHASMRequestID, found)
+			if tc.wantCHASMRequestID {
+				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, reference.EventType)
+			}
+
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestApplyUpdateAcceptedEventAlwaysReconstructsLegacyRequestID() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any())
+	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	const (
+		updateID  = "replay-update-id"
+		requestID = "replay-request-id"
+	)
+	event := &historypb.HistoryEvent{
+		EventId:   2,
+		EventTime: timestamppb.Now(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				ProtocolInstanceId: updateID,
+				AcceptedRequest: &updatepb.Request{
+					Meta:      &updatepb.Meta{UpdateId: updateID},
+					RequestId: requestID,
+					CompletionCallbacks: []*commonpb.Callback{{
+						Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"}},
+					}},
+				},
+			},
+		},
+	}
+	s.NoError(s.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(event))
+	s.Contains(s.mutableState.GetExecutionState().GetRequestIds(), requestID)
 }
 
 // TestGetNexusUpdateCompletion_TransientReadErrorPropagated verifies that we correctly propagate
