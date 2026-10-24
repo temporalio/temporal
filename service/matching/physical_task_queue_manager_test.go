@@ -229,7 +229,7 @@ func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.
 			out <- err
 			return nil
 		}
-		task.finish(taskFinishResult{err: err, consumedToken: true})
+		task.finish(err)
 		out <- task
 		return nil
 	})

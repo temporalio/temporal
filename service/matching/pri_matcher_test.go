@@ -442,7 +442,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			polled, err := tm.Poll(ctx, &pollMetadata{})
 			require.NoError(t, err)
 			require.Equal(t, task, polled)
-			polled.finish(taskFinishResult{consumedToken: true})
+			polled.finish(nil)
 			synctest.Wait()
 			require.True(t, offerDone.Load())
 			require.NoError(t, offerErr)

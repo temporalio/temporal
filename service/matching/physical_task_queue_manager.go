@@ -450,7 +450,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
-			task.finish(taskFinishResult{dropReason: dropReasonExpiredMemory})
+			task.finish(dropReasonExpiredMemory)
 			continue
 		}
 
