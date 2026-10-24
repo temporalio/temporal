@@ -467,6 +467,7 @@ type (
 	// task category type. Min TaskID or FireTime is optional.
 	RangeCompleteHistoryTasksRequest struct {
 		ShardID             int32
+		RangeID             int64
 		TaskCategory        tasks.Category
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
