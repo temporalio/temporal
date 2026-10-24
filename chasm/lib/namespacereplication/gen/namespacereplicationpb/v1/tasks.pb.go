@@ -22,10 +22,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ApplyLocalTask is dispatched once per component, gates peer fan-out.
-// Validate checks the component is still in the expected state.
+// ApplyLocalTask applies or reconciles the local mutation and gates peer fan-out.
+// Validate rejects stale or duplicate retries using attempt.
 type ApplyLocalTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The current retry generation. It must match LocalApplyStatus.attempt_count.
+	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -58,6 +60,13 @@ func (x *ApplyLocalTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ApplyLocalTask.ProtoReflect.Descriptor instead.
 func (*ApplyLocalTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ApplyLocalTask) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
 }
 
 // ApplyPeerTask is dispatched once per peer cell after ApplyLocalTask completes.
@@ -177,8 +186,9 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_tasks_proto pro
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"Ctemporal/server/chasm/lib/namespacereplication/proto/v1/tasks.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\"\x10\n" +
-	"\x0eApplyLocalTask\"J\n" +
+	"Ctemporal/server/chasm/lib/namespacereplication/proto/v1/tasks.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\"*\n" +
+	"\x0eApplyLocalTask\x12\x18\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"J\n" +
 	"\rApplyPeerTask\x12\x1f\n" +
 	"\vtarget_cell\x18\x01 \x01(\tR\n" +
 	"targetCell\x12\x18\n" +

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -216,8 +217,8 @@ func (m *visibilityManagerMetrics) AddSearchAttributes(
 // AdminListExecutions implements [manager.AdminVisibilityManager].
 func (m *visibilityManagerMetrics) AdminListExecutions(
 	ctx context.Context,
-	request *manager.AdminListExecutionsRequest,
-) (*manager.AdminListExecutionsResponse, error) {
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
 	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager
@@ -229,16 +230,16 @@ func (m *visibilityManagerMetrics) AdminListExecutions(
 		metrics.VisibilityPersistenceListExecutionsScope,
 		adminManager.AdminListExecutions,
 		request,
-		request.Namespace,
-		request.Query,
+		namespace.Name(request.GetNamespace()),
+		request.GetQuery(),
 	)
 }
 
 // AdminCountExecutions implements [manager.AdminVisibilityManager].
 func (m *visibilityManagerMetrics) AdminCountExecutions(
 	ctx context.Context,
-	request *manager.AdminCountExecutionsRequest,
-) (*manager.AdminCountExecutionsResponse, error) {
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
 	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager
@@ -250,8 +251,8 @@ func (m *visibilityManagerMetrics) AdminCountExecutions(
 		metrics.VisibilityPersistenceCountExecutionsScope,
 		adminManager.AdminCountExecutions,
 		request,
-		request.Namespace,
-		request.Query,
+		namespace.Name(request.GetNamespace()),
+		request.GetQuery(),
 	)
 }
 

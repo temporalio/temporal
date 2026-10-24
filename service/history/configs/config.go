@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -78,8 +77,6 @@ type Config struct {
 	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnablePrincipalPropagation                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -415,6 +412,7 @@ type Config struct {
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
 	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
@@ -553,8 +551,6 @@ func NewConfig(
 		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
 		EnablePrincipalPropagation:                 dynamicconfig.EnablePrincipalPropagation.Get(dc),
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
-		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
@@ -852,6 +848,7 @@ func NewConfig(
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
 		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		EnableWorkflowEagerDispatchCheck:  dynamicconfig.EnableWorkflowEagerDispatchCheck.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
 		// Archival related

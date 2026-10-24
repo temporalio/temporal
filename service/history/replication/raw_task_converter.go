@@ -67,7 +67,12 @@ type (
 		logger             log.Logger
 	}
 	workflowLockPriorityContextKey struct{}
+	// unbuildableTaskError identifies a task serialization or source history lookup failure.
+	unbuildableTaskError struct{ err error }
 )
+
+func (e *unbuildableTaskError) Error() string { return e.err.Error() }
+func (e *unbuildableTaskError) Unwrap() error { return e.err }
 
 func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
@@ -116,7 +121,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	if replicationTask != nil {
 		rawTaskInfo, err := c.replicationTaskSerializer.SerializeReplicationTask(task)
 		if err != nil {
-			return nil, err
+			return nil, &unbuildableTaskError{err: err}
 		}
 		replicationTask.RawTaskInfo = rawTaskInfo
 	}
@@ -581,7 +586,7 @@ func getBranchToken(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -591,7 +596,11 @@ func getBranchToken(
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
-		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		historyItems, branchToken, baseInfo, err := persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		if err != nil {
+			return nil, nil, nil, &unbuildableTaskError{err: err}
+		}
+		return historyItems, branchToken, baseInfo, nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil, nil, nil
 	default:

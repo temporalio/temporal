@@ -1046,11 +1046,6 @@ func NexusService(service string) ZapTag {
 	return NewStringTag("nexus-service", service)
 }
 
-// NexusTaskQueueName returns tag for NexusTaskQueueName
-func NexusTaskQueueName(taskQueueName string) ZapTag {
-	return NewStringTag("nexus-task-queue-name", taskQueueName)
-}
-
 // NexusEndpointTargetNamespaceID returns a tag for the namespace ID targeted by a Nexus endpoint's worker target.
 func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)

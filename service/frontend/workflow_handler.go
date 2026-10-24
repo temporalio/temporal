@@ -6512,7 +6512,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
 		}()
