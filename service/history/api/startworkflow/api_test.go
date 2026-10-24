@@ -2,21 +2,40 @@ package startworkflow
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -120,4 +139,195 @@ func TestValidateAttachedCallbacks_NothingAttached(t *testing.T) {
 	ms := historyi.NewMockMutableState(ctrl)
 
 	require.NoError(t, validateAttachedCallbacks(context.Background(), api.NewWorkflowLease(wfContext, nil, ms), "", nil))
+}
+
+func TestPrepareEagerDispatchCheck(t *testing.T) {
+	t.Parallel()
+
+	priority := &commonpb.Priority{PriorityKey: 2}
+	testCases := []struct {
+		name             string
+		checkEnabled     bool
+		firstTaskBackoff bool
+		response         *matchingservice.GrantEagerDispatchResponse
+		matchingErr      error
+		wantDeniedReason metrics.ReasonString
+	}{
+		{
+			name: "check disabled",
+		},
+		{
+			name:         "granted",
+			checkEnabled: true,
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}},
+		},
+		{
+			name:         "denied",
+			checkEnabled: true,
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{},
+			}},
+			wantDeniedReason: eagerStartDeniedReasonDispatchNotGranted,
+		},
+		{
+			name:             "matching error",
+			checkEnabled:     true,
+			matchingErr:      errors.New("matching unavailable"),
+			wantDeniedReason: eagerStartDeniedReasonDispatchNotGranted,
+		},
+		{
+			// Matching isn't asked when eager start is already denied, so no grant is spent.
+			name:             "eager already denied",
+			checkEnabled:     true,
+			firstTaskBackoff: true,
+			wantDeniedReason: eagerStartDeniedReasonFirstWorkflowTaskBackoff,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.EnableWorkflowEagerDispatchCheck, test.checkEnabled)
+			config := configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 1)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			shardContext := historyi.NewMockShardContext(ctrl)
+			shardContext.EXPECT().GetConfig().Return(config).AnyTimes()
+			shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+			shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+			shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
+
+			grantRequested := test.checkEnabled && !test.firstTaskBackoff
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			if grantRequested {
+				matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), protomock.Eq(&matchingservice.GrantEagerDispatchRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+						TaskQueue:     "workflow-task-queue",
+						TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					},
+					Items: []*matchingservice.GrantEagerDispatchRequest_Item{{Count: 1, Priority: priority}},
+				})).Return(test.response, test.matchingErr)
+			}
+
+			var firstTaskBackoff *durationpb.Duration
+			if test.firstTaskBackoff {
+				firstTaskBackoff = durationpb.New(time.Minute)
+			}
+			starter := &Starter{
+				shardContext:   shardContext,
+				matchingClient: matchingClient,
+				namespace:      tests.LocalNamespaceEntry,
+				request: &historyservice.StartWorkflowExecutionRequest{
+					NamespaceId:              tests.NamespaceID.String(),
+					FirstWorkflowTaskBackoff: firstTaskBackoff,
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						Namespace:             tests.Namespace.String(),
+						RequestId:             "request-id",
+						WorkflowId:            "workflow-id",
+						WorkflowType:          &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:             &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+						RequestEagerExecution: true,
+						Priority:              priority,
+					},
+				},
+			}
+			require.NoError(t, starter.prepare(t.Context()))
+			require.Equal(t, test.wantDeniedReason == "", starter.requestEagerStart())
+
+			sent := capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()]
+			if grantRequested {
+				require.Len(t, sent, 1)
+				require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(), sent[0].Tags[metrics.TaskTypeTagName])
+				require.Equal(t, metrics.HistoryStartWorkflowExecutionScope, sent[0].Tags[metrics.OperationTagName])
+				// The activity paths that emit this metric have no workflow type tag.
+				require.NotContains(t, sent[0].Tags, metrics.WorkflowTypeTag("").Key)
+			} else {
+				require.Empty(t, sent)
+			}
+
+			reasonTag := metrics.ReasonTag(test.wantDeniedReason)
+			var deniedReasons []string
+			for _, recording := range capture.Snapshot()[metrics.WorkflowEagerExecutionDeniedCounter.Name()] {
+				deniedReasons = append(deniedReasons, recording.Tags[reasonTag.Key])
+			}
+			if test.wantDeniedReason == "" {
+				require.Empty(t, deniedReasons)
+			} else {
+				require.Equal(t, []string{reasonTag.Value}, deniedReasons)
+			}
+		})
+	}
+}
+
+func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
+	t.Parallel()
+
+	version := &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"}
+	testCases := []struct {
+		name        string
+		override    *workflowpb.VersioningOverride
+		wantVersion *deploymentspb.WorkerDeploymentVersion
+	}{
+		{
+			name: "no override",
+		},
+		{
+			name: "pinned override",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  version,
+				},
+			}},
+			wantVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
+		},
+		{
+			name: "one-time override",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_OneTime{
+				OneTime: &workflowpb.VersioningOverride_OneTimeOverride{TargetDeploymentVersion: version},
+			}},
+			wantVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			shardContext := historyi.NewMockShardContext(ctrl)
+			shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+			shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), protomock.Eq(&matchingservice.GrantEagerDispatchRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     "workflow-task-queue",
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				},
+				Items: []*matchingservice.GrantEagerDispatchRequest_Item{{Count: 1, Version: test.wantVersion}},
+			})).Return(&matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}}, nil)
+
+			starter := &Starter{
+				shardContext:   shardContext,
+				matchingClient: matchingClient,
+				namespace:      tests.LocalNamespaceEntry,
+				request: &historyservice.StartWorkflowExecutionRequest{
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						TaskQueue:          &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+						VersioningOverride: test.override,
+					},
+				},
+			}
+			require.True(t, starter.grantEagerWorkflowDispatch(context.Background()))
+		})
+	}
 }
