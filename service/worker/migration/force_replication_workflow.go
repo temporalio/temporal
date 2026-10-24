@@ -16,8 +16,12 @@ type (
 	TaskQueueUserDataReplicationParams struct {
 		// PageSize for the SeedReplicationQueueWithUserDataEntries activity
 		PageSize int
-		// RPS limits the number of task queue user data entries pages requested per second.
+		// RPS limits page requests and remote verification requests per second.
 		RPS float64
+		// TargetClusterName enables verification of each entry on the target cluster.
+		TargetClusterName string
+		// TargetClusterEndpoint is used for verification when the target cluster name is absent.
+		TargetClusterEndpoint string
 	}
 
 	// TaskQueueUserDataReplicationParamsWithNamespace is used for child workflow / activity input
@@ -352,6 +356,11 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 	input := TaskQueueUserDataReplicationParamsWithNamespace{
 		TaskQueueUserDataReplicationParams: params.TaskQueueUserDataReplicationParams,
 		Namespace:                          params.Namespace,
+	}
+
+	if params.EnableVerification {
+		input.TargetClusterName = params.TargetClusterName
+		input.TargetClusterEndpoint = params.TargetClusterEndpoint
 	}
 
 	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)

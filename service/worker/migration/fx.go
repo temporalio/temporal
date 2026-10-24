@@ -124,8 +124,9 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		MetricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
-		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
-		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
-		workflowVerifier:                 wc.WorkflowVerifier,
+		enableTaskQueueUserDataReplicationVerification: dynamicconfig.WorkerEnableTaskQueueUserDataReplicationVerification.Get(wc.DynamicCollection),
+		enableHistoryRateLimiter:                       dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		emitNamespaceLifecycleEvents:                   dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
+		workflowVerifier:                               wc.WorkflowVerifier,
 	}
 }

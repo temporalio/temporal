@@ -668,3 +668,50 @@ func newTestLegacyDeploymentVersionData(buildID string) *deploymentspb.Deploymen
 		},
 	}
 }
+
+func TestIsTaskQueueUserDataReplicated(t *testing.T) {
+	t.Parallel()
+	data := func(clock int64, revision int64) *persistencespb.TaskQueueUserData {
+		return &persistencespb.TaskQueueUserData{
+			Clock: &clockspb.HybridLogicalClock{WallClock: clock},
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				1: {DeploymentData: &persistencespb.DeploymentData{
+					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+						"deployment": {RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: revision}},
+					},
+				}},
+			},
+		}
+	}
+	for _, tc := range []struct {
+		name              string
+		current, incoming *persistencespb.TaskQueueUserData
+		want              bool
+	}{
+		{
+			name:    "discarded build ID tombstone",
+			current: &persistencespb.TaskQueueUserData{VersioningData: &persistencespb.VersioningData{}},
+			incoming: &persistencespb.TaskQueueUserData{VersioningData: &persistencespb.VersioningData{
+				VersionSets: []*persistencespb.CompatibleVersionSet{{
+					SetIds:   []string{"set"},
+					BuildIds: []*persistencespb.BuildId{{Id: "deleted", State: persistencespb.STATE_DELETED}},
+				}},
+			}},
+			want: true,
+		},
+		{name: "missing", incoming: data(1, 1)},
+		{name: "identical", current: data(1, 1), incoming: data(1, 1), want: true},
+		{name: "older parent", current: data(1, 1), incoming: data(2, 1)},
+		{name: "newer remote", current: data(2, 2), incoming: data(1, 1), want: true},
+		{name: "missing revision despite newer parent", current: data(2, 1), incoming: data(1, 2)},
+		{name: "missing deployment despite newer parent", current: &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 2}}, incoming: data(1, 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			currentBefore, incomingBefore := common.CloneProto(tc.current), common.CloneProto(tc.incoming)
+			require.Equal(t, tc.want, IsTaskQueueUserDataReplicated(tc.current, tc.incoming))
+			protorequire.ProtoEqual(t, currentBefore, tc.current)
+			protorequire.ProtoEqual(t, incomingBefore, tc.incoming)
+		})
+	}
+}

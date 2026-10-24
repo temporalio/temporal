@@ -244,3 +244,20 @@ func selectRevisionedProto[T revisionedProto](baseValue T, otherValue T) (T, boo
 		return baseValue, true
 	}
 }
+
+// IsTaskQueueUserDataReplicated reports whether applying incoming data would leave current unchanged.
+// Replication may retain newer remote updates and discard legacy build ID tombstones.
+func IsTaskQueueUserDataReplicated(current, incoming *persistencespb.TaskQueueUserData) bool {
+	if current == nil {
+		return incoming == nil
+	}
+	base, other, _ := selectTaskQueueUserData(current, incoming)
+	merged, _ := mergeTaskQueueUserDataDeployments(base, other)
+	versioning := common.CloneProto(MergeVersioningData(current.GetVersioningData(), incoming.GetVersioningData()))
+	if versioning != nil {
+		versioning.AssignmentRules = base.GetVersioningData().GetAssignmentRules()
+		versioning.RedirectRules = base.GetVersioningData().GetRedirectRules()
+		merged.VersioningData = ClearTombstones(versioning)
+	}
+	return proto.Equal(current, merged)
+}

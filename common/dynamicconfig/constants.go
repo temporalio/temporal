@@ -3831,6 +3831,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
 	)
+	WorkerEnableTaskQueueUserDataReplicationVerification = NewGlobalBoolSetting(
+		"worker.enableTaskQueueUserDataReplicationVerification",
+		false,
+		`WorkerEnableTaskQueueUserDataReplicationVerification enables verification of each seeded task queue user data entry on the target cluster.`,
+	)
 	WorkerEnableHistoryRateLimiter = NewGlobalBoolSetting(
 		"worker.enableHistoryRateLimiter",
 		false,
