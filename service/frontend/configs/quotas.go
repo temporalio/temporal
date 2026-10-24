@@ -184,6 +184,15 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskFailed":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
+		// P3: Worker heartbeat and config. These are short, non-poll operations that maintain
+		// worker health state. Grouping them with long-poll APIs at P4 causes starvation:
+		// concurrent P0 (DescribeNamespace) bursts at startup consume the P4 token bucket,
+		// making heartbeat calls fail with RESOURCE_EXHAUSTED even at low overall load.
+		// See: https://github.com/temporalio/temporal/issues/12564
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":    3,
+
 		// P4: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
@@ -194,9 +203,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     4,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              4,
-		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
 
 		// P5: Low priority APIs
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
