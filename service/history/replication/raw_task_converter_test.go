@@ -154,6 +154,12 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 }
 
+// SetupSubTest makes assertion failures report on the active subtest.
+func (s *rawTaskConverterSuite) SetupSubTest() {
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+}
+
 func (s *rawTaskConverterSuite) TearDownTest() {
 	s.controller.Finish()
 	s.shardContext.StopForTest()
@@ -1025,6 +1031,97 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		}, result)
 	}
 	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestGetVersionHistoryAndEvents_EventBlobCache() {
+	shardID := int32(12)
+	firstEventID := int64(10)
+	nextEventID := int64(20)
+	version := int64(288)
+	workflowKey := definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)
+	versionHistory := &historyspb.VersionHistory{
+		BranchToken: []byte("branch token"),
+		Items:       []*historyspb.VersionHistoryItem{{EventId: nextEventID - 1, Version: version}},
+	}
+	firstBatch := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: []byte("first batch")}
+	secondBatch := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: []byte("second batch")}
+
+	type cachedBatch struct {
+		firstEventID int64
+		nextEventID  int64
+		blob         *commonpb.DataBlob
+	}
+	for _, tc := range []struct {
+		name                string
+		cachedBatches       []cachedBatch
+		readFromPersistence bool
+		expectedEvents      []*commonpb.DataBlob
+	}{
+		{
+			name:           "one cached batch covers the range",
+			cachedBatches:  []cachedBatch{{firstEventID, nextEventID, firstBatch}},
+			expectedEvents: []*commonpb.DataBlob{firstBatch},
+		},
+		{
+			name:           "range spans several cached batches",
+			cachedBatches:  []cachedBatch{{firstEventID, 15, firstBatch}, {15, nextEventID, secondBatch}},
+			expectedEvents: []*commonpb.DataBlob{firstBatch, secondBatch},
+		},
+		{
+			name:                "a batch in the range is not cached",
+			cachedBatches:       []cachedBatch{{firstEventID, 15, firstBatch}},
+			readFromPersistence: true,
+			expectedEvents:      []*commonpb.DataBlob{firstBatch, secondBatch},
+		},
+	} {
+		s.Run(tc.name, func() {
+			eventBlobCache := persistence.NewEventsBlobCache(1024*1024, time.Minute, s.logger)
+			for _, batch := range tc.cachedBatches {
+				eventBlobCache.Put(
+					persistence.NewXDCCacheKey(workflowKey, batch.firstEventID, version),
+					persistence.NewXDCCacheValue(nil, versionHistory.Items, []*commonpb.DataBlob{batch.blob}, batch.nextEventID),
+				)
+			}
+			if tc.readFromPersistence {
+				s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+					gomock.Any(),
+					s.shardContext,
+					namespace.ID(s.namespaceID),
+					&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+					locks.PriorityLow,
+				).Return(s.workflowContext, s.releaseFn, nil)
+				s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
+				s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+					VersionHistories: &historyspb.VersionHistories{Histories: []*historyspb.VersionHistory{versionHistory}},
+				})
+				s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+					BranchToken: versionHistory.BranchToken,
+					MinEventID:  firstEventID,
+					MaxEventID:  nextEventID,
+					PageSize:    1,
+					ShardID:     shardID,
+				}).Return(&persistence.ReadRawHistoryBranchResponse{
+					HistoryEventBlobs: tc.expectedEvents,
+				}, nil)
+			}
+
+			_, events, _, err := getVersionHistoryAndEvents(
+				context.Background(),
+				s.shardContext,
+				shardID,
+				workflowKey,
+				version,
+				firstEventID,
+				nextEventID,
+				s.workflowCache,
+				eventBlobCache,
+				s.executionManager,
+				s.logger,
+			)
+			s.NoError(err)
+			s.Equal(tc.expectedEvents, events)
+		})
+	}
 }
 
 func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowMissing() {
