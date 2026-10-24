@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
-	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -67,6 +66,20 @@ type monitor struct {
 	broadcastHostPortResolver func() (string, error)
 	hostID                    []byte
 	initialized               *future.FutureImpl[struct{}]
+}
+
+type dynamicDiscoverProvider struct {
+	initialHostPorts           []string
+	bootstrapHostPortRetriever func() ([]string, error)
+}
+
+func (p *dynamicDiscoverProvider) Hosts() ([]string, error) {
+	if p.initialHostPorts != nil {
+		hostPorts := p.initialHostPorts
+		p.initialHostPorts = nil
+		return hostPorts, nil
+	}
+	return p.bootstrapHostPortRetriever()
 }
 
 var _ membership.Monitor = (*monitor)(nil)
@@ -196,12 +209,16 @@ func (rpo *monitor) bootstrapRingPop() error {
 		if err != nil {
 			return err
 		}
+		rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(hostPorts, ",")))
 
 		bootParams := &swim.BootstrapOptions{
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  statichosts.New(hostPorts...),
+			DiscoverProvider: &dynamicDiscoverProvider{
+				initialHostPorts:           hostPorts,
+				bootstrapHostPortRetriever: rpo.fetchCurrentBootstrapHostports,
+			},
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
@@ -349,7 +366,6 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
 			}
 
-			rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
 	}
