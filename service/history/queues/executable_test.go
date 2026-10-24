@@ -1290,6 +1290,109 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 	}
 }
 
+// TestTaskNack_UnavailableBlipPreservesResourceExhaustedBackoff is a regression test
+// for a brief Unavailable blip (e.g. a database failover) resetting the accumulated
+// resource exhausted backoff state, which collapses the fleet-wide long backoff and
+// causes a synchronized retry storm on recovery.
+func (s *executableSuite) TestTaskNack_UnavailableBlipPreservesResourceExhaustedBackoff() {
+	executable := s.newTestExecutable()
+
+	systemResourceExhaustedErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "persistence rate limit exceeded",
+	}
+
+	// Accumulate congestion backoff state while persistence is rate limited.
+	const numResourceExhausted = 6
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutedAsActive: true,
+		ExecutionErr:     systemResourceExhaustedErr,
+	}).Times(numResourceExhausted)
+	for range numResourceExhausted {
+		err := executable.Execute()
+		s.Error(err)
+		s.Error(executable.HandleErr(err))
+	}
+
+	// A brief Unavailable blip (e.g. database failover) hits the same task.
+	unavailableErr := serviceerror.NewUnavailable("database failover")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutedAsActive: true,
+		ExecutionErr:     unavailableErr,
+	})
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+
+	// Nack with the Unavailable error must keep the task on the long congestion
+	// backoff curve instead of falling back to the fast default reschedule policy
+	// (and must not take the immediate resubmit optimization).
+	var rescheduleTime time.Time
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(
+		func(_ queues.Executable, t time.Time) {
+			rescheduleTime = t
+		},
+	).Times(1)
+	executable.Nack(unavailableErr)
+
+	backoffDuration := rescheduleTime.Sub(s.timeSource.Now())
+	// With the accumulated resource exhausted count preserved, the long reschedule
+	// policy (initial 3s, coefficient 1.5) yields >= ~18s even after jitter. If the
+	// blip had reset the count, the default policy (initial 1s, coefficient 1.1)
+	// would yield < 3s.
+	s.GreaterOrEqual(backoffDuration, 5*time.Second)
+	s.LessOrEqual(backoffDuration, 5*time.Minute)
+}
+
+// TestTaskNack_GenericErrorResetsResourceExhaustedBackoff verifies that errors which
+// don't indicate congestion still reset the accumulated resource exhausted backoff.
+func (s *executableSuite) TestTaskNack_GenericErrorResetsResourceExhaustedBackoff() {
+	executable := s.newTestExecutable()
+
+	systemResourceExhaustedErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "persistence rate limit exceeded",
+	}
+
+	const numResourceExhausted = 6
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutedAsActive: true,
+		ExecutionErr:     systemResourceExhaustedErr,
+	}).Times(numResourceExhausted)
+	for range numResourceExhausted {
+		err := executable.Execute()
+		s.Error(err)
+		s.Error(executable.HandleErr(err))
+	}
+
+	// A generic, non-congestion error resets the resource exhausted count.
+	genericErr := errors.New("some random error")
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutedAsActive: true,
+		ExecutionErr:     genericErr,
+	})
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+
+	// With the count reset, the immediate resubmit optimization applies again; when
+	// submission fails, the task is rescheduled on the fast default policy.
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
+	var rescheduleTime time.Time
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(
+		func(_ queues.Executable, t time.Time) {
+			rescheduleTime = t
+		},
+	).Times(1)
+	executable.Nack(genericErr)
+
+	backoffDuration := rescheduleTime.Sub(s.timeSource.Now())
+	s.Greater(backoffDuration, time.Duration(0))
+	s.Less(backoffDuration, 3*time.Second)
+}
+
 func (s *executableSuite) TestTaskAbort() {
 	executable := s.newTestExecutable()
 
