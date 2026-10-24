@@ -109,3 +109,7 @@
 
 # This generated file has no code owner to allow automated updates by CI.
 /tests/testcore/shard_salt.txt
+
+# These files have no code owner to allow automated updates by CI (see .github/workflows/testx-bump.yml).
+/go.mod
+/go.sum
