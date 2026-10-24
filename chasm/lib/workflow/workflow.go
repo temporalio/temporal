@@ -2,6 +2,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -113,6 +115,122 @@ func (w *Workflow) ProcessUpdateCallbacks(ctx chasm.MutableContext, updateID str
 		return serviceerror.NewNotFoundf("update with ID %s not found", updateID)
 	}
 	return callback.ScheduleCompletionCallbacks(ctx, update.Get(ctx))
+}
+
+// CallbackAttachmentEventReference identifies the history event that attached callbacks.
+type CallbackAttachmentEventReference struct {
+	EventType enumspb.EventType
+	EventID   int64
+}
+
+type readOnlyContext struct {
+	chasm.Context
+}
+
+func readWorkflowUpdate(
+	ctx chasm.Context,
+	updateField chasm.Field[*WorkflowUpdate],
+) *WorkflowUpdate {
+	return updateField.Get(readOnlyContext{ctx})
+}
+
+// LookupCallbackAttachmentEventReference returns the history event that attached callbacks for requestID.
+func (w *Workflow) LookupCallbackAttachmentEventReference(
+	ctx chasm.Context,
+	updateID string,
+	requestID string,
+) (CallbackAttachmentEventReference, bool) {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return CallbackAttachmentEventReference{}, false
+	}
+	info, ok := readWorkflowUpdate(ctx, updateField).CallbackAttachmentEventReferences[requestID]
+	if !ok {
+		return CallbackAttachmentEventReference{}, false
+	}
+	return CallbackAttachmentEventReference{
+		EventType: info.GetEventType(),
+		EventID:   info.GetEventId(),
+	}, true
+}
+
+// UpdateCallbackAttachment describes completion callbacks and the event that attached them.
+type UpdateCallbackAttachment struct {
+	UpdateID             string
+	RequestID            string
+	Callbacks            []*commonpb.Callback
+	EventReference       CallbackAttachmentEventReference
+	LegacyEventReference *CallbackAttachmentEventReference
+}
+
+// VisitCallbackAttachmentEventReferences visits every callback attachment event reference.
+func (w *Workflow) VisitCallbackAttachmentEventReferences(
+	ctx chasm.Context,
+	visitor func(updateID string, requestID string, reference CallbackAttachmentEventReference),
+) {
+	for updateID, updateField := range w.Updates {
+		for requestID, info := range readWorkflowUpdate(ctx, updateField).CallbackAttachmentEventReferences {
+			visitor(updateID, requestID, CallbackAttachmentEventReference{
+				EventType: info.GetEventType(),
+				EventID:   info.GetEventId(),
+			})
+		}
+	}
+}
+
+// tryBackfillCallbackAttachmentEventReference ensures an existing callback has an attachment event
+// reference using legacy state. It returns true if the reference already existed or was backfilled.
+func (w *Workflow) tryBackfillCallbackAttachmentEventReference(
+	ctx chasm.MutableContext,
+	updateID string,
+	requestID string,
+	reference CallbackAttachmentEventReference,
+) bool {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return false
+	}
+	update := readWorkflowUpdate(ctx, updateField)
+	if _, ok := update.CallbackAttachmentEventReferences[requestID]; ok {
+		return true
+	}
+	if !callback.HasCallbacksForRequest(update, requestID) {
+		return false
+	}
+	setCallbackAttachmentEventReference(updateField.Get(ctx), requestID, reference)
+	return true
+}
+
+func setCallbackAttachmentEventReference(
+	update *WorkflowUpdate,
+	requestID string,
+	reference CallbackAttachmentEventReference,
+) {
+	if update.CallbackAttachmentEventReferences == nil {
+		update.CallbackAttachmentEventReferences = make(map[string]*chasmworkflowpb.CallbackAttachmentEventReference, 1)
+	}
+	update.CallbackAttachmentEventReferences[requestID] = &chasmworkflowpb.CallbackAttachmentEventReference{
+		EventType: reference.EventType,
+		EventId:   reference.EventID,
+	}
+}
+
+// SetCallbackAttachmentEventReferenceEventID replaces a buffered event ID after the event is assigned its durable ID.
+func (w *Workflow) SetCallbackAttachmentEventReferenceEventID(
+	ctx chasm.MutableContext,
+	updateID string,
+	requestID string,
+	eventID int64,
+) {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return
+	}
+	info, ok := readWorkflowUpdate(ctx, updateField).CallbackAttachmentEventReferences[requestID]
+	if !ok || info.EventId != common.BufferedEventID {
+		return
+	}
+	updateField.Get(ctx).CallbackAttachmentEventReferences[requestID].EventId = eventID
 }
 
 // RejectUpdate stores the rejection failure on the WorkflowUpdate component and
@@ -269,6 +387,48 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 		update:   w.Updates[updateID].Get(ctx),
 	}
 	return callback.Attach(ctx, wfUpdateHost, requestID, eventTime, completionCallbacks, callback.WithReusedRequestID())
+}
+
+// AddUpdateCompletionCallbacksWithAttachmentEventReference attaches completion callbacks to the
+// given update, creating its WorkflowUpdate component if needed, and records the history event that
+// attached them. Re-attaching a request that is already present is a no-op. Legacy request ID
+// information deduplicates mixed-version retries.
+//
+// NOTE: Aggregate limits are NOT checked here. See [Workflow.ValidateCallbackAddition].
+func (w *Workflow) AddUpdateCompletionCallbacksWithAttachmentEventReference(
+	ctx chasm.MutableContext,
+	eventTime *timestamppb.Timestamp,
+	attachment UpdateCallbackAttachment,
+) error {
+	updateID := attachment.UpdateID
+	requestID := attachment.RequestID
+	if requestID != "" {
+		if attachment.LegacyEventReference != nil && w.tryBackfillCallbackAttachmentEventReference(
+			ctx,
+			updateID,
+			requestID,
+			*attachment.LegacyEventReference,
+		) {
+			return nil
+		}
+		if updateField, ok := w.Updates[updateID]; ok {
+			update := readWorkflowUpdate(ctx, updateField)
+			if _, ok := update.CallbackAttachmentEventReferences[requestID]; ok ||
+				callback.HasCallbacksForRequest(update, requestID) {
+				return nil
+			}
+		}
+	}
+	if len(attachment.Callbacks) == 0 {
+		return nil
+	}
+	if err := w.AddUpdateCompletionCallbacks(ctx, eventTime, updateID, requestID, attachment.Callbacks); err != nil {
+		return err
+	}
+	if requestID != "" {
+		setCallbackAttachmentEventReference(w.Updates[updateID].Get(ctx), requestID, attachment.EventReference)
+	}
+	return nil
 }
 
 // addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,
