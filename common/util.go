@@ -694,12 +694,13 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
-// GrantEagerDispatch asks Matching whether it may eagerly dispatch one activity task.
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one task.
 func GrantEagerDispatch(
 	ctx context.Context,
 	client matchingservice.MatchingServiceClient,
 	namespaceID string,
 	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
 	priority *commonpb.Priority,
 	version *deploymentspb.WorkerDeploymentVersion,
 ) bool {
@@ -711,7 +712,7 @@ func GrantEagerDispatch(
 		NamespaceId: namespaceID,
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     taskQueue,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			TaskQueueType: taskQueueType,
 		},
 		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
 			Count:    1,

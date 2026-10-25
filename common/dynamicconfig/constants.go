@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	NamespaceReplicationTransportModeLegacy = "legacy"
+	NamespaceReplicationTransportModeShadow = "shadow"
+)
+
 var (
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
@@ -78,6 +83,12 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
+	)
+	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
+		"system.namespaceReplicationTransportMode",
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		NamespaceReplicationTransportModeLegacy,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -252,6 +263,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		true,
 		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
+	)
+	EnableWorkflowEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableWorkflowEagerDispatchCheck",
+		false,
+		`EnableWorkflowEagerDispatchCheck controls whether history asks matching for a grant before eagerly starting a workflow.`,
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
@@ -1127,6 +1143,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 			"xdc-redirection",
 			"xdc-redirection-api",
 			"temporal-nexus-failure-support",
+			"temporal-internal-nexus-cloud-caller-namespace-id",
+			"temporal-internal-nexus-cloud-caller-type",
 		}),
 		`Nexus request headers to be removed before being sent to a user handler. Wildcards (*) are expanded to
 allow any substring. By default headers that are meant for internal use are disallowed. Concrete type should be list of
