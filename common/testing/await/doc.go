@@ -1,11 +1,11 @@
 // Package await provides context-bounded test waits, including polling
 // assertions and blocking channel operations.
 //
-// [Require] and [RequireTrue] replace testify's EventuallyWithT and Eventually,
-// respectively: the first passing poll passes.
+// [Require] and [RequireTrue] replace testify's EventuallyWithT and Eventually:
+// they retry until a poll passes.
 //
 // [RequireHolds] and [RequireHoldsTrue] replace testify's Never with positive
-// invariants: every poll must pass for the full duration.
+// invariants: polls must keep passing for the full duration.
 //
 // By default, they enforce a 10s timeout for each await attempt.
 //

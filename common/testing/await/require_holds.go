@@ -2,6 +2,7 @@ package await
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -9,17 +10,17 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
-// RequireHolds polls condition immediately and then after each pollInterval,
-// failing on the first assertion failure. It succeeds only after the full
-// duration has elapsed and every started attempt has passed. It cannot detect
+var errObservationEnded = errors.New("observation duration elapsed")
+
+// RequireHolds polls condition immediately and then after each pollInterval.
+// It succeeds after the full duration if at least one poll completed successfully
+// and every poll completed before the duration ended passed. It cannot detect
 // violations between polls.
 //
 // Pass the *await.T to assertions and use t.Context() for blocking operations.
-// The duration stops new polls; it does not cancel an in-flight attempt. That
-// attempt is allowed to finish under its own timeout, and its result is honored
-// even after the duration has elapsed. Returning can therefore take up to an
-// additional attempt timeout plus the hard-deadlock grace period.
-// Parent cancellation, attempt timeout, and deadlock fail the test.
+// At the end of the duration, the running attempt is canceled and drained;
+// its assertion failures are ignored. It must exit within the hard-deadlock
+// grace period. Parent cancellation, attempt timeout, and deadlock fail the test.
 func RequireHolds(ctx context.Context, tb testing.TB, condition func(*T), duration, pollInterval time.Duration) {
 	tb.Helper()
 	runHolds(ctx, tb, condition, legacyConfig(duration, pollInterval, ""), "RequireHolds", requireMisuseHint, true)
@@ -46,7 +47,7 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 		return
 	}
 
-	parentCtx = testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+cfg.attemptTimeout+postAwaitTimeoutReserve)
+	parentCtx = testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+postAwaitTimeoutReserve)
 	if deadline, ok := testcontext.GoTestDeadline(tb); ok {
 		var cancel context.CancelFunc
 		parentCtx, cancel = context.WithDeadline(parentCtx, deadline)
@@ -55,6 +56,9 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 
 	start := time.Now()
 	observationEnd := start.Add(cfg.totalTimeout)
+	observationCtx, cancel := context.WithDeadlineCause(parentCtx, observationEnd, errObservationEnded)
+	defer cancel()
+	passed := false
 	report := timeoutReport{}
 	fail := func(format string, args ...any) {
 		tb.Helper()
@@ -72,15 +76,25 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 			fail("context ended before observation completed: %v", err)
 			return
 		}
-		if report.attempts > 0 && deadlineReached(observationEnd) {
+		if deadlineReached(observationEnd) {
+			if !passed {
+				fail("no poll completed successfully before observation ended")
+			}
 			return
 		}
 
 		report.nextPoll()
-		attemptCtx, attemptCancel := context.WithTimeout(parentCtx, cfg.attemptTimeout)
+		attemptCtx, attemptCancel := context.WithTimeout(observationCtx, cfg.attemptTimeout)
 		t := &T{tb: tb, ctx: attemptCtx}
-		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
-		attemptErr := attemptCtx.Err()
+		var attemptCause error
+		var completedAt time.Time
+		res := runAttempt(t, func(t *T) {
+			defer func() {
+				attemptCause = context.Cause(attemptCtx)
+				completedAt = time.Now()
+			}()
+			condition(t)
+		}, attemptCancel, funcName, cancellable)
 		attemptCancel()
 		if res.panicVal != nil {
 			panic(res.panicVal)
@@ -93,7 +107,10 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 			}
 			return
 		}
-		report.recordErrors(t.errors)
+		interrupted := attemptCause == errObservationEnded || (attemptCause == nil && !completedAt.Before(observationEnd))
+		if !interrupted {
+			report.recordErrors(t.errors)
+		}
 		if tb.Failed() {
 			fail("the test was marked failed directly — %s", misuseHint)
 			return
@@ -102,8 +119,11 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 			fail("context ended before observation completed: %v", err)
 			return
 		}
-		if attemptErr != nil {
-			fail("attempt context ended before condition completed: %v", attemptErr)
+		if interrupted {
+			continue
+		}
+		if attemptCause != nil {
+			fail("attempt context ended before condition completed: %v", attemptCause)
 			return
 		}
 		if res.stopped || t.Failed() {
@@ -111,6 +131,7 @@ func runHolds(parentCtx context.Context, tb testing.TB, condition func(*T), cfg 
 			return
 		}
 
-		sleep(parentCtx, observationEnd, cfg.pollInterval)
+		passed = true
+		sleep(observationCtx, observationEnd, cfg.pollInterval)
 	}
 }

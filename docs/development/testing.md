@@ -90,7 +90,10 @@ await.RequireHoldsTrue(t, func() bool {
 ```
 
 These helpers check sampled observations, so they cannot detect violations
-_between_ polls. Success requires the full duration.
+_between_ polls. Success requires the full duration and at least one completed,
+passing poll. When the duration ends, the running poll is canceled and drained;
+its assertion failures are ignored. Parent cancellation, attempt timeouts,
+panics, and deadlocks still fail the test.
 
 The suite equivalents are `s.AwaitHolds`, `s.AwaitHoldsf`, `s.AwaitHoldsTrue`,
 and `s.AwaitHoldsTruef`. Assertion callbacks receive an attempt-scoped suite,
