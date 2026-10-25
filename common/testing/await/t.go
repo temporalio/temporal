@@ -14,6 +14,8 @@ type attemptFailed struct{}
 // T is passed to the condition callback. It intercepts assertion failures
 // so the polling loop can retry.
 //
+// [RequireHolds] instead fails the test on the first assertion failure.
+//
 // Only use T for assertions (require.*, assert.*, t.Errorf, t.Fatal, t.FailNow).
 type T struct {
 	tb     testing.TB

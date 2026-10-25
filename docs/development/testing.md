@@ -67,6 +67,35 @@ await.RequireTrue(t, func() bool {
 
 `RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
 
+### Conditions that must keep holding
+
+Use `await.RequireHolds` (or `await.RequireHoldsf`) instead of testify's `Never`
+when an invariant must remain true for a duration. Write positive assertions;
+the first failure ends the observation and fails the test.
+
+```go
+await.RequireHolds(ctx, t, func(t *await.T) {
+    resp, err := client.GetStatus(t.Context())
+    require.NoError(t, err)
+    require.Equal(t, "scheduled", resp.Status)
+}, 3*time.Second, 200*time.Millisecond)
+```
+
+For simple local predicates, use `RequireHoldsTrue` or `RequireHoldsTruef`:
+
+```go
+await.RequireHoldsTrue(t, func() bool {
+    return dbWrites.Load() == 0
+}, 100*time.Millisecond, time.Millisecond)
+```
+
+These helpers check sampled observations, so they cannot detect violations
+_between_ polls. Success requires the full duration.
+
+The suite equivalents are `s.AwaitHolds`, `s.AwaitHoldsf`, `s.AwaitHoldsTrue`,
+and `s.AwaitHoldsTruef`. Assertion callbacks receive an attempt-scoped suite,
+just like `s.Await`.
+
 ### Blocking on channels
 
 Use `await.Rcv` and `await.Snd` for blocking channel operations.
