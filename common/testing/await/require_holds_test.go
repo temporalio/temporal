@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/testing/await"
 )
 
@@ -51,12 +52,17 @@ func TestRequireHoldsStopsOnFailure(t *testing.T) {
 
 func TestRequireHoldsDrainsFinalAttempt(t *testing.T) {
 	t.Parallel()
-	for _, lateFailure := range []bool{false, true} {
-		name := "pass"
-		if lateFailure {
-			name = "fail"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		passedBefore    bool
+		failAfterCancel bool
+	}{
+		{"passed then interrupted failure", true, true},
+		{"passed then interrupted success", true, false},
+		{"only interrupted failure", false, true},
+		{"only interrupted success", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
 				tb := newRecordingTB()
@@ -66,18 +72,29 @@ func TestRequireHoldsDrainsFinalAttempt(t *testing.T) {
 				tb.run(func() {
 					await.RequireHolds(t.Context(), tb, func(c *await.T) {
 						attempts++
-						attemptCtx = c.Context()
-						time.Sleep(2 * time.Second) //nolint:forbidigo // Advance the synctest clock beyond the observation window.
-						require.NoError(c, c.Context().Err())
-						if lateFailure {
-							c.Fatal("late violation")
+						if tc.passedBefore && attempts == 1 {
+							return
 						}
-					}, time.Second, time.Millisecond)
+						attemptCtx = c.Context()
+						<-c.Context().Done()
+						time.Sleep(50 * time.Millisecond) //nolint:forbidigo // Simulate cleanup after the observation window cancels the attempt.
+						if tc.failAfterCancel {
+							require.NoError(c, c.Context().Err())
+						}
+					}, time.Second, 400*time.Millisecond)
 				})
-				require.Equal(t, lateFailure, tb.Failed(), tb.fatals())
-				require.Equal(t, 1, attempts)
-				require.Equal(t, 2*time.Second, time.Since(start))
-				require.ErrorIs(t, attemptCtx.Err(), context.Canceled)
+				require.Equal(t, !tc.passedBefore, tb.Failed(), tb.fatals())
+				wantAttempts := 1
+				if tc.passedBefore {
+					wantAttempts = 2
+				}
+				require.Equal(t, wantAttempts, attempts)
+				require.Equal(t, 1050*time.Millisecond, time.Since(start))
+				require.ErrorIs(t, attemptCtx.Err(), context.DeadlineExceeded)
+				require.Empty(t, tb.errors(), "interrupted attempt failures must be discarded")
+				if !tc.passedBefore {
+					require.Contains(t, tb.fatals(), "no poll completed successfully")
+				}
 			})
 		})
 	}
@@ -114,20 +131,30 @@ func TestRequireHoldsCancellation(t *testing.T) {
 }
 
 func TestRequireHoldsAttemptTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", "50ms")
-		tb := newRecordingTB()
-		attempts := 0
-		tb.run(func() {
-			await.RequireHolds(t.Context(), tb, func(c *await.T) {
-				attempts++
-				<-c.Context().Done()
-			}, time.Hour, time.Millisecond)
+	for _, cleanup := range []time.Duration{0, 200 * time.Millisecond} {
+		t.Run(cleanup.String(), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", "50ms")
+				attemptTimeout := 50 * time.Millisecond * debug.TimeoutMultiplier
+				tb := newRecordingTB()
+				attempts := 0
+				tb.run(func() {
+					await.RequireHolds(t.Context(), tb, func(c *await.T) {
+						attempts++
+						if attempts == 1 {
+							return
+						}
+						<-c.Context().Done()
+						time.Sleep(cleanup) //nolint:forbidigo // Verify an earlier attempt timeout is not hidden when cleanup crosses the observation deadline.
+					}, attemptTimeout+100*time.Millisecond, time.Millisecond)
+				})
+				require.True(t, tb.Failed())
+				require.Equal(t, 2, attempts)
+				require.Contains(t, tb.fatals(), "attempt context")
+				require.Contains(t, tb.fatals(), "context deadline exceeded")
+			})
 		})
-		require.True(t, tb.Failed())
-		require.Equal(t, 1, attempts)
-		require.Contains(t, tb.fatals(), "attempt context")
-	})
+	}
 }
 
 func TestRequireHoldsSoftDeadlock(t *testing.T) {
@@ -145,23 +172,39 @@ func TestRequireHoldsSoftDeadlock(t *testing.T) {
 }
 
 func TestRequireHoldsHardDeadlock(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", "10ms")
-		t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "10ms")
-		release := make(chan struct{})
-		exited := make(chan struct{})
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.RequireHolds(t.Context(), tb, func(*await.T) {
-				defer close(exited)
-				<-release
-			}, time.Second, time.Millisecond)
+	for _, tc := range []struct {
+		name           string
+		attemptTimeout string
+		passedBefore   bool
+	}{
+		{"attempt timeout", "10ms", false},
+		{"observation end", "10s", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", tc.attemptTimeout)
+				t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "10ms")
+				release := make(chan struct{})
+				exited := make(chan struct{})
+				tb := newRecordingTB()
+				attempts := 0
+				tb.run(func() {
+					await.RequireHolds(t.Context(), tb, func(*await.T) {
+						attempts++
+						if tc.passedBefore && attempts == 1 {
+							return
+						}
+						defer close(exited)
+						<-release
+					}, time.Second, time.Millisecond)
+				})
+				close(release)
+				<-exited
+				require.True(t, tb.Failed())
+				require.Contains(t, tb.fatals(), "does it honor t.Context()?")
+			})
 		})
-		close(release)
-		<-exited
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "does it honor t.Context()?")
-	})
+	}
 }
 
 func TestRequireHoldsAbnormalTermination(t *testing.T) {
@@ -172,6 +215,18 @@ func TestRequireHoldsAbnormalTermination(t *testing.T) {
 			await.RequireHolds(t.Context(), t, func(*await.T) { panic("boom") }, time.Second, time.Millisecond)
 		})
 	})
+	t.Run("panic on window cancellation", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			require.PanicsWithValue(t, "boom", func() {
+				await.RequireHolds(t.Context(), t, func(c *await.T) {
+					<-c.Context().Done()
+					panic("boom")
+				}, time.Second, time.Millisecond)
+			})
+		})
+	})
+
 	for _, tc := range []struct {
 		name      string
 		condition func(*recordingTB, *await.T)
@@ -238,18 +293,24 @@ func TestRequireHoldsCanceledDuringDrain(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		go func() {
-			time.Sleep(1500 * time.Millisecond) //nolint:forbidigo // Cancel after the observation window while its last attempt is running.
+			time.Sleep(1025 * time.Millisecond) //nolint:forbidigo // Cancel after the observation window while its last attempt is running.
 			cancel()
 		}()
 		tb := newRecordingTB()
 		start := time.Now()
+		attempts := 0
 		tb.run(func() {
 			await.RequireHolds(ctx, tb, func(c *await.T) {
+				attempts++
+				if attempts == 1 {
+					return
+				}
 				<-c.Context().Done()
-			}, time.Second, time.Millisecond)
+				time.Sleep(50 * time.Millisecond) //nolint:forbidigo // Keep the final attempt draining until the parent is canceled.
+			}, time.Second, 400*time.Millisecond)
 		})
 		require.True(t, tb.Failed())
-		require.Equal(t, 1500*time.Millisecond, time.Since(start))
+		require.Equal(t, 1050*time.Millisecond, time.Since(start))
 		require.Contains(t, tb.fatals(), "context canceled")
 	})
 }
