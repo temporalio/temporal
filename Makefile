@@ -278,8 +278,8 @@ $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
 
-# Path to a tool pinned in mise.toml, installing it if missing. Without mise, the tool from PATH.
-mise-tool = $(or $(shell command -v mise >/dev/null && mise exec -- sh -c 'command -v $(1)'),$(shell command -v $(1)))
+# Path to a tool pinned in mise.toml, installing it if missing.
+mise-tool = $(or $(shell mise exec -- sh -c 'command -v $(1)'),$(error $(1) not available via mise; see https://mise.jdx.dev/installing-mise.html))
 PROTOC = $(call mise-tool,protoc)
 PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go)
 PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc)
