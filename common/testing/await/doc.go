@@ -2,13 +2,12 @@
 // assertions and blocking channel operations.
 //
 // [Require] and [RequireTrue] replace testify's EventuallyWithT and Eventually,
-// respectively, including their formatted variants. By default, they enforce
-// a 10s timeout for each await attempt.
+// respectively: the first passing poll passes.
 //
 // [RequireHolds] and [RequireHoldsTrue] replace testify's Never with positive
-// invariants: every poll must pass for the full duration. RequireHolds supports
-// assertions and context-aware RPCs; RequireHoldsTrue takes a local bool predicate.
-// The observation duration stops new polls without canceling a running callback.
+// invariants: every poll must pass for the full duration.
+//
+// By default, they enforce a 10s timeout for each await attempt.
 //
 // Improvements over testify's eventually functions:
 //
