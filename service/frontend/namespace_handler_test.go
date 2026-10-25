@@ -119,6 +119,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil,
 	)
 }
 

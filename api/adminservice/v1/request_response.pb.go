@@ -60,6 +60,12 @@ const (
 	ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED ApplyNamespaceMutationResponse_Outcome = // The admitter rejected the namespace (cluster's admission policy says
 	// not to accept this namespace). No write was performed.
 	5
+	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload matched the original legacy task reference.
+	// No write was performed.
+	6
+	ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH ApplyNamespaceMutationResponse_Outcome = // The shadow payload differed from the original legacy task reference.
+	// No write was performed.
+	7
 )
 
 // Enum value maps for ApplyNamespaceMutationResponse_Outcome.
@@ -71,14 +77,18 @@ var (
 		3: "OUTCOME_CREATED",
 		4: "OUTCOME_DUPLICATE",
 		5: "OUTCOME_NOT_ADMITTED",
+		6: "OUTCOME_SHADOW_MATCH",
+		7: "OUTCOME_SHADOW_MISMATCH",
 	}
 	ApplyNamespaceMutationResponse_Outcome_value = map[string]int32{
-		"OUTCOME_UNSPECIFIED":  0,
-		"OUTCOME_APPLIED":      1,
-		"OUTCOME_NO_OP_STALE":  2,
-		"OUTCOME_CREATED":      3,
-		"OUTCOME_DUPLICATE":    4,
-		"OUTCOME_NOT_ADMITTED": 5,
+		"OUTCOME_UNSPECIFIED":     0,
+		"OUTCOME_APPLIED":         1,
+		"OUTCOME_NO_OP_STALE":     2,
+		"OUTCOME_CREATED":         3,
+		"OUTCOME_DUPLICATE":       4,
+		"OUTCOME_NOT_ADMITTED":    5,
+		"OUTCOME_SHADOW_MATCH":    6,
+		"OUTCOME_SHADOW_MISMATCH": 7,
 	}
 )
 
@@ -104,6 +114,12 @@ func (x ApplyNamespaceMutationResponse_Outcome) String() string {
 
 		// Deprecated: Use ApplyNamespaceMutationResponse_Outcome.Descriptor instead.
 		return "ApplyNamespaceMutationResponseOutcomeNotAdmitted"
+	case ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
+		return "ApplyNamespaceMutationResponseOutcomeShadowMatch"
+	case ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
+
+		// Target scheduler implementation for migration.
+		return "ApplyNamespaceMutationResponseOutcomeShadowMismatch"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -126,7 +142,6 @@ func (ApplyNamespaceMutationResponse_Outcome) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{26, 0}
 }
 
-// Target scheduler implementation for migration.
 type MigrateScheduleRequest_SchedulerTarget int32
 
 const (
@@ -1723,12 +1738,20 @@ func (x *GetNamespaceReplicationMessagesResponse) GetMessages() *v15.Replication
 // for the CHASM-based namespace replication transport.
 type ApplyNamespaceMutationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The mutation to apply. Reuses the existing NamespaceTaskAttributes shape so the
-	// receiver-side apply-if-higher logic (replication_task_executor.go) can be reused
-	// unchanged.
+	// Compatibility view for older receivers. New receivers validate and process
+	// namespace_task_payload instead of this independently encoded typed field.
 	NamespaceTask *v15.NamespaceTaskAttributes `protobuf:"bytes,1,opt,name=namespace_task,json=namespaceTask,proto3" json:"namespace_task,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Shadow requests validate transport equivalence but never mutate receiver state.
+	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
+	// Fields 4-7 are used by observability metadata in the shadow metrics change.
+	// Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
+	// decodes this payload with its local schema for shadow comparison.
+	NamespaceTaskPayload []byte `protobuf:"bytes,8,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
+	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
+	// Shadow requests compare this reference with the decoded namespace_task_payload.
+	ShadowLegacyTaskPayload []byte `protobuf:"bytes,9,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ApplyNamespaceMutationRequest) Reset() {
@@ -1768,9 +1791,30 @@ func (x *ApplyNamespaceMutationRequest) GetNamespaceTask() *v15.NamespaceTaskAtt
 	return nil
 }
 
+func (x *ApplyNamespaceMutationRequest) GetShadow() bool {
+	if x != nil {
+		return x.Shadow
+	}
+	return false
+}
+
+func (x *ApplyNamespaceMutationRequest) GetNamespaceTaskPayload() []byte {
+	if x != nil {
+		return x.NamespaceTaskPayload
+	}
+	return nil
+}
+
+func (x *ApplyNamespaceMutationRequest) GetShadowLegacyTaskPayload() []byte {
+	if x != nil {
+		return x.ShadowLegacyTaskPayload
+	}
+	return nil
+}
+
 type ApplyNamespaceMutationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Result of applying the mutation on the receiving cluster.
+	// Result of applying or shadow-validating the mutation on the receiving cluster.
 	Outcome       ApplyNamespaceMutationResponse_Outcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse_Outcome" json:"outcome,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -6540,18 +6584,23 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\x83\x01\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\x8e\x02\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
-	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\"\xa0\x02\n" +
+	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
+	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x124\n" +
+	"\x16namespace_task_payload\x18\b \x01(\fR\x14namespaceTaskPayload\x12;\n" +
+	"\x1ashadow_legacy_task_payload\x18\t \x01(\fR\x17shadowLegacyTaskPayload\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
-	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\x96\x01\n" +
+	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fOUTCOME_APPLIED\x10\x01\x12\x17\n" +
 	"\x13OUTCOME_NO_OP_STALE\x10\x02\x12\x13\n" +
 	"\x0fOUTCOME_CREATED\x10\x03\x12\x15\n" +
 	"\x11OUTCOME_DUPLICATE\x10\x04\x12\x18\n" +
-	"\x14OUTCOME_NOT_ADMITTED\x10\x05\"z\n" +
+	"\x14OUTCOME_NOT_ADMITTED\x10\x05\x12\x18\n" +
+	"\x14OUTCOME_SHADOW_MATCH\x10\x06\x12\x1b\n" +
+	"\x17OUTCOME_SHADOW_MISMATCH\x10\a\"z\n" +
 	" GetDLQReplicationMessagesRequest\x12V\n" +
 	"\n" +
 	"task_infos\x18\x01 \x03(\v27.temporal.server.api.replication.v1.ReplicationTaskInfoR\ttaskInfos\"\x85\x01\n" +

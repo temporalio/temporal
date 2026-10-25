@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -133,4 +135,65 @@ func requireInvalidArgumentError(t *testing.T, err error, operation string) {
 
 	require.Contains(t, err.Error(), "unable to parse branch token",
 		"%s error message should contain 'unable to parse branch token'", operation)
+}
+
+func TestAppendHistoryNodes_TransactionIDMustExceedPrevTransactionID(t *testing.T) {
+	serializer := serialization.NewSerializer()
+	branchUtil := p.NewHistoryBranchUtil(serializer)
+	branchToken, err := branchUtil.NewHistoryBranch("", "", "", uuid.NewString(), nil, nil, 0, 0, 0)
+	require.NoError(t, err)
+	events := []*historypb.HistoryEvent{{EventId: 5, Version: 1}}
+	blob, err := serializer.SerializeEvents(events)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name              string
+		prevTransactionID int64
+		transactionID     int64
+		valid             bool
+	}{
+		{name: "greater", prevTransactionID: 100, transactionID: 101, valid: true},
+		{name: "no previous", prevTransactionID: 0, transactionID: 1, valid: true},
+		{name: "equal", prevTransactionID: 100, transactionID: 100, valid: false},
+		{name: "lower", prevTransactionID: 101, transactionID: 100, valid: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mock.NewMockExecutionStore(ctrl)
+			store.EXPECT().GetHistoryBranchUtil().AnyTimes().Return(branchUtil)
+			if tc.valid {
+				store.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).Times(2).Return(nil)
+			}
+			em := p.NewExecutionManager(
+				store,
+				serializer,
+				nil,
+				log.NewNoopLogger(),
+				dynamicconfig.GetIntPropertyFn(1024*1024),
+				dynamicconfig.GetBoolPropertyFn(false),
+			)
+
+			_, err := em.AppendHistoryNodes(context.Background(), &p.AppendHistoryNodesRequest{
+				BranchToken:       branchToken,
+				Events:            events,
+				PrevTransactionID: tc.prevTransactionID,
+				TransactionID:     tc.transactionID,
+			})
+			_, rawErr := em.AppendRawHistoryNodes(context.Background(), &p.AppendRawHistoryNodesRequest{
+				BranchToken:       branchToken,
+				History:           blob,
+				NodeID:            5,
+				PrevTransactionID: tc.prevTransactionID,
+				TransactionID:     tc.transactionID,
+			})
+			if tc.valid {
+				require.NoError(t, err)
+				require.NoError(t, rawErr)
+				return
+			}
+			require.ErrorAs(t, err, new(*p.InvalidPersistenceRequestError))
+			require.ErrorAs(t, rawErr, new(*p.InvalidPersistenceRequestError))
+		})
+	}
 }
