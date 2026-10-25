@@ -274,12 +274,11 @@ func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, policy en
 		// paused: the paused workflow keeps the overlap slot occupied. Poll
 		// over a window during which the 1s schedule would otherwise fire ~8
 		// times, confirming ActionCount never advances.
-		require.Never(
-			t,
-			func() bool {
-				c, cErr := scheduleActionCount(f.ctx, f.env, f.sid)
-				return cErr == nil && c > f.actionsAtPause
-			},
+		await.RequireHoldsf(f.ctx, t, func(at *await.T) {
+			c, cErr := scheduleActionCount(at.Context(), f.env, f.sid)
+			require.NoError(at, cErr)
+			require.LessOrEqual(at, c, f.actionsAtPause)
+		},
 			8*time.Second,
 			500*time.Millisecond,
 			"schedule with %s must not take new actions while its workflow is paused", policy)
@@ -453,12 +452,13 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 	// workflow must not continue-as-new: it stays on the same run, still PAUSED.
 	err := f.env.SdkClient().SignalWorkflow(f.ctx, f.execution.GetWorkflowId(), f.execution.GetRunId(), "go", nil)
 	require.NoError(t, err)
-	require.Never(t, func() bool {
-		d, dErr := f.env.FrontendClient().DescribeWorkflowExecution(f.ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.RequireHoldsf(f.ctx, t, func(at *await.T) {
+		d, dErr := f.env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: f.env.Namespace().String(),
 			Execution: f.execution,
 		})
-		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+		require.NoError(at, dErr)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, d.GetWorkflowExecutionInfo().GetStatus())
 	}, 3*time.Second, 500*time.Millisecond,
 		"paused workflow must not continue-as-new while paused")
 
