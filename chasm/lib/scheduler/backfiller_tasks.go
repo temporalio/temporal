@@ -94,6 +94,7 @@ func (b *BackfillerTaskHandler) Execute(
 		// schedule a current stamped task, without allowing it to process a range.
 		backfiller.TaskStamp = backfiller.Attempt
 		b.rescheduleBackfill(ctx, backfiller)
+		scheduler.PrepareVisibility(ctx)
 		return nil
 	}
 	defer func() { backfiller.Attempt++ }()
@@ -117,6 +118,7 @@ func (b *BackfillerTaskHandler) Execute(
 		logger.Debug("Buffer full, backing off backfill",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		b.rescheduleBackfill(ctx, backfiller)
+		scheduler.PrepareVisibility(ctx)
 		return nil
 	}
 
@@ -156,6 +158,7 @@ func (b *BackfillerTaskHandler) Execute(
 	// Otherwise, update watermark and reschedule.
 	backfiller.LastProcessedTime = timestamppb.New(result.LastProcessedTime)
 	b.rescheduleBackfill(ctx, backfiller)
+	scheduler.PrepareVisibility(ctx)
 
 	return nil
 }

@@ -55,8 +55,9 @@ type Scheduler struct {
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
-	cacheConflictToken int64
-	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
+	cacheConflictToken     int64
+	compiledSpec           *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
+	visibilityForcePublish bool
 }
 
 var (
@@ -399,7 +400,7 @@ func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
 
 // Terminate implements the chasm.RootComponent interface.
 func (s *Scheduler) Terminate(
-	_ chasm.MutableContext,
+	ctx chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	if s.Closed {
@@ -409,6 +410,7 @@ func (s *Scheduler) Terminate(
 	// Needed so that the CHASM-level search attribute reads closed as well as the
 	// MS-level/legacy ExecutionStatus.
 	s.Closed = true
+	s.PrepareVisibility(ctx)
 	return chasm.TerminateComponentResponse{}, nil
 }
 
@@ -841,6 +843,7 @@ func (s *Scheduler) Delete(
 		return nil, ErrMigrationPending
 	}
 	s.Closed = true
+	s.PrepareVisibility(ctx)
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
 	}, nil
@@ -880,6 +883,7 @@ func (s *Scheduler) MigrateToWorkflow(
 
 	// Schedule a side-effect task to export state and start the V1 workflow.
 	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+	s.PrepareVisibility(ctx)
 
 	return &schedulerpb.MigrateToWorkflowResponse{}, nil
 }
@@ -923,6 +927,7 @@ func (s *Scheduler) Update(
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
+	s.visibilityForcePublish = true
 	s.setNullableFields()
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
@@ -954,6 +959,7 @@ func (s *Scheduler) Patch(
 		return nil, ErrMigrationPending
 	}
 	s.applyPausePatch(ctx, req.FrontendRequest.Patch)
+	s.visibilityForcePublish = true
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err
@@ -996,6 +1002,13 @@ func (s *Scheduler) executionStatus() string {
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
+	if s.VisibilityPublication != nil && !s.Sentinel {
+		return s.publishedSearchAttributes()
+	}
+	return s.liveSearchAttributes(ctx)
+}
+
+func (s *Scheduler) liveSearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	if s.Sentinel {
 		return []chasm.SearchAttributeKeyValue{
 			executionStatusSearchAttribute.Value(s.executionStatus()),
@@ -1032,6 +1045,9 @@ func (s *Scheduler) Memo(
 ) proto.Message {
 	if s.Sentinel {
 		return nil
+	}
+	if s.VisibilityPublication != nil {
+		return s.VisibilityPublication.ListInfo
 	}
 	return s.ListInfo(ctx)
 }
