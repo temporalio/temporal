@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -59,12 +60,21 @@ func (s *setupTestSuite) SetupTest() {} //nolint:unused
 type awaitTrueSuite struct{ Suite[*awaitTrueSuite] }
 
 func (s *awaitTrueSuite) TestAwaitTrue() {
-	var attempts atomic.Int32
-	s.AwaitTrue(func() bool {
-		attempts.Add(1)
-		return true
-	}, time.Second, time.Millisecond)
-	s.Equal(int32(1), attempts.Load())
+	synctest.Test(s.T(), func(t *testing.T) {
+		s := s.copySuite(t, false, nil, nil).(*awaitTrueSuite)
+		var attempts atomic.Int32
+		s.AwaitTrue(func() bool {
+			attempts.Add(1)
+			return true
+		}, time.Second, time.Millisecond)
+		s.Equal(int32(1), attempts.Load())
+
+		start := time.Now()
+		s.AwaitHoldsTrue(func() bool {
+			return attempts.Load() == 1
+		}, time.Second, 400*time.Millisecond)
+		s.Equal(time.Second, time.Since(start))
+	})
 }
 
 func (s *awaitTrueSuite) TestAwaitTrueFalseRetry() {
@@ -76,9 +86,18 @@ func (s *awaitTrueSuite) TestAwaitTrueFalseRetry() {
 }
 
 func (s *awaitTrueSuite) TestAwaitTruef() {
-	s.AwaitTruef(func() bool {
-		return true
-	}, time.Second, time.Millisecond, "condition should pass")
+	synctest.Test(s.T(), func(t *testing.T) {
+		s := s.copySuite(t, false, nil, nil).(*awaitTrueSuite)
+		s.AwaitTruef(func() bool {
+			return true
+		}, time.Second, time.Millisecond, "condition should pass")
+
+		start := time.Now()
+		s.AwaitHoldsTruef(func() bool {
+			return true
+		}, time.Second, time.Millisecond, "condition should keep holding")
+		s.Equal(time.Second, time.Since(start))
+	})
 }
 
 type contextSuite struct{ Suite[*contextSuite] }
@@ -90,18 +109,40 @@ func (s *contextSuite) TestContextHasDeadline() {
 }
 
 func (s *contextSuite) TestAwaitUsesSuiteContext() {
-	type key struct{}
+	synctest.Test(s.T(), func(t *testing.T) {
+		s := s.copySuite(t, false, nil, nil).(*contextSuite)
+		type key struct{}
 
-	testcontext.AttachDecorator(s.T(), key{}, func(ctx context.Context) context.Context {
-		return context.WithValue(ctx, key{}, "decorated")
+		testcontext.AttachDecorator(s.T(), key{}, func(ctx context.Context) context.Context {
+			return context.WithValue(ctx, key{}, "decorated")
+		})
+
+		s.Await(func(s *contextSuite) {
+			s.Equal("decorated", s.Context().Value(key{}))
+			deadline, ok := s.Context().Deadline()
+			s.True(ok)
+			s.Less(time.Until(deadline), 200*time.Millisecond)
+		}, 100*time.Millisecond, time.Millisecond)
+
+		start := time.Now()
+		attempts := 0
+		var attemptCtx context.Context
+		s.AwaitHolds(func(c *contextSuite) {
+			attempts++
+			attemptCtx = c.Context()
+			c.NotSame(s, c)
+			c.Equal("decorated", c.Context().Value(key{}))
+			c.NotSame(s.AssertionT(), c.AssertionT())
+			c.NoError(c.Context().Err())
+		}, time.Second, 400*time.Millisecond)
+		s.Equal(3, attempts)
+		s.Equal(time.Second, time.Since(start))
+		s.ErrorIs(attemptCtx.Err(), context.Canceled)
+		s.AwaitHoldsf(func(c *contextSuite) {
+			c.NoError(c.Context().Err())
+		}, time.Second, time.Second, "activity %s", "scheduled")
+		s.Equal(2*time.Second, time.Since(start))
 	})
-
-	s.Await(func(s *contextSuite) {
-		s.Equal("decorated", s.Context().Value(key{}))
-		deadline, ok := s.Context().Deadline()
-		s.True(ok)
-		s.Less(time.Until(deadline), 200*time.Millisecond)
-	}, 100*time.Millisecond, time.Millisecond)
 }
 
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
