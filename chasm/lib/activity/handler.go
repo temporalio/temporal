@@ -228,18 +228,21 @@ func (h *handler) newActivityForStartExecution(
 		}
 	}
 
-	if request.GetRequestEagerExecution() {
-		err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
+	eager := request.GetRequestEagerExecution()
+	if eager {
+		if err := TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
 			requestID: request.GetRequestId(),
-			identity:  request.GetIdentity(),
-		})
+		}); err != nil {
+			return nil, nil, err
+		}
+		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
 	} else {
 		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	if !request.GetRequestEagerExecution() {
+	if !eager {
 		return newActivity, nil, nil
 	}
 
