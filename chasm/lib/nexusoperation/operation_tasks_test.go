@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -1233,6 +1235,32 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			timerRecordings := snap[OutboundRequestLatency.Name()]
 			require.Len(t, timerRecordings, 1)
 			require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
+		})
+	}
+}
+
+// tasks.Tags can't import this package, so it repeats TaskGroupName as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
+	t.Parallel()
+
+	registry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, registry.Register(NewNilLibrary()))
+
+	for _, taskType := range []string{
+		"nexusoperation.invocation",
+		"nexusoperation.cancellation",
+	} {
+		t.Run(taskType, func(t *testing.T) {
+			t.Parallel()
+
+			registered, ok := registry.TaskByID(chasm.GenerateTypeID(taskType))
+			require.True(t, ok)
+			require.Equal(t, TaskGroupName, registered.TaskGroup())
+
+			task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+			task.SetOutboundTaskGroup(registered.TaskGroup())
+			require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound)
 		})
 	}
 }

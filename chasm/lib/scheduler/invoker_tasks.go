@@ -692,10 +692,12 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	}
 
 	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
-	var lcr []*commonpb.Payload
+	// Nil unless there is a result: SDKs treat any non-nil Payloads as present (V1 parity).
+	var lcr *commonpb.Payloads
 	continuedFailure := lastCompletionState.Failure
-	if tracksCompletionResult && lastCompletionState.Success != nil {
-		lcr = append(lcr, lastCompletionState.Success)
+	// Older binaries may have persisted an empty payload from a no-result workflow.
+	if tracksCompletionResult && !internal.IsEmptyPayload(lastCompletionState.Success) {
+		lcr = &commonpb.Payloads{Payloads: []*commonpb.Payload{lastCompletionState.Success}}
 	}
 	if !tracksCompletionResult {
 		continuedFailure = nil
@@ -729,9 +731,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		TimeSkippingConfig:           timeSkippingConfig,
 		TimeSkippingStatePropagation: timeSkippingStatePropagation,
 		ContinuedFailure:             continuedFailure,
-		LastCompletionResult: &commonpb.Payloads{
-			Payloads: lcr,
-		},
+		LastCompletionResult:         lcr,
 	}
 	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
 		request.VersioningOverride = requestSpec.VersioningOverride
