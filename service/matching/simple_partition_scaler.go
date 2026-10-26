@@ -58,6 +58,7 @@ type simplePartitionScaler struct {
 	upTrackers                map[time.Duration]*taskTracker
 	downTrackers              map[time.Duration]*taskTracker
 	lastLoggedTargetBeforeMax int
+	lastCall                  time.Time
 }
 
 func newSimplePartitionScaler(
@@ -88,6 +89,15 @@ func (s *simplePartitionScaler) getTracker(trackers map[time.Duration]*taskTrack
 }
 
 func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScalerDecision {
+	// in.NumTasks arrived since the previous call, so track that interval even across calls
+	// that return early.
+	now := s.ts.Now()
+	prevCall := s.lastCall
+	if prevCall.IsZero() {
+		prevCall = now
+	}
+	s.lastCall = now
+
 	cfg := s.cfg()
 
 	if !cfg.Enabled {
@@ -125,10 +135,10 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
 	for _, t := range s.upTrackers {
-		t.inc(in.NumTasks)
+		t.incOver(in.NumTasks, prevCall)
 	}
 	for _, t := range s.downTrackers {
-		t.inc(in.NumTasks)
+		t.incOver(in.NumTasks, prevCall)
 	}
 
 	// unmarshal our state
