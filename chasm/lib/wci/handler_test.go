@@ -47,6 +47,8 @@ type fakeCompute struct {
 	callErr    error
 	// Provider types the WCI process serves, on top of the in-process defaults.
 	remote []string
+	// onValidate runs inside ValidateSpec, i.e. while an update holds no lock.
+	onValidate func()
 }
 
 func (f *fakeCompute) Supports(namespaceName, providerType string) bool {
@@ -62,6 +64,9 @@ func (f *fakeCompute) record(call string) error {
 }
 
 func (f *fakeCompute) ValidateSpec(context.Context, compute.RequestContext, *iface.WorkerControllerInstanceSpec) error {
+	if f.onValidate != nil {
+		f.onValidate()
+	}
 	return f.record("validate")
 }
 
@@ -394,6 +399,46 @@ func TestE2E_DeleteThenTaskAddIsClosed(t *testing.T) {
 	require.Zero(t, fake.taskAddCalls, "a deleted instance never runs the algorithm")
 	_, err = e.describe()
 	require.ErrorIs(t, err, ErrClosed)
+}
+
+func TestE2E_UpdateAfterDeleteRecreates(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	first, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	_, err = e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+	require.NoError(t, err)
+
+	_, err = e.updateWithToken(first.GetConflictToken(), groupUpsert("test-invoke"))
+	require.ErrorIs(t, err, errConflictTokenMismatch, "a token from the deleted instance never matches")
+
+	second, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NotEqual(t, first.GetConflictToken(), second.GetConflictToken())
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status)
+	require.Contains(t, w.ScalingGroupSpecs, "g")
+}
+
+func TestE2E_UpdateRacingCloseIsRetryable(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+
+	// The instance closes between the update's read and its apply.
+	e.compute.onValidate = func() {
+		e.compute.onValidate = nil
+		_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+		require.NoError(t, err)
+	}
+	_, err = e.update(groupUpsert("test-invoke"))
+	require.ErrorIs(t, err, errClosedDuringUpdate)
+	var unavailable *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailable, "retryable, so the router re-probes")
+	_, err = e.describe()
+	require.ErrorIs(t, err, ErrClosed, "no new execution replaced the closed one")
+
+	_, err = e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err, "the retry re-creates")
 }
 
 func TestE2E_TaskAddOnMissingIsNotFound(t *testing.T) {
