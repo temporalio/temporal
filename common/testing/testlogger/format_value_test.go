@@ -87,20 +87,17 @@ func TestFormatValue_NoRaceWithConcurrentMutation(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := range 1000 {
 			c.pollers[i] = "poller" // intentionally unsynchronized, like the matching engine's pollers map
 		}
-	}()
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		for range 1000 {
 			for _, tg := range tags {
 				_ = formatValue(tg)
 			}
 		}
-	}()
+	})
 	wg.Wait()
 }
