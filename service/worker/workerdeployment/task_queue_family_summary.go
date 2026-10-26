@@ -37,7 +37,6 @@ func taskQueueFamilyMayExist(summary *deploymentspb.TaskQueueFamilySummary, task
 	}
 
 	filterWords := summary.GetBloomFilterWords()
-	// TODO: Validate the Bloom filter metadata before reconstructing it.
 	// The proto uses int64 words to satisfy proto lint, while the Bloom library requires uint64.
 	// This conversion preserves the existing bitset; it does not rebuild the filter from task queue names.
 	words := make([]uint64, len(filterWords))
@@ -49,4 +48,17 @@ func taskQueueFamilyMayExist(summary *deploymentspb.TaskQueueFamilySummary, task
 		uint(summary.GetBloomFilterSize()),
 		uint(summary.GetBloomFilterHashCount()),
 	).TestString(taskQueueName)
+}
+
+func isTaskQueueFamilySummaryValid(summary *deploymentspb.TaskQueueFamilySummary) bool {
+	count := summary.GetCount()
+	if count <= 0 {
+		return false
+	}
+	expectedSize, expectedHashCount := bloom.EstimateParameters(uint(count), taskQueueFamilyBloomFalsePositiveRate)
+
+	// validations to ensure that the Bloom filter is valid
+	return summary.GetBloomFilterSize() == int64(expectedSize) &&
+		summary.GetBloomFilterHashCount() == int32(expectedHashCount) &&
+		uint(len(summary.GetBloomFilterWords())) == (expectedSize+63)/64
 }

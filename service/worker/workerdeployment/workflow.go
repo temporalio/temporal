@@ -194,9 +194,7 @@ func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(ctx workflow.Cont
 
 	// Preserve create_request_id since the version workflow doesn't know about it.
 	summary.CreateRequestId = existing.GetCreateRequestId()
-	if summary.GetTaskQueueFamilySummary() == nil {
-		summary.TaskQueueFamilySummary = existing.GetTaskQueueFamilySummary()
-	}
+	summary.TaskQueueFamilySummary = existing.GetTaskQueueFamilySummary()
 	d.State.Versions[summary.GetVersion()] = summary
 	if workflow.GetVersion(ctx, "update-memo-with-summary", workflow.DefaultVersion, 0) != workflow.DefaultVersion {
 		if err := d.updateMemo(ctx); err != nil {
@@ -258,9 +256,7 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		return
 	}
-	if summary.GetTaskQueueFamilySummary() == nil {
-		summary.TaskQueueFamilySummary = existingSummary.GetTaskQueueFamilySummary()
-	}
+	summary.TaskQueueFamilySummary = existingSummary.GetTaskQueueFamilySummary()
 
 	// Preserve create_time and first_activation_time if they exist in current summary. This is to ensure that if the version
 	// had already been activated before, we don't override the first activation time by setting it to a wrong value.
@@ -724,7 +720,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.lock.Unlock()
 	}()
 	// Revalidate after acquiring the lock because the summary may have changed after update validation.
-	bloomFilterPassed, err := d.validateRegisterWorkerWithBloomFilterResult(args)
+	bloomFilterMatched, err := d.validateRegisterWorkerWithBloomFilterResult(args)
 	if err != nil {
 		return err
 	}
@@ -744,6 +740,10 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		routingConfigToSync = d.GetState().GetRoutingConfig()
 	}
 
+	// Invalidating the task queue family count. This may be required so that if a Temporal Operator were to change the max task queues limit in the future,
+	// then we want our cached values to be invalidated. This is a best-effort approach to ensure that we are using the latest values.
+	d.invalidateTaskQueueFamilySummaryBelowLimit(version, args.GetMaxTaskQueues())
+
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
@@ -756,7 +756,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	if err != nil {
 		if isMaxTaskQueuesInVersionError(err) {
 			d.cacheTaskQueueFamilySummaryFromError(version, err)
-			if bloomFilterPassed {
+			if bloomFilterMatched {
 				d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeFalsePositive)
 			}
 			return temporal.NewApplicationError(
@@ -766,10 +766,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		}
 		return err
 	}
-	// Invalidating the task queue family count. This may be required so that if a Temporal Operator were to change the max task queues limit in the future,
-	// then we want our cached values to be invalidated. This is a best-effort approach to ensure that we are using the latest values.
-	d.invalidateTaskQueueFamilySummaryBelowLimit(version, args.GetMaxTaskQueues())
-	if bloomFilterPassed {
+	if bloomFilterMatched {
 		d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeAccepted)
 	}
 
@@ -794,12 +791,15 @@ func (d *WorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWork
 	return err
 }
 
-func (d *WorkflowRunner) validateRegisterWorkerWithBloomFilterResult(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) (bool, error) {
+func (d *WorkflowRunner) validateRegisterWorkerWithBloomFilterResult(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) (bloomFilterMatched bool, err error) {
 	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.GetVersion())
 	versionSummary := d.GetState().GetVersions()[version]
 	taskQueueFamilySummary := versionSummary.GetTaskQueueFamilySummary()
 	if taskQueueFamilySummary == nil ||
 		taskQueueFamilySummary.GetCount() < args.GetMaxTaskQueues() {
+		return false, nil
+	}
+	if !isTaskQueueFamilySummaryValid(taskQueueFamilySummary) {
 		return false, nil
 	}
 	if taskQueueFamilyMayExist(taskQueueFamilySummary, args.GetTaskQueueName()) {

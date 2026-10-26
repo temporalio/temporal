@@ -227,12 +227,12 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 	})
 
 	testCases := []struct {
-		name           string
-		summary        *deploymentspb.TaskQueueFamilySummary
-		taskQueueName  string
-		maxTaskQueues  int32
-		wantLimitError bool
-		wantBloomPass  bool
+		name                   string
+		summary                *deploymentspb.TaskQueueFamilySummary
+		taskQueueName          string
+		maxTaskQueues          int32
+		wantLimitError         bool
+		wantBloomFilterMatched bool
 	}{
 		{
 			name:           "definite miss at limit",
@@ -242,11 +242,11 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 			wantLimitError: true,
 		},
 		{
-			name:          "existing family at limit",
-			summary:       completeSummary,
-			taskQueueName: "existing-queue",
-			maxTaskQueues: 1,
-			wantBloomPass: true,
+			name:                   "existing family at limit",
+			summary:                completeSummary,
+			taskQueueName:          "existing-queue",
+			maxTaskQueues:          1,
+			wantBloomFilterMatched: true,
 		},
 		{
 			name:          "below limit",
@@ -256,6 +256,91 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 		},
 		{
 			name:          "missing summary fails open",
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "zero bloom filter size fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                1,
+				BloomFilterHashCount: 1,
+				BloomFilterWords:     []int64{1},
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "zero bloom filter hash count fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:            1,
+				BloomFilterSize:  64,
+				BloomFilterWords: []int64{1},
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "missing bloom filter words fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                1,
+				BloomFilterSize:      64,
+				BloomFilterHashCount: 1,
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "inconsistent bloom filter metadata fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                completeSummary.GetCount(),
+				BloomFilterSize:      completeSummary.GetBloomFilterSize() + 1,
+				BloomFilterHashCount: completeSummary.GetBloomFilterHashCount(),
+				BloomFilterWords:     completeSummary.GetBloomFilterWords(),
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "inconsistent bloom filter hash count fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                completeSummary.GetCount(),
+				BloomFilterSize:      completeSummary.GetBloomFilterSize(),
+				BloomFilterHashCount: completeSummary.GetBloomFilterHashCount() + 1,
+				BloomFilterWords:     completeSummary.GetBloomFilterWords(),
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "negative bloom filter size fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                1,
+				BloomFilterSize:      -1,
+				BloomFilterHashCount: 1,
+				BloomFilterWords:     []int64{1},
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "negative bloom filter hash count fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                1,
+				BloomFilterSize:      64,
+				BloomFilterHashCount: -1,
+				BloomFilterWords:     []int64{0},
+			},
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
+		},
+		{
+			name: "inconsistent bloom filter word count fails open",
+			summary: &deploymentspb.TaskQueueFamilySummary{
+				Count:                completeSummary.GetCount(),
+				BloomFilterSize:      completeSummary.GetBloomFilterSize(),
+				BloomFilterHashCount: completeSummary.GetBloomFilterHashCount(),
+				BloomFilterWords:     []int64{0, 0},
+			},
 			taskQueueName: "new-queue",
 			maxTaskQueues: 1,
 		},
@@ -275,13 +360,13 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 				},
 				metrics: sdkclient.MetricsNopHandler,
 			}
-			bloomFilterPassed, err := runner.validateRegisterWorkerWithBloomFilterResult(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
+			bloomFilterMatched, err := runner.validateRegisterWorkerWithBloomFilterResult(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 				TaskQueueName: tc.taskQueueName,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
 				MaxTaskQueues: tc.maxTaskQueues,
 				Version:       version,
 			})
-			require.Equal(t, tc.wantBloomPass, bloomFilterPassed)
+			require.Equal(t, tc.wantBloomFilterMatched, bloomFilterMatched)
 
 			if !tc.wantLimitError {
 				require.NoError(t, err)
