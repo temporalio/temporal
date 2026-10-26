@@ -519,6 +519,7 @@ type (
 		// CustomStores contains the config for all custom history archivers
 		// The structure is a map of archiver name (scheme) to a map of config key-values
 		CustomStores map[string]map[string]any `yaml:"customStores"`
+		Azblob       *AzblobArchiver           `yaml:"azblob"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -539,6 +540,7 @@ type (
 		// CustomStores contains the config for all custom visibility archivers
 		// The structure is a map of archiver name (scheme) to a map of config key-values
 		CustomStores map[string]map[string]any `yaml:"customStores"`
+		Azblob       *AzblobArchiver           `yaml:"azblob"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver
@@ -558,6 +560,14 @@ type (
 		Endpoint         *string `yaml:"endpoint"`
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 		LogLevel         uint    `yaml:"logLevel"`
+	}
+
+	// AzblobArchiver contains the config for Azure Blob Storage archiver
+	AzblobArchiver struct {
+		AccountName  string `yaml:"accountName"`
+		AccountKey   string `yaml:"accountKey"`
+		Endpoint     string `yaml:"endpoint"`
+		UseSharedKey bool   `yaml:"useSharedKey"`
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to

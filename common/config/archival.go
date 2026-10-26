@@ -33,14 +33,20 @@ func (p *HistoryArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
-	return p.Gstorage.validate("archival.history.provider.gstorage")
+	if err := p.Gstorage.validate("archival.history.provider.gstorage"); err != nil {
+		return err
+	}
+	return p.Azblob.validate("archival.history.provider.azblob")
 }
 
 func (p *VisibilityArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
-	return p.Gstorage.validate("archival.visibility.provider.gstorage")
+	if err := p.Gstorage.validate("archival.visibility.provider.gstorage"); err != nil {
+		return err
+	}
+	return p.Azblob.validate("archival.visibility.provider.azblob")
 }
 
 func isArchivalConfigValid(

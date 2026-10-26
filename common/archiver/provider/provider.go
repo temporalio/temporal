@@ -155,6 +155,9 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 		case archiver.URISchemeGstorage:
 			historyArchiver, err = p.newGstorageHistoryArchiver()
 
+		case archiver.URISchemeAzblob:
+			historyArchiver, err = p.newAzblobHistoryArchiver()
+
 		case archiver.URISchemeS3store:
 			if p.historyArchiverConfigs.S3store == nil {
 				return nil, ErrArchiverConfigNotFound
@@ -219,6 +222,8 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 			visibilityArchiver, err = s3store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.S3store)
 		case archiver.URISchemeGstorage:
 			visibilityArchiver, err = p.newGstorageVisibilityArchiver()
+		case archiver.URISchemeAzblob:
+			visibilityArchiver, err = p.newAzblobVisibilityArchiver()
 
 		default:
 			return nil, ErrUnknownScheme
