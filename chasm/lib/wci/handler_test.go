@@ -709,6 +709,7 @@ func TestE2E_MigrateToWorkflowAborts(t *testing.T) {
 	}{
 		{name: "another_run_owns_the_id", setup: func(h *fakeHistory) {
 			h.startErr = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "req", "run")
+			h.rejectActivation = &failurepb.Failure{Message: "unknown update"}
 		}},
 		{name: "activation_rejected", setup: func(h *fakeHistory) { h.rejectActivation = &failurepb.Failure{Message: "token mismatch"} }},
 		{name: "workflow_expired", setup: func(h *fakeHistory) { h.updateErr = serviceerror.NewNotFound("workflow execution already completed") }},
@@ -729,6 +730,23 @@ func TestE2E_MigrateToWorkflowAborts(t *testing.T) {
 			require.NoError(t, e.recordTaskAdd(), "scaling resumes")
 		})
 	}
+}
+
+// The activate response was lost and the activated run continued as new before the task retried:
+// the retried start finds another run, which still accepts the activation.
+func TestE2E_MigrateToWorkflowActivatedRunContinuedAsNew(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	e.history.startErr = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "req", "run")
+
+	require.NoError(t, e.migrateToWorkflow())
+	e.runMigrateTask(t)
+
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status, "CHASM must not resume next to the workflow")
+	require.Len(t, e.history.updates, 1)
+	require.Equal(t, iface.UpdateActivateMigration, e.history.updates[0].GetInput().GetName())
 }
 
 func TestE2E_MigrateToWorkflowRetriesAmbiguousActivation(t *testing.T) {
