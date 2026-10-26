@@ -55,7 +55,8 @@ type simplePartitionScaler struct {
 	ts                        clock.TimeSource
 	logger                    log.Logger
 	metricsHandler            metrics.Handler
-	trackers                  map[time.Duration]*taskTracker
+	upTrackers                map[time.Duration]*taskTracker
+	downTrackers              map[time.Duration]*taskTracker
 	lastLoggedTargetBeforeMax int
 }
 
@@ -72,16 +73,17 @@ func newSimplePartitionScaler(
 		ts:             ts,
 		logger:         logger,
 		metricsHandler: metricsHandler,
-		trackers:       make(map[time.Duration]*taskTracker),
+		upTrackers:     make(map[time.Duration]*taskTracker),
+		downTrackers:   make(map[time.Duration]*taskTracker),
 	}
 }
 
-func (s *simplePartitionScaler) getTracker(interval time.Duration) *taskTracker {
-	if t, ok := s.trackers[interval]; ok {
+func (s *simplePartitionScaler) getTracker(trackers map[time.Duration]*taskTracker, interval time.Duration) *taskTracker {
+	if t, ok := trackers[interval]; ok {
 		return t
 	}
 	t := newTaskTracker(s.ts, interval/simplePartitionScalerTrackerBuckets, interval)
-	s.trackers[interval] = t
+	trackers[interval] = t
 	return t
 }
 
@@ -114,15 +116,18 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 
 	// init trackers in use
 	for _, down := range cfg.Downs {
-		_ = s.getTracker(down.Window)
+		_ = s.getTracker(s.downTrackers, down.Window)
 	}
 	for _, up := range cfg.Ups {
-		_ = s.getTracker(up.Window)
+		_ = s.getTracker(s.upTrackers, up.Window)
 	}
 
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
-	for _, t := range s.trackers {
+	for _, t := range s.upTrackers {
+		t.inc(in.NumTasks)
+	}
+	for _, t := range s.downTrackers {
 		t.inc(in.NumTasks)
 	}
 
@@ -182,14 +187,16 @@ func (*simplePartitionScaler) Stop() {
 
 func (s *simplePartitionScaler) updateAddTarget(
 	cfg dynamicconfig.SimplePartitionScalerSettings,
-	target int,
+	prevTarget int,
 ) (int, bool) {
+	target := prevTarget
 	// TODO(dp): we should return some information about which window made the change and put
 	// a log of those in the scale state
 	for _, down := range cfg.Downs {
-		rate, full := s.getTracker(down.Window).rateAndFull()
+		rate, full := s.getTracker(s.downTrackers, down.Window).rateAndFull()
 		if !full {
-			return 0, false
+			// A decrease requires a full window of data since the last increase or since startup.
+			continue
 		}
 		// decrease target so that each partition is ~= target rate
 		target = max(1, min(
@@ -199,7 +206,7 @@ func (s *simplePartitionScaler) updateAddTarget(
 	}
 
 	for _, up := range cfg.Ups {
-		rate, full := s.getTracker(up.Window).rateAndFull()
+		rate, full := s.getTracker(s.upTrackers, up.Window).rateAndFull()
 		if !full {
 			return 0, false
 		}
@@ -213,6 +220,16 @@ func (s *simplePartitionScaler) updateAddTarget(
 
 	// always keep min of 1 even if we have no Ups/Downs
 	target = max(target, 1)
+
+	if prevTarget > 0 && target > prevTarget {
+		// Down windows include load from before this increase, so they would immediately
+		// pull the target back down. Restart them now (not lazily on the next call, which may
+		// be many seconds later) so a decrease needs exactly one window of new data.
+		clear(s.downTrackers)
+		for _, down := range cfg.Downs {
+			_ = s.getTracker(s.downTrackers, down.Window)
+		}
+	}
 
 	return target, true
 }
