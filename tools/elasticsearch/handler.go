@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/schema"
 	commonschema "go.temporal.io/server/tools/common/schema"
 )
@@ -86,8 +87,8 @@ func ping(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
-	cfg := new(esclient.Config)
+func parseElasticConfig(cli *cli.Context) (*esconfig.Config, error) {
+	cfg := new(esconfig.Config)
 
 	u, err := url.Parse(cli.GlobalString(commonschema.CLIOptEndpoint))
 	if err != nil {
@@ -101,7 +102,7 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	cfg.Indices = map[string]string{}
 
 	if cli.String(CLIOptVisibilityIndex) != "" {
-		cfg.Indices[esclient.VisibilityAppName] = cli.String(CLIOptVisibilityIndex)
+		cfg.Indices[esconfig.VisibilityAppName] = cli.String(CLIOptVisibilityIndex)
 	}
 
 	if cli.GlobalString(CLIOptAWSCredentials) != "" {
