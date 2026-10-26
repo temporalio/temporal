@@ -541,8 +541,8 @@ comma := ,
 
 # Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
 # end of the variable name is set. Each temporal_with_* tag needs one.
-EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
-EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7 go.temporal.io/server/common/persistence/visibility/store/elasticsearch
+EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
+EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
