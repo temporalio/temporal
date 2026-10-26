@@ -346,6 +346,41 @@ func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	require.Equal(t, []int{2, 2, 2, 2}, tqlb.pollerCounts)
 }
 
+func TestPickReadPartition_NonPositivePartitionCount(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	// matching.numTaskqueueReadPartitions has no min/max validation, so an operator can set it
+	// to zero or a negative value. PickWritePartition clamps its equivalent with max(1, ...);
+	// the read path did not.
+	testCases := []struct {
+		name           string
+		partitionCount int
+	}{
+		{name: "zero", partitionCount: 0},
+		{name: "negative", partitionCount: -1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			lb := &defaultLoadBalancer{
+				namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+				nReadPartitions: func(string, string, enumspb.TaskQueueType) int {
+					return tc.partitionCount
+				},
+				taskQueueLBs: make(map[tqid.TaskQueue]*tqLoadBalancer),
+			}
+
+			// An empty PartitionCounts is not Valid(), so the count comes from dynamic config.
+			token := lb.PickReadPartition(tq, PartitionCounts{})
+			require.NotNil(t, token)
+			require.Equal(t, 0, token.TQPartition.PartitionId(),
+				"a non-positive partition count should fall back to the root partition")
+		})
+	}
+}
+
 func TestPickWritePartitionRootFloorPreservesNonRootWeights(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	require.NoError(t, err)
