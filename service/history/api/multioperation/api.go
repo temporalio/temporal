@@ -206,8 +206,8 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			updateResponse := uws.updater.CreateCompletedResponse(
 				ms,
 				workflowKey,
-				completedUpdate.Outcome,
-				completedUpdate.AcceptedEventID,
+				completedUpdate.GetOutcome(),
+				completedUpdate.GetAcceptedEventId(),
 				nexusSerializationContext,
 			)
 			workflowLease.GetReleaseFn()(nil)
@@ -216,7 +216,6 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
 					Status:  status,
-					Link:    api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), workflowKey.WorkflowID, workflowKey.RunID),
 				},
 				updateResponse,
 			), nil

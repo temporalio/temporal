@@ -509,8 +509,8 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	var updOutcome *updatepb.Outcome
 	acceptedEventID := common.EmptyEventID
 	if err == nil {
-		updOutcome = completedUpdate.Outcome
-		acceptedEventID = completedUpdate.AcceptedEventID
+		updOutcome = completedUpdate.GetOutcome()
+		acceptedEventID = completedUpdate.GetAcceptedEventId()
 	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.

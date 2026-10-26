@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,7 +21,6 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 )
 
@@ -114,7 +114,7 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 
 	s.currentMutableState.EXPECT().
 		GetCompletedUpdate(gomock.Any(), testUpdateID).
-		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: 42}, nil)
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: 42}, nil)
 
 	nexusSerializationContext := &nexuspb.PropagatedSerializationContext{
 		Endpoint:  "endpoint",
@@ -175,7 +175,7 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 		resp.Responses[1].GetUpdateWorkflow().GetResponse().GetPropagatedNexusSerializationContext())
 }
 
-func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() {
+func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesUpdateResponseLink() {
 	ctx := testcontext.For(s.T())
 	const acceptedEventID int64 = 42
 
@@ -189,7 +189,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 		Return(lease, nil)
 	s.currentMutableState.EXPECT().
 		GetCompletedUpdate(gomock.Any(), testUpdateID).
-		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: acceptedEventID}, nil)
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: acceptedEventID}, nil)
 	s.currentMutableState.EXPECT().
 		GetExecutionState().
 		Return(executionState)
@@ -217,9 +217,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesResponseLinks() 
 
 	resp, err := uws.Invoke(ctx)
 	s.NoError(err)
-	protorequire.ProtoEqual(s.T(), api.GenerateStartedEventRefLink(
-		tests.Namespace.String(), tests.WorkflowID, tests.RunID,
-	), resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	s.Nil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
 	protorequire.ProtoEqual(s.T(), &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -261,7 +259,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestI
 		Return(lease, nil)
 	s.currentMutableState.EXPECT().
 		GetCompletedUpdate(gomock.Any(), testUpdateID).
-		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}, AcceptedEventID: acceptedEventID}, nil)
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}, AcceptedEventId: acceptedEventID}, nil)
 	s.currentMutableState.EXPECT().
 		GetExecutionState().
 		Return(executionState).
@@ -326,7 +324,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOm
 		Return(lease, nil)
 	s.currentMutableState.EXPECT().
 		GetCompletedUpdate(gomock.Any(), testUpdateID).
-		Return(&update.CompletedUpdate{Outcome: &updatepb.Outcome{}}, nil)
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{Outcome: &updatepb.Outcome{}}, nil)
 	s.currentMutableState.EXPECT().
 		GetExecutionState().
 		Return(executionState)
@@ -354,7 +352,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOm
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NoError(releaseErr)
-	s.NotNil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	s.Nil(resp.GetResponses()[0].GetStartWorkflow().GetLink())
 	s.Nil(resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 

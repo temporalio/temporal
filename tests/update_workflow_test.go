@@ -5596,7 +5596,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 					env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: runID}),
 					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 				)
-				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[0].GetStartWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				s.Nil(uwsRes2.response.Responses[0].GetStartWorkflow().GetLink())
 				requireWorkflowEventLink(s.T(), uwsRes2.response.Responses[1].GetUpdateWorkflow().GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), runID, acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 				// poll update to ensure same outcome is returned

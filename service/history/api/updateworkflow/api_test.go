@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -84,9 +85,9 @@ func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
 					})
 				})
 				if tc.stageAtResponse == completed {
-					ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(&update.CompletedUpdate{
+					ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 						Outcome:         outcome,
-						AcceptedEventID: acceptedEventID,
+						AcceptedEventId: acceptedEventID,
 					}, nil)
 					ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil)
 				} else {
@@ -278,9 +279,9 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 	ms := newRunningMutableStateForCallbacks(ctrl)
 	ms.EXPECT().GetExecutionState().AnyTimes()
 	ms.EXPECT().GetCompletedUpdate(gomock.Any(), updateID).
-		Return(&update.CompletedUpdate{
+		Return(&historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 			Outcome:         &updatepb.Outcome{Value: &updatepb.Outcome_Success{}},
-			AcceptedEventID: acceptedEventID,
+			AcceptedEventId: acceptedEventID,
 		}, nil).AnyTimes()
 	ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil).AnyTimes()
 	ms.EXPECT().ValidateCallbackAddition(gomock.Any(), gomock.Any()).Times(0)

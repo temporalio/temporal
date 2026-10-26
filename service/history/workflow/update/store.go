@@ -14,16 +14,10 @@ import (
 )
 
 type (
-	// CompletedUpdate contains the durable result of a completed Workflow Update.
-	CompletedUpdate struct {
-		Outcome         *updatepb.Outcome
-		AcceptedEventID int64
-	}
-
 	// UpdateStore represents the update package's requirements for reading Updates from the store.
 	UpdateStore interface {
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-		GetCompletedUpdate(ctx context.Context, updateID string) (*CompletedUpdate, error)
+		GetCompletedUpdate(ctx context.Context, updateID string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
 		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
@@ -138,10 +139,10 @@ func TestFind(t *testing.T) {
 
 	t.Run("return update when found in registry", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
-				return &update.CompletedUpdate{
+			GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
+				return &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 					Outcome:         &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}},
-					AcceptedEventID: testAcceptedEventID,
+					AcceptedEventId: testAcceptedEventID,
 				}, nil
 			},
 		})
@@ -175,7 +176,7 @@ func TestFind(t *testing.T) {
 		internalErr := serviceerror.NewInternal("internal error")
 
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
+			GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 				return nil, internalErr
 			},
 		})
@@ -258,8 +259,8 @@ func TestNexusSerializationContext(t *testing.T) {
 
 	t.Run("completed update found in store", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
-				return &update.CompletedUpdate{
+			GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
+				return &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 					Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()}},
 				}, nil
 			},
@@ -1210,8 +1211,8 @@ func TestIsCompleted(t *testing.T) {
 
 	t.Run("an update completed in the store is completed", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
-			GetCompletedUpdateFunc: func(context.Context, string) (*update.CompletedUpdate, error) {
-				return &update.CompletedUpdate{
+			GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
+				return &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
 					Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{}},
 				}, nil
 			},

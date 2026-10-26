@@ -2995,8 +2995,8 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	// as GetCompletedUpdate relies on event version history which is only updated when closing the transaction
 	completedUpdate, err := s.mutableState.GetCompletedUpdate(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
 	s.NoError(err)
-	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), completedUpdate.Outcome)
-	s.Equal(acptEvent1.GetEventId(), completedUpdate.AcceptedEventID)
+	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), completedUpdate.GetOutcome())
+	s.Equal(acptEvent1.GetEventId(), completedUpdate.GetAcceptedEventId())
 
 	_, err = s.mutableState.GetCompletedUpdate(ctx, "not_an_update_id")
 	s.Error(err)

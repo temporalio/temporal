@@ -2224,10 +2224,10 @@ func (mr *MockMutableStateMockRecorder) GetCloseVersion() *gomock.Call {
 }
 
 // GetCompletedUpdate mocks base method.
-func (m *MockMutableState) GetCompletedUpdate(ctx context.Context, updateID string) (*update0.CompletedUpdate, error) {
+func (m *MockMutableState) GetCompletedUpdate(ctx context.Context, updateID string) (*history.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCompletedUpdate", ctx, updateID)
-	ret0, _ := ret[0].(*update0.CompletedUpdate)
+	ret0, _ := ret[0].(*history.WorkflowExecutionUpdateCompletedEventAttributes)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -525,6 +525,8 @@ func (u *Updater) CreateCompletedResponse(
 			return resp
 		}
 	}
+	// Update completion events written before accepted_event_id was introduced may not carry
+	// the accepted event ID. Return the completed result without an invalid event reference.
 	if acceptedEventID != common.EmptyEventID {
 		resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
 	}
