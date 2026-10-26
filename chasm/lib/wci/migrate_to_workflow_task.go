@@ -143,11 +143,9 @@ func (h *MigrateToWorkflowTaskHandler) Execute(ctx context.Context, ref chasm.Co
 // handOver starts the workflow pending and activates it. false is a definitive abort; an error is ambiguous.
 func (h *MigrateToWorkflowTaskHandler) handOver(ctx context.Context, target migrationTarget) (bool, error) {
 	_, err := h.historyClient.StartWorkflowExecution(ctx, target.start)
-	if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
-		// Another run owns the ID; the same request ID would have been de-duplicated instead.
-		return false, nil
-	}
-	if err != nil {
+	// Another run owns the ID. It may be our activated run after a continue-as-new, which carries the
+	// token and accepts the activation; any other run rejects it.
+	if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); !ok && err != nil {
 		return false, err
 	}
 
