@@ -2376,21 +2376,34 @@ func (adh *AdminHandler) MigrateWorkerControllerInstance(
 	if request.GetIdentity() == "" {
 		return nil, errIdentityNotSet
 	}
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	nsEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	instanceID := wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{
+	version := &deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: request.GetDeploymentName(),
 		BuildId:        request.GetBuildId(),
-	})
-	adh.logger.Info("Migrating worker controller instance to workflow",
-		tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowID(instanceID), tag.NewStringTag("identity", request.GetIdentity()))
-	if _, err := adh.wciClient.MigrateToWorkflow(ctx, &wcipb.MigrateToWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		InstanceId:  instanceID,
-	}); err != nil {
-		return nil, err
+	}
+	instanceID := wciclient.GenerateWorkerControllerInstanceWorkflowID(version)
+	target := request.GetTarget()
+	adh.logger.Info("Migrating worker controller instance",
+		tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowID(instanceID), tag.NewStringTag("identity", request.GetIdentity()),
+		tag.NewStringerTag("target", target))
+
+	switch target {
+	case adminservice.MigrateWorkerControllerInstanceRequest_TARGET_UNSPECIFIED, adminservice.MigrateWorkerControllerInstanceRequest_TARGET_WORKFLOW:
+		if _, err := adh.wciClient.MigrateToWorkflow(ctx, &wcipb.MigrateToWorkflowRequest{
+			NamespaceId: nsEntry.ID().String(),
+			InstanceId:  instanceID,
+		}); err != nil {
+			return nil, err
+		}
+	case adminservice.MigrateWorkerControllerInstanceRequest_TARGET_CHASM:
+		if err := wciclient.RequestMigrationToCHASM(ctx, adh.historyClient, nsEntry, version, request.GetIdentity()); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unknown target: %v", target)
 	}
 	return &adminservice.MigrateWorkerControllerInstanceResponse{}, nil
 }

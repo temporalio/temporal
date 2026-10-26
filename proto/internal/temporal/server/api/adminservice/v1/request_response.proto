@@ -723,6 +723,17 @@ message MigrateScheduleRequest {
 message MigrateScheduleResponse {}
 
 message MigrateWorkerControllerInstanceRequest {
+  // Backend to move the instance to.
+  enum Target {
+    // Same as TARGET_WORKFLOW.
+    TARGET_UNSPECIFIED = 0;
+    // Move a CHASM-backed instance to its workflow.
+    TARGET_WORKFLOW = 1;
+    // Ask the workflow to hand over to CHASM at its next continue-as-new; bypasses the migration
+    // rollout gate but needs routing. Returns once the workflow accepts the request.
+    TARGET_CHASM = 2;
+  }
+
   // Namespace name.
   string namespace = 1;
   // Worker deployment version the instance controls.
@@ -730,6 +741,7 @@ message MigrateWorkerControllerInstanceRequest {
   string build_id = 3;
   // Identity of the caller.
   string identity = 4;
+  Target target = 5;
 }
 
 message MigrateWorkerControllerInstanceResponse {}

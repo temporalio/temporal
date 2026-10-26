@@ -22,9 +22,11 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -2916,15 +2918,16 @@ func (s *adminHandlerSuite) TestMigrateWorkerControllerInstance() {
 	request := &adminservice.MigrateWorkerControllerInstanceRequest{
 		Namespace: s.namespace.String(), DeploymentName: "dep", BuildId: "build", Identity: "me",
 	}
+	instanceID := wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"})
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil)
 	_, err := s.handler.MigrateWorkerControllerInstance(context.Background(), request)
 	s.NoError(err)
 	s.Equal(s.namespaceID.String(), fake.req.GetNamespaceId())
-	s.Equal(wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"}), fake.req.GetInstanceId())
+	s.Equal(instanceID, fake.req.GetInstanceId())
 
 	fake.err = serviceerror.NewNotFound("missing")
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil)
 	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), request)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
@@ -2932,4 +2935,38 @@ func (s *adminHandlerSuite) TestMigrateWorkerControllerInstance() {
 	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), &adminservice.MigrateWorkerControllerInstanceRequest{Namespace: s.namespace.String(), Identity: "me"})
 	var invalid *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalid)
+}
+
+// TARGET_CHASM sends the workflow's migrate-to-chasm update; the CHASM client is not called.
+func (s *adminHandlerSuite) TestMigrateWorkerControllerInstanceToCHASM() {
+	fake := &fakeWCIClient{}
+	s.handler.wciClient = fake
+	request := &adminservice.MigrateWorkerControllerInstanceRequest{
+		Namespace: s.namespace.String(), DeploymentName: "dep", BuildId: "build", Identity: "me",
+		Target: adminservice.MigrateWorkerControllerInstanceRequest_TARGET_CHASM,
+	}
+	instanceID := wciclient.GenerateWorkerControllerInstanceWorkflowID(&deploymentpb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"})
+
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil)
+	s.mockHistoryClient.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *historyservice.UpdateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+			s.Equal(s.namespaceID.String(), req.GetNamespaceId())
+			s.Equal(instanceID, req.GetRequest().GetWorkflowExecution().GetWorkflowId())
+			s.Equal(wciiface.UpdateMigrateToCHASM, req.GetRequest().GetRequest().GetInput().GetName())
+			return &historyservice.UpdateWorkflowExecutionResponse{Response: &workflowservice.UpdateWorkflowExecutionResponse{
+				Stage:   enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+				Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: &commonpb.Payloads{}}},
+			}}, nil
+		})
+	_, err := s.handler.MigrateWorkerControllerInstance(context.Background(), request)
+	s.NoError(err)
+	s.Nil(fake.req)
+
+	// Already on CHASM: no workflow runs the WCI.
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil)
+	s.mockHistoryClient.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("workflow execution already completed"))
+	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
 }
