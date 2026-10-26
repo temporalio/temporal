@@ -17,10 +17,10 @@ func (testStringer) String() string { return "stringer" }
 
 // component mimics a live service object that is mutated concurrently with logging.
 type component struct {
-	pollers map[int]string // mutated without synchronization; formatValue must never read it
+	pollers map[int]string // mutated without synchronization; the printer must never read it
 }
 
-func TestFormatValue_PreservesBasicTypes(t *testing.T) {
+func TestPrinter_PreservesBasicTypes(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -50,7 +50,7 @@ func TestFormatValue_PreservesBasicTypes(t *testing.T) {
 	}
 }
 
-func TestFormatValue_TagValue(t *testing.T) {
+func TestPrinter_TagValue(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "abc", formatValue(tag.NewStringTag("k", "abc")))
@@ -58,7 +58,7 @@ func TestFormatValue_TagValue(t *testing.T) {
 	require.Equal(t, "[a b]", formatValue(tag.NewStringsTag("k", []string{"a", "b"})))
 }
 
-func TestFormatValue_DoesNotDeepWalkCompositeValues(t *testing.T) {
+func TestPrinter_DoesNotDeepWalkCompositeValues(t *testing.T) {
 	t.Parallel()
 
 	c := &component{pollers: map[int]string{1: "secret-poller"}}
@@ -73,9 +73,9 @@ func TestFormatValue_DoesNotDeepWalkCompositeValues(t *testing.T) {
 	require.Equal(t, "func()", formatAny(func() {}))
 }
 
-// TestFormatValue_NoRaceWithConcurrentMutation fails under -race if formatValue reads the
+// TestPrinter_NoRaceWithConcurrentMutation fails under -race if formatValue reads the
 // contents of a value that another goroutine is mutating without synchronization.
-func TestFormatValue_NoRaceWithConcurrentMutation(t *testing.T) {
+func TestPrinter_NoRaceWithConcurrentMutation(t *testing.T) {
 	t.Parallel()
 
 	c := &component{pollers: map[int]string{}}
