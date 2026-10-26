@@ -32,8 +32,9 @@ type (
 	}
 
 	taskQueueState struct {
-		rangeID     int64
-		lastUpdated time.Time
+		rangeID        int64
+		lastUpdated    time.Time
+		retainMetadata bool
 	}
 
 	stats struct {
@@ -198,8 +199,9 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 			TaskQueueType: info.Data.TaskType,
 		},
 		taskQueueState: taskQueueState{
-			rangeID:     info.RangeID,
-			lastUpdated: info.Data.LastUpdateTime.AsTime(),
+			rangeID:        info.RangeID,
+			lastUpdated:    info.Data.LastUpdateTime.AsTime(),
+			retainMetadata: p.IsTaskQueueMetadataRetained(info.Data),
 		},
 		scvg: s,
 	}

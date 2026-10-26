@@ -271,8 +271,9 @@ type (
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
 
-		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *timestamppb.Timestamp
+		TaskQueueKind         enumspb.TaskQueueKind
+		ExpiryTime            *timestamppb.Timestamp
+		SingleSessionAssigned bool
 
 		PrevRangeID int64
 	}

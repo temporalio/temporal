@@ -49,7 +49,7 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && !IsTaskQueueMetadataRetained(taskQueueInfo) {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -80,7 +80,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && !IsTaskQueueMetadataRetained(taskQueueInfo) {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -95,8 +95,9 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		RangeID:       request.RangeID,
 		TaskQueueInfo: taskQueueInfoBlob,
 
-		TaskQueueKind: request.TaskQueueInfo.GetKind(),
-		ExpiryTime:    taskQueueInfo.ExpiryTime,
+		TaskQueueKind:         request.TaskQueueInfo.GetKind(),
+		ExpiryTime:            taskQueueInfo.ExpiryTime,
+		SingleSessionAssigned: IsTaskQueueMetadataRetained(taskQueueInfo),
 
 		PrevRangeID: request.PrevRangeID,
 	}

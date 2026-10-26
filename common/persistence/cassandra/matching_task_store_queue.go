@@ -188,10 +188,10 @@ func (d *taskQueueStore) UpdateTaskQueue(
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
-		if request.ExpiryTime == nil {
-			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
+		expiryTTL, ttlErr := taskQueueMetadataTTL(request, time.Now())
+		if ttlErr != nil {
+			return nil, ttlErr
 		}
-		expiryTTL := min(convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds()), maxCassandraTTL)
 		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),
@@ -249,6 +249,16 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	}
 
 	return &p.UpdateTaskQueueResponse{}, nil
+}
+
+func taskQueueMetadataTTL(request *p.InternalUpdateTaskQueueRequest, now time.Time) (int64, error) {
+	if request.SingleSessionAssigned {
+		return 0, nil
+	}
+	if request.ExpiryTime == nil {
+		return 0, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
+	}
+	return min(convert.Int64Ceil(timestamp.TimeValue(request.ExpiryTime).Sub(now).Seconds()), maxCassandraTTL), nil
 }
 
 func (d *taskQueueStore) ListTaskQueue(

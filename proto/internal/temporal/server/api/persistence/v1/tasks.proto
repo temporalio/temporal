@@ -76,6 +76,10 @@ message TaskQueueInfo {
 
   // Dynamic partition scaling state (root only):
   PartitionScaleState partition_scale_state = 11;
+
+  // Records that a workflow sticky destination has acquired its single session.
+  // Retained after workflow completion and worker replacement to prevent reuse.
+  bool single_session_assigned = 12;
 }
 
 message SubqueueInfo {

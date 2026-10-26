@@ -44,10 +44,11 @@ type (
 
 		// mutable
 		sync.Mutex
-		rangeID       int64
-		subqueues     []*dbSubqueue
-		otherHasTasks bool
-		scaleState    *persistencespb.PartitionScaleState
+		rangeID               int64
+		subqueues             []*dbSubqueue
+		otherHasTasks         bool
+		scaleState            *persistencespb.PartitionScaleState
+		singleSessionAssigned bool
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -191,6 +192,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
 		db.scaleState = response.TaskQueueInfo.PartitionScaleState
+		db.singleSessionAssigned = response.TaskQueueInfo.GetSingleSessionAssigned()
 		err := db.updateTaskQueueLocked(ctx, true)
 		if err != nil {
 			db.rangeID = 0
@@ -801,19 +803,23 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	for i := range db.subqueues {
 		infos[i] = &db.subqueues[i].SubqueueInfo
 	}
-	return &persistencespb.TaskQueueInfo{
+	info := &persistencespb.TaskQueueInfo{
 		NamespaceId:             db.queue.NamespaceId(),
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
 		AckLevel:                db.subqueues[subqueueZero].AckLevel, // backwards compatibility
-		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
 		Subqueues:               infos,
 		OtherHasTasks:           db.otherHasTasks,
 		PartitionScaleState:     db.scaleState,
+		SingleSessionAssigned:   db.singleSessionAssigned,
 	}
+	if !persistence.IsTaskQueueMetadataRetained(info) {
+		info.ExpiryTime = db.expiryTime()
+	}
+	return info
 }
 
 // emitPhysicalBacklogGaugesLocked emits backlog gauges tagged by priority key, along with
