@@ -733,7 +733,12 @@ func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event reschedule
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count++
 	attempt.Stamp++
-	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)
+	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
+		return err
+	}
+	// The worker no longer owns an attempt while the activity waits for its retry.
+	attempt.StartedTime = nil
+	return nil
 }
 
 func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {
