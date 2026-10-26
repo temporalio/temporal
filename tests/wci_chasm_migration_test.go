@@ -158,12 +158,16 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	}
 	scalesUp("CHASM")
 
+	// The operator path (tdbg worker-controller migrate-to-workflow / migrate-to-chasm).
+	migrate := func(target adminservice.MigrateWorkerControllerInstanceRequest_Target) error {
+		_, err := env.GetTestCluster().AdminClient().MigrateWorkerControllerInstance(ctx, &adminservice.MigrateWorkerControllerInstanceRequest{
+			Namespace: ns, DeploymentName: deploymentName, BuildId: buildID, Identity: "test", Target: target,
+		})
+		return err
+	}
+
 	// --- CHASM → workflow. ---
-	// Through the operator path (tdbg worker-controller migrate-to-workflow).
-	_, err = env.GetTestCluster().AdminClient().MigrateWorkerControllerInstance(ctx, &adminservice.MigrateWorkerControllerInstanceRequest{
-		Namespace: ns, DeploymentName: deploymentName, BuildId: buildID, Identity: "test",
-	})
-	s.NoError(err)
+	s.NoError(migrate(adminservice.MigrateWorkerControllerInstanceRequest_TARGET_UNSPECIFIED))
 	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING }, 30*time.Second, 200*time.Millisecond, "workflow started")
 	s.AwaitTruef(func() bool { return !onCHASM() }, 30*time.Second, 200*time.Millisecond, "CHASM closed after the hand-off")
 	_, err = chasmClient.RecordTaskAdd(ctx, &wcipb.RecordTaskAddRequest{
@@ -188,6 +192,20 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	s.AwaitTruef(onCHASM, 60*time.Second, 200*time.Millisecond, "back on CHASM")
 	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED }, 30*time.Second, 200*time.Millisecond, "workflow completed, not continued-as-new")
 	scalesUp("CHASM after the round trip")
+
+	// --- Again by operator request, with the automatic migration gate closed. ---
+	env.OverrideDynamicConfig(wciclient.WorkerControllerCHASMMigrationEnabled, false)
+	s.NoError(migrate(adminservice.MigrateWorkerControllerInstanceRequest_TARGET_WORKFLOW))
+	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING }, 30*time.Second, 200*time.Millisecond, "workflow started again")
+	// CHASM closes only once the workflow run is activated and accepts updates.
+	s.AwaitTruef(func() bool { return !onCHASM() }, 30*time.Second, 200*time.Millisecond, "CHASM closed again")
+	scalesUp("workflow again")
+	s.NoError(migrate(adminservice.MigrateWorkerControllerInstanceRequest_TARGET_CHASM))
+	s.AwaitTruef(onCHASM, 60*time.Second, 200*time.Millisecond, "on CHASM by operator request")
+	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED }, 30*time.Second, 200*time.Millisecond, "workflow completed again")
+	scalesUp("CHASM by operator request")
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(migrate(adminservice.MigrateWorkerControllerInstanceRequest_TARGET_CHASM), &notFound, "already on CHASM")
 
 	// --- Spec preserved end to end. ---
 	resp, err := sdk.WorkflowService().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{Namespace: ns, DeploymentVersion: version})
