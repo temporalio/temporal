@@ -97,6 +97,7 @@ func Invoke(
 			if request.GetRequestId() != "" {
 				mutableState.AddSignalRequested(request.GetRequestId())
 			}
+
 			_, err := mutableState.AddWorkflowExecutionSignaledEvent(
 				request.GetSignalName(),
 				request.GetInput(),
@@ -109,7 +110,6 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: createWorkflowTask,

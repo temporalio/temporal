@@ -113,6 +113,8 @@ message WorkflowExecutionInfo {
   // (-- api-linter: core::0140::prepositions=disabled
   //     aip.dev/not-precedent: "since" is needed here. --)
   int32 workflow_task_attempts_since_last_success = 111;
+  // Control queue of the worker currently running the Workflow Task, if it supports early heartbeats.
+  string workflow_task_worker_control_task_queue = 118;
 
   bool cancel_requested = 29;
   string cancel_request_id = 32;

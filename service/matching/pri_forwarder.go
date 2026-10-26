@@ -236,10 +236,11 @@ func ForwardPollWithTarget(
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
 				Identity:                  identity,
-				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities, //nolint:staticcheck // SA1019: Retain legacy build ID versioning metadata.
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
+				SupportsWorkflowTaskHeartbeatNotification: pollMetadata.supportsWorkflowTaskHeartbeatNotification,
 			},
 			ForwardedSource: source.RpcName(),
 			Conditions:      pollMetadata.conditions,

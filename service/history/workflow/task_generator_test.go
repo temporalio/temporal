@@ -1127,13 +1127,19 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 		}
 		return commands
 	}
+	notification := []*workerpb.WorkerCommand{{
+		Type: &workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification{
+			WorkflowTaskHeartbeatNotification: &workerpb.WorkflowTaskHeartbeatNotificationCommand{RunId: tests.RunID},
+		},
+	}}
 
 	testCases := []struct {
-		name           string
-		featureEnabled bool
-		commands       []*workerpb.WorkerCommand
-		controlQueue   string
-		expectTask     bool
+		name                string
+		featureEnabled      bool
+		notificationEnabled bool
+		commands            []*workerpb.WorkerCommand
+		controlQueue        string
+		expectTask          bool
 	}{
 		{
 			name:           "creates task when enabled with valid inputs",
@@ -1148,6 +1154,18 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 			commands:       makeCommands(token1, token2, token3),
 			controlQueue:   "test-control-queue",
 			expectTask:     false,
+		},
+		{
+			name:                "notification works when cancellation is disabled",
+			notificationEnabled: true,
+			commands:            notification,
+			controlQueue:        "test-control-queue",
+			expectTask:          true,
+		},
+		{
+			name:         "disabled notification does not create a task",
+			commands:     notification,
+			controlQueue: "test-control-queue",
 		},
 		{
 			name:           "no task when commands empty",
@@ -1183,7 +1201,8 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 			}
 
 			cfg := &configs.Config{
-				EnableCancelActivityWorkerCommand: func(string) bool { return tc.featureEnabled },
+				EnableCancelActivityWorkerCommand:       func(string) bool { return tc.featureEnabled },
+				EnableWorkflowTaskHeartbeatNotification: func(string) bool { return tc.notificationEnabled },
 			}
 
 			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())

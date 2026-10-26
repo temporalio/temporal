@@ -573,11 +573,22 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
-	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
+	if len(commands) == 0 || controlQueue == "" {
 		return nil
 	}
-
-	if len(commands) == 0 || controlQueue == "" {
+	namespaceName := r.mutableState.GetNamespaceEntry().Name().String()
+	enabled := false
+	for _, command := range commands {
+		switch command.GetType().(type) {
+		case *workerpb.WorkerCommand_CancelActivity:
+			enabled = enabled || r.config.EnableCancelActivityWorkerCommand(namespaceName)
+		case *workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification:
+			enabled = enabled || r.config.EnableWorkflowTaskHeartbeatNotification(namespaceName)
+		default:
+			continue
+		}
+	}
+	if !enabled {
 		return nil
 	}
 

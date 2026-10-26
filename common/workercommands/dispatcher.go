@@ -73,7 +73,22 @@ func (d *Dispatcher) Execute(
 	task *tasks.WorkerCommandsTask,
 	namespaceName string,
 ) error {
-	if !d.config.EnableCancelActivityWorkerCommand(namespaceName) {
+	enabledCommands := make([]*workerpb.WorkerCommand, 0, len(task.Commands))
+	for _, command := range task.Commands {
+		switch command.GetType().(type) {
+		case *workerpb.WorkerCommand_CancelActivity:
+			if d.config.EnableCancelActivityWorkerCommand(namespaceName) {
+				enabledCommands = append(enabledCommands, command)
+			}
+		case *workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification:
+			if d.config.EnableWorkflowTaskHeartbeatNotification(namespaceName) {
+				enabledCommands = append(enabledCommands, command)
+			}
+		default:
+			continue
+		}
+	}
+	if len(enabledCommands) == 0 {
 		d.logger.Info("Worker commands feature disabled, dropping task",
 			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(task.WorkflowID),
@@ -84,14 +99,11 @@ func (d *Dispatcher) Execute(
 		return nil
 	}
 
-	if len(task.Commands) == 0 {
-		return nil
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, d.config.WorkerCommandsDispatchTimeout())
 	defer cancel()
-
-	return d.dispatchToWorker(ctx, task, namespaceName)
+	enabledTask := *task
+	enabledTask.Commands = enabledCommands
+	return d.dispatchToWorker(ctx, &enabledTask, namespaceName)
 }
 
 func (d *Dispatcher) dispatchToWorker(
@@ -213,6 +225,8 @@ func CommandTypeName(cmd *workerpb.WorkerCommand) string {
 	switch cmd.GetType().(type) {
 	case *workerpb.WorkerCommand_CancelActivity:
 		return "cancel_activity"
+	case *workerpb.WorkerCommand_WorkflowTaskHeartbeatNotification:
+		return "workflow_task_heartbeat_notification"
 	default:
 		return "unknown"
 	}
