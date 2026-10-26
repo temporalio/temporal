@@ -553,8 +553,8 @@ func (s *functionalTestBase) RegisterNamespace(
 		IsGlobalNamespace: false,
 	}
 
-	// Parallel test setup can exhaust the persistence client's retry budget while updating
-	// Cassandra's shared namespace metadata.
+	// Parallel namespace creation can exhaust the normal retry budget, so test setup uses a larger
+	// budget for transient errors across all persistence backends.
 	metadataMgr := persistence.NewMetadataPersistenceRetryableClient(
 		s.testCluster.testBase.MetadataManager,
 		backoff.NewExponentialRetryPolicy(100*time.Millisecond).
