@@ -8,7 +8,6 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -159,9 +158,7 @@ func (h *DatabaseHandle) ConvertError(err error) error {
 		errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, io.EOF) ||
-		errors.Is(err, syscall.ECONNRESET) ||
-		errors.Is(err, syscall.ECONNABORTED) ||
-		errors.Is(err, syscall.ECONNREFUSED) {
+		isConnectionErrno(err) {
 		h.reconnect(true)
 		return serviceerror.NewUnavailablef("database connection lost: %s", err.Error())
 	}

@@ -50,6 +50,10 @@ type (
 		scaleState    *persistencespb.PartitionScaleState
 
 		// used to avoid unnecessary metadata writes:
+		// changed is set when metadata changes in memory and cleared by a
+		// successful write, so a change is never lost to a clock that
+		// reports it in the same instant as the last write.
+		changed    bool
 		lastChange time.Time // updated when metadata is changed in memory
 		lastWrite  time.Time // updated when metadata is successfully written to db
 	}
@@ -249,6 +253,7 @@ func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRange
 		return err
 	}
 	db.lastWrite = time.Now()
+	db.changed = false
 	db.rangeID = newRangeID
 	return nil
 }
@@ -272,7 +277,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	// Cap at 24h so that the scavenger (which looks for metadata not updated in 48h) doesn't
 	// mistake the queue for idle, even if a future partition kind has a longer TTL.
 	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
+	needWrite := db.changed || db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
 		// If we don't write, though, we wouldn't know if someone else has stolen ownership
 		// momentarily (this could happen due to eventual consistency of membership updates).
@@ -318,19 +323,19 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 		newAckLevel = dbQueue.AckLevel
 	}
 	if dbQueue.AckLevel != newAckLevel {
-		db.lastChange = time.Now()
+		db.changed = true
 		dbQueue.AckLevel = newAckLevel
 	}
 
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
 		if dbQueue.ApproximateBacklogCount != 0 || !dbQueue.oldestTime.Equal(oldestTime) {
-			db.lastChange = time.Now()
+			db.changed = true
 			dbQueue.ApproximateBacklogCount = 0
 			dbQueue.oldestTime = oldestTime
 		}
 	} else if countDelta != 0 {
-		db.lastChange = time.Now()
+		db.changed = true
 		db.updateBacklogStatsLocked(subqueue, countDelta, oldestTime)
 	}
 }
@@ -339,7 +344,7 @@ func (db *taskQueueDB) updateFairAckLevel(subqueue subqueueIndex, newAckLevel fa
 	db.Lock()
 	defer db.Unlock()
 
-	db.lastChange = time.Now()
+	db.changed = true
 	dbQueue := db.subqueues[subqueue]
 	if prev := fairLevelFromProto(dbQueue.FairAckLevel); newAckLevel.less(prev) {
 		softassert.Fail(db.logger,
@@ -366,7 +371,7 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue subqueueIndex, count in
 	defer db.Unlock()
 
 	if db.subqueues[subqueue].ApproximateBacklogCount != count {
-		db.lastChange = time.Now()
+		db.changed = true
 		db.subqueues[subqueue].ApproximateBacklogCount = count
 		if count == 0 {
 			db.subqueues[subqueue].oldestTime = time.Time{}
@@ -399,7 +404,7 @@ func (db *taskQueueDB) persistTopKFairnessKeys(subqueue subqueueIndex, entries [
 	}
 
 	db.subqueues[subqueue].TopKFairnessCounts = counts
-	db.lastChange = time.Now()
+	db.changed = true
 }
 
 func (db *taskQueueDB) getTopKFairnessKeys(subqueue subqueueIndex) []counter.TopKEntry {
@@ -458,7 +463,7 @@ func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 		return nil
 	}
 	db.otherHasTasks = value
-	db.lastChange = time.Now()
+	db.changed = true
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
@@ -468,7 +473,7 @@ func (db *taskQueueDB) UpdateScaleState(ctx context.Context, scaleState *persist
 	db.Lock()
 	defer db.Unlock()
 	db.scaleState = scaleState
-	db.lastChange = time.Now()
+	db.changed = true
 	if syncToDB {
 		return db.updateTaskQueueLocked(ctx, false)
 	}
@@ -542,9 +547,12 @@ func (db *taskQueueDB) CreateTasks(
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
+			// The append persisted cachedQueueInfo(), which includes every change made so far
+			// under this lock, so nothing is left for SyncState to write.
 			db.lastWrite = time.Now()
+			db.changed = false
 		} else {
-			db.lastChange = time.Now()
+			db.changed = true
 		}
 	} else if writeDefinitelyFailed(err) {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
@@ -618,9 +626,12 @@ func (db *taskQueueDB) CreateFairTasks(
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
+			// The append persisted cachedQueueInfo(), which includes every change made so far
+			// under this lock, so nothing is left for SyncState to write.
 			db.lastWrite = time.Now()
+			db.changed = false
 		} else {
-			db.lastChange = time.Now()
+			db.changed = true
 		}
 	} else if writeDefinitelyFailed(err) {
 		// Tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.

@@ -1,0 +1,2 @@
+runtime_root = "../gomad/internal/model/runtimesource"
+derive = "temporal"

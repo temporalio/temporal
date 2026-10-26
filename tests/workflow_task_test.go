@@ -11,8 +11,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -26,7 +28,8 @@ func TestWorkflowTaskTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
-	env := testcore.NewEnv(s.T())
+	const heartbeatTimeout = 5 * time.Second
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskHeartbeatTimeout, heartbeatTimeout))
 	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -76,8 +79,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
   3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	taskToken := resp1.GetTaskToken()
+	// The chain was scheduled before its poll returned, so this bounds the server's deadline from above.
+	chainDeadline := time.Now().Add(heartbeatTimeout)
 	hbTimeout := 0
-	for range 12 {
+	for i := range 12 {
+		expectTimeout := i == 5 || i == 10
+		if expectTimeout {
+			s.Require().NoError(util.InterruptibleSleep(s.Context(), time.Until(chainDeadline)+100*time.Millisecond))
+		}
 		resp2, err2 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: taskToken,
@@ -89,7 +98,9 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,
 		})
-		if _, isNotFound := err2.(*serviceerror.NotFound); isNotFound {
+		_, isNotFound := err2.(*serviceerror.NotFound)
+		s.Require().Equal(expectTimeout, isNotFound, "heartbeat %d: %v", i, err2)
+		if isNotFound {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondWorkflowTaskCompletedResponse{}, resp2)
 
@@ -100,6 +111,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			})
 			s.NoError(err)
 			taskToken = resp.GetTaskToken()
+			chainDeadline = time.Now().Add(heartbeatTimeout)
 		} else {
 			s.NoError(err2)
 			taskToken = resp2.WorkflowTask.GetTaskToken()

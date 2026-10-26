@@ -4,11 +4,28 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testlogger"
 )
+
+func TestWithInMemorySQLitePersistence(t *testing.T) {
+	var options testOptions
+	WithInMemorySQLitePersistence()(&options)
+
+	params := ApplyTestClusterOptions(options.clusterOptions)
+	require.True(t, options.dedicatedCluster)
+	require.Equal(t, "in-memory SQLite persistence required", options.dedicatedReason)
+	require.NotEmpty(t, params.Persistence.DBName)
+	got := params.Persistence
+	got.DBName = ""
+	want := *persistencetests.GetSQLiteMemoryTestClusterOption()
+	want.DBName = ""
+	require.Equal(t, want, got)
+}
 
 type TestEnvSuite struct {
 	parallelsuite.Suite[*TestEnvSuite]

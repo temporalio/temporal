@@ -582,6 +582,73 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
 }
 
+// TestSyncState_WritesChangeAtLastWriteInstant covers the Gomad dirty flag (UPSTREAM.md #4): a
+// clock that reports a metadata change at the same instant as the last write (or a write that
+// appears later) must not hide the change from SyncState, which timestamps alone would do.
+func (s *BacklogManagerTestSuite) TestSyncState_WritesChangeAtLastWriteInstant() {
+	ctx := context.Background()
+	db := s.blm.getDB()
+	_, err := db.RenewLease(ctx)
+	s.Require().NoError(err)
+	scale := &persistencespb.PartitionScaleState{Target: 3, MaxTarget: 3, TargetVersion: 7}
+	s.Require().NoError(db.UpdateScaleState(ctx, scale, false))
+
+	// Make the last write appear no earlier than the change, as a coarse or stalled clock would.
+	db.Lock()
+	db.lastWrite = time.Now().Add(time.Minute)
+	db.Unlock()
+	baseline := s.taskMgr.getUpdateCount(db.queue)
+
+	s.Require().NoError(db.SyncState(ctx))
+	s.Equal(baseline+1, s.taskMgr.getUpdateCount(db.queue), "the tied change must be written")
+	protorequire.ProtoEqual(s.T(), scale, s.persistedScaleState(db))
+
+	s.Require().NoError(db.SyncState(ctx))
+	s.Equal(baseline+1, s.taskMgr.getUpdateCount(db.queue), "a written change must not be written again")
+}
+
+// TestSyncState_SkipsWriteAfterAppendPersistedMetadata checks that when a task append already
+// persisted the metadata (Cassandra piggybacks it on the append LWT), the next SyncState does not
+// issue a redundant UpdateTaskQueue, matching upstream's lastChange/lastWrite semantics.
+func (s *BacklogManagerTestSuite) TestSyncState_SkipsWriteAfterAppendPersistedMetadata() {
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingMetadataUpdateOnAppendInterval.Key(), time.Duration(0))
+	ctx := context.Background()
+	db := s.blm.getDB()
+	_, err := db.RenewLease(ctx)
+	s.Require().NoError(err)
+	scale := &persistencespb.PartitionScaleState{Target: 3, MaxTarget: 3, TargetVersion: 7}
+	s.Require().NoError(db.UpdateScaleState(ctx, scale, false))
+
+	req := &writeTaskRequest{
+		subqueue:  subqueueZero,
+		fairLevel: fairLevel{id: db.GetMaxReadLevel(subqueueZero) + 1},
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimeNowPtrUtc(),
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		},
+	}
+	if s.fairness {
+		req.pass = 1
+		_, err = db.CreateFairTasks(ctx, []*writeTaskRequest{req})
+	} else {
+		_, err = db.CreateTasks(ctx, []*writeTaskRequest{req})
+	}
+	s.Require().NoError(err)
+	// The append must have persisted the metadata, including the pending change.
+	protorequire.ProtoEqual(s.T(), scale, s.persistedScaleState(db))
+	baseline := s.taskMgr.getUpdateCount(db.queue)
+
+	s.Require().NoError(db.SyncState(ctx))
+	s.Equal(baseline, s.taskMgr.getUpdateCount(db.queue), "metadata written by the append must not be rewritten")
+}
+
+func (s *BacklogManagerTestSuite) persistedScaleState(db *taskQueueDB) *persistencespb.PartitionScaleState {
+	tqd := s.taskMgr.getQueueDataByKey(db.queue)
+	tqd.Lock()
+	defer tqd.Unlock()
+	return tqd.info.GetPartitionScaleState()
+}
+
 // TestGetTaskBatch_ReadsInRangeSizedChunks checks that an empty stretch of task ids is scanned
 // in chunks of RangeSize, and that one getTaskBatch call gives up after ten chunks so the pump
 // can check whether it should keep going.

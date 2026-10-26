@@ -445,6 +445,7 @@ func NewMutableState(
 		)
 	}
 
+	s.gomadDebugSnapshot("created")
 	return s
 }
 
@@ -605,6 +606,7 @@ func NewMutableStateFromDB(
 	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
 		mutableState.wrapTimeSourceWithTimeSkipping()
 	}
+	mutableState.gomadDebugSnapshot("loaded")
 	return mutableState, nil
 }
 
@@ -1394,6 +1396,7 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 		ms.writeEventToCache(event)
 	}
 	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
+	ms.gomadDebugSnapshot("history_event")
 	return event
 }
 
@@ -7747,6 +7750,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	transactionPolicy historyi.TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
+	ms.gomadDebugSnapshot("close_mutation")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -7793,6 +7797,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	transactionPolicy historyi.TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
+	ms.gomadDebugSnapshot("close_snapshot")
 	if err != nil {
 		return nil, nil, err
 	}

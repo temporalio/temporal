@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/tests/testcore"
@@ -410,6 +411,13 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 		)
 		s.NoError(err)
 	}
+
+	// Wait for all activity tasks to reach matching before measuring dispatch fairness.
+	await.Require(s.Context(), s.T(), func(t *await.T) {
+		tasksOnDraining, tasksOnActive, _, _, _, err := s.countTasksByDrainingActive(env, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+		require.NoError(t, err)
+		require.EqualValues(t, Workflows*Tasks, tasksOnDraining+tasksOnActive)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// process activity tasks
 	var runs []int

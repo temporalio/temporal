@@ -2,11 +2,9 @@ package testcore
 
 import (
 	"flag"
+	"slices"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 )
 
 // cliFlags contains the feature flags for functional tests
@@ -22,14 +20,10 @@ func init() {
 	flag.StringVar(&cliFlags.enableFaultInjection, "enableFaultInjection", "", "enable global fault injection")
 }
 
+// UseSQLVisibility reports whether the persistence driver is a SQL plugin. If
+// the main storage is Cassandra, Elasticsearch is used for visibility.
 func UseSQLVisibility() bool {
-	switch cliFlags.persistenceDriver {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
-		return true
-	// If the main storage is Cassandra, Elasticsearch is used for visibility.
-	default:
-		return false
-	}
+	return slices.Contains(sqlPluginNames, cliFlags.persistenceDriver)
 }
 
 func UseCassandraPersistence() bool {

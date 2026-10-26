@@ -1,6 +1,7 @@
 package update
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -349,7 +350,7 @@ func (r *registry) Send(
 	for _, upd := range r.updates {
 		sortedUpdates = append(sortedUpdates, upd)
 	}
-	slices.SortStableFunc(sortedUpdates, func(u1, u2 *Update) int { return u1.admittedTime.Compare(u2.admittedTime) })
+	slices.SortStableFunc(sortedUpdates, compareAdmission)
 
 	for _, upd := range sortedUpdates {
 		outgoingMessage := upd.Send(includeAlreadySent, sequencingEventID)
@@ -516,4 +517,14 @@ func (r *registry) SuggestContinueAsNew() bool {
 
 func (r *registry) inFlightCount() int {
 	return len(r.updates)
+}
+
+// compareAdmission orders Updates by admission time and, within one clock
+// tick, by admission sequence, so the order Updates are sent in matches the
+// order they were admitted in even when the clock did not move between them.
+func compareAdmission(u1, u2 *Update) int {
+	if c := u1.admittedTime.Compare(u2.admittedTime); c != 0 {
+		return c
+	}
+	return cmp.Compare(u1.admittedSeq, u2.admittedSeq)
 }

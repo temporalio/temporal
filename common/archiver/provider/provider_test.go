@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
-	"go.temporal.io/server/common/archiver/gcloud"
-	"go.temporal.io/server/common/archiver/s3store"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -222,7 +220,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_Filestore() {
 }
 
 func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_GCloud() {
-	scheme := gcloud.URIScheme
+	scheme := gcloudURIScheme
 
 	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
@@ -243,7 +241,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_GCloud() {
 }
 
 func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_S3() {
-	scheme := s3store.URIScheme
+	scheme := s3URIScheme
 
 	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
@@ -487,7 +485,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_Filestore() {
 }
 
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_GCloud() {
-	scheme := gcloud.URIScheme
+	scheme := gcloudURIScheme
 
 	provider := NewArchiverProvider(
 		nil,
@@ -508,7 +506,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_GCloud() {
 }
 
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_S3() {
-	scheme := s3store.URIScheme
+	scheme := s3URIScheme
 
 	provider := NewArchiverProvider(
 		nil,

@@ -1,3 +1,5 @@
+//go:build !gomad
+
 package client
 
 import (

@@ -499,12 +499,24 @@ func (s TimerSequenceIDs) Less(
 	}
 
 	// timeout time & event ID are the same
-	if thisSequenceID.TimerType < thatSequenceID.TimerType {
+	if thisRank, thatRank := timerTypeSameInstantRank(thisSequenceID.TimerType), timerTypeSameInstantRank(thatSequenceID.TimerType); thisRank < thatRank {
 		return true
-	} else if thisSequenceID.TimerType > thatSequenceID.TimerType {
+	} else if thisRank > thatRank {
 		return false
 	}
 
 	// thisSequenceID && thatSequenceID are the same
 	return true
+}
+
+// timerTypeSameInstantRank orders an activity's timers that expire in the
+// same instant. The ScheduleToClose deadline bounds every other timeout of the
+// activity (StartToClose is capped to it), so when it expires together with one
+// of them the activity is out of its overall budget and closes with
+// ScheduleToClose; the other types keep their enum order.
+func timerTypeSameInstantRank(timerType enumspb.TimeoutType) int {
+	if timerType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+		return -1
+	}
+	return int(timerType)
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
@@ -32,7 +36,9 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/util"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -1222,6 +1228,29 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		},
 	}
 
+	// The migration stays pending only until its side-effect task closes the
+	// CHASM schedule, so hold that task to make the pending state explicit
+	// instead of racing the second call against it.
+	migrateTaskTypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(chasm.SchedulerLibraryName, "migrateToWorkflow"))
+	heldMigrateTasks := make(chan *historytasks.ChasmTask)
+	releaseMigrateTasks := make(chan struct{})
+	releaseMigration := sync.OnceFunc(func() { close(releaseMigrateTasks) })
+	defer releaseMigration()
+	env.InjectHook(testhooks.NewHook(
+		testhooks.HistoryTransferTaskInterceptor,
+		func(task historytasks.Task, execute func()) {
+			chasmTask, ok := task.(*historytasks.ChasmTask)
+			if ok && chasmTask.GetWorkflowID() == sid && chasmTask.Info.GetTypeId() == migrateTaskTypeID {
+				select {
+				case heldMigrateTasks <- chasmTask:
+					<-releaseMigrateTasks
+				case <-releaseMigrateTasks:
+				}
+			}
+			execute()
+		},
+	))
+
 	// Create CHASM schedule.
 	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
 		ctx,
@@ -1238,25 +1267,115 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 	)
 	s.NoError(err)
 
-	// First migration call.
-	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
-		Namespace:  nsName,
-		ScheduleId: sid,
-		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-	})
-	s.NoError(err)
+	migrate := func() error {
+		_, err := env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		return err
+	}
+	describeCHASM := func() (*workflowservice.DescribeScheduleResponse, error) {
+		resp, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		return resp.GetFrontendResponse(), err
+	}
+	// Transfer tasks from the held one onwards cannot be acked while it is
+	// held, so listing them shows every migration task created so far.
+	migrateTaskIDs := func(heldTask *historytasks.ChasmTask) []int64 {
+		shardID := historytasks.GetShardIDForTask(heldTask, int(env.GetTestClusterConfig().HistoryConfig.NumHistoryShards))
+		var taskIDs []int64
+		var nextPageToken []byte
+		for {
+			resp, err := env.AdminClient().ListHistoryTasks(ctx, &adminservice.ListHistoryTasksRequest{
+				ShardId:  int32(shardID),
+				Category: int32(historytasks.CategoryIDTransfer),
+				TaskRange: &historyspb.TaskRange{
+					InclusiveMinTaskKey: &historyspb.TaskKey{
+						FireTime: timestamppb.New(historytasks.DefaultFireTime),
+						TaskId:   heldTask.GetTaskID(),
+					},
+					ExclusiveMaxTaskKey: &historyspb.TaskKey{
+						FireTime: timestamppb.New(historytasks.DefaultFireTime),
+						TaskId:   math.MaxInt64,
+					},
+				},
+				BatchSize:     1000,
+				NextPageToken: nextPageToken,
+			})
+			s.NoError(err)
+			for _, task := range resp.GetTasks() {
+				if task.GetWorkflowId() == sid && task.GetTaskType() == enumsspb.TASK_TYPE_CHASM {
+					taskIDs = append(taskIDs, task.GetTaskId())
+				}
+			}
+			nextPageToken = resp.GetNextPageToken()
+			if len(nextPageToken) == 0 {
+				return taskIDs
+			}
+		}
+	}
 
-	// Second migration call should also succeed (idempotent).
-	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
-		Namespace:  nsName,
-		ScheduleId: sid,
-		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-	})
+	// First migration call.
+	s.NoError(migrate())
+
+	// Pending: the migration task is held, so the CHASM schedule is still open
+	// and paused for migration.
+	heldTask := await.Rcv(s.T(), heldMigrateTasks)
+	pendingDesc, err := describeCHASM()
 	s.NoError(err)
+	s.ProtoEqual(
+		&schedulepb.ScheduleState{
+			Paused: true,
+			Notes:  "paused for migration to workflow-backed scheduler",
+		},
+		pendingDesc.GetSchedule().GetState(),
+	)
+	s.Equal([]int64{heldTask.GetTaskID()}, migrateTaskIDs(heldTask))
+
+	// Second migration call should also succeed (idempotent) without scheduling
+	// another migration task or changing the pending schedule.
+	s.NoError(migrate())
+	repeatedDesc, err := describeCHASM()
+	s.NoError(err)
+	s.ProtoEqual(pendingDesc.GetSchedule(), repeatedDesc.GetSchedule())
+	s.Equal(pendingDesc.GetConflictToken(), repeatedDesc.GetConflictToken())
+	s.Equal([]int64{heldTask.GetTaskID()}, migrateTaskIDs(heldTask))
+
+	// Closed: let the migration complete, which starts the V1 workflow and
+	// then closes the CHASM schedule.
+	releaseMigration()
+	var closedErr *serviceerror.FailedPrecondition
+	await.Require(ctx, s.T(), func(t *await.T) {
+		_, err := describeCHASM()
+		require.ErrorAs(t, err, &closedErr)
+	}, 10*time.Second, 100*time.Millisecond)
+	s.Equal(chasmscheduler.ErrClosed.Error(), closedErr.Error())
+	v1Desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+		ctx,
+		&historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: nsID,
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, v1Desc.GetWorkflowExecutionInfo().GetStatus())
+
+	// A migration call after completion is rejected: idempotency only covers
+	// the pending migration.
+	var migrateClosedErr *serviceerror.FailedPrecondition
+	s.ErrorAs(migrate(), &migrateClosedErr)
+	s.Equal(chasmscheduler.ErrClosed.Error(), migrateClosedErr.Error())
 }
 
 func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCreationAndMigration() {

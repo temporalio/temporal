@@ -3834,18 +3834,28 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			s.NoError(w.Start())
 			defer w.Stop()
 
-			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
-			s.NoError(err)
+			// The expected history has the update accepted by the first workflow task. An update sent after
+			// the start can miss that task, so admit it together with the start.
+			workflowID := uuid.NewString()
+			startOp := env.SdkClient().NewWithStartWorkflowOperation(client.StartWorkflowOptions{
+				ID:                       workflowID,
+				TaskQueue:                taskQueue,
+				WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			}, callerWF)
 
 			// Block until the Nexus operation has started.
-			startedHandle, err := env.SdkClient().UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
-				WorkflowID:   run.GetID(),
-				RunID:        run.GetRunID(),
-				UpdateName:   awaitStartedUpdate,
-				WaitForStage: client.WorkflowUpdateStageCompleted,
+			startedHandle, err := env.SdkClient().UpdateWithStartWorkflow(ctx, client.UpdateWithStartWorkflowOptions{
+				StartWorkflowOperation: startOp,
+				UpdateOptions: client.UpdateWorkflowOptions{
+					WorkflowID:   workflowID,
+					UpdateName:   awaitStartedUpdate,
+					WaitForStage: client.WorkflowUpdateStageCompleted,
+				},
 			})
 			s.NoError(err)
 			s.NoError(startedHandle.Get(ctx, nil))
+			run, err := startOp.Get(ctx)
+			s.NoError(err)
 
 			// The operation is created in the tree implied by the schedule-time flag, in the original run.
 			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}, !tc.enableChasmAtSchedule)
@@ -3878,6 +3888,17 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 			// After the rebuild the operation lives on the tree implied by the current flag, verified on the
 			// specific post-reset run.
 			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}, expectHSMAfterReset)
+
+			// The expected history has the done signal after the first post-reset workflow task. A signal
+			// sent while that task is still pending is delivered in it instead, so wait for it to complete.
+			s.WaitForHistoryEventsSuffix(`
+ 10 WorkflowTaskFailed {"Cause":20}
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowExecutionUpdateCompleted`,
+				env.GetHistoryFunc(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}),
+				10*time.Second, 100*time.Millisecond)
 
 			// Drive the reset run to completion, then assert on its final history.
 			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "done", nil))

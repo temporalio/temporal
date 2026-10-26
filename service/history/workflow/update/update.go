@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -60,6 +61,10 @@ type (
 		checkLimits     func(*updatepb.Request) error
 		instrumentation *instrumentation
 		admittedTime    time.Time
+		// admittedSeq orders Updates admitted at the same instant. The registry
+		// sends Updates in admission order, and the clock alone cannot tell two
+		// admissions within one tick apart.
+		admittedSeq uint64
 		// pendingCallbacks buffers AttachCallbacks requests that arrive while
 		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
@@ -109,12 +114,17 @@ func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
 		admittedTime:    time.Now().UTC(),
+		admittedSeq:     admissionSequence.Add(1),
 	}
 	for _, opt := range opts {
 		opt(upd)
 	}
 	return upd
 }
+
+// admissionSequence numbers admissions process-wide so that Updates admitted
+// within the same clock tick keep their admission order.
+var admissionSequence atomic.Uint64
 
 func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
@@ -384,6 +394,7 @@ func (u *Update) Admit(
 		}
 		u.setState(stateAdmitted)
 		u.admittedTime = time.Now().UTC()
+		u.admittedSeq = admissionSequence.Add(1)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyAdmitted {
@@ -392,6 +403,7 @@ func (u *Update) Admit(
 		u.setState(prevState)
 		var timeZero time.Time
 		u.admittedTime = timeZero
+		u.admittedSeq = 0
 	})
 
 	return nil

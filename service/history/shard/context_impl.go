@@ -1633,6 +1633,7 @@ func (s *ContextImpl) rLock() {
 }
 
 func (s *ContextImpl) wUnlock() {
+	s.gomadDebugSnapshot()
 	s.rwLock.Unlock()
 }
 

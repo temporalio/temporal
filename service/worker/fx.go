@@ -5,7 +5,6 @@ import (
 	"os"
 
 	otellog "go.opentelemetry.io/otel/log"
-	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -51,7 +50,7 @@ var Module = fx.Options(
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
-	wcicomponent.Module,
+	wciComponentModule,
 	dlq.Module,
 	dummy.Module,
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),

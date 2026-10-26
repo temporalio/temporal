@@ -916,6 +916,49 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 	}, timerSequenceIDs)
 }
 
+// An activity started in the same instant it was scheduled has its
+// StartToClose and ScheduleToClose timers expire together when the former was
+// capped to the latter; the overall deadline is the one that closes it.
+func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_ScheduleToCloseWinsSameInstant() {
+	now := time.Now().UTC()
+	activityInfo := &persistencespb.ActivityInfo{
+		Version:                123,
+		ScheduledEventId:       234,
+		ScheduledTime:          timestamppb.New(now),
+		FirstScheduledTime:     timestamppb.New(now),
+		StartedEventId:         345,
+		StartedTime:            timestamppb.New(now),
+		ActivityId:             "some random activity ID",
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(2),
+		StartToCloseTimeout:    timestamp.DurationFromSeconds(2),
+		HeartbeatTimeout:       timestamp.DurationFromSeconds(0),
+		TimerTaskStatus:        TimerTaskStatusNone,
+		Attempt:                1,
+	}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
+		activityInfo.ScheduledEventId: activityInfo,
+	})
+
+	timerSequenceIDs := s.timerSequence.LoadAndSortActivityTimers()
+	s.Equal([]TimerSequenceID{
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    now.Add(2 * time.Second),
+			TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			TimerCreated: false,
+			Attempt:      activityInfo.Attempt,
+		},
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    now.Add(2 * time.Second),
+			TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			TimerCreated: false,
+			Attempt:      activityInfo.Attempt,
+		},
+	}, timerSequenceIDs)
+}
+
 func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 	now := time.Now().UTC()
 	timerExpiry := timestamppb.New(now.Add(100))

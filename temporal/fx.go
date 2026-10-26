@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -412,7 +411,7 @@ type (
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
 func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
-	membershipModule := ringpop.MembershipModule
+	membershipModule := defaultMembershipModule()
 	if len(params.StaticServiceHosts) > 0 {
 		membershipModule = static.MembershipModule(params.StaticServiceHosts)
 	}
@@ -1031,7 +1030,10 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		fx.Annotate(
-			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+			func(rsn primitives.ServiceName, rsi resource.InstanceID, sps []otelsdktrace.SpanProcessor) (*otelresource.Resource, error) {
+				if len(sps) == 0 {
+					return otelresource.Empty(), nil
+				}
 				attrs := []attribute.KeyValue{
 					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
@@ -1048,7 +1050,7 @@ var ServiceTracingModule = fx.Options(
 					otelresource.WithAttributes(attrs...),
 				)
 			},
-			fx.ParamTags(``, `optional:"true"`),
+			fx.ParamTags(``, `optional:"true"`, ``),
 		),
 	),
 	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {

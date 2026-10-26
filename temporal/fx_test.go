@@ -6,16 +6,30 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
+
+func TestServiceTracingModuleSkipsResourceDetectionWithoutSpanProcessors(t *testing.T) {
+	var tracingResource *otelresource.Resource
+	app := fx.New(
+		fx.Supply(primitives.FrontendService),
+		ServiceTracingModule,
+		fx.Populate(&tracingResource),
+	)
+	require.NoError(t, app.Err())
+	require.Empty(t, tracingResource.Attributes())
+}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")

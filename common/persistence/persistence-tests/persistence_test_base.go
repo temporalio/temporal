@@ -27,9 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
@@ -153,11 +151,11 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName:
+		case sqlplugin.PluginNameMySQL:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNamePGX:
+		case sqlplugin.PluginNamePostgreSQL, sqlplugin.PluginNamePostgreSQLPGX:
 			options.DBPort = environment.GetPostgreSQLPort()
-		case sqlite.PluginName:
+		case sqlplugin.PluginNameSQLite:
 			options.DBPort = 0
 		default:
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
@@ -165,11 +163,11 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName:
+		case sqlplugin.PluginNameMySQL:
 			options.DBHost = environment.GetMySQLAddress()
-		case postgresql.PluginName, postgresql.PluginNamePGX:
+		case sqlplugin.PluginNamePostgreSQL, sqlplugin.PluginNamePostgreSQLPGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
-		case sqlite.PluginName:
+		case sqlplugin.PluginNameSQLite:
 			options.DBHost = environment.GetLocalhostIP()
 		default:
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))

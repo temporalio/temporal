@@ -712,8 +712,10 @@ func (s *Starter) respondToRetriedRequest(
 	}
 
 	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
-	// matching based dispatch.
-	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
+	// matching based dispatch. A started first task whose timeout has elapsed is denied too: the timer queue is
+	// about to fail it, so a retried start that hands it out would let the caller respond to a task that no longer
+	// exists.
+	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 || s.workflowTaskTimedOut(mutableStateInfo.workflowTask) {
 		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
 			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
 
@@ -756,6 +758,14 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 	}
 
 	return extractMutableStateInfo(ctx, ms)
+}
+
+// workflowTaskTimedOut reports whether a started workflow task has reached its StartToClose deadline.
+func (s *Starter) workflowTaskTimedOut(workflowTask *historyi.WorkflowTaskInfo) bool {
+	if workflowTask.WorkflowTaskTimeout <= 0 || workflowTask.StartedTime.IsZero() {
+		return false
+	}
+	return !s.shardContext.GetTimeSource().Now().Before(workflowTask.StartedTime.Add(workflowTask.WorkflowTaskTimeout))
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task
