@@ -200,6 +200,11 @@ func WorkflowNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("wf-namespace-id", namespaceID)
 }
 
+// TargetNamespaceID returns tag for a target namespace ID, e.g. the namespace a request is routed to.
+func TargetNamespaceID(namespaceID string) ZapTag {
+	return NewStringTag("target-namespace-id", namespaceID)
+}
+
 // WorkflowNamespace returns tag for WorkflowNamespace
 func WorkflowNamespace(namespace string) ZapTag {
 	return NewStringTag("wf-namespace", namespace)
@@ -809,6 +814,7 @@ func SourceShardID(shardID int32) ZapTag {
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
 }
+
 func ReplicationTask(replicationTask any) ZapTag {
 	return NewAnyTag("xdc-replication-task", replicationTask)
 }
