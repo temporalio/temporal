@@ -165,6 +165,8 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionGlobal                      dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionLocal                       dynamicconfig.DurationPropertyFn
 
 	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
@@ -632,6 +634,8 @@ func NewConfig(
 		TimerProcessorMaxTimeShift:                       dynamicconfig.TimerProcessorMaxTimeShift.Get(dc),
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
+		NamespaceMinRetentionGlobal:                      dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
+		NamespaceMinRetentionLocal:                       dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 
 		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
