@@ -22,6 +22,15 @@ func (cb *circularTaskBuffer) inc(n int) {
 	cb.buffer[cb.currentPos] += int32(n)
 }
 
+// incAgo adds n to the bucket that is `ago` buckets older than the current one.
+func (cb *circularTaskBuffer) incAgo(ago int, n int) {
+	numBuckets := len(cb.buffer)
+	stepsBack := ago % numBuckets // going back a full lap lands on the same bucket
+	// adding numBuckets before the modulo keeps the index non-negative when stepping back past 0
+	pos := (cb.currentPos - stepsBack + numBuckets) % numBuckets
+	cb.buffer[pos] += int32(n)
+}
+
 func (cb *circularTaskBuffer) advance() {
 	cb.currentPos = (cb.currentPos + 1) % len(cb.buffer)
 	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
@@ -85,6 +94,45 @@ func (s *taskTracker) inc(n int) {
 	elapsed := currentTime.Sub(s.bucketStartTime)
 	s.advanceAndReset(elapsed)
 	s.tasks.inc(n)
+}
+
+// incOver adds n tasks spread uniformly over (from, now]. Batched adds represent tasks that
+// arrived over that whole interval, so attributing them all to the current bucket would bias
+// short windows high.
+func (s *taskTracker) incOver(n int, from time.Time) {
+	now := s.clock.Now()
+	s.advanceAndReset(now.Sub(s.bucketStartTime))
+
+	span := now.Sub(from)
+	// With no interval to spread over (first call, or the clock moved backwards) fall back to
+	// counting at the current instant, as inc does.
+	if span <= 0 || n == 0 || now.Before(s.bucketStartTime) {
+		s.tasks.inc(n)
+		return
+	}
+	lower := from
+	if s.startTime.After(lower) {
+		lower = s.startTime
+	}
+
+	start, end := s.bucketStartTime, now
+	var coveredTime time.Duration
+	assignedSoFar := 0
+	for ago := range s.buckets {
+		if !end.After(lower) {
+			break
+		}
+		if lower.After(start) {
+			start = lower
+		}
+		coveredTime += end.Sub(start)
+		// cumulative rounding keeps per-bucket error <= 1 and the total exact
+		assignedThroughThisBucket := int(float64(n)*float64(coveredTime)/float64(span) + 0.5)
+		s.tasks.incAgo(ago, assignedThroughThisBucket-assignedSoFar)
+		assignedSoFar = assignedThroughThisBucket
+		end = start
+		start = start.Add(-s.bucketSize)
+	}
 }
 
 // rate returns the rate of increments in a given interval
