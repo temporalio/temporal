@@ -1,7 +1,10 @@
+//go:build !wasip1
+
 package sqlite
 
 import (
 	"errors"
+	"net/url"
 	"regexp"
 
 	"modernc.org/sqlite"
@@ -15,6 +18,14 @@ const (
 )
 
 var sqlTableExistsRegex = regexp.MustCompile(sqlTableExistsPattern)
+
+func driverDSN(databaseName string, _ url.Values) string {
+	return databaseName
+}
+
+func driverTimeParameter() (key, value string) {
+	return "_time_format", "sqlite"
+}
 
 func (*db) IsDupEntryError(err error) bool {
 	if sqlErr, ok := errors.AsType[*sqlite.Error](err); ok {

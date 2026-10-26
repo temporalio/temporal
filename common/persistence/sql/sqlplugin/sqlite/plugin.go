@@ -172,7 +172,7 @@ func buildDSN(cfg *config.SQL) (string, error) {
 	}
 	dsn := fmt.Sprintf(
 		"file:%s?%v",
-		cfg.DatabaseName,
+		driverDSN(cfg.DatabaseName, vals),
 		vals.Encode(),
 	)
 	return dsn, nil
@@ -205,6 +205,7 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 		parameters.Add("_pragma", fmt.Sprintf("%s=%s", key, value))
 	}
 	// set time format
-	parameters.Add("_time_format", "sqlite")
+	key, value := driverTimeParameter()
+	parameters.Add(key, value)
 	return parameters, nil
 }

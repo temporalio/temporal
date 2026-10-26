@@ -107,6 +107,7 @@ type (
 		EnableArchival            bool
 		SpanExporter              sdktrace.SpanExporter
 		AdditionalServerOptions   []temporal.ServerOption
+		Persistence               persistencetests.TestBaseOptions
 	}
 	TestClusterOption func(params *testClusterParams)
 )
@@ -313,6 +314,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
+		Persistence:    params.Persistence,
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
