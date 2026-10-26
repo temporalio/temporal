@@ -4,6 +4,7 @@ package ndc
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -306,6 +307,13 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		// case 1.b
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
+		if !slices.ContainsFunc(totalEvents, func(event *historypb.HistoryEvent) bool {
+			return canReapplyOnReset(r.shardContext.StateMachineRegistry(), event)
+		}) {
+			// For a closed workflow, if none of the events can be reapplied (e.g. no signal, no update, etc.), skip reset.
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
+		}
+
 		baseMutableState := targetWorkflow.GetMutableState()
 		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
