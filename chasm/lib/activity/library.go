@@ -1,9 +1,12 @@
 package activity
 
 import (
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
@@ -26,6 +29,8 @@ func activityContextFromChasm(ctx chasm.Context) *activityContext {
 const (
 	libraryName   = "activity"
 	componentName = "activity"
+
+	Retention = 24 * time.Hour
 )
 
 var (
@@ -63,6 +68,9 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
 			chasm.WithRecordPrincipals(),
+			chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+				return Retention
+			}),
 			chasm.WithContextValues(map[any]any{
 				ctxKeyActivityContext: &activityContext{
 					config: l.config,

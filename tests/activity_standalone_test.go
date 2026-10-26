@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -355,6 +356,79 @@ func (s *standaloneActivityTestSuite) TestLastWorkerAttributionSurvivesTerminati
 		info := assertLastWorker(t, activityID, startResp.RunId)
 		require.Nil(t, info.GetClosedByPrincipal())
 	})
+}
+
+func (s *standaloneActivityTestSuite) TestRetention() {
+	env := s.newTestEnv(
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionGlobal, 2*time.Hour),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionLocal, 2*time.Hour),
+		testcore.WithDynamicConfig(dynamicconfig.RetentionTimerJitterDuration, time.Duration(0)),
+	)
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	s.NotNil(recorder)
+
+	testCases := []struct {
+		name              string
+		minRetention      time.Duration
+		expectedRetention time.Duration
+	}{
+		{
+			name:              "archetype retention above min retention",
+			minRetention:      2 * time.Hour,
+			expectedRetention: activity.Retention,
+		},
+		{
+			name:              "raised to min retention",
+			minRetention:      72 * time.Hour,
+			expectedRetention: 72 * time.Hour,
+		},
+	}
+
+	for _, tc := range testCases {
+		// Sequential because the min retention override applies to the whole dedicated cluster.
+		s.RunSequential(tc.name, func(s *standaloneActivityTestSuite) {
+			t := s.T()
+			defer env.OverrideDynamicConfig(dynamicconfig.NamespaceMinRetentionGlobal, tc.minRetention)()
+			defer env.OverrideDynamicConfig(dynamicconfig.NamespaceMinRetentionLocal, tc.minRetention)()
+
+			activityID := testcore.RandomizeStr(t.Name())
+			taskQueue := testcore.RandomizeStr(t.Name())
+			startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+
+			beforeClose := time.Now()
+			_, err := env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			afterClose := time.Now()
+
+			var deleteTask *historytasks.DeleteHistoryEventTask
+			await.Require(s.Context(), t, func(t *await.T) {
+				recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+					NamespaceID: env.NamespaceID().String(),
+					WorkflowID:  activityID,
+					RunID:       startResp.RunId,
+				})
+				for _, rec := range recorded {
+					if task, ok := rec.Task.(*historytasks.DeleteHistoryEventTask); ok {
+						deleteTask = task
+					}
+				}
+				require.NotNil(t, deleteTask, "expected a DeleteHistoryEventTask for retention")
+			}, 5*time.Second, 50*time.Millisecond)
+
+			require.Equal(t, activity.ArchetypeID, deleteTask.ArchetypeID)
+			// Persisted task timestamps are rounded to millisecond precision.
+			require.WithinRange(t,
+				deleteTask.VisibilityTimestamp,
+				beforeClose.Add(tc.expectedRetention).Add(-time.Millisecond),
+				afterClose.Add(tc.expectedRetention).Add(time.Millisecond),
+			)
+		})
+	}
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
