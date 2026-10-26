@@ -1195,15 +1195,15 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 			}
 
 			require.NotNil(t, deleteHistoryEventTask, "DeleteHistoryEventTask should be created")
-			assert.Equal(t, tests.NamespaceID.String(), deleteHistoryEventTask.NamespaceID)
-			assert.Equal(t, tests.WorkflowID, deleteHistoryEventTask.WorkflowID)
-			assert.Equal(t, tests.RunID, deleteHistoryEventTask.RunID)
-			assert.Equal(t, tc.archetypeID, deleteHistoryEventTask.ArchetypeID)
+			require.Equal(t, tests.NamespaceID.String(), deleteHistoryEventTask.NamespaceID)
+			require.Equal(t, tests.WorkflowID, deleteHistoryEventTask.WorkflowID)
+			require.Equal(t, tests.RunID, deleteHistoryEventTask.RunID)
+			require.Equal(t, tc.archetypeID, deleteHistoryEventTask.ArchetypeID)
 
 			// Verify the retention time is within expected range
-			assert.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention),
+			require.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention),
 				"Delete time should be at least closeTime + retention")
-			assert.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention+retentionJitterDuration),
+			require.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention+retentionJitterDuration),
 				"Delete time should not exceed closeTime + retention + jitter")
 		})
 	}
