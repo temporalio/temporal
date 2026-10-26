@@ -281,7 +281,6 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(int64(5), nil).AnyTimes()
 	ms.EXPECT().GetUpdateNexusSerializationContext(updateID).Return(nil).AnyTimes()
 	ms.EXPECT().ValidateCallbackAddition(gomock.Any(), gomock.Any()).Times(0)
-	ms.EXPECT().IsDirty().Return(false)
 
 	updateReg := update.NewRegistry(ms)
 	updater := &Updater{req: createUpdateRequestWithCallbacks(updateID, "another-request-id")}

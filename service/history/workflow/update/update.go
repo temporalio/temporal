@@ -410,14 +410,13 @@ func (u *Update) Admit(
 // The admitting request's own callbacks are written with its UpdateAdmitted or
 // UpdateAccepted event, so they are not attached here.
 //
-// Returns true if the request is fully handled, and false if the caller should
-// continue processing it, e.g. by scheduling a workflow task. Returns an error if
-// the request has callbacks but no request ID, or if the Update is in a provisional
-// state. In the latter case the caller should retry.
+// Returns true if an event was written, i.e. if mutable state needs to be persisted.
+// Returns an error if the request has callbacks but no request ID, or if the Update
+// is in a provisional state. In the latter case the caller should retry.
 func (u *Update) AttachCallbacks(
 	req *updatepb.Request,
 	eventStore EventStore,
-) (handled bool, err error) {
+) (eventWritten bool, err error) {
 	if len(req.GetCompletionCallbacks()) == 0 {
 		return false, nil
 	}
@@ -441,17 +440,16 @@ func (u *Update) AttachCallbacks(
 		}
 
 	case stateAdmitted, stateSent:
-		// This is the admitting request, or a retry of it. Returning false lets the caller
-		// schedule a workflow task for a new Update. A new Update is already in stateAdmitted
-		// here because the caller admits it with immediate effects.
+		// This is the admitting request, or a retry of it. Its callbacks travel with
+		// u.request. A new Update is already in stateAdmitted here because the caller
+		// admits it with immediate effects.
 		if req.GetRequestId() == u.originalReqID {
 			return false, nil
 		}
 		// Otherwise the request is from another caller. The Update is not yet accepted, so
 		// buffer its callbacks. onAcceptanceMsg writes them in the same transaction as the
-		// UpdateAccepted event. The admitting request already ensured that a workflow task
-		// will deliver the Update, so the caller has nothing more to do. If the Registry is
-		// cleared, the Update is aborted and the caller retries.
+		// UpdateAccepted event. If the Registry is cleared, the Update is aborted and the
+		// caller retries.
 		alreadyBuffered := slices.ContainsFunc(u.pendingCallbacks, func(pc pendingCallback) bool {
 			return pc.requestID == req.GetRequestId()
 		})
@@ -461,17 +459,18 @@ func (u *Update) AttachCallbacks(
 				completionCallbacks: req.GetCompletionCallbacks(),
 			})
 		}
-		return true, nil
+		return false, nil
 
 	case stateAccepted:
-		// Persist immediately as its own event, u.persistCallback(...) will dedup against requestIDs
-		// that are already recorded on the workflow.
+		// Write the callbacks as their own event, unless their request ID is already recorded
+		// on the workflow. This is the only case that writes an event, and so the only one that
+		// returns true.
 		return u.persistCallback(eventStore, req.GetRequestId(), req.GetCompletionCallbacks())
 
 	case stateCompleted:
 		// If the update is already completed, the result is returned synchronously
 		// in the UpdateWorkflowExecution response — no callback needed.
-		return true, nil
+		return false, nil
 
 	default:
 		// Callbacks cannot be attached in the remaining states. Log only for another request's
@@ -520,14 +519,15 @@ func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 
 // persistCallback writes a single WorkflowExecutionOptionsUpdatedEvent to attach the
 // given requestID and completion callbacks, and deduplicate on requestID if already attached.
+// Returns true if an event was written.
 func (u *Update) persistCallback(
 	eventStore EventStore,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-) (isCallbackAttached bool, err error) {
+) (eventWritten bool, err error) {
 	// Callback is already attached, no need to update.
 	if requestID != "" && eventStore.HasRequestID(requestID) {
-		return true, nil
+		return false, nil
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
 		nil, false, "", nil, nil, "", nil, nil, false,

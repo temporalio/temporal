@@ -756,14 +756,14 @@ func TestRejectUnprocessedWithBufferedCallbacks(t *testing.T) {
 			if tc.bufferAfterSend {
 				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
 			}
-			handled, err := upd.AttachCallbacks(&updatepb.Request{
+			written, err := upd.AttachCallbacks(&updatepb.Request{
 				Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
 				Input:               &updatepb.Input{Name: tv.HandlerName()},
 				RequestId:           tv.RequestID(),
 				CompletionCallbacks: []*commonpb.Callback{{}},
 			}, store)
 			require.NoError(t, err)
-			require.True(t, handled)
+			require.False(t, written)
 			if !tc.bufferAfterSend {
 				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
 			}
@@ -1154,9 +1154,9 @@ func TestInFlightCallbacks(t *testing.T) {
 		require.Len(t, reg.Send(context.Background(), skipAlreadySent, testSequencingEventID), 1)
 		require.Equal(t, []string{"u1/req-1/2"}, inFlight(t, reg), "sent")
 
-		attached, err := upd.AttachCallbacks(request("u1", "req-2", 1), store)
+		written, err := upd.AttachCallbacks(request("u1", "req-2", 1), store)
 		require.NoError(t, err)
-		require.True(t, attached)
+		require.False(t, written)
 		require.ElementsMatch(t, []string{"u1/req-1/2", "u1/req-2/1"}, inFlight(t, reg), "buffered while sent")
 
 		// Applying the accepted event adds the callbacks to the persisted totals before the
