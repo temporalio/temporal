@@ -47,7 +47,9 @@ type (
 		shutdownLock            sync.RWMutex
 	}
 
-	// ProcessorConfig contains all configs for processor
+	// ProcessorConfig is an alias of esconfig.ProcessorConfig.
+	//
+	// Deprecated: use esconfig.ProcessorConfig.
 	ProcessorConfig = esconfig.ProcessorConfig
 
 	ackFuture struct { // value of processorImpl.mapToAckFuture
@@ -70,7 +72,7 @@ var (
 
 // NewProcessor create new processorImpl
 func NewProcessor(
-	cfg *ProcessorConfig,
+	cfg *esconfig.ProcessorConfig,
 	esClient client.Client,
 	logger log.Logger,
 	metricsHandler metrics.Handler,

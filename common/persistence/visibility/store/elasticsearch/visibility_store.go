@@ -37,6 +37,9 @@ import (
 )
 
 const (
+	// PersistenceName is an alias of esconfig.PersistenceName.
+	//
+	// Deprecated: use esconfig.PersistenceName.
 	PersistenceName = esconfig.PersistenceName
 
 	delimiter = "~"
@@ -131,7 +134,7 @@ var (
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
 	cfg *esconfig.Config,
-	processorConfig *ProcessorConfig,
+	processorConfig *esconfig.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
@@ -178,7 +181,7 @@ func (s *VisibilityStore) Close() {
 }
 
 func (s *VisibilityStore) GetName() string {
-	return PersistenceName
+	return esconfig.PersistenceName
 }
 
 func (s *VisibilityStore) GetIndexName() string {
