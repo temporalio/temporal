@@ -25,6 +25,8 @@ var (
 	errPendingInvisible = serviceerror.NewNotFound("worker controller instance not found")
 
 	errConflictTokenMismatch = serviceerror.NewFailedPrecondition("conflict token mismatch")
+	// errClosedDuringUpdate: retryable, so the router re-probes and finds the new owner.
+	errClosedDuringUpdate = serviceerror.NewUnavailable("worker controller instance closed during the update")
 )
 
 var (

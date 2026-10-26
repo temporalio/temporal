@@ -151,6 +151,10 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	defer log.CapturePanic(h.logger, &err)
 
 	cur, err := read(ctx, req.GetNamespaceId(), req.GetInstanceId())
+	if errors.Is(err, ErrClosed) {
+		// Re-create: update-with-start starts a new execution over the closed one.
+		cur, err = snapshotOf{spec: &iface.WorkerControllerInstanceSpec{}}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +215,10 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetInstanceId()},
 		func(mctx chasm.MutableContext, _ any) (*WorkerControllerInstance, error) {
+			// The instance we read closed meanwhile (handover or delete); its owner may now be the workflow.
+			if cur.exists {
+				return nil, errClosedDuringUpdate
+			}
 			// Short-term workaround: the engine drops children added by updateFn on create (see plan.md, 5c).
 			created = NewWorkerControllerInstance(mctx, req.GetDeploymentName(), req.GetBuildId(), nil)
 			resp, err := apply(created, mctx)
