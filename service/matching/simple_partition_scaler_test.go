@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -482,4 +483,58 @@ func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
 	require.Equal(t, 8, d.NewTarget)
 	require.Equal(t, 1000, d.BacklogCap)
+}
+
+// TestOnTasksReasonNamesWindow verifies the decision reason names the Ups/Downs window that
+// determined the add target and the rate measured in it.
+func TestOnTasksReasonNamesWindow(t *testing.T) {
+	t.Parallel()
+	cfg := dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: true,
+		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: 5 * time.Second, TargetRate: 200},
+			{Window: 10 * time.Second, TargetRate: 100},
+		},
+		Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: 20 * time.Second, TargetRate: 50},
+		},
+	}
+	ts := clock.NewEventTimeSource()
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		ts,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// fill all windows at ~500 tasks/sec (the tracker also counts the current bucket, so
+	// the measured rate is a bit higher): ups[1] wants the most, downs[0] wants more still
+	var dec PartitionScalerDecision
+	for range 20 {
+		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 500, CurrentTarget: 2})
+		ts.Advance(time.Second)
+	}
+	dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 500, CurrentTarget: 2, PrivateState: dec.PrivateState})
+	require.False(t, dec.NoChange)
+	require.Greater(t, dec.NewTarget, 2)
+	target := dec.NewTarget
+	require.Regexp(t, fmt.Sprintf(`^set by ups\[1\] \(10s\) rate=5\d\d\.\d wants=%d$`, target), dec.Reason)
+
+	// same load again: no window moves the target, so report what held it
+	ts.Advance(time.Second)
+	dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 500, CurrentTarget: target, PrivateState: dec.PrivateState})
+	require.Equal(t, target, dec.NewTarget)
+	require.Regexp(t, fmt.Sprintf(`^held between downs\[0\] \(20s\) rate=\d+\.\d wants=\d+ and ups\[1\] \(10s\) rate=\d+\.\d wants=%d$`, target), dec.Reason)
+
+	// drop to zero load: the first decrease comes from the down window
+	for range 21 {
+		ts.Advance(time.Second)
+		dec = scaler.OnTasks(PartitionScalerInput{CurrentTarget: target, PrivateState: dec.PrivateState})
+		if dec.NewTarget != target {
+			break
+		}
+	}
+	require.Less(t, dec.NewTarget, target)
+	require.Regexp(t, `^set by downs\[0\] \(20s\) rate=\d+\.\d wants=\d+$`, dec.Reason)
 }
