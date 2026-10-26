@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -179,7 +180,7 @@ type (
 	}
 
 	activityTaskPostActionInfo struct {
-		taskQueue                          string
+		taskQueue                          *taskqueuepb.TaskQueue
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
@@ -213,28 +214,16 @@ func newActivityTaskPostActionInfo(
 	mutableState historyi.MutableState,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
-	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
-	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
-
-	return &activityTaskPostActionInfo{
-		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
-		versionDirective:                   directive,
-		priority:                           priority,
-	}, nil
-}
-
-func newActivityRetryTimePostActionInfo(
-	mutableState historyi.MutableState,
-	taskQueue string,
-	activityScheduleToStartTimeout time.Duration,
-	activityInfo *persistencespb.ActivityInfo,
-) (*activityTaskPostActionInfo, error) {
+	taskQueue, err := workflow.ActivityTaskQueue(mutableState, activityInfo)
+	if err != nil {
+		return nil, err
+	}
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 
 	return &activityTaskPostActionInfo{
 		taskQueue:                          taskQueue,
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
 	}, nil

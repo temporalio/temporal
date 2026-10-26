@@ -248,6 +248,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			RetryPolicy:                  command.RetryPolicy,
 			UseWorkflowBuildId:           command.UseWorkflowBuildId,
 			Priority:                     command.Priority,
+			SessionOptions:               command.SessionOptions,
 		},
 	}
 	return event

@@ -499,6 +499,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
+	if attr.GetSessionOptions().GetUseWorkflowSession() && executionInfo.GetStickyTaskQueue() == "" {
+		err := serviceerror.NewInvalidArgument("Workflow-session activities require a sticky workflow task queue")
+		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+	}
+
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.UseWorkflowBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
