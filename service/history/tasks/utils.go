@@ -56,11 +56,17 @@ func nexusStageTag(task Task) (tag.Tag, bool) {
 	if !ok {
 		return nil, false
 	}
-	// The group names are defined by the HSM and CHASM Nexus libraries, which this package cannot import.
+	// The group names are defined by the HSM and CHASM Nexus and callback libraries, which this package
+	// cannot import.
 	switch group := grouped.OutboundTaskGroup(); {
 	case group == "nexus", // CHASM
 		strings.HasPrefix(group, "nexusoperations."): // HSM
 		return tag.NexusStageCallerOutbound, true
+	// Every callback kind today delivers a Nexus operation completion (see common/callbacks.Kind);
+	// revisit if a non-Nexus kind is added.
+	case group == "callback.invoke", // CHASM
+		strings.HasPrefix(group, "callbacks."): // HSM
+		return tag.NexusStageHandlerOutbound, true
 	default:
 		return nil, false
 	}

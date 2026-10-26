@@ -96,6 +96,12 @@ type ExecutionInfo struct {
 	// An execution is closed when its root component reaches a terminal state in its lifecycle.
 	// If the component is still running (not yet closed), it returns a zero time.Time value.
 	CloseTime time.Time
+	// StartedByPrincipal is the authenticated principal that created this execution.
+	// It is nil when the execution was created without a principal.
+	StartedByPrincipal *commonpb.Principal
+	// ClosedByPrincipal is the authenticated principal that closed this execution.
+	// It is nil when the execution remains open or was closed without a principal.
+	ClosedByPrincipal *commonpb.Principal
 }
 
 type EndpointRegistry interface {
@@ -206,6 +212,7 @@ func (c *immutableCtx) ExecutionKey() ExecutionKey {
 
 func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 	executionInfo := c.root.backend.GetExecutionInfo()
+	rootAttributes := c.root.serializedNode.GetMetadata().GetComponentAttributes()
 
 	var closeTime time.Time
 	closeTimestamp := executionInfo.GetCloseTime()
@@ -218,6 +225,8 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 		StateTransitionCount: executionInfo.GetStateTransitionCount(),
 		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
 		CloseTime:            closeTime,
+		StartedByPrincipal:   rootAttributes.GetStartedByPrincipal(),
+		ClosedByPrincipal:    rootAttributes.GetClosedByPrincipal(),
 	}
 }
 
