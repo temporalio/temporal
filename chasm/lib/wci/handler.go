@@ -53,10 +53,12 @@ func refFor(namespaceID, instanceID string) chasm.ComponentRef {
 
 // snapshotOf is what a request reads under the lock before working without it.
 type snapshotOf struct {
-	exists   bool
-	state    *wcipb.WorkerControllerInstanceState
-	spec     *iface.WorkerControllerInstanceSpec
-	statuses map[string]iface.ScalingAlgorithmStatus
+	exists bool
+	// activatedToken of a closed instance, carried onto a re-created one.
+	activatedToken string
+	state          *wcipb.WorkerControllerInstanceState
+	spec           *iface.WorkerControllerInstanceSpec
+	statuses       map[string]iface.ScalingAlgorithmStatus
 }
 
 // read returns the current instance; a missing execution reads as an empty, non-existent one.
@@ -66,7 +68,7 @@ func read(ctx context.Context, namespaceID, instanceID string) (snapshotOf, erro
 			return snapshotOf{}, errPendingInvisible
 		}
 		if w.LifecycleState(cctx).IsClosed() {
-			return snapshotOf{}, ErrClosed
+			return snapshotOf{activatedToken: w.ActivatedMigrationToken}, ErrClosed
 		}
 		statuses := map[string]iface.ScalingAlgorithmStatus{}
 		for id, field := range w.ScalingGroups {
@@ -153,7 +155,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	cur, err := read(ctx, req.GetNamespaceId(), req.GetInstanceId())
 	if errors.Is(err, ErrClosed) {
 		// Re-create: update-with-start starts a new execution over the closed one.
-		cur, err = snapshotOf{spec: &iface.WorkerControllerInstanceSpec{}}, nil
+		cur, err = snapshotOf{spec: &iface.WorkerControllerInstanceSpec{}, activatedToken: cur.activatedToken}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -221,6 +223,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 			}
 			// Short-term workaround: the engine drops children added by updateFn on create (see plan.md, 5c).
 			created = NewWorkerControllerInstance(mctx, req.GetDeploymentName(), req.GetBuildId(), nil)
+			created.ActivatedMigrationToken = cur.activatedToken
 			resp, err := apply(created, mctx)
 			createdResp = resp
 			return created, err
@@ -363,11 +366,19 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 		return nil, serviceerror.NewInvalidArgument("migration token and expire time are required")
 	}
 
+	// A late prepare can replace a deleted instance; keep its token so a retried activation still succeeds.
+	// Not atomic with the start: the engine doesn't expose the run it replaces (plan.md, 11g).
+	activatedToken, err := readActivatedToken(ctx, req.GetNamespaceId(), req.GetInstanceId())
+	if err != nil {
+		return nil, err
+	}
 	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetInstanceId()},
 		func(mctx chasm.MutableContext, req *wcipb.CreateFromMigrationStateRequest) (*WorkerControllerInstance, error) {
-			return NewWorkerControllerInstanceFromMigration(mctx, req.GetState(), req.GetScalingGroups(), req.GetMigrationToken(), req.GetExpireTime().AsTime()), nil
+			w := NewWorkerControllerInstanceFromMigration(mctx, req.GetState(), req.GetScalingGroups(), req.GetMigrationToken(), req.GetExpireTime().AsTime())
+			w.ActivatedMigrationToken = activatedToken
+			return w, nil
 		},
 		req,
 	)
@@ -378,6 +389,17 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 		return nil, err
 	}
 	return &wcipb.CreateFromMigrationStateResponse{}, nil
+}
+
+// readActivatedToken returns the current execution's activated token; empty when there is none.
+func readActivatedToken(ctx context.Context, namespaceID, instanceID string) (string, error) {
+	token, err := chasm.ReadComponent(ctx, refFor(namespaceID, instanceID), func(w *WorkerControllerInstance, _ chasm.Context, _ any) (string, error) {
+		return w.ActivatedMigrationToken, nil
+	}, nil)
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return "", nil
+	}
+	return token, err
 }
 
 func (h *handler) checkSameMigration(ctx context.Context, req *wcipb.CreateFromMigrationStateRequest) error {

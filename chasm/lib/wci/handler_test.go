@@ -631,6 +631,18 @@ func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
 			require.NoError(t, e.migrateToWorkflow())
 			e.runMigrateTask(t)
 		}},
+		// An earlier run's timed-out prepare lands after the delete and replaces the deleted execution.
+		{name: "deleted_then_late_prepare", status: wcipb.WCI_STATUS_PENDING_ACTIVATION, moveOn: func(t *testing.T, e *e2e) {
+			_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+			require.NoError(t, err)
+			require.NoError(t, e.prepare("run-0", time.Minute))
+		}},
+		{name: "deleted_then_recreated", status: wcipb.WCI_STATUS_RUNNING, moveOn: func(t *testing.T, e *e2e) {
+			_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+			require.NoError(t, err)
+			_, err = e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
