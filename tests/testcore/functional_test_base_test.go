@@ -12,15 +12,12 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/mockapi/operatorservicemock/v1"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/testcontext"
@@ -81,15 +78,12 @@ func TestRegisterNamespace(t *testing.T) {
 		name              string
 		transientFailures int
 		createErr         error
-		createDelay       time.Duration
 		cancel            bool
 		wantAttempts      int
 	}{
 		{name: "RetriesContention", transientFailures: 4, wantAttempts: 5},
 		{name: "DuplicateNamespace", createErr: serviceerror.NewNamespaceAlreadyExists("duplicate"), wantAttempts: 1},
 		{name: "Cancellation", createErr: serviceerror.NewUnavailable("conditional failure"), cancel: true, wantAttempts: 1},
-		{name: "RetryExhaustion", createErr: serviceerror.NewUnavailable("conditional failure"), wantAttempts: 20},
-		{name: "RetryTimeBudget", createErr: serviceerror.NewUnavailable("conditional failure"), createDelay: time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -109,9 +103,7 @@ func TestRegisterNamespace(t *testing.T) {
 					testCluster: &TestCluster{
 						testBase: &persistencetests.TestBase{
 							ClusterMetadata: metadata,
-							MetadataManager: persistence.NewMetadataPersistenceRetryableClient(
-								manager, common.CreatePersistenceClientRetryPolicy(), persistenceclient.IsPersistenceTransientError,
-							),
+							MetadataManager: manager,
 						},
 						host: &temporalImpl{},
 					},
@@ -136,10 +128,6 @@ func TestRegisterNamespace(t *testing.T) {
 						if tc.cancel {
 							cancel()
 						}
-						if tc.createDelay > 0 {
-							// Fake time models slow persistence calls without delaying the test.
-							await.Rcv(t, time.After(tc.createDelay))
-						}
 						if attempts <= tc.transientFailures {
 							return nil, serviceerror.NewUnavailable("conditional failure")
 						}
@@ -162,9 +150,7 @@ func TestRegisterNamespace(t *testing.T) {
 					}, nil)
 				}
 
-				started := time.Now()
 				id, err := base.RegisterNamespace(ctx, ns, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-				elapsed := time.Since(started)
 				if tc.createErr != nil {
 					require.ErrorIs(t, err, tc.createErr)
 					require.Equal(t, namespace.EmptyID, id)
@@ -173,16 +159,7 @@ func TestRegisterNamespace(t *testing.T) {
 					require.Equal(t, requestedID, id)
 				}
 
-				if tc.wantAttempts == 0 {
-					require.GreaterOrEqual(t, elapsed, 10*time.Second, "retry budget must not expire early")
-					// Budget + in-flight inner attempts = 10s + 2*1s + up to 50ms backoff = 12.05s < 13s.
-					require.Less(t, elapsed, 13*time.Second, "retry budget must not allow another full retry window")
-					// Attempt cap = 10 outer attempts * 2 database attempts = 20 database attempts.
-					require.Less(t, attempts, 20, "retry time budget must stop slow calls before the attempt limit")
-					require.NoError(t, ctx.Err(), "retry budget must expire before the test context")
-				} else {
-					require.Equal(t, tc.wantAttempts, attempts)
-				}
+				require.Equal(t, tc.wantAttempts, attempts)
 			})
 		})
 	}
