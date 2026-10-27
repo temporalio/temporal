@@ -64,7 +64,7 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 					require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
 				} else {
 					require.NotNil(t, persisted.TaskQueueInfo.GetExpiryTime())
-					require.True(t, persisted.TaskQueueInfo.ExpiryTime.AsTime().After(time.Now()))
+					require.True(t, persisted.TaskQueueInfo.GetExpiryTime().AsTime().After(time.Now()))
 				}
 			}
 		})

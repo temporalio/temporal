@@ -35,6 +35,10 @@ Before starting the implementation or review of any request, you MUST REVIEW the
 - Update API proto: `make update-go-api`
 - Always include `-tags test_dep` when running tests. Include the `integration` tag only for integration tests.
 
+## Code Conventions
+
+- Use getter methods for reads whenever available, including protobuf fields. Use direct field access for assignments.
+
 ## Development Workflow
 
 1. Inspect surrounding code, tests, and configuration before making changes.

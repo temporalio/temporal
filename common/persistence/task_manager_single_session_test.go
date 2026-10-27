@@ -85,7 +85,7 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 									restored, err := serializer.TaskQueueInfoFromBlob(req.TaskQueueInfo)
 									require.NoError(t, err)
 									protorequire.ProtoEqual(t, info, restored)
-									protorequire.ProtoEqual(t, info.ExpiryTime, req.ExpiryTime)
+									protorequire.ProtoEqual(t, info.GetExpiryTime(), req.ExpiryTime)
 									return storeErr
 								})
 						} else {
@@ -94,7 +94,7 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 									restored, err := serializer.TaskQueueInfoFromBlob(req.TaskQueueInfo)
 									require.NoError(t, err)
 									protorequire.ProtoEqual(t, info, restored)
-									protorequire.ProtoEqual(t, info.ExpiryTime, req.ExpiryTime)
+									protorequire.ProtoEqual(t, info.GetExpiryTime(), req.ExpiryTime)
 									require.Equal(t, persistence.IsTaskQueueMetadataRetained(info), req.SingleSessionAssigned)
 									return &persistence.UpdateTaskQueueResponse{}, storeErr
 								})

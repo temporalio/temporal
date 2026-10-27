@@ -56,14 +56,14 @@ func TestSingleSessionMetadataCleanup(t *testing.T) {
 					if expiredTask {
 						response.Tasks = []*persistencespb.AllocatedTaskInfo{{TaskId: 1, Data: &persistencespb.TaskInfo{ExpiryTime: timestamppb.New(time.Now().Add(-time.Hour))}}}
 						manager.EXPECT().CompleteTasksLessThan(gomock.Any(), &p.CompleteTasksLessThanRequest{
-							NamespaceID: info.Data.NamespaceId, TaskQueueName: info.Data.Name, TaskType: tc.taskType,
+							NamespaceID: info.Data.GetNamespaceId(), TaskQueueName: info.Data.GetName(), TaskType: tc.taskType,
 							ExclusiveMaxTaskID: 2, Limit: 1,
 						}).Return(1, nil)
 					}
 					manager.EXPECT().GetTasks(gomock.Any(), gomock.Any()).Return(response, nil)
 					if !tc.retained {
 						manager.EXPECT().DeleteTaskQueue(gomock.Any(), &p.DeleteTaskQueueRequest{
-							TaskQueue: &p.TaskQueueKey{NamespaceID: info.Data.NamespaceId, TaskQueueName: info.Data.Name, TaskQueueType: tc.taskType},
+							TaskQueue: &p.TaskQueueKey{NamespaceID: info.Data.GetNamespaceId(), TaskQueueName: info.Data.GetName(), TaskQueueType: tc.taskType},
 							RangeID:   7,
 						}).Return(nil)
 					}
