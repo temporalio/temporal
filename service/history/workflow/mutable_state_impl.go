@@ -1468,8 +1468,9 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
-	// If the sticky task queue is already bound to a single sesssion, then re-setting it to a different name is not allowed.
 	if ms.executionInfo.GetSingleSessionBound() && name != ms.executionInfo.GetStickyTaskQueue() {
+		// Workflow-task completion rejects a different destination before calling this setter, which is why
+		// we do not need to return an error here.
 		return
 	}
 	ms.executionInfo.StickyTaskQueue = name

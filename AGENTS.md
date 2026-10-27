@@ -37,6 +37,7 @@ Before starting the implementation or review of any request, you MUST REVIEW the
 
 ## Code Conventions
 
+- Keep receiver methods in their existing implementation files and unit tests in the corresponding owner test files. Do not create feature files that mix methods or test suites from unrelated owners.
 - Use getter methods for reads whenever available, including protobuf fields. Use direct field access for assignments.
 
 ## Development Workflow

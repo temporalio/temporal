@@ -113,6 +113,7 @@ type (
 
 	pollMetadata struct {
 		sessionOptions            *sessionpb.WorkerSessionOptions
+		singleSessionAcquisition  bool // This is set to true when a poller is *attempting to acquire* a single session for a stable identity
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -211,6 +212,10 @@ type (
 		taskHookFactories []hooks.TaskHookFactory
 	}
 )
+
+func (m *pollMetadata) isSingleSessionAcquisition() bool {
+	return m != nil && m.singleSessionAcquisition
+}
 
 // Add registers a poller for a worker instance. Thread-safe.
 func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
@@ -771,6 +776,22 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+	queue := UnversionedQueueKey(partition)
+	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(),
+		TaskQueue:   queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+	})
+	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return persistence.IsTaskQueueMetadataRetained(response.TaskQueueInfo), nil
+}
+
 func (e *matchingEngineImpl) GrantEagerDispatch(
 	ctx context.Context,
 	request *matchingservice.GrantEagerDispatchRequest,
@@ -833,6 +854,7 @@ pollLoop:
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 			sessionOptions:            request.GetSessionOptions(),
+			singleSessionAcquisition:  partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

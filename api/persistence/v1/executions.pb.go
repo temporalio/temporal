@@ -383,6 +383,7 @@ type WorkflowExecutionInfo struct {
 	// Nexus operation context retained across runs so workers can select payload serialization.
 	PropagatedNexusSerializationContext *v18.PropagatedSerializationContext `protobuf:"bytes,117,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
 	// Prevents ordinary sticky resets and fallback from changing this run's destination.
+	// Once set to true for a workflow execution, it shall be retained for the lifetime of the workflow execution.
 	SingleSessionBound bool `protobuf:"varint,118,opt,name=single_session_bound,json=singleSessionBound,proto3" json:"single_session_bound,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache

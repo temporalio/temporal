@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -150,6 +152,8 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, 20*time.Millisecond),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEphemeralDataUpdateInterval, 20*time.Millisecond),
 	)
 	tv := env.Tv()
 	client := env.FrontendClient()
@@ -319,4 +323,74 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
+}
+
+func TestSingleSessionAcquisitionUsesAdvertisedBacklog(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		writePartition int
+	}{
+		{name: "root backlog", writePartition: 0},
+		{name: "non-root backlog", writePartition: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := testcore.NewEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 3),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 3),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, 20*time.Millisecond),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingEphemeralDataUpdateInterval, 20*time.Millisecond),
+			)
+			env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, tc.writePartition))
+			tv := env.Tv()
+			stickyQueue := tv.StickyTaskQueue()
+			// Sticky queues see backlog advertisements from their hashed subscription partition and its parents.
+			for int(farm.Fingerprint32([]byte(stickyQueue.GetName())))%3 != tc.writePartition {
+				stickyQueue.Name += "s"
+			}
+			client := env.FrontendClient()
+			poller := taskpoller.New(t, client, env.Namespace().String()).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: stickyQueue, Identity: tv.WorkerIdentity(),
+				SessionOptions: &sessionpb.WorkerSessionOptions{
+					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stickyQueue.GetName()},
+					},
+				},
+			})
+			completed := make(chan error, 1)
+			go func() {
+				_, err := poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				}, taskpoller.WithContext(t.Context()))
+				completed <- err
+			}()
+
+			partition := &taskqueuespb.TaskQueuePartition{
+				TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyQueue.GetName()},
+			}
+			await.Require(t.Context(), t, func(t *await.T) {
+				response, err := env.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+					NamespaceId: env.NamespaceID().String(), TaskQueuePartition: partition,
+					Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+					ReportPollers: true, OnlyIfLoaded: true,
+				})
+				require.NoError(t, err)
+				pollers := response.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetPollers()
+				require.NotEmpty(t, pollers)
+				require.Equal(t, tv.WorkerIdentity(), pollers[0].GetIdentity())
+			}, 10*time.Second, 20*time.Millisecond)
+
+			// No normal poller is started; the sticky poll must discover this default-priority backlog.
+			_, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+			})
+			require.NoError(t, err)
+			require.NoError(t, await.Rcv(t, completed))
+		})
+	}
 }

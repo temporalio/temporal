@@ -654,8 +654,12 @@ func (tm *priTaskMatcher) poll(
 		pollMetadata: pollMetadata,
 	}
 
-	if tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.sessionOptions.GetSingleSession() != nil {
-		// Session acquisition is controlled by the sticky partition, not priority-backlog forwarding.
+	if pollMetadata.sessionOptions.GetSingleSession() != nil &&
+		(pollMetadata.conditions.GetNoWait() ||
+			(tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !pollMetadata.isSingleSessionAcquisition())) {
+		// Only an acquisition owner may forward. NoWait cannot await an asynchronous forward. In other words,
+		// if the poller is not the acquisition owner, it will not forward the poll, preventing multiple pollers
+		// from acquiring different workflow tasks at the same time for the same stable identity.
 		poller.forwardCtx = nil
 	}
 

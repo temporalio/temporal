@@ -111,6 +111,24 @@ func newTaskQueueDB(
 	}
 }
 
+func (db *taskQueueDB) SingleSessionAssigned() bool {
+	db.Lock()
+	defer db.Unlock()
+	return db.singleSessionAssigned
+}
+
+func (db *taskQueueDB) assignSingleSession(ctx context.Context) (bool, error) {
+	db.Lock()
+	defer db.Unlock()
+	if db.singleSessionAssigned {
+		return false, nil
+	}
+	db.singleSessionAssigned = true
+	db.lastChange = time.Now()
+	// Fence scanner snapshots captured before this record became retained metadata.
+	return true, db.updateTaskQueueLocked(ctx, true)
+}
+
 // RangeID returns the current persistence view of rangeID
 func (db *taskQueueDB) RangeID() int64 {
 	db.Lock()
@@ -816,6 +834,10 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		PartitionScaleState:     db.scaleState,
 		SingleSessionAssigned:   db.singleSessionAssigned,
 	}
+	// The initial POC of single session assignment does not set the expiry time for sticky task queues with the main
+	// reason being that we always want to retain the task queue metadata for sticky task queues with single session assigned.
+	// The reason for this being that agentCore Sessions have no TTL technically, and the corresponding TaskQueueInfo record should also not have
+	// an expiry time.
 	if !persistence.IsTaskQueueMetadataRetained(info) {
 		info.ExpiryTime = db.expiryTime()
 	}

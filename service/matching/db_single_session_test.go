@@ -70,3 +70,40 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestSingleSessionAssignmentPersists(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t)
+	logger := log.NewTestLogger()
+	store := newTestTaskManager(logger)
+	partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+	queue := UnversionedQueueKey(partition)
+	cfg := newTaskQueueConfig(partition.TaskQueue(), NewConfig(dynamicconfig.NewNoopCollection()), tv.NamespaceName())
+	db := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
+	_, err := db.RenewLease(t.Context())
+	require.NoError(t, err)
+	require.False(t, db.SingleSessionAssigned())
+	staleRange := db.rangeID
+
+	changed, err := db.assignSingleSession(t.Context())
+	require.NoError(t, err)
+	require.True(t, changed)
+	persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
+	})
+	require.NoError(t, err)
+	require.True(t, persisted.TaskQueueInfo.GetSingleSessionAssigned())
+	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
+	require.Equal(t, staleRange+1, persisted.RangeID, "assignment fences snapshots taken before retention")
+
+	changed, err = db.assignSingleSession(t.Context())
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, persisted.RangeID, db.rangeID)
+
+	reloaded := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
+	_, err = reloaded.RenewLease(t.Context())
+	require.NoError(t, err)
+	require.True(t, reloaded.SingleSessionAssigned())
+	require.NoError(t, reloaded.SyncState(t.Context()))
+}

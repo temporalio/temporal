@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -888,4 +889,148 @@ func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
 		}
 		synctest.Wait()
 	})
+}
+
+func (s *PriMatcherSuite) TestSingleSessionStickyPollSkipsPriorityForwarder() {
+	ctx := s.T().Context()
+	tm := s.newTestMatcher(ctx, testMatcherOpts{})
+	tm.partition = testMatcherTaskQueue.StickyPartition("session")
+	defer tm.Stop()
+	forwarder := newPollForwarderTask(1, priorityBacklogPollForwarder)
+	tm.data.tasks.Add(forwarder)
+	metadata := &pollMetadata{
+		sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+		}},
+		conditions: &matchingservice.PollConditions{NoWait: true},
+	}
+	task, err := tm.Poll(ctx, metadata)
+	s.Require().ErrorIs(err, errNoTasks)
+	s.Require().Nil(task)
+
+	local := s.newBacklogTask(1, make(chan taskResponse, 1))
+	tm.data.tasks.Add(local)
+	task, err = tm.Poll(ctx, metadata)
+	s.Require().NoError(err)
+	s.Require().Same(local, task)
+}
+
+func (s *PriMatcherSuite) TestSingleSessionAcquisitionUsesStickyForwarding() {
+	for _, tc := range []struct {
+		name       string
+		noBacklog  bool
+		empty      bool
+		cancel     bool
+		forwardErr error
+	}{
+		{name: "default-priority backlog on non-root partition"},
+		{name: "empty remote backlog", empty: true},
+		{name: "forward error waits for poll end", forwardErr: serviceerror.NewUnavailable("start result unavailable")},
+		{name: "cancel while forwarding", cancel: true},
+		{name: "cancel before forwarding", noBacklog: true, cancel: true},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+				tm.partition = testMatcherTaskQueue.StickyPartition("session")
+				defer tm.Stop()
+				metadata := &pollMetadata{
+					sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+					}},
+					singleSessionAcquisition: true,
+				}
+				requests := make(chan *matchingservice.PollWorkflowTaskQueueRequest, 1)
+				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+				if !tc.noBacklog {
+					client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, _ ...any) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+							requests <- request
+							if tc.cancel {
+								<-ctx.Done()
+								return nil, ctx.Err()
+							}
+							if tc.empty {
+								return &matchingservice.PollWorkflowTaskQueueResponse{}, nil
+							}
+							return response, tc.forwardErr
+						})
+					tm.UpdateRemotePriorityBacklogs(remotePriorityBacklogSet{
+						{partition: 2, priority: tm.config.DefaultPriorityKey}: {},
+					})
+				}
+				type result struct {
+					task *internalTask
+					err  error
+				}
+				completed := make(chan result, 1)
+				go func() {
+					task, err := tm.Poll(ctx, metadata)
+					completed <- result{task: task, err: err}
+				}()
+				if !tc.noBacklog {
+					request := await.Rcv(t, requests)
+					require.Equal(t, tm.partition.RpcName(), request.GetForwardedSource())
+					require.Equal(t, testMatcherTaskQueue.NormalPartition(2).RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
+					require.Same(t, metadata.sessionOptions, request.GetPollRequest().GetSessionOptions())
+					require.True(t, request.GetConditions().GetNoWait())
+					require.Equal(t, int32(tm.config.DefaultPriorityKey), request.GetConditions().GetMinPriority())
+				}
+				if tc.cancel || tc.empty || tc.forwardErr != nil {
+					synctest.Wait()
+					select {
+					case <-completed:
+						t.Fatal("poll must wait for cancellation")
+					default:
+					}
+					cancel()
+				}
+				got := await.Rcv(t, completed)
+				switch {
+				case tc.noBacklog || tc.empty || tc.cancel || tc.forwardErr != nil:
+					require.ErrorIs(t, got.err, errNoTasks)
+					require.Nil(t, got.task)
+				default:
+					require.NoError(t, got.err)
+					require.Same(t, response, got.task.pollWorkflowTaskQueueResponse())
+				}
+			})
+		})
+	}
+}
+
+func (s *PriMatcherSuite) TestSingleSessionNoWaitSkipsForwarder() {
+	for _, sticky := range []bool{false, true} {
+		name := "normal parent forwarding"
+		if sticky {
+			name = "sticky backlog forwarding"
+		}
+		s.Run(name, func() {
+			ctx := s.T().Context()
+			opts := testMatcherOpts{}
+			if !sticky {
+				opts.partition = testMatcherTaskQueue.NormalPartition(1)
+			}
+			tm := s.newTestMatcher(ctx, opts)
+			defer tm.Stop()
+			forwarder := parentPollForwarder
+			if sticky {
+				tm.partition = testMatcherTaskQueue.StickyPartition("session")
+				forwarder = priorityBacklogPollForwarder
+			}
+			tm.data.tasks.Add(newPollForwarderTask(1, forwarder))
+			task, err := tm.Poll(ctx, &pollMetadata{
+				sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+				}},
+				singleSessionAcquisition: true,
+				conditions:               &matchingservice.PollConditions{NoWait: true},
+			})
+			s.Require().ErrorIs(err, errNoTasks)
+			s.Require().Nil(task)
+		})
+	}
 }
