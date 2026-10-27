@@ -28,6 +28,23 @@ message NamespaceInfo {
   string description = 4;
   string owner = 5;
   map<string, string> data = 6;
+  // The namespace's most recent restore, started by OperatorService.RestoreNamespace. Unset if the
+  // namespace has never been restored.
+  NamespaceRestoreInfo restore_info = 7;
+}
+
+// NamespaceRestoreInfo records a namespace restore on the namespace itself, so it is written,
+// replicated, and ordered by ConfigVersion together with the namespace state it governs.
+message NamespaceRestoreInfo {
+  // Identifies this restore. Part of the restore job's workflow ID, and guards every update the job
+  // makes to this record, so a job from a superseded restore can't change it.
+  string restore_id = 1;
+  // Cluster whose temporal-system namespace runs the restore job.
+  string host_cluster = 2;
+  temporal.api.enums.v1.NamespaceRestoreState state = 3;
+  google.protobuf.Timestamp start_time = 4;
+  // Set when state leaves NAMESPACE_RESTORE_STATE_RUNNING.
+  google.protobuf.Timestamp close_time = 5;
 }
 
 message NamespaceConfig {

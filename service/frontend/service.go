@@ -178,6 +178,8 @@ type Config struct {
 	// after all namespace resources (i.e. workflow executions) are deleted.
 	// Default is 0, means, namespace will be deleted immediately.
 	DeleteNamespaceNamespaceDeleteDelay dynamicconfig.DurationPropertyFn
+	// Enables the SoftDeleteNamespace, RestoreNamespace, and DescribeNamespaceRestore APIs.
+	EnableNamespaceSoftDelete dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -400,6 +402,7 @@ func NewConfig(
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.DeleteNamespacePagesPerExecution.Get(dc),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
+		EnableNamespaceSoftDelete:                           dynamicconfig.EnableNamespaceSoftDelete.Get(dc),
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
