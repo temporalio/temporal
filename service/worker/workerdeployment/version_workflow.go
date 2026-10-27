@@ -356,10 +356,14 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	waitForPropagationsBeforeCAN := workflow.GetVersion(ctx, "wait-for-pending-propagations", workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	// Preserve historical CaN decisions when replay reaches this point without a version marker.
+	// Those runs keep the legacy rules until their next CaN.
+	canLogicVersion := workflow.GetVersion(
+		ctx, "wait-for-pending-propagations", workflow.DefaultVersion, 1,
+	)
 	// Automatic CaN must preserve pending propagation. Force-CaN can bypass it to recover a stuck workflow.
 	err := workflow.Await(ctx, func() bool {
-		if waitForPropagationsBeforeCAN && d.asyncPropagationsInProgress != 0 &&
+		if canLogicVersion != workflow.DefaultVersion && d.asyncPropagationsInProgress != 0 &&
 			(d.deleteVersion || !d.forceCAN || !d.skipPendingPropagations) {
 			return false
 		}
