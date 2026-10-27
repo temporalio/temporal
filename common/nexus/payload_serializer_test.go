@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/notificationservice/v1"
 	"go.temporal.io/api/proxy"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/proto"
 )
 
 func mustToPayload(t *testing.T, v any) *commonpb.Payload {
@@ -237,4 +238,10 @@ func TestNexusPayloadSerializer(t *testing.T) {
 			require.True(t, expectedPayload.Equal(outputPayload))
 		})
 	}
+}
+
+func TestNilResultPayloadMatchesHTTPDeserialize(t *testing.T) {
+	var fromHTTP *commonpb.Payload
+	require.NoError(t, payloadSerializer{}.Deserialize(&nexus.Content{Header: nexus.Header{}}, &fromHTTP))
+	require.True(t, proto.Equal(fromHTTP, NilResultPayload()))
 }

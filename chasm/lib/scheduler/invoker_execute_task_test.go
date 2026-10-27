@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
@@ -491,6 +492,7 @@ func TestExecuteTask_LastCompletionResultSkipsEmptyPayload(t *testing.T) {
 		{name: "empty payload", success: &commonpb.Payload{}, wantPayloads: 0},
 		{name: "nil payload", success: nil, wantPayloads: 0},
 		{name: "real payload", success: &commonpb.Payload{Data: []byte("previous-result")}, wantPayloads: 1},
+		{name: "binary/null payload", success: commonnexus.NilResultPayload(), wantPayloads: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newInvokerExecuteTestEnv(t)
@@ -507,6 +509,9 @@ func TestExecuteTask_LastCompletionResultSkipsEmptyPayload(t *testing.T) {
 						require.Nil(t, req.GetLastCompletionResult())
 					}
 					require.Len(t, req.GetLastCompletionResult().GetPayloads(), tc.wantPayloads)
+					if tc.wantPayloads == 1 {
+						require.True(t, proto.Equal(tc.success, req.GetLastCompletionResult().GetPayloads()[0]))
+					}
 					require.Equal(t, "previous-failure", req.GetContinuedFailure().GetMessage())
 					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
 				})
