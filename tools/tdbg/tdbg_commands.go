@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -74,6 +75,12 @@ func getCommands(
 			Name:        "delegated-batch",
 			Usage:       "Delegate workflow or activity termination or deletion from a user namespace to temporal-system",
 			Subcommands: newAdminBatchCommands(clientFactory, prompterFactory),
+		},
+		{
+			Name:        "visibility",
+			Aliases:     []string{"vis"},
+			Usage:       "Run admin operation on visibility",
+			Subcommands: newAdminVisibilityCommands(clientFactory),
 		},
 		{
 			Name:        "decode",
@@ -178,6 +185,60 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
+			},
+		},
+		{
+			Name:  "scan-nexus-chasm",
+			Usage: "Read-only snapshot scan for running workflows with old pending CHASM-backed Nexus operations; results require operator review",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Value:   "ExecutionStatus = 'Running'",
+					Usage:   "Additional Visibility query. The scanner always restricts results to running workflows old enough to contain a qualifying operation.",
+				},
+				&cli.IntFlag{
+					Name:  FlagListRPS,
+					Value: 2,
+					Usage: "Maximum Visibility list requests per second.",
+				},
+				&cli.IntFlag{
+					Name:  FlagRPS,
+					Value: 5,
+					Usage: "Maximum combined DescribeMutableState and history requests per second.",
+				},
+				&cli.IntFlag{
+					Name:  FlagWorkers,
+					Value: 4,
+					Usage: "Maximum executions inspected concurrently.",
+				},
+				&cli.DurationFlag{
+					Name:  FlagMinPendingAge,
+					Value: 10 * time.Minute,
+					Usage: "Minimum age for selecting a pending CHASM Nexus operation as a candidate; age alone does not prove it is stuck.",
+				},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Value: 100,
+					Usage: "Visibility page size. A checkpoint is emitted only after the whole page is processed.",
+				},
+				&cli.IntFlag{
+					Name:  FlagMaxHistoryPages,
+					Value: 100,
+					Usage: "Maximum reverse-history pages read per matching execution.",
+				},
+				&cli.StringFlag{
+					Name:  FlagResumeToken,
+					Usage: "Opaque resume token from a prior checkpoint record. Resume continues the original time-bounded snapshot.",
+				},
+				&cli.StringFlag{
+					Name:  FlagOutput,
+					Value: "jsonl",
+					Usage: "Output format. Only jsonl is supported.",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminScanNexusChasm(c, clientFactory)
 			},
 		},
 		{
@@ -1145,6 +1206,52 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 		&cli.StringFlag{
 			Name:  FlagTargetCluster,
 			Usage: "Target cluster, v2 only. If not provided, current cluster is used.",
+		},
+	}
+}
+
+func newAdminVisibilityCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "list",
+			Usage: "List executions.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Usage:   "Visibility query to select workflows",
+				},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Value: 10,
+					Usage: "Result page size",
+				},
+				&cli.BoolFlag{
+					Name:  FlagMore,
+					Usage: "List more pages, default is to list one page of default page size 10",
+				},
+				&cli.BoolFlag{
+					Name:  FlagPrintJSON,
+					Usage: "Print in raw json format",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminListExecutions(c, clientFactory)
+			},
+		},
+		{
+			Name:  "count",
+			Usage: "Count executions.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Usage:   "Visibility query to select workflows",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminCountExecutions(c, clientFactory)
+			},
 		},
 	}
 }

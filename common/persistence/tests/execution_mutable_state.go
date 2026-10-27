@@ -389,6 +389,83 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
+func (s *ExecutionMutableStateSuite) TestCreateBrandNewDuplicateRunIDOtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, _ := s.createRunThenNewCurrentRun()
+
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		NewWorkflowSnapshot: *dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
+	s.assertCurrentRunID(secondRunID)
+}
+
+func (s *ExecutionMutableStateSuite) TestCreateUpdateCurrentDuplicateRunIDOtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
+
+	secondLastWriteVersion := rand.Int63()
+	secondMutation, secondEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		secondSnapshot.NextEventID,
+		secondLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		secondSnapshot.DBRecordVersion+1,
+		secondBranchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondEvents,
+	})
+	s.NoError(err)
+
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err = s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            secondRunID,
+		PreviousLastWriteVersion: secondLastWriteVersion,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		NewWorkflowSnapshot: *dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot, secondMutation)
+	s.assertCurrentRunID(secondRunID)
+}
+
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_BrandNew() {
 	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
 		rand.Int63(),
@@ -705,6 +782,121 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, currentEvents, updateEvents)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
+}
+
+// newDuplicateRunSnapshot returns a newly started run's snapshot whose run ID is s.RunID.
+func (s *ExecutionMutableStateSuite) newDuplicateRunSnapshot() (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
+	snapshot, events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		1,
+		branchToken,
+	)
+	snapshot.Condition = common.FirstEventID
+	return snapshot, events
+}
+
+// createRunThenNewCurrentRun creates a run with ID s.RunID, then closes it and creates a second, running run
+// that becomes current.
+func (s *ExecutionMutableStateSuite) createRunThenNewCurrentRun() (
+	*p.WorkflowSnapshot,
+	*p.WorkflowMutation,
+	string,
+	*p.WorkflowSnapshot,
+	[]byte,
+) {
+	branchToken, firstSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	firstMutation, firstEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		firstSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	secondRunID := uuid.New().String()
+	secondBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, secondRunID, s.HistoryBranchUtil)
+	secondSnapshot, secondEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		secondBranchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *firstMutation,
+		UpdateWorkflowEvents:   firstEvents,
+
+		NewWorkflowSnapshot: secondSnapshot,
+		NewWorkflowEvents:   secondEvents,
+	})
+	s.NoError(err)
+	return firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdateNotZombieWithNewDuplicateRunID() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
+
+	// Close the current (second) run and create a new run reusing the first, non-current run's ID.
+	secondMutation, secondUpdateEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		secondSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		secondSnapshot.DBRecordVersion+1,
+		secondBranchToken,
+	)
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondUpdateEvents,
+
+		NewWorkflowSnapshot: dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
@@ -2680,6 +2872,27 @@ func (s *ExecutionMutableStateSuite) CreateCHASMExecution(
 	})
 	s.NoError(err)
 	return snapshot
+}
+
+func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
+	resp, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(expectedRunID, resp.RunID)
+}
+
+func (s *ExecutionMutableStateSuite) assertWorkflowRunAlreadyExists(
+	err error,
+	existingState *persistencespb.WorkflowExecutionState,
+) {
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	s.ErrorAs(err, &existsErr)
+	s.Equal(existingState.RunId, existsErr.RunID)
+	s.Equal(existingState.Status, existsErr.Status)
 }
 
 func (s *ExecutionMutableStateSuite) AssertMissingFromDB(

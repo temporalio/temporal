@@ -18,6 +18,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexusoperation "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -291,7 +292,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -355,7 +356,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut_W
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -393,7 +394,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
@@ -450,7 +451,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -488,7 +489,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -552,7 +553,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed_Wit
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -590,7 +591,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -653,7 +654,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted_
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -691,7 +692,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -799,7 +800,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -850,7 +851,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -2334,6 +2335,7 @@ func (p *testTaskGeneratorProvider) NewTaskGenerator(
 
 	return NewTaskGenerator(
 		shardContext.GetNamespaceRegistry(),
+		shardContext.ChasmRegistry(),
 		mutableState,
 		shardContext.GetConfig(),
 		shardContext.GetArchivalMetadata(),
@@ -2465,6 +2467,18 @@ func nexusCompletedEvent() *historypb.HistoryEvent {
 	return &historypb.HistoryEvent{EventId: 6, EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED}
 }
 
+func nexusCancelRequestedEvent() *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventId:   7,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED,
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: 5,
+			},
+		},
+	}
+}
+
 func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 	hsmErr := serviceerror.NewInternal("hsm apply failed")
 	chasmErr := serviceerror.NewInternal("chasm unavailable")
@@ -2561,6 +2575,16 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmErr},
 			wantChasmApplied: true,
 			wantErr:          chasmErr,
+		},
+		{
+			// CancelRequestedEventDefinition in not an operation creating event, we should surface any error other than
+			// NotFound which is only returned when the operation is not the chasm tree. Do not try application of event
+			// to HSM when it is a different error other than NotFound.
+			name:             "cancel requested, chasm error surfaced without hsm fallback",
+			event:            nexusCancelRequestedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmnexusoperation.ErrOperationAlreadyCompleted},
+			wantChasmApplied: true,
+			wantErr:          chasmnexusoperation.ErrOperationAlreadyCompleted,
 		},
 	}
 

@@ -157,10 +157,8 @@ func NamespaceDetailFromTransmissionTask(
 
 // ShouldReplicateNamespace reports whether a namespace mutation must be
 // propagated to peer clusters at all. It is the single replicate/skip gate,
-// extracted from HandleTransmissionTask in preparation for an eventual
-// CHASM-based namespace replication transport: that path will share this exact
-// decision so the two transports can never diverge on which mutations replicate.
-// Today only the legacy queue path (HandleTransmissionTask) calls it.
+// shared by the legacy queue and CHASM namespace replication transports so they
+// cannot diverge on which mutations replicate.
 //
 // The entire force/deleted/global/peer decision lives here, in one place, so no
 // caller can accidentally bypass part of it:
@@ -200,12 +198,9 @@ func ShouldReplicateNamespace(
 // apply-if-higher logic (TaskExecutor).
 //
 // It is extracted here as the single source of truth for that conversion in
-// preparation for an eventual CHASM-based namespace replication transport: when
-// that path is added it will build its outbound requests through this same
-// function, so a replicated field can never be emitted by one transport and
-// silently dropped by the other. Today only the legacy queue path
-// (HandleTransmissionTask) calls it; the extraction itself is a pure
-// no-behavior-change refactor.
+// both the legacy queue and CHASM namespace replication transports, so a
+// replicated field cannot be emitted by one transport and silently dropped by
+// the other.
 func NamespaceDetailToTaskAttributes(
 	namespaceOperation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,

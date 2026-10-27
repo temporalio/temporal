@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
-	"go.uber.org/mock/gomock"
 )
 
 func TestNilStoreQueryConverter_GetDatetimeFormat(t *testing.T) {
@@ -98,12 +97,11 @@ func TestNilStoreQueryConverter_ConvertIsExpr(t *testing.T) {
 
 func TestNewNilQueryConverter(t *testing.T) {
 	t.Parallel()
-	ctrl := gomock.NewController(t)
 	c := NewNilQueryConverter(
 		"",
 		searchattribute.TestNameTypeMap(),
 		nil, // saMapper
-		metrics.NewMockHandler(ctrl),
+		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
 	require.Equal(t, &nilStoreQueryConverter{}, c.storeQC)
