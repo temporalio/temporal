@@ -121,7 +121,7 @@ func (factory *factory) getMonitor() *monitor {
 			factory.broadcastAddressResolver,
 			factory.Config.MaxJoinDuration,
 			maxPropagationTime,
-			factory.getJoinTime(maxPropagationTime),
+			func() time.Time { return factory.getJoinTime(maxPropagationTime) },
 			factory.getJoinWindow(),
 			replicaPoints,
 		)

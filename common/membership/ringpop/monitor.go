@@ -62,7 +62,7 @@ type monitor struct {
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
 	propagationTime           time.Duration
-	joinTime                  time.Time
+	getJoinTime               func() time.Time
 	joinWindow                time.Duration
 	rings                     map[primitives.ServiceName]*serviceResolver
 	replicaPoints             int
@@ -85,7 +85,7 @@ func newMonitor(
 	broadcastHostPortResolver func() (string, error),
 	maxJoinDuration time.Duration,
 	propagationTime time.Duration,
-	joinTime time.Time,
+	getJoinTime func() time.Time,
 	joinWindow time.Duration,
 	replicaPoints int,
 ) *monitor {
@@ -115,7 +115,7 @@ func newMonitor(
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
 		propagationTime:           propagationTime,
-		joinTime:                  joinTime,
+		getJoinTime:               getJoinTime,
 		joinWindow:                joinWindow,
 	}
 	for service, port := range services {
@@ -162,14 +162,16 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to get ringpop labels", tag.Error(err))
 	}
 
-	if until := time.Until(rpo.joinTime); until > 0 && until.Seconds() < maxScheduledEventTimeSeconds {
+	// Compute the join time only now (after bootstrap), so that it's still in the future.
+	joinTime := rpo.getJoinTime()
+	if until := time.Until(joinTime); until > 0 && until.Seconds() < maxScheduledEventTimeSeconds {
 		window := truncateWindow(rpo.joinWindow)
 		if window > 0 {
 			if err = labels.Set(startWindowKey, strconv.FormatInt(int64(window/time.Second), 10)); err != nil {
 				rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startWindowKey))
 			}
 		}
-		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
+		if err = labels.Set(startAtKey, strconv.FormatInt(joinTime.Unix(), 10)); err != nil {
 			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
 		}
 		// Clean up the labels eventually (after the window), but we don't really care when.
