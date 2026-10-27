@@ -1449,6 +1449,60 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 	s.NoError(err)
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary() {
+	namespace := s.getRandomNamespace()
+	version := int64(100)
+	nid := uuid.NewString()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: 1,
+		},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   nid,
+				Name: namespace,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:   durationpb.New(7 * time.Hour * 24),
+				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+		},
+	}, nil)
+	var updateReq *persistence.UpdateNamespaceRequest
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+			updateReq = req
+			return nil
+		},
+	)
+
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		Config: &namespacepb.NamespaceConfig{
+			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+				"bad-checksum": {Reason: "some reason", Operator: "some operator"},
+			}},
+		},
+	})
+	s.NoError(err)
+	s.NotNil(updateReq)
+	s.Contains(updateReq.Namespace.Config.BadBinaries.Binaries, "bad-checksum")
+	s.Equal(int64(1), updateReq.Namespace.ConfigVersion)
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	namespace := s.getRandomNamespace()
 	description := "some random description"
