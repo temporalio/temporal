@@ -2266,6 +2266,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 	s.fakeClock.Update(time.Now())
 	expiredTime1 := s.fakeClock.Now().Add(-1 * time.Hour)
 	expiredTime2 := s.fakeClock.Now().Add(-2 * time.Hour)
+	unexpiredTime := s.fakeClock.Now().Add(24 * time.Hour)
 
 	tests := []struct {
 		name        string
@@ -2291,6 +2292,17 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
 			},
 		},
+		{
+			name: "unexpired rule is kept", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(unexpiredTime)}},
+			},
+		},
+		{
+			name: "expired rule is deleted before an unexpired one", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
+				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(unexpiredTime)}},
+				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime1)}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -2302,6 +2314,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 			if _, exists := tt.rules[tt.deletedRule]; exists {
 				s.True(false, "Rule was not deleted")
 			}
+			s.Len(tt.rules, oldLens-1)
 		}
 	}
 }
