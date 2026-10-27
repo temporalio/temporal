@@ -363,15 +363,23 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	)
 	// Automatic CaN must preserve pending propagation. Force-CaN can bypass it to recover a stuck workflow.
 	err := workflow.Await(ctx, func() bool {
-		if canLogicVersion != workflow.DefaultVersion && d.asyncPropagationsInProgress != 0 &&
+		handlersFinished := !d.signalHandler.signalSelector.HasPending() &&
+			d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx)
+
+		if canLogicVersion == workflow.DefaultVersion {
+			// Use the old set of conditions only when the workflow code is running on a version before
+			// the changes introduced by "wait-for-pending-propagations" version marker.
+			return (d.deleteVersion && d.asyncPropagationsInProgress == 0) ||
+				(handlersFinished && (d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) ||
+					workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+		}
+
+		if d.asyncPropagationsInProgress != 0 &&
 			(d.deleteVersion || !d.forceCAN || !d.skipPendingPropagations) {
 			return false
 		}
-		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
-			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change or history got too large
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+		return d.deleteVersion || (handlersFinished &&
+			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 	})
 	if err != nil {
 		return err
