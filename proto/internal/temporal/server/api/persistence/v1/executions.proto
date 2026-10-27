@@ -339,6 +339,10 @@ message WorkflowExecutionInfo {
   google.protobuf.Timestamp last_supersede_time = 119;
   // Run ID of the run last superseded by this one. Set together with last_supersede_time.
   string last_superseded_run_id = 120;
+  // Time conflict resolution on this cluster last found children initiated on a non-current branch
+  // of this run. The run will never record their results. Cluster-local like last_branch_time.
+  // Surfaced in visibility as the TemporalLastOrphanedChildrenTime search attribute.
+  google.protobuf.Timestamp last_orphaned_children_time = 121;
 }
 
 message TimeSkippingInfo {

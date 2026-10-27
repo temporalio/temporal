@@ -565,12 +565,13 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	// Derived from cluster-local state rather than stored in SearchAttributes, which replication
 	// overwrites from the source cluster. Any other value (e.g. read back from visibility) is dropped.
 	for name, value := range map[string]*timestamppb.Timestamp{
-		sadefs.TemporalLastBranchTime:    executionInfo.GetLastBranchTime(),
-		sadefs.TemporalLastSupersedeTime: executionInfo.GetLastSupersedeTime(),
+		sadefs.TemporalLastBranchTime:           executionInfo.GetLastBranchTime(),
+		sadefs.TemporalLastSupersedeTime:        executionInfo.GetLastSupersedeTime(),
+		sadefs.TemporalLastOrphanedChildrenTime: executionInfo.GetLastOrphanedChildrenTime(),
 	} {
 		if value != nil {
 			if searchAttributes == nil {
-				searchAttributes = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload, 2)}
+				searchAttributes = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload, 3)}
 			}
 			searchAttributes.IndexedFields[name] = sadefs.MustEncodeValue(value.AsTime(), enumspb.INDEXED_VALUE_TYPE_DATETIME)
 		} else if searchAttributes != nil {

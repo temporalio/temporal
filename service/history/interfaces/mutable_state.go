@@ -312,6 +312,9 @@ type (
 		// visibility update for them. Called when conflict resolution supersedes another run of
 		// this workflow ID with this one.
 		RecordRunSuperseded(supersededRunID string) error
+		// RecordOrphanedChildren stamps LastOrphanedChildrenTime and schedules a visibility update for
+		// it. Called when conflict resolution leaves children initiated on a non-current branch.
+		RecordOrphanedChildren() error
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 		RefreshExpirationTimeoutTask(ctx context.Context) error

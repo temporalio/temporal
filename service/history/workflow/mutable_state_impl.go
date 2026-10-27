@@ -7181,6 +7181,11 @@ func (ms *MutableStateImpl) RecordHistoryBranch() error {
 	return ms.generateLocalStateVisibilityTask()
 }
 
+func (ms *MutableStateImpl) RecordOrphanedChildren() error {
+	ms.executionInfo.LastOrphanedChildrenTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+	return ms.generateLocalStateVisibilityTask()
+}
+
 func (ms *MutableStateImpl) RecordRunSuperseded(supersededRunID string) error {
 	ms.executionInfo.LastSupersedeTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.LastSupersededRunId = supersededRunID
@@ -9812,6 +9817,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.LastBranchTime,
 			&info.LastSupersedeTime,
 			&info.LastSupersededRunId,
+			&info.LastOrphanedChildrenTime,
 			&info.WorkflowExecutionTimerTaskStatus,
 			&info.SubStateMachinesByType,
 			&info.StateMachineTimers,

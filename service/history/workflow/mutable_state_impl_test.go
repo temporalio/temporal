@@ -2521,6 +2521,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	mutableState.executionInfo.LastBranchTime = timestamppb.Now()
 	mutableState.executionInfo.LastSupersedeTime = timestamppb.Now()
 	mutableState.executionInfo.LastSupersededRunId = "superseded-run"
+	mutableState.executionInfo.LastOrphanedChildrenTime = timestamppb.Now()
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2541,6 +2542,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.Nil(sanitizedMutableState.executionInfo.LastBranchTime)
 	s.Nil(sanitizedMutableState.executionInfo.LastSupersedeTime)
 	s.Empty(sanitizedMutableState.executionInfo.LastSupersededRunId)
+	s.Nil(sanitizedMutableState.executionInfo.LastOrphanedChildrenTime)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -10265,17 +10267,20 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 	s.NoError(err)
 	localBranchTime := timestamppb.New(time.Unix(1700000000, 0))
 	localSupersedeTime := timestamppb.New(time.Unix(1700000001, 0))
+	localOrphanedTime := timestamppb.New(time.Unix(1700000002, 0))
 	current := &persistencespb.WorkflowExecutionInfo{
-		LastBranchTime:      localBranchTime,
-		LastSupersedeTime:   localSupersedeTime,
-		LastSupersededRunId: "local-superseded-run",
+		LastBranchTime:           localBranchTime,
+		LastSupersedeTime:        localSupersedeTime,
+		LastSupersededRunId:      "local-superseded-run",
+		LastOrphanedChildrenTime: localOrphanedTime,
 	}
 	// The source's conflict resolution is its own, so its values must never replace the local ones.
 	incoming := &persistencespb.WorkflowExecutionInfo{
-		LastBranchTime:      timestamppb.New(time.Unix(1800000000, 0)),
-		LastSupersedeTime:   timestamppb.New(time.Unix(1800000001, 0)),
-		LastSupersededRunId: "source-superseded-run",
-		WorkflowTypeName:    "synced",
+		LastBranchTime:           timestamppb.New(time.Unix(1800000000, 0)),
+		LastSupersedeTime:        timestamppb.New(time.Unix(1800000001, 0)),
+		LastSupersededRunId:      "source-superseded-run",
+		LastOrphanedChildrenTime: timestamppb.New(time.Unix(1800000002, 0)),
+		WorkflowTypeName:         "synced",
 	}
 
 	for _, includeFinal := range []bool{false, true} {
@@ -10284,6 +10289,7 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 		s.Equal(localBranchTime, current.LastBranchTime)
 		s.Equal(localSupersedeTime, current.LastSupersedeTime)
 		s.Equal("local-superseded-run", current.LastSupersededRunId)
+		s.Equal(localOrphanedTime, current.LastOrphanedChildrenTime)
 	}
 }
 
@@ -10296,6 +10302,19 @@ func (s *mutableStateSuite) TestRecordRunSuperseded() {
 	s.NoError(ms.RecordRunSuperseded("superseded-run"))
 	s.WithinRange(ms.GetExecutionInfo().GetLastSupersedeTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
 	s.Equal("superseded-run", ms.GetExecutionInfo().GetLastSupersededRunId())
+	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+}
+
+func (s *mutableStateSuite) TestRecordOrphanedChildren() {
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordOrphanedChildren())
+	s.WithinRange(ms.GetExecutionInfo().GetLastOrphanedChildrenTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
 	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
 	s.Len(visibilityTasks, 1)
 	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])

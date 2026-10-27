@@ -108,6 +108,7 @@ func (r *workflowRebuilderImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().LastBranchTime = rebuildSpec.mutableState.GetExecutionInfo().GetLastBranchTime()
 	rebuildMutableState.GetExecutionInfo().LastSupersedeTime = rebuildSpec.mutableState.GetExecutionInfo().GetLastSupersedeTime()
 	rebuildMutableState.GetExecutionInfo().LastSupersededRunId = rebuildSpec.mutableState.GetExecutionInfo().GetLastSupersededRunId()
+	rebuildMutableState.GetExecutionInfo().LastOrphanedChildrenTime = rebuildSpec.mutableState.GetExecutionInfo().GetLastOrphanedChildrenTime()
 	// The run deadline is recomputed from the original start time and the execution deadline is
 	// copied from the started event, so either can already be in the past and its refreshed
 	// timer task would fire at once. Re-anchor both deadlines at the current time and regenerate

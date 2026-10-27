@@ -678,6 +678,12 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 	if err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionHistoryItem); err != nil {
 		return err
 	}
+	if initiatesChild(task.getEvents()) {
+		// Children initiated on a non-current branch are orphaned.
+		if err := mutableState.RecordOrphanedChildren(); err != nil {
+			return err
+		}
+	}
 
 	transactionIDs, err := r.shardContext.GenerateTaskIDs(len(task.getEvents()))
 	if err != nil {
@@ -873,4 +879,15 @@ func (r *HistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shardContext.GetConfig().StandbyClusterDelay())
 	r.shardContext.SetCurrentTime(clusterName, now)
+}
+
+func initiatesChild(eventBatches [][]*historypb.HistoryEvent) bool {
+	for _, events := range eventBatches {
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED {
+				return true
+			}
+		}
+	}
+	return false
 }

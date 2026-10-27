@@ -3474,6 +3474,20 @@ func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
 }
 
+// RecordOrphanedChildren mocks base method.
+func (m *MockMutableState) RecordOrphanedChildren() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordOrphanedChildren")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordOrphanedChildren indicates an expected call of RecordOrphanedChildren.
+func (mr *MockMutableStateMockRecorder) RecordOrphanedChildren() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordOrphanedChildren", reflect.TypeOf((*MockMutableState)(nil).RecordOrphanedChildren))
+}
+
 // RecordRunSuperseded mocks base method.
 func (m *MockMutableState) RecordRunSuperseded(supersededRunID string) error {
 	m.ctrl.T.Helper()

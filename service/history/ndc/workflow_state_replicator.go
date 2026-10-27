@@ -1464,6 +1464,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				return newBranchToken, err
 			}
 		}
+		// Pending children are still those of the branch being moved off.
+		if index != originalIndex && hasOrphanedChildren(localMutableState, sourceVersionHistory) {
+			if err := localMutableState.RecordOrphanedChildren(); err != nil {
+				return newBranchToken, err
+			}
+		}
 		// LastFirstEventTxnId still points at the branch we moved off. Chain onto this branch instead.
 		if isNewBranch || index != originalIndex {
 			lastTxnID, err := r.lastTransactionID(ctx, versionHistoryToAppend.GetBranchToken(), localLastItem.GetEventId())

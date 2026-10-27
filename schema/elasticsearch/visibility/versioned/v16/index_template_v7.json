@@ -129,6 +129,9 @@
       "TemporalLastSupersedeTime": {
         "type": "date_nanos"
       },
+      "TemporalLastOrphanedChildrenTime": {
+        "type": "date_nanos"
+      },
       "TemporalBool01": {
         "type": "boolean"
       },

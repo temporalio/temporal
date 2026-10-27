@@ -10,11 +10,13 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -202,6 +204,20 @@ func persistLocalState(ctx context.Context, shardContext historyi.ShardContext, 
 		return wf.GetContext().UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 	}
 	return wf.GetContext().SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
+}
+
+// hasOrphanedChildren reports whether a pending child was initiated off the given branch, so making
+// it current leaves the child without a parent to record its result.
+func hasOrphanedChildren(mutableState historyi.MutableState, branch *historyspb.VersionHistory) bool {
+	for initiatedID, child := range mutableState.GetPendingChildExecutionInfos() {
+		if !versionhistory.ContainsVersionHistoryItem(
+			branch,
+			versionhistory.NewVersionHistoryItem(initiatedID, child.GetVersion()),
+		) {
+			return true
+		}
+	}
+	return false
 }
 
 // terminatedByVersionConflict reports whether the run was terminated by conflict resolution on the

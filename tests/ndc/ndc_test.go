@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
@@ -845,6 +846,184 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		historyClient,
 	)
 	s.verifyEventHistorySize(workflowID, runID, historySize)
+}
+
+// TestOrphanedChildrenTagged covers both clusters' view of a parent that started a child on the
+// losing side of a conflict: the one that switches away from the losing branch, and the one that
+// receives the losing branch after the winning one.
+func (s *NDCFunctionalTestSuite) TestOrphanedChildrenTagged() {
+	for _, losingBranchFirst := range []bool{true, false} {
+		s.Run(fmt.Sprintf("losingBranchFirst=%v", losingBranchFirst), func() {
+			s.testOrphanedChildrenTagged(losingBranchFirst)
+		})
+	}
+}
+
+func (s *NDCFunctionalTestSuite) testOrphanedChildrenTagged(losingBranchFirst bool) {
+	parentID := "ndc-orphaned-child-parent-" + uuid.NewString()
+	parentRunID := uuid.NewString()
+	childID := "ndc-orphaned-child-" + uuid.NewString()
+	childRunID := uuid.NewString()
+	workflowType := "event-generator-workflow-type"
+	taskqueue := "event-generator-taskQueue"
+	identity := "worker-identity"
+	historyClient := s.cluster.HistoryClient()
+	// Version 22 is cluster-b, version 23 is cluster-c, which wins.
+	const losingVersion, winningVersion = int64(22), int64(23)
+
+	workflowTaskScheduled := func(eventID, version int64) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventId:   eventID,
+			EventTime: timestamppb.New(time.Now().UTC()),
+			Version:   version,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				StartToCloseTimeout: durationpb.New(1000 * time.Second),
+				Attempt:             1,
+			}},
+		}
+	}
+	started := func(parent *workflowspb.ParentExecutionInfo) *historypb.HistoryEvent {
+		attributes := &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+			WorkflowRunTimeout:  durationpb.New(1000 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(1000 * time.Second),
+		}
+		if parent != nil {
+			attributes.ParentWorkflowNamespace = s.namespace.String()
+			attributes.ParentWorkflowNamespaceId = s.namespaceID.String()
+			attributes.ParentWorkflowExecution = parent.GetExecution()
+			attributes.ParentInitiatedEventId = parent.GetInitiatedId()
+			attributes.ParentInitiatedEventVersion = parent.GetInitiatedVersion()
+		}
+		return &historypb.HistoryEvent{
+			EventId:    1,
+			EventTime:  timestamppb.New(time.Now().UTC()),
+			Version:    losingVersion,
+			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: attributes},
+		}
+	}
+
+	shared := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{started(nil), workflowTaskScheduled(2, losingVersion)}},
+		{Events: []*historypb.HistoryEvent{{
+			EventId:   3,
+			EventTime: timestamppb.New(time.Now().UTC()),
+			Version:   losingVersion,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+				ScheduledEventId: 2,
+				Identity:         identity,
+				RequestId:        uuid.NewString(),
+			}},
+		}}},
+		{Events: []*historypb.HistoryEvent{{
+			EventId:   4,
+			EventTime: timestamppb.New(time.Now().UTC()),
+			Version:   losingVersion,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
+				ScheduledEventId: 2,
+				StartedEventId:   3,
+				Identity:         identity,
+			}},
+		}}},
+	}
+	losing := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{{
+			EventId:   5,
+			EventTime: timestamppb.New(time.Now().UTC()),
+			Version:   losingVersion,
+			EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+			Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+				Namespace:                    s.namespace.String(),
+				NamespaceId:                  s.namespaceID.String(),
+				WorkflowId:                   childID,
+				WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue},
+				WorkflowRunTimeout:           durationpb.New(1000 * time.Second),
+				WorkflowTaskTimeout:          durationpb.New(1000 * time.Second),
+				WorkflowTaskCompletedEventId: 4,
+			}},
+		}}},
+		{Events: []*historypb.HistoryEvent{{
+			EventId:   6,
+			EventTime: timestamppb.New(time.Now().UTC()),
+			Version:   losingVersion,
+			EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
+				Namespace:         s.namespace.String(),
+				NamespaceId:       s.namespaceID.String(),
+				InitiatedEventId:  5,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: childID, RunId: childRunID},
+				WorkflowType:      &commonpb.WorkflowType{Name: workflowType},
+			}},
+		}}},
+	}
+	winning := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
+			{
+				EventId:   5,
+				EventTime: timestamppb.New(time.Now().UTC()),
+				Version:   winningVersion,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name",
+					Identity:   identity,
+				}},
+			},
+			workflowTaskScheduled(6, winningVersion),
+		}},
+	}
+	child := []*historypb.History{
+		{Events: []*historypb.HistoryEvent{
+			started(&workflowspb.ParentExecutionInfo{
+				Execution:        &commonpb.WorkflowExecution{WorkflowId: parentID, RunId: parentRunID},
+				InitiatedId:      5,
+				InitiatedVersion: losingVersion,
+			}),
+			workflowTaskScheduled(2, losingVersion),
+		}},
+	}
+
+	sharedHistory := s.eventBatchesToVersionHistory(nil, shared)
+	losingHistory := s.eventBatchesToVersionHistory(versionhistory.CopyVersionHistory(sharedHistory), losing)
+	winningHistory := s.eventBatchesToVersionHistory(versionhistory.CopyVersionHistory(sharedHistory), winning)
+	s.applyEvents(parentID, parentRunID, workflowType, taskqueue, sharedHistory, shared, historyClient)
+	s.applyEvents(childID, childRunID, workflowType, taskqueue, s.eventBatchesToVersionHistory(nil, child), child, historyClient)
+	if losingBranchFirst {
+		// This cluster wrote the losing branch, then switches to the winning one.
+		s.applyEvents(parentID, parentRunID, workflowType, taskqueue, losingHistory, losing, historyClient)
+		s.applyEvents(parentID, parentRunID, workflowType, taskqueue, winningHistory, winning, historyClient)
+	} else {
+		// This cluster wrote the winning branch, then receives the losing one as a non-current branch.
+		s.applyEvents(parentID, parentRunID, workflowType, taskqueue, winningHistory, winning, historyClient)
+		s.applyEvents(parentID, parentRunID, workflowType, taskqueue, losingHistory, losing, historyClient)
+	}
+
+	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalLastOrphanedChildrenTime >= '%s'",
+		parentID, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano))
+	await.Require(testcontext.For(s.T()), s.T(), func(t *await.T) {
+		resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(
+			t.Context(),
+			&workflowservice.ListWorkflowExecutionsRequest{Namespace: s.namespace.String(), Query: query},
+		)
+		require.NoError(t, err)
+		require.Len(t, resp.GetExecutions(), 1)
+		require.Equal(t, parentRunID, resp.GetExecutions()[0].GetExecution().GetRunId())
+	}, 30*time.Second, 200*time.Millisecond)
+
+	// From the tagged parent, its children are found through their parent link.
+	resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace.String(),
+		Query:     fmt.Sprintf("ParentWorkflowId = '%s' AND ParentRunId = '%s'", parentID, parentRunID),
+	})
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+	s.Equal(childRunID, resp.GetExecutions()[0].GetExecution().GetRunId())
 }
 
 func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {

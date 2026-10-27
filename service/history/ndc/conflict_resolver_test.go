@@ -148,6 +148,11 @@ func (s *conflictResolverSuite) TestRebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
+	// Event 4 is past branch 1's last event, so its child loses its parent.
+	s.mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
+		4: {Version: version, InitiatedEventId: 4},
+	}).AnyTimes()
+	mockRebuildMutableState.EXPECT().RecordOrphanedChildren().Return(nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,
@@ -287,6 +292,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
+	s.mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).AnyTimes()
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,
@@ -395,6 +401,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 	mockRebuildMutableState.EXPECT().RecordHistoryBranch().Return(nil)
+	s.mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).AnyTimes()
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,

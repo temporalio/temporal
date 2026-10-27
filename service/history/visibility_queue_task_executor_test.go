@@ -1191,8 +1191,10 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLoc
 	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
 	lastBranchTime := time.Unix(1700000000, 0).UTC()
 	lastSupersedeTime := time.Unix(1700000001, 0).UTC()
+	orphanedTime := time.Unix(1700000002, 0).UTC()
 	mutableState.GetExecutionInfo().LastBranchTime = timestamppb.New(lastBranchTime)
 	mutableState.GetExecutionInfo().LastSupersedeTime = timestamppb.New(lastSupersedeTime)
+	mutableState.GetExecutionInfo().LastOrphanedChildrenTime = timestamppb.New(orphanedTime)
 	visibilityTask := s.closeVisibilityTaskForTest(execution)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1200,8 +1202,9 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_IncludesLoc
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
 			for name, expected := range map[string]time.Time{
-				sadefs.TemporalLastBranchTime:    lastBranchTime,
-				sadefs.TemporalLastSupersedeTime: lastSupersedeTime,
+				sadefs.TemporalLastBranchTime:           lastBranchTime,
+				sadefs.TemporalLastSupersedeTime:        lastSupersedeTime,
+				sadefs.TemporalLastOrphanedChildrenTime: orphanedTime,
 			} {
 				value, err := sadefs.DecodeValue(
 					request.SearchAttributes.GetIndexedFields()[name],

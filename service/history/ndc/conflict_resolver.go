@@ -162,6 +162,7 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().LastBranchTime = r.mutableState.GetExecutionInfo().LastBranchTime
 	rebuildMutableState.GetExecutionInfo().LastSupersedeTime = r.mutableState.GetExecutionInfo().LastSupersedeTime
 	rebuildMutableState.GetExecutionInfo().LastSupersededRunId = r.mutableState.GetExecutionInfo().LastSupersededRunId
+	rebuildMutableState.GetExecutionInfo().LastOrphanedChildrenTime = r.mutableState.GetExecutionInfo().LastOrphanedChildrenTime
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +183,11 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 	if err := rebuildMutableState.RecordHistoryBranch(); err != nil {
 		return nil, err
+	}
+	if hasOrphanedChildren(r.mutableState, replayVersionHistory) {
+		if err := rebuildMutableState.RecordOrphanedChildren(); err != nil {
+			return nil, err
+		}
 	}
 
 	r.context.Clear()

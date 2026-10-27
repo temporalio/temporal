@@ -127,6 +127,10 @@ const (
 	// TemporalLastSupersedeTime is the time conflict resolution on this cluster last superseded
 	// another run of the same workflow ID with this execution. Unset if it never did.
 	TemporalLastSupersedeTime = "TemporalLastSupersedeTime"
+
+	// TemporalLastOrphanedChildrenTime is the time conflict resolution on this cluster last found
+	// children initiated on a non-current branch of the execution. Unset if it never did.
+	TemporalLastOrphanedChildrenTime = "TemporalLastOrphanedChildrenTime"
 )
 
 var (
@@ -197,6 +201,7 @@ var (
 		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalLastBranchTime:               enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalLastSupersedeTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalLastOrphanedChildrenTime:     enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
