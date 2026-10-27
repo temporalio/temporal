@@ -427,10 +427,9 @@ func TestVersionWorkflowContinueAsNew(t *testing.T) {
 					}
 					updateName := SyncVersionState
 					var updateArgs any = &deploymentspb.SyncVersionStateUpdateArgs{
-						RoutingUpdateTime: now,
-						CurrentSinceTime:  now,
+						RoutingUpdateTime: now, //nolint:staticcheck // SA1019: required by validateSyncState.
 						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentVersion:            tv.DeploymentVersionString(),
+							CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
 							CurrentVersionChangedTime: now,
 							RevisionNumber:            5,
 						},
@@ -486,8 +485,7 @@ func TestVersionWorkflowContinueAsNew(t *testing.T) {
 							TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
 								tv.TaskQueue().GetName(): {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
 							},
-							SyncBatchSize:             10,
-							StartedDeploymentWorkflow: true,
+							SyncBatchSize: 10,
 						},
 					})
 
