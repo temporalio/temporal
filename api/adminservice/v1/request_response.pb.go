@@ -1744,20 +1744,20 @@ type ApplyNamespaceMutationRequest struct {
 	// Shadow requests validate transport equivalence but never mutate receiver state.
 	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
 	// Source cluster initiating the delivery.
-	SourceCluster string `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
+	SourceCluster string `protobuf:"bytes,4,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	// Source CHASM component business ID for correlation.
-	ComponentBusinessId string `protobuf:"bytes,4,opt,name=component_business_id,json=componentBusinessId,proto3" json:"component_business_id,omitempty"`
+	ComponentBusinessId string `protobuf:"bytes,5,opt,name=component_business_id,json=componentBusinessId,proto3" json:"component_business_id,omitempty"`
 	// Source CHASM component run ID for correlation.
-	ComponentRunId string `protobuf:"bytes,5,opt,name=component_run_id,json=componentRunId,proto3" json:"component_run_id,omitempty"`
+	ComponentRunId string `protobuf:"bytes,6,opt,name=component_run_id,json=componentRunId,proto3" json:"component_run_id,omitempty"`
 	// One-based component-managed peer retry attempt, not a physical delivery count.
 	// Task redelivery and transport retries may reuse the same number.
-	AttemptCount int32 `protobuf:"varint,6,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	AttemptCount int32 `protobuf:"varint,7,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
 	// Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
 	// decodes this payload with its local schema for shadow comparison.
-	NamespaceTaskPayload []byte `protobuf:"bytes,7,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
+	NamespaceTaskPayload []byte `protobuf:"bytes,8,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
 	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
 	// Shadow requests compare this reference with the decoded namespace_task_payload.
-	ShadowLegacyTaskPayload []byte `protobuf:"bytes,8,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
+	ShadowLegacyTaskPayload []byte `protobuf:"bytes,9,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -6620,16 +6620,16 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xb8\x03\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xcb\x03\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
 	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
 	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12%\n" +
-	"\x0esource_cluster\x18\x03 \x01(\tR\rsourceCluster\x122\n" +
-	"\x15component_business_id\x18\x04 \x01(\tR\x13componentBusinessId\x12(\n" +
-	"\x10component_run_id\x18\x05 \x01(\tR\x0ecomponentRunId\x12#\n" +
-	"\rattempt_count\x18\x06 \x01(\x05R\fattemptCount\x124\n" +
-	"\x16namespace_task_payload\x18\a \x01(\fR\x14namespaceTaskPayload\x12;\n" +
-	"\x1ashadow_legacy_task_payload\x18\b \x01(\fR\x17shadowLegacyTaskPayload\"\xd7\x02\n" +
+	"\x0esource_cluster\x18\x04 \x01(\tR\rsourceCluster\x122\n" +
+	"\x15component_business_id\x18\x05 \x01(\tR\x13componentBusinessId\x12(\n" +
+	"\x10component_run_id\x18\x06 \x01(\tR\x0ecomponentRunId\x12#\n" +
+	"\rattempt_count\x18\a \x01(\x05R\fattemptCount\x124\n" +
+	"\x16namespace_task_payload\x18\b \x01(\fR\x14namespaceTaskPayload\x12;\n" +
+	"\x1ashadow_legacy_task_payload\x18\t \x01(\fR\x17shadowLegacyTaskPayloadJ\x04\b\x03\x10\x04R\vfingerprint\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +

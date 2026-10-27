@@ -32,6 +32,8 @@ type shadowCompletionRecord struct {
 }
 
 func newShadowCompletionRecord(c *NamespaceMutationComponent, completedAt time.Time) *shadowCompletionRecord {
+	// Completion telemetry covers normal all-peers-terminal completion only.
+	// System-forced terminations use the framework's execution_force_terminations metric.
 	if !c.GetMutation().GetShadow() || c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_COMPLETED {
 		return nil
 	}
@@ -48,6 +50,8 @@ func newShadowCompletionRecord(c *NamespaceMutationComponent, completedAt time.T
 	if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
 		record.startedAt = started.AsTime()
 	}
+	// Summarize errors before mismatches before matches, independent of map order.
+	// Per-peer outcomes and counts retain mismatches even when the summary is error.
 	for name, peer := range c.GetPeerApply() {
 		outcome := peer.GetOutcome()
 		record.peerOutcomes[name] = outcome.String()

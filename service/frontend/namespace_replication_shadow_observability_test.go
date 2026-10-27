@@ -24,7 +24,27 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
+
+func TestShadowReceiverAcceptsMergedPR2WireFormat(t *testing.T) {
+	t.Parallel()
+	payload, err := nsreplication.MarshalNamespaceTask(shadowObservationTask())
+	require.NoError(t, err)
+	// These payload tags are the wire contract already merged in PR2.
+	wire := protowire.AppendTag(nil, 2, protowire.VarintType)
+	wire = protowire.AppendVarint(wire, 1)
+	wire = protowire.AppendTag(wire, 8, protowire.BytesType)
+	wire = protowire.AppendBytes(wire, payload)
+	wire = protowire.AppendTag(wire, 9, protowire.BytesType)
+	wire = protowire.AppendBytes(wire, payload)
+	var request adminservice.ApplyNamespaceMutationRequest
+	require.NoError(t, proto.Unmarshal(wire, &request))
+	handler := &AdminHandler{logger: log.NewNoopLogger()}
+	response, err := handler.ApplyNamespaceMutation(context.Background(), &request)
+	require.NoError(t, err)
+	require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
 
 func shadowObservationTask() *replicationspb.NamespaceTaskAttributes {
 	return &replicationspb.NamespaceTaskAttributes{Id: "namespace-id", NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,

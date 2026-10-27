@@ -129,8 +129,8 @@ func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.App
 		data.NamespaceID = metadataTask.GetId()
 		data.Namespace = metadataTask.GetInfo().GetName()
 		data.Operation = metadataTask.GetNamespaceOperation().String()
-		data.ConfigVersion = proto.Int64(metadataTask.GetConfigVersion())
-		data.FailoverVersion = proto.Int64(metadataTask.GetFailoverVersion())
+		data.ConfigVersion = new(metadataTask.GetConfigVersion())
+		data.FailoverVersion = new(metadataTask.GetFailoverVersion())
 		data.Details["metadata_source"] = "legacy_reference"
 	}
 	wideevents.EmitNamespaceReplicationLifecycle(adh.eventLogger, wideevents.NamespaceReplicationLifecycleInput{

@@ -204,28 +204,52 @@ func TestShadowCompletionSnapshot(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String(), record.peerOutcomes["cellD"])
 }
 
-func TestShadowPeerEndToEndRequiresPersistedTerminalOutcome(t *testing.T) {
+func TestPeerEndToEndRequiresPersistedTerminalOutcome(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name    string
-		record  peerOutcomeRecord
-		saveErr error
-	}{
-		{name: "persistence failure", record: peerOutcomeRecord{stateUpdated: true}, saveErr: serviceerror.NewUnavailable("save failed")},
-		{name: "stale result", record: peerOutcomeRecord{}},
-		{name: "scheduled retry", record: peerOutcomeRecord{stateUpdated: true, retryScheduled: true}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, mode := range []string{"shadow", "authoritative"} {
+		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			mh := metricstest.NewCaptureHandler()
-			capture := mh.StartCapture()
-			defer mh.StopCapture(capture)
-			h := &applyPeerTaskHandler{logger: log.NewNoopLogger(), metricsHandler: mh}
-			record := tc.record
-			record.startedAt = time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-			record.resolvedAt = record.startedAt.Add(time.Minute)
-			h.observePeerApply(PeerApplyRequest{Shadow: true}, record, nil, tc.saveErr, time.Second)
-			require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyEndToEndLatency.Name()))
+			for _, tc := range []struct {
+				name         string
+				record       peerOutcomeRecord
+				saveErr      error
+				missingStart bool
+				wantSample   bool
+			}{
+				{name: "terminal result", record: peerOutcomeRecord{stateUpdated: true}, wantSample: true},
+				{name: "persistence failure", record: peerOutcomeRecord{stateUpdated: true}, saveErr: serviceerror.NewUnavailable("save failed")},
+				{name: "stale result", record: peerOutcomeRecord{}},
+				{name: "scheduled retry", record: peerOutcomeRecord{stateUpdated: true, retryScheduled: true}},
+				{name: "missing start", record: peerOutcomeRecord{stateUpdated: true}, missingStart: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					mh := metricstest.NewCaptureHandler()
+					capture := mh.StartCapture()
+					defer mh.StopCapture(capture)
+					h := &applyPeerTaskHandler{logger: log.NewNoopLogger(), metricsHandler: mh}
+					record := tc.record
+					record.startedAt = time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+					record.resolvedAt = record.startedAt.Add(time.Minute)
+					if tc.missingStart {
+						record.startedAt = time.Time{}
+					}
+					record.outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
+					if mode == "shadow" {
+						record.outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH
+					}
+					h.observePeerApply(PeerApplyRequest{Shadow: mode == "shadow"}, record, nil, tc.saveErr, time.Second)
+					samples := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyEndToEndLatency.Name())
+					if tc.wantSample {
+						require.Len(t, samples, 1)
+						require.Equal(t, time.Minute, samples[0].Value)
+						require.Equal(t, mode, samples[0].Tags["mode"])
+						require.Equal(t, "peer", samples[0].Tags["apply_stage"])
+					} else {
+						require.Empty(t, samples)
+					}
+				})
+			}
 		})
 	}
 }

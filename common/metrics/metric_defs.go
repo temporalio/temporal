@@ -1649,11 +1649,11 @@ var (
 	)
 	NamespaceReplicationShadowCompletionOutcomes = NewCounterDef(
 		"namespace_replication_shadow_completion_outcomes",
-		WithDescription("Shadow mutations whose peers are all terminal, tagged by aggregate match, mismatch, error, or no_peers outcome."),
+		WithDescription("Normally completed shadow mutations, excluding forced terminations. Aggregate outcome prioritizes error over mismatch over match; zero peers yields no_peers."),
 	)
 	NamespaceReplicationShadowCompletionLatency = NewTimerDef(
 		"namespace_replication_shadow_completion_latency",
-		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds."),
+		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds; excludes forced terminations."),
 	)
 	NamespaceReplicationCHASMPeerPendingLatency = NewTimerDef(
 		"namespace_replication_chasm_peer_pending_latency",
