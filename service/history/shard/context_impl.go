@@ -2376,11 +2376,16 @@ func (s *ContextImpl) CallbackValidator() callbacks.Validator {
 }
 
 func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
-	rps := s.config.BusinessIDReuseRate(namespaceID.String())
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil
+	}
+	namespaceName := namespaceEntry.Name().String()
+	rps := s.config.BusinessIDReuseRate(namespaceName)
 	if rps <= 0 {
 		return nil
 	}
-	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceID.String())))
+	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceName)))
 	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
 	existing := s.businessIDRateLimiters.Get(key)
 	if existing == nil {

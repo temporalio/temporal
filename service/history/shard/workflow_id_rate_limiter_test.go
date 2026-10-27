@@ -15,11 +15,15 @@ import (
 func newTestShardForRateLimiter(t *testing.T) *ContextTest {
 	controller := gomock.NewController(t)
 	t.Cleanup(controller.Finish)
-	return NewTestContext(
+	shard := NewTestContext(
 		controller,
 		&persistencespb.ShardInfo{ShardId: 1},
 		configs.NewConfig(dynamicconfig.NewNoopCollection(), 1),
 	)
+	shard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(
+		namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "test-ns"}, nil, ""), nil,
+	).AnyTimes()
+	return shard
 }
 
 func TestBusinessIDReuseRateLimiter_Disabled(t *testing.T) {
@@ -104,4 +108,24 @@ func TestBusinessIDReuseRateLimiter_BurstUpdatesOnConfigChange(t *testing.T) {
 	shard.config.BusinessIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
 	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	require.Equal(t, 6, rl.Burst())
+}
+
+func TestBusinessIDReuseRateLimiter_ConfigFilteredByNamespaceName(t *testing.T) {
+	shard := newTestShardForRateLimiter(t)
+	shard.config.BusinessIDReuseRate = func(ns string) int {
+		if ns == "test-ns" {
+			return 1
+		}
+		return 0
+	}
+	shard.config.BusinessIDReuseBurstRatio = func(ns string) float64 {
+		if ns == "test-ns" {
+			return 2.0
+		}
+		return 1.0
+	}
+	nsID := namespace.ID("test-ns-id")
+	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	require.NotNil(t, rl)
+	require.Equal(t, 2, rl.Burst())
 }
