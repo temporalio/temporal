@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -83,11 +84,12 @@ type (
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory            *pollerHistory
-		currentPolls             atomic.Int64
-		taskValidator            taskValidator
-		deploymentRegistrationCh chan struct{}
-		pollerScalingRateLimiter quotas.RateLimiter
+		pollerHistory                   *pollerHistory
+		currentPolls                    atomic.Int64
+		taskValidator                   taskValidator
+		deploymentRegistrationCh        chan struct{}
+		deploymentVersionMonitorRunning atomic.Bool
+		pollerScalingRateLimiter        quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -757,12 +759,80 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		select {
 		case <-userDataChanged:
 		case <-ctx.Done():
-			c.logger.Error("timed out waiting for worker deployment version to appear in user data")
+			c.maybeStartDeploymentVersionMonitor()
+			c.throttledLogger.Warn("Worker deployment version not yet in user data; background monitoring active",
+				tag.Deployment(workerDeployment.SeriesName),
+				tag.BuildId(workerDeployment.BuildId),
+				tag.Error(ctx.Err()),
+			)
 			return ctx.Err()
 		}
 	}
 
 	return nil
+}
+
+// maybeStartDeploymentVersionMonitor starts a monitor goroutine if one is not already running.
+// The monitor checks whether this physical task queue's deployment version is present in user
+// data. It can be restarted: if the version appears then later disappears (e.g., after a
+// migration), a new poll will start a fresh monitor.
+func (c *physicalTaskQueueManagerImpl) maybeStartDeploymentVersionMonitor() {
+	if c.deploymentVersionMonitorRunning.CompareAndSwap(false, true) {
+		go c.monitorDeploymentVersionInUserData()
+	}
+}
+
+// monitorDeploymentVersionInUserData waits an initial grace period, then periodically checks
+// whether this physical task queue's deployment version is present in its task queue's user data.
+// If the version is missing after the grace period, it emits a counter on each check until the
+// version appears or the task queue unloads. No metric is emitted when the version is found.
+// Clears the running flag on exit so a future poll can restart the monitor if needed.
+func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
+	defer c.deploymentVersionMonitorRunning.Store(false)
+
+	gracePeriod := c.config.DeploymentVersionMonitorGracePeriod()
+	// Grace period before first check to allow normal propagation to complete.
+	select {
+	case <-c.tqCtx.Done():
+		return
+	case <-time.After(gracePeriod):
+	}
+
+	version := worker_versioning.DeploymentVersionFromDeployment(c.queue.Version().Deployment())
+	ticker := time.NewTicker(c.config.DeploymentVersionMonitorInterval())
+	defer ticker.Stop()
+	for {
+		found, err := c.isDeploymentVersionInUserData(version)
+		if err != nil {
+			// Inconclusive (e.g., partition unloading); skip this tick.
+		} else if found {
+			return
+		} else {
+			c.throttledLogger.Error("Worker deployment version missing from user data beyond grace period",
+				tag.Deployment(version.GetDeploymentName()),
+				tag.BuildId(version.GetBuildId()),
+				tag.Duration("grace-period", gracePeriod),
+			)
+			metrics.DeploymentVersionMissingFromUserData.With(c.metricsHandler).Record(1)
+		}
+		select {
+		case <-c.tqCtx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// isDeploymentVersionInUserData checks whether the given deployment version is present in this
+// task queue's user data.
+func (c *physicalTaskQueueManagerImpl) isDeploymentVersionInUserData(
+	version *deploymentspb.WorkerDeploymentVersion,
+) (bool, error) {
+	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	if err != nil {
+		return false, err
+	}
+	return worker_versioning.HasDeploymentVersion(userData.GetDeploymentData(), version), nil
 }
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
