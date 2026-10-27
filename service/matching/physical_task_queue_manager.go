@@ -762,9 +762,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		select {
 		case <-userDataChanged:
 		case <-ctx.Done():
-			c.logger.Error("timed out waiting for worker deployment version to appear in user data",
+			c.throttledLogger.Warn("Worker deployment version not yet in user data; background monitoring active",
 				tag.Deployment(workerDeployment.SeriesName),
 				tag.BuildId(workerDeployment.BuildId),
+				tag.Error(ctx.Err()),
 			)
 			return ctx.Err()
 		}
@@ -791,11 +792,12 @@ func (c *physicalTaskQueueManagerImpl) maybeStartDeploymentVersionMonitor() {
 func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 	defer c.deploymentVersionMonitorRunning.Store(false)
 
+	gracePeriod := c.config.DeploymentVersionMonitorGracePeriod()
 	// Grace period before first check to allow normal propagation to complete.
 	select {
 	case <-c.tqCtx.Done():
 		return
-	case <-time.After(c.config.DeploymentVersionMonitorGracePeriod()):
+	case <-time.After(gracePeriod):
 	}
 
 	version := worker_versioning.DeploymentVersionFromDeployment(c.queue.Version().Deployment())
@@ -808,6 +810,11 @@ func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
 		} else if found {
 			return
 		} else {
+			c.throttledLogger.Error("Worker deployment version missing from user data beyond grace period",
+				tag.Deployment(version.GetDeploymentName()),
+				tag.BuildId(version.GetBuildId()),
+				tag.Duration("grace-period", gracePeriod),
+			)
 			metrics.DeploymentVersionMissingFromUserData.With(c.metricsHandler).Record(1)
 		}
 		select {

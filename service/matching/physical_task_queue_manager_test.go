@@ -1157,7 +1157,7 @@ func setupVersionedTQManager(
 	controller := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	logger.Expect(testlogger.Error, "error while registering version")
-	logger.Expect(testlogger.Error, "timed out waiting for worker deployment version to appear in user data")
+	logger.Expect(testlogger.Warn, "Worker deployment version not yet in user data; background monitoring active")
 
 	config := defaultTestConfig()
 	config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
@@ -1178,7 +1178,7 @@ func setupVersionedTQManager(
 	partition := queueKey.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, nsName)
 
-	partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	partitionMgr, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, engine.logger, engine.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
 	require.NoError(t, err)
 
 	tqMgr, err := newPhysicalTaskQueueManager(partitionMgr, queueKey)
