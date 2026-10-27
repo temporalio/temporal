@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -1118,6 +1119,67 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
   6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
 	})
 
+	s.Run("Merged pages stay reserved until the transaction is persisted", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		// The workflow context takes the shard's metrics handler when it is created.
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mockShard.SetMetricsHandler(metricsHandler)
+		inflightBytes := func() float64 {
+			recordings := capture.SnapshotMetric(metrics.WorkflowTaskCompletionBufferInflightBytes.Name())
+			s.Require().NotEmpty(recordings)
+			return recordings[len(recordings)-1].Value.(float64)
+		}
+
+		wfContext := s.createStartedWorkflow(tv)
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+		s.NotNil(upd)
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         s.UpdateAcceptCommands(tv),
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		reserved := inflightBytes()
+		s.Positive(reserved)
+
+		var inflightAtPersist float64
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+				inflightAtPersist = inflightBytes()
+				return tests.UpdateWorkflowExecutionResponse, nil
+			}).Times(1)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				Commands:   s.UpdateCompleteCommands(tv),
+				Messages:   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				PageNumber: 1,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.InDelta(reserved, inflightAtPersist, 0, "merged pages must stay reserved while the transaction is persisted")
+		s.Zero(inflightBytes(), "merged pages must be released once the transaction is persisted")
+	})
+
 	s.Run("Buffer lost on eviction between pages", func() {
 		tv := testvars.New(s.T())
 		tv = tv.WithRunID(tv.Any().RunID())
@@ -1192,7 +1254,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 
 		// A late final page referencing the timed-out workflow task must be reported as
 		// buffer-lost, not silently merged against a stale buffer.
-		_, err = wfContext.GetMergedTaskCompletionPages(
+		_, _, err = wfContext.GetMergedTaskCompletionPages(
 			taskToken.GetScheduledEventId(),
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
@@ -1237,7 +1299,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 
 		// A late final page referencing the closed WFT must be reported as
 		// buffer lost, not silently merged against a stale buffer.
-		_, err = wfContext.GetMergedTaskCompletionPages(
+		_, _, err = wfContext.GetMergedTaskCompletionPages(
 			taskToken.GetScheduledEventId(),
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
