@@ -102,8 +102,8 @@ func (mdb *db) RangeSelectFromHistoryNode(
 			filter.TreeID,
 			filter.BranchID,
 			filter.MinNodeID,
-			filter.MaxTxnID,
-			-filter.MaxTxnID,
+			filter.MaxNodeID,
+			-filter.MaxTxnID, // NOTE: transaction ID is *= -1 when stored
 			filter.MaxNodeID,
 			filter.PageSize,
 		}

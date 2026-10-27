@@ -29,7 +29,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
@@ -431,8 +431,8 @@ func RateLimitInterceptorProvider(
 
 func ESProcessorConfigProvider(
 	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
+) *esconfig.ProcessorConfig {
+	return &esconfig.ProcessorConfig{
 		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -481,7 +481,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func VisibilityManagerConfigProvider(
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+	esProcessorConfig *esconfig.ProcessorConfig,
 	serviceConfig *configs.Config,
 ) *visibility.ManagerConfig {
 	return &visibility.ManagerConfig{

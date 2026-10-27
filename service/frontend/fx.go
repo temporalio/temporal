@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -114,6 +115,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
+	fx.Provide(RetryDelayFloorInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -260,6 +262,7 @@ func GrpcServerOptionsProvider(
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
+	retryDelayFloorInterceptor *interceptor.RetryDelayFloorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -319,6 +322,8 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Keep this outside telemetry so error metrics see the original limiter errors.
+		retryDelayFloorInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -701,6 +706,22 @@ func NamespaceRateLimitInterceptorProvider(
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
+	)
+}
+
+func RetryDelayFloorInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) *interceptor.RetryDelayFloorInterceptor {
+	return interceptor.NewRetryDelayFloorInterceptor(
+		namespaceRegistry,
+		serviceConfig.ResourceExhaustedRetryDelayFloor,
+		metricsHandler,
+		[]*serviceerror.ResourceExhausted{
+			interceptor.ErrNamespaceRateLimitServerBusy,
+			interceptor.ErrNamespaceCountLimitServerBusy,
+		},
 	)
 }
 
