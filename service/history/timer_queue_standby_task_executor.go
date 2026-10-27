@@ -172,13 +172,12 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task, true)
+		isTaskInTree, err := checkChasmStandbyTask(ctx, ms, task)
 		if err != nil {
 			return nil, err
 		}
-		if !isTaskInTree || !isValid {
-			// Replication has removed the logical task, or the component reports it
-			// invalid — drop the physical task.
+		if !isTaskInTree {
+			// Replication removed the task or component access is no longer allowed.
 			return nil, nil
 		}
 
@@ -187,21 +186,15 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		return ms.ChasmTree(), nil
 	}
 
-	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	return t.processTimer(
 		ctx,
 		task,
 		actionFn,
-		getStandbyPostActionFn(
-			task,
-			t.getCurrentTime,
-			t.config.ChasmStandbyTaskDiscardDelay(chasmTaskType),
-			t.discardChasmTask,
-		),
+		t.processChasmStandbyTask,
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
+func (t *timerQueueStandbyTaskExecutor) processChasmStandbyTask(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo any,
@@ -217,6 +210,14 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 	chasmTask, ok := taskInfo.(*tasks.ChasmTask)
 	if !ok {
 		return serviceerror.NewInternal("taskInfo is not a ChasmTask")
+	}
+
+	valid, err := validateChasmStandbyTask(ctx, t.chasmEngine, chasmTree, chasmTask)
+	if err != nil {
+		return err
+	}
+	if valid {
+		return consts.ErrTaskRetry
 	}
 
 	return discardChasmSideEffectTask(
