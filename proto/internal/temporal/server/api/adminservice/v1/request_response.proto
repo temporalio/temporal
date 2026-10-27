@@ -409,6 +409,11 @@ message RefreshWorkflowTasksRequest {
   string archetype = 4;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 5;
+  // If set, the history host that owns the execution refreshes it only if its namespace registry
+  // has the namespace at this ConfigVersion or later and in NAMESPACE_STATE_REGISTERED. Otherwise
+  // it returns UNAVAILABLE if its registry is behind, or FAILED_PRECONDITION if the namespace is
+  // not REGISTERED at that version. Zero means no check.
+  int64 min_namespace_config_version = 6;
 }
 
 message RefreshWorkflowTasksResponse {}

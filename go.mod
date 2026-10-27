@@ -226,3 +226,5 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+replace go.temporal.io/api => ../api-go

@@ -59,6 +59,16 @@ func (c *clientImpl) DeleteNexusEndpoint(
 	return c.client.DeleteNexusEndpoint(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeNamespaceRestore(
+	ctx context.Context,
+	request *operatorservice.DescribeNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.DescribeNamespaceRestoreResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeNamespaceRestore(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNexusEndpoint(
 	ctx context.Context,
 	request *operatorservice.GetNexusEndpointRequest,
@@ -117,6 +127,26 @@ func (c *clientImpl) RemoveSearchAttributes(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RemoveSearchAttributes(ctx, request, opts...)
+}
+
+func (c *clientImpl) RestoreNamespace(
+	ctx context.Context,
+	request *operatorservice.RestoreNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.RestoreNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RestoreNamespace(ctx, request, opts...)
+}
+
+func (c *clientImpl) SoftDeleteNamespace(
+	ctx context.Context,
+	request *operatorservice.SoftDeleteNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*operatorservice.SoftDeleteNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SoftDeleteNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateNexusEndpoint(

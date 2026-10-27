@@ -1108,6 +1108,14 @@ and deployment interaction in matching and history.`,
 		false,
 		`If set to true (default is false), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
 	)
+	EnableNamespaceSoftDelete = NewNamespaceBoolSetting(
+		"frontend.enableNamespaceSoftDelete",
+		false,
+		`EnableNamespaceSoftDelete enables the OperatorService SoftDeleteNamespace, RestoreNamespace, and
+DescribeNamespaceRestore APIs. Enable it only after every cluster that shares the namespace runs a
+server version that accepts NAMESPACE_STATE_SOFT_DELETED: older peers reject a replicated
+soft-deleted namespace as invalid.`,
+	)
 
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",

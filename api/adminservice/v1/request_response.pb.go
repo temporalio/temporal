@@ -3384,9 +3384,14 @@ type RefreshWorkflowTasksRequest struct {
 	Execution   *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
 	Archetype   string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ArchetypeId uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	// If set, the history host that owns the execution refreshes it only if its namespace registry
+	// has the namespace at this ConfigVersion or later and in NAMESPACE_STATE_REGISTERED. Otherwise
+	// it returns UNAVAILABLE if its registry is behind, or FAILED_PRECONDITION if the namespace is
+	// not REGISTERED at that version. Zero means no check.
+	MinNamespaceConfigVersion int64 `protobuf:"varint,6,opt,name=min_namespace_config_version,json=minNamespaceConfigVersion,proto3" json:"min_namespace_config_version,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *RefreshWorkflowTasksRequest) Reset() {
@@ -3443,6 +3448,13 @@ func (x *RefreshWorkflowTasksRequest) GetArchetype() string {
 func (x *RefreshWorkflowTasksRequest) GetArchetypeId() uint32 {
 	if x != nil {
 		return x.ArchetypeId
+	}
+	return 0
+}
+
+func (x *RefreshWorkflowTasksRequest) GetMinNamespaceConfigVersion() int64 {
+	if x != nil {
+		return x.MinNamespaceConfigVersion
 	}
 	return 0
 }
@@ -6723,12 +6735,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x11maximum_page_size\x18\x05 \x01(\x05R\x0fmaximumPageSize\x12&\n" +
 	"\x0fnext_page_token\x18\x06 \x01(\fR\rnextPageToken\"B\n" +
 	"\x18MergeDLQMessagesResponse\x12&\n" +
-	"\x0fnext_page_token\x18\x01 \x01(\fR\rnextPageToken\"\xd0\x01\n" +
+	"\x0fnext_page_token\x18\x01 \x01(\fR\rnextPageToken\"\x91\x02\n" +
 	"\x1bRefreshWorkflowTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x1c\n" +
 	"\tarchetype\x18\x04 \x01(\tR\tarchetype\x12!\n" +
-	"\farchetype_id\x18\x05 \x01(\rR\varchetypeIdJ\x04\b\x01\x10\x02\"\x1e\n" +
+	"\farchetype_id\x18\x05 \x01(\rR\varchetypeId\x12?\n" +
+	"\x1cmin_namespace_config_version\x18\x06 \x01(\x03R\x19minNamespaceConfigVersionJ\x04\b\x01\x10\x02\"\x1e\n" +
 	"\x1cRefreshWorkflowTasksResponse\"\xaf\x02\n" +
 	"\x1dResendReplicationTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
