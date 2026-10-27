@@ -161,31 +161,31 @@ func (mr *MockPureTaskHandlerMockRecorder[C, T]) pureTaskHandler() *gomock.Call 
 }
 
 // MockStandbyTaskValidator is a mock of StandbyTaskValidator interface.
-type MockStandbyTaskValidator[C any, T any] struct {
+type MockStandbyTaskValidator[T any] struct {
 	ctrl     *gomock.Controller
-	recorder *MockStandbyTaskValidatorMockRecorder[C, T]
+	recorder *MockStandbyTaskValidatorMockRecorder[T]
 	isgomock struct{}
 }
 
 // MockStandbyTaskValidatorMockRecorder is the mock recorder for MockStandbyTaskValidator.
-type MockStandbyTaskValidatorMockRecorder[C any, T any] struct {
-	mock *MockStandbyTaskValidator[C, T]
+type MockStandbyTaskValidatorMockRecorder[T any] struct {
+	mock *MockStandbyTaskValidator[T]
 }
 
 // NewMockStandbyTaskValidator creates a new mock instance.
-func NewMockStandbyTaskValidator[C any, T any](ctrl *gomock.Controller) *MockStandbyTaskValidator[C, T] {
-	mock := &MockStandbyTaskValidator[C, T]{ctrl: ctrl}
-	mock.recorder = &MockStandbyTaskValidatorMockRecorder[C, T]{mock}
+func NewMockStandbyTaskValidator[T any](ctrl *gomock.Controller) *MockStandbyTaskValidator[T] {
+	mock := &MockStandbyTaskValidator[T]{ctrl: ctrl}
+	mock.recorder = &MockStandbyTaskValidatorMockRecorder[T]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockStandbyTaskValidator[C, T]) EXPECT() *MockStandbyTaskValidatorMockRecorder[C, T] {
+func (m *MockStandbyTaskValidator[T]) EXPECT() *MockStandbyTaskValidatorMockRecorder[T] {
 	return m.recorder
 }
 
 // ValidateStandby mocks base method.
-func (m *MockStandbyTaskValidator[C, T]) ValidateStandby(arg0 Context, arg1 C, arg2 TaskInvocation, arg3 T) (bool, error) {
+func (m *MockStandbyTaskValidator[T]) ValidateStandby(arg0 context.Context, arg1 ComponentRef, arg2 TaskInvocation, arg3 T) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateStandby", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(bool)
@@ -194,9 +194,9 @@ func (m *MockStandbyTaskValidator[C, T]) ValidateStandby(arg0 Context, arg1 C, a
 }
 
 // ValidateStandby indicates an expected call of ValidateStandby.
-func (mr *MockStandbyTaskValidatorMockRecorder[C, T]) ValidateStandby(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockStandbyTaskValidatorMockRecorder[T]) ValidateStandby(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateStandby", reflect.TypeOf((*MockStandbyTaskValidator[C, T])(nil).ValidateStandby), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateStandby", reflect.TypeOf((*MockStandbyTaskValidator[T])(nil).ValidateStandby), arg0, arg1, arg2, arg3)
 }
 
 // MockTaskValidator is a mock of TaskValidator interface.
