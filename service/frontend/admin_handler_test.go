@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -48,10 +50,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
@@ -61,8 +64,10 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mockapi/operatorservicemock/v1"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
@@ -73,6 +78,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -89,7 +96,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
-		mockVisibilityMgr          *manager.MockVisibilityManager
+		mockAdminVisibilityMgr     *manager.MockAdminVisibilityManager
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
@@ -140,7 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
-	s.mockVisibilityMgr = s.mockResource.VisibilityManager
+	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
@@ -158,6 +165,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit:     dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesSizeOfValueLimit:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesTotalSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		VisibilityMaxPageSize:                 dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
@@ -172,7 +180,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg.SearchAttributesNumberOfKeysLimit,
 		cfg.SearchAttributesSizeOfValueLimit,
 		cfg.SearchAttributesTotalSizeLimit,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		cfg.SuppressErrorSetSystemSearchAttribute,
 		metrics.NoopMetricsHandler,
@@ -184,7 +192,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		s.mockResource.GetLogger(),
 		nil,
 		s.mockResource.GetTaskManager(),
@@ -230,6 +238,227 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: namespaceTaskPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture()
+	s.handler.logger = logger
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(&replicationspb.NamespaceTaskAttributes{Id: "legacy-namespace-id"})
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "namespace replication shadow receive mismatch",
+		Tags: map[string]any{
+			"reason":             "legacy_payload_mismatch",
+			"differing_fields":   []string{"id"},
+			"legacy_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(legacyPayload)),
+			"actual_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)),
+		},
+	})
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesPayloadInsteadOfTypedTask() {
+	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(payloadTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:           &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: namespaceTaskPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowComparesDecodedPayloads() {
+	canonicalPayload, err := nsreplication.MarshalNamespaceTask(
+		&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+	)
+	s.Require().NoError(err)
+	unknownField := protowire.AppendTag(nil, 100, protowire.VarintType)
+	unknownField = protowire.AppendVarint(unknownField, 42)
+	namespaceTaskPayload := append(unknownField, canonicalPayload...)
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{}
+	s.Require().NoError(proto.Unmarshal(namespaceTaskPayload, namespaceTask))
+	reencodedPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	s.NotEqual(namespaceTaskPayload, reencodedPayload)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: reencodedPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMissingPayload() {
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "nil"},
+		{name: "empty", payload: []byte{}},
+	} {
+		s.Run(tc.name, func() {
+			_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:               true,
+				NamespaceTaskPayload: tc.payload,
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "namespace_task_payload is required")
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload() {
+	namespaceTaskPayload := []byte{0xff}
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"})
+	s.Require().NoError(err)
+	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Require().ErrorContains(err, "decode namespace_task_payload")
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutationRejectsInvalidLegacyReference() {
+	for _, tc := range []struct {
+		name      string
+		reference []byte
+	}{
+		{name: "missing"},
+		{name: "malformed", reference: []byte{0xff}},
+	} {
+		s.Run(tc.name, func() {
+			_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:                  true,
+				NamespaceTaskPayload:    []byte{0x12, 1, 'n'},
+				ShadowLegacyTaskPayload: tc.reference,
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "shadow_legacy_task_payload")
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutationDetectsLegacyDivergence() {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*replicationspb.NamespaceTaskAttributes)
+		field  string
+	}{
+		{name: "field dropped by history converter", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.Info.Description = ""
+		}, field: "info"},
+		{name: "version changed", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.ConfigVersion++
+		}, field: "config_version"},
+		{name: "unknown field dropped", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.ProtoReflect().SetUnknown(nil)
+		}, field: "unknown_fields"},
+	} {
+		s.Run(tc.name, func() {
+			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
+			s.handler.logger = logger
+			legacyTask := &replicationspb.NamespaceTaskAttributes{
+				Id:            "namespace-id",
+				Info:          &namespacepb.NamespaceInfo{Description: "frontend legacy value"},
+				ConfigVersion: 42,
+			}
+			unknown := protowire.AppendTag(nil, 100, protowire.VarintType)
+			legacyTask.ProtoReflect().SetUnknown(protowire.AppendVarint(unknown, 42))
+			legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+			s.Require().NoError(err)
+			chasmTask := proto.Clone(legacyTask).(*replicationspb.NamespaceTaskAttributes)
+			tc.mutate(chasmTask)
+			chasmPayload, err := nsreplication.MarshalNamespaceTask(chasmTask)
+			s.Require().NoError(err)
+
+			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:                  true,
+				NamespaceTaskPayload:    chasmPayload,
+				ShadowLegacyTaskPayload: legacyPayload,
+			})
+			s.Require().NoError(err)
+			s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+			capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: "namespace replication shadow receive mismatch",
+				Tags: map[string]any{
+					"reason":           "legacy_payload_mismatch",
+					"differing_fields": []string{tc.field},
+				},
+			})
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutationIgnoresTypedUnknownMapEncodingOrder() {
+	// Field 100 represents a map known to the sender but unknown to this receiver.
+	// Each map entry is a repeated length-delimited unknown field at the receiver.
+	entry := func(key string) []byte {
+		encoded := protowire.AppendString(protowire.AppendTag(nil, 1, protowire.BytesType), key)
+		encoded = protowire.AppendString(protowire.AppendTag(encoded, 2, protowire.BytesType), "value")
+		return protowire.AppendBytes(protowire.AppendTag(nil, 100, protowire.BytesType), encoded)
+	}
+	legacyTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	legacyTask.ProtoReflect().SetUnknown(append(entry("a"), entry("b")...))
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+	s.Require().NoError(err)
+	typedTask := proto.Clone(legacyTask).(*replicationspb.NamespaceTaskAttributes)
+	typedTask.ProtoReflect().SetUnknown(append(entry("b"), entry("a")...))
+	s.Require().False(proto.Equal(legacyTask, typedTask), "test must exercise unknown-map encoding differences")
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:           typedTask,
+		Shadow:                  true,
+		NamespaceTaskPayload:    legacyPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
@@ -932,7 +1161,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -970,7 +1199,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -1954,7 +2183,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
@@ -1969,7 +2198,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2056,7 +2285,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestEsNameTypeMap(), nil).Times(eventsWithSasCount)
 
@@ -2068,7 +2297,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2778,4 +3007,116 @@ func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
 			}, request.GetTargetExecutions())
 		})
 	}
+}
+
+func (s *adminHandlerSuite) TestListExecutions() {
+	ctx := context.Background()
+	request := &adminservice.ListExecutionsRequest{
+		Namespace:     s.namespace.String(),
+		Query:         "ExecutionStatus = 'Completed'",
+		PageSize:      10,
+		NextPageToken: []byte("page-token"),
+	}
+	executions := []*adminservice.VisibilityExecutionInfo{
+		{
+			NamespaceId: s.namespaceID.String(),
+			Namespace:   s.namespace.String(),
+			BusinessId:  "test-workflow-id",
+			RunId:       "test-run-id",
+			State:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.ListExecutionsResponse{
+				Executions:    executions,
+				NextPageToken: []byte("next-page-token"),
+			}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.NoError(err)
+		protorequire.ProtoSliceEqual(s.T(), executions, resp.GetExecutions())
+		s.Equal([]byte("next-page-token"), resp.GetNextPageToken())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, protomock.Eq(&adminservice.ListExecutionsRequest{
+				Query:    request.GetQuery(),
+				PageSize: request.GetPageSize(),
+			})).
+			Return(&adminservice.ListExecutionsResponse{}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
+			Query:    request.GetQuery(),
+			PageSize: request.GetPageSize(),
+		})
+		s.NoError(err)
+		s.Empty(resp.GetExecutions())
+		s.Empty(resp.GetNextPageToken())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+}
+
+func (s *adminHandlerSuite) TestCountExecutions() {
+	ctx := context.Background()
+	request := &adminservice.CountExecutionsRequest{
+		Namespace: s.namespace.String(),
+		Query:     "GROUP BY ExecutionStatus",
+	}
+	groups := []*adminservice.CountExecutionsResponse_AggregationGroup{
+		{
+			GroupValues: []*commonpb.Payload{
+				payload.EncodeString(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String()),
+			},
+			Count: 100,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.CountExecutionsResponse{Count: 100, Groups: groups}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		protorequire.ProtoSliceEqual(s.T(), groups, resp.GetGroups())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, protomock.Eq(&adminservice.CountExecutionsRequest{Query: request.GetQuery()})).
+			Return(&adminservice.CountExecutionsResponse{Count: 100}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
+			Query: request.GetQuery(),
+		})
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		s.Empty(resp.GetGroups())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
 }

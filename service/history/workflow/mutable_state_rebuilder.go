@@ -578,7 +578,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}
@@ -594,7 +594,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}
@@ -610,7 +610,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}
@@ -626,7 +626,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}
@@ -642,7 +642,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}
@@ -671,7 +671,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				event.GetEventTime().AsTime(),
 				false,
-				false, // skipCloseTransferTask
+				false, // skipParentVerification
 			); err != nil {
 				return nil, err
 			}

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
@@ -228,6 +229,14 @@ func (s *registryWatchSuite) waitForCallback(ch <-chan struct{}, description str
 	}
 }
 
+func (s *registryWatchSuite) waitForRefreshLatencyMetrics(expectedCount int) {
+	s.T().Helper()
+	// Refresh latency is recorded after state change callbacks return.
+	await.Require(s.T().Context(), s.T(), func(t *await.T) {
+		require.Len(t, s.capture.SnapshotMetric(metrics.NamespaceRegistryRefreshLatency.Name()), expectedCount)
+	}, 30*time.Second, time.Millisecond)
+}
+
 // TestWatchEvents verifies the registry can start with a watch-enabled persistence
 // implementation, receives the initial refresh callback, and processes namespace
 // create, update, and delete events received over the watch channel.
@@ -343,6 +352,68 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	snap := s.capture.Snapshot()
 	s.Len(snap[metrics.NamespaceRegistryRefreshLatency.Name()], 1)
 	s.InEpsilon(float64(1), snap[metrics.TotalNamespaces.Name()][3].Value, 0.01) // after delete: 1 namespace remains
+}
+
+// TestCallbackSeesUpdatedCache verifies that the cache is updated before state change callbacks
+// run, for both the refresh and watch paths. Matching relies on this to avoid loading a partition
+// with a namespace entry that a callback has already handled.
+func (s *registryWatchSuite) TestCallbackSeesUpdatedCache() {
+	nsID := namespace.NewID()
+	nsRecord := s.newGlobalNamespaceResponse(nsID, "failover-namespace", cluster.TestCurrentClusterName, 1)
+
+	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
+	s.expectWatchAndList(watchCh, nsRecord)
+
+	type observed struct {
+		cached  *namespace.Namespace
+		err     error
+		deleted bool
+	}
+	observedCh := make(chan observed, 3)
+	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+		cached, err := s.registry.GetNamespaceByIDWithOptions(
+			ns.ID(),
+			namespace.GetNamespaceOptions{DisableReadthrough: true},
+		)
+		observedCh <- observed{cached: cached, err: err, deleted: deletedFromDb}
+	})
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	waitForObserved := func(description string) observed {
+		select {
+		case o := <-observedCh:
+			return o
+		case <-time.After(30 * time.Second):
+			s.FailNow("Timed out waiting for callback: " + description)
+			return observed{}
+		}
+	}
+
+	// --- Initial refresh ---
+	o := waitForObserved("initial refresh")
+	s.NoError(o.err)
+	s.Equal(int64(1), o.cached.NotificationVersion())
+
+	// --- Failover via watch ---
+	watchCh <- &persistence.NamespaceWatchEvent{
+		Type:     persistence.NamespaceWatchEventTypeUpdate,
+		Response: s.newGlobalNamespaceResponse(nsID, "failover-namespace", cluster.TestAlternativeClusterName, 2),
+	}
+	o = waitForObserved("update event")
+	s.NoError(o.err)
+	s.Equal(int64(2), o.cached.NotificationVersion())
+	s.Equal(cluster.TestAlternativeClusterName, o.cached.ActiveClusterName(namespace.RoutingKey{}))
+
+	// --- Delete via watch ---
+	watchCh <- &persistence.NamespaceWatchEvent{
+		Type:        persistence.NamespaceWatchEventTypeDelete,
+		NamespaceID: nsID,
+	}
+	o = waitForObserved("delete event")
+	s.True(o.deleted)
+	s.ErrorAs(o.err, new(*serviceerror.NamespaceNotFound))
 }
 
 // TestWatchStaleUpdateIgnored verifies that update events with a NotificationVersion
@@ -945,7 +1016,7 @@ func (s *registryWatchSuite) TestWatchChannelCloses() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchEventWithError verifies that when a watch event contains an error, the registry reconnects and continues
@@ -1020,7 +1091,7 @@ func (s *registryWatchSuite) TestWatchEventWithError() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchEmptyInitialRefresh verifies the registry handles an empty initial
@@ -1223,7 +1294,7 @@ func (s *registryWatchSuite) TestWatchReconnectSucceedsAfterRetry() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchNamespaceDeletedDuringRefresh verifies that when a namespace is removed
@@ -1326,7 +1397,7 @@ func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchStop verifies the registry stops gracefully without panics.
@@ -1561,5 +1632,5 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }

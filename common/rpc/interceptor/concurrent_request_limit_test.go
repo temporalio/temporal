@@ -138,6 +138,58 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			},
 			expectRateLimit: false,
 		},
+		{
+			name:               "long poll describe activity execution",
+			request:            &workflowservice.DescribeActivityExecutionRequest{LongPollToken: []byte("token")},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution": 1,
+			},
+			expectRateLimit: true,
+		},
+		{
+			name:               "non-long poll describe activity execution",
+			request:            &workflowservice.DescribeActivityExecutionRequest{},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution": 1,
+			},
+			expectRateLimit: false,
+		},
+		{
+			name:               "long poll describe nexus operation execution",
+			request:            &workflowservice.DescribeNexusOperationExecutionRequest{LongPollToken: []byte("token")},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+			},
+			expectRateLimit: true,
+		},
+		{
+			name:               "non-long poll describe nexus operation execution",
+			request:            &workflowservice.DescribeNexusOperationExecutionRequest{},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+			},
+			expectRateLimit: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -359,16 +411,19 @@ func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 
 			cleanup, err := interceptor.Allow("test-namespace", tc.method, mh, tc.request)
 			defer cleanup()
-			wantLimitGroup := "default"
 			if tc.internal {
 				require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
-				wantLimitGroup = "internal_per_ns"
 			} else {
 				require.NoError(t, err)
 			}
 			recordings := capture.SnapshotMetric(metrics.ServicePendingRequests.Name())
-			require.Len(t, recordings, 1)
-			require.Equal(t, wantLimitGroup, recordings[0].Tags["concurrency_limit_group"])
+			if tc.internal {
+				require.Empty(t, recordings)
+			} else {
+				require.Len(t, recordings, 1)
+				require.InDelta(t, 1, recordings[0].Value, 0)
+				require.Empty(t, recordings[0].Tags)
+			}
 		})
 	}
 }
@@ -421,24 +476,37 @@ func TestNamespaceCountLimitInterceptorIndependentPollerQuotas(t *testing.T) {
 				{queue: "regular-tq", limit: tc.defaultLimit},
 				{queue: primitives.PerNSWorkerTaskQueue, limit: tc.internalLimit},
 			} {
+				mh := metricstest.NewCaptureHandler()
+				capture := mh.StartCapture()
+				t.Cleanup(func() { mh.StopCapture(capture) })
 				request := &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: pool.queue}}
 				for range pool.limit {
-					cleanup, err := interceptor.Allow("test-namespace", method, metrics.NoopMetricsHandler, request)
+					cleanup, err := interceptor.Allow("test-namespace", method, mh, request)
 					t.Cleanup(cleanup)
 					require.NoError(t, err)
 				}
-				cleanup, err := interceptor.Allow("test-namespace", method, metrics.NoopMetricsHandler, request)
+				cleanup, err := interceptor.Allow("test-namespace", method, mh, request)
 				cleanup()
 				require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
 
-				cleanup, err = interceptor.Allow("test-namespace", activityMethod, metrics.NoopMetricsHandler,
+				cleanup, err = interceptor.Allow("test-namespace", activityMethod, mh,
 					&workflowservice.PollActivityTaskQueueRequest{TaskQueue: request.TaskQueue})
 				t.Cleanup(cleanup)
 				require.NoError(t, err)
 
-				cleanup, err = interceptor.Allow("other-namespace", method, metrics.NoopMetricsHandler, request)
+				cleanup, err = interceptor.Allow("other-namespace", method, mh, request)
 				t.Cleanup(cleanup)
 				require.NoError(t, err)
+
+				recordings := capture.SnapshotMetric(metrics.ServicePendingRequests.Name())
+				if pool.queue == primitives.PerNSWorkerTaskQueue {
+					require.Empty(t, recordings)
+				} else {
+					require.Len(t, recordings, pool.limit+3)
+					for _, recording := range recordings {
+						require.Empty(t, recording.Tags)
+					}
+				}
 			}
 		})
 	}

@@ -119,6 +119,87 @@ func TestCherryPick(t *testing.T) {
 		require.ErrorIs(t, err, ErrEventNotCherryPickable)
 	})
 
+	for _, tc := range []struct {
+		name       string
+		def        EventDefinition
+		event      func(scheduledEventID int64) *historypb.HistoryEvent
+		wantStatus nexusoperationpb.CancellationStatus
+	}{
+		{
+			name: "cancel request completed",
+			def:  CancelRequestCompletedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+						},
+					},
+				}
+			},
+			wantStatus: nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
+		},
+		{
+			name: "cancel request failed",
+			def:  CancelRequestFailedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							Failure:          &failurepb.Failure{Message: "cancel failed"},
+						},
+					},
+				}
+			},
+			wantStatus: nexusoperationpb.CANCELLATION_STATUS_FAILED,
+		},
+	} {
+		t.Run(tc.name+" without a cancellation reports not found", func(t *testing.T) {
+			tcx := newTestContext(t, defaultConfig)
+			event, _ := scheduleOperation(t, tcx)
+
+			err := tc.def.CherryPick(tcx.chasmCtx, tcx.wf, tc.event(event.EventId), nil)
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+		})
+
+		t.Run(tc.name+" with a cancellation is cherry-picked", func(t *testing.T) {
+			tcx := newTestContext(t, defaultConfig)
+			event, key := scheduleOperation(t, tcx)
+			applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
+				EventTime: timestamppb.Now(),
+				Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+					NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+						ScheduledEventId: event.EventId,
+					},
+				},
+			})
+			// Transition the operation to STARTED so the cancellation gets scheduled (see
+			// TestCancelRequestCompletedEventDefinitionApply).
+			applyEventDefinition[StartedEventDefinition](t, tcx, &historypb.HistoryEvent{
+				EventTime: timestamppb.Now(),
+				Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+						ScheduledEventId: event.EventId,
+						OperationToken:   "token",
+					},
+				},
+			})
+
+			err := tc.def.CherryPick(tcx.chasmCtx, tcx.wf, tc.event(event.EventId), nil)
+			require.NoError(t, err)
+
+			field, ok := tcx.wf.Operations[key]
+			require.True(t, ok)
+			cancellation, hasCancellation := field.Get(tcx.chasmCtx).Cancellation.TryGet(tcx.chasmCtx)
+			require.True(t, hasCancellation)
+			require.Equal(t, tc.wantStatus, cancellation.StateMachineState())
+		})
+	}
+
 	t.Run("started cherry-pick applies", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
@@ -397,10 +478,11 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 		require.Equal(t, requestedTime, cancellation.GetRequestedTime().AsTime())
 	})
 
-	t.Run("tolerates missing operation", func(t *testing.T) {
+	t.Run("reports not found for a missing operation", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 
-		applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
+		def := CancelRequestedEventDefinition{}
+		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 			EventId:   int64(20),
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
@@ -409,6 +491,8 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 				},
 			},
 		})
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound)
 	})
 }
 
@@ -454,6 +538,61 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 	require.True(t, hasCancellation)
 	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
+}
+
+// TestNexusCancelRequestOutcomesRequireCancellation: a cancel request outcome reaching an operation with no
+// cancellation is a violation.
+func TestNexusCancelRequestOutcomesRequireCancellation(t *testing.T) {
+	testCases := []struct {
+		name  string
+		def   EventDefinition
+		event func(scheduledEventID int64) *historypb.HistoryEvent
+	}{
+		{
+			name: "cancel request completed",
+			def:  CancelRequestCompletedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "cancel request failed",
+			def:  CancelRequestFailedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							Failure:          &failurepb.Failure{Message: "cancel failed"},
+						},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tcx := newTestContext(t, defaultConfig)
+			// Schedule only: without a NexusOperationCancelRequested the operation has no cancellation child.
+			event, key := scheduleOperation(t, tcx)
+			op := tcx.wf.Operations[key].Get(tcx.chasmCtx)
+			_, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
+			require.False(t, hasCancellation, "test setup: the operation must not have a cancellation")
+
+			require.Panics(t, func() {
+				_ = tc.def.Apply(tcx.chasmCtx, tcx.wf, tc.event(event.EventId))
+			}, "Apply must enforce the cancellation precondition rather than silently skip")
+		})
+	}
 }
 
 // TestNexusEventDefinitionsReportMissingOperation verifies that Apply reports a serviceerror.NotFound when the

@@ -46,6 +46,8 @@ const (
 	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+
+	nexusSerializationContextMatch = "context_match"
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
@@ -368,6 +370,14 @@ const (
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
+// Reasons for WorkflowTaskCompletionBufferLost.
+const (
+	BufferLostReasonNewPaginationLimit ReasonString = "new_pagination_limit"
+	BufferLostReasonMemoryLimit        ReasonString = "memory_limit"
+	BufferLostReasonMissingBuffer      ReasonString = "missing_buffer"
+	BufferLostReasonMissingPage        ReasonString = "missing_page"
+)
+
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
 // down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
 func PollerScaleDecisionTag(decision string) Tag {
@@ -456,6 +466,10 @@ func NexusOperationTag(value string) Tag {
 
 func NexusOperationBackendTag(value string) Tag {
 	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
+func NexusSerializationContextMatchTag(value ReasonString) Tag {
+	return Tag{Key: nexusSerializationContextMatch, Value: string(value)}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

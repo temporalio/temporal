@@ -641,3 +641,25 @@ func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) 
 		requestIDs[start.RequestId] = start.RunId
 	}
 }
+
+// An empty success payload (no-result workflow) must not be carried into V1,
+// which would otherwise forward it as a payload without encoding metadata.
+func TestCHASMToLegacyStartScheduleArgs_DropsEmptySuccessPayload(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:   "ns",
+		NamespaceId: "ns-id",
+		ScheduleId:  "sched-id",
+		Schedule:    newTestSchedule(),
+		Info:        &schedulepb.ScheduleInfo{},
+	}
+	lastCompletion := &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{},
+		Failure: &failurepb.Failure{Message: "last failure"},
+	}
+
+	args := CHASMToLegacyStartScheduleArgs(scheduler, &schedulerpb.GeneratorState{}, &schedulerpb.InvokerState{}, nil, lastCompletion, nil, nil, now)
+
+	require.Nil(t, args.State.LastCompletionResult)
+	require.Equal(t, "last failure", args.State.ContinuedFailure.GetMessage())
+}

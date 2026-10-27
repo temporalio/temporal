@@ -9,9 +9,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
@@ -63,6 +65,15 @@ type (
 		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
 		pendingCallbacks []pendingCallback
+		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
+		// Update. Callers don't need to load it: it is populated on every path that produces an Update, i.e.
+		// Admit (from the request, before acceptance), Registry construction and Find (from UpdateInfo in
+		// MutableState), and TryResurrect (from the worker's echoed request). Unlike request, it is retained
+		// after acceptance. It is persisted in UpdateInfo only once an UpdateAdmitted or UpdateAccepted event
+		// is written; before that it is in-memory only, like request, since admission writes nothing so that
+		// rejected Updates leave no trace. It is nil if the Update is still in stateCreated, the request had no
+		// context, or the Update was persisted before this field existed.
+		nexusSerializationContext *nexuspb.PropagatedSerializationContext
 
 		// These fields might be accessed while not holding the workflow lock.
 		accepted future.Future[*failurepb.Failure]
@@ -153,6 +164,12 @@ func withCompletionCallback(cb func()) updateOpt {
 func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
 	return func(u *Update) {
 		u.checkLimits = cb
+	}
+}
+
+func withNexusSerializationContext(nsCtx *nexuspb.PropagatedSerializationContext) updateOpt {
+	return func(u *Update) {
+		u.nexusSerializationContext = nsCtx
 	}
 }
 
@@ -359,6 +376,7 @@ func (u *Update) Admit(
 	}
 	u.request = reqAny
 	u.originalReqID = req.GetRequestId()
+	u.nexusSerializationContext = req.GetPropagatedNexusSerializationContext()
 
 	prevState := u.setState(stateProvisionallyAdmitted)
 	eventStore.OnAfterCommit(func(context.Context) {
@@ -458,6 +476,10 @@ func (u *Update) AttachCallbacks(
 
 	default:
 		// All other states are too early or not applicable for callback attachment.
+		// Callbacks on the admitting request travel with u.request and are attached on acceptance.
+		if req.GetRequestId() != u.originalReqID {
+			u.instrumentation.logCallbacksNotAttached(u.id, req.GetRequestId(), u.state.String(), len(req.GetCompletionCallbacks()))
+		}
 		return false, nil
 	}
 }
@@ -485,8 +507,8 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
-// stateSent. The per-update callback limit (MaxCallbacksPerUpdateID) bounds the
-// worst case.
+// stateSent. The execution's aggregate callback limits, which reserve buffered
+// callbacks at admission, bound the worst case.
 func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	for _, pc := range u.pendingCallbacks {
 		if _, err := u.persistCallback(eventStore, pc.requestID, pc.completionCallbacks); err != nil {
@@ -859,6 +881,7 @@ func (u *Update) setState(newState state) state {
 func (u *Update) GetSize() int {
 	size := len(u.id)
 	size += proto.Size(u.request)
+	size += proto.Size(u.nexusSerializationContext)
 	if u.accepted.Ready() {
 		res, _ := u.accepted.Get(context.Background())
 		size += res.Size()
@@ -870,6 +893,14 @@ func (u *Update) GetSize() int {
 	return size
 }
 
+// NexusSerializationContext returns the Nexus serialization context of the request that admitted this Update.
+// For a deduplicated request, this is the original request's context. A nil result means the Update has no
+// context (see the nexusSerializationContext field), not that it still needs to be loaded.
+// It must be invoked while holding the workflow lock.
+func (u *Update) NexusSerializationContext() *nexuspb.PropagatedSerializationContext {
+	return u.nexusSerializationContext
+}
+
 // AcceptedEventID should only be invoked after the accepted/outcome futures are set.
 // This is because acceptedEventID is only written while holding the workflow lock and
 // before the accepted/outcome futures are set.
@@ -878,4 +909,42 @@ func (u *Update) AcceptedEventID() int64 {
 		return common.EmptyEventID
 	}
 	return u.acceptedEventID
+}
+
+// IsCompleted reports whether the Update has completed, in which case its outcome is final and
+// no further callbacks will be attached to it.
+func (u *Update) IsCompleted() bool {
+	return u.state == stateCompleted
+}
+
+// inFlightCallbacks returns the completion callbacks this Update will persist if it is accepted.
+// See Registry.InFlightCallbacks.
+func (u *Update) inFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
+	if !u.state.Matches(stateSet(stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
+		return nil, nil
+	}
+	var inFlight []chasmworkflow.CallbackAddition
+	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
+	// were persisted along with that event.
+	if u.request != nil {
+		req := &updatepb.Request{}
+		if err := u.request.UnmarshalTo(req); err != nil {
+			return nil, serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+		}
+		if len(req.GetCompletionCallbacks()) > 0 {
+			inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+				UpdateID:  u.id,
+				RequestID: req.GetRequestId(),
+				Callbacks: req.GetCompletionCallbacks(),
+			})
+		}
+	}
+	for _, pc := range u.pendingCallbacks {
+		inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+			UpdateID:  u.id,
+			RequestID: pc.requestID,
+			Callbacks: pc.completionCallbacks,
+		})
+	}
+	return inFlight, nil
 }

@@ -3,6 +3,7 @@
 package replication
 
 import (
+	"slices"
 	"sync"
 	"unsafe"
 
@@ -157,9 +158,17 @@ func (c *progressCacheImpl) Update(
 	c.cacheLock.Lock()
 	defer c.cacheLock.Unlock()
 
-	item, ok := c.cache.Get(cacheKey).(*ReplicationProgress)
-	if !ok {
-		item = &ReplicationProgress{}
+	// Get hands out the cached progress without holding the lock while callers read it, so never mutate a cached
+	// progress in place. Update a copy and swap it in instead. The inner slices are never mutated once stored, so
+	// cloning the outer slices is enough.
+	item := &ReplicationProgress{}
+	if cached, ok := c.cache.Get(cacheKey).(*ReplicationProgress); ok {
+		item = &ReplicationProgress{
+			versionedTransitions:         slices.Clone(cached.versionedTransitions),
+			eventVersionHistoryItems:     slices.Clone(cached.eventVersionHistoryItems),
+			lastVersionTransitionIndex:   cached.lastVersionTransitionIndex,
+			lastEventVersionHistoryIndex: cached.lastEventVersionHistoryIndex,
+		}
 	}
 
 	stateDirty := c.updateStates(item, versionedTransitions)
