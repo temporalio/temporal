@@ -58,14 +58,10 @@ func (d *namespaceHandler) recordShadowSourceOutcome(task *replicationspb.Namesp
 		metric.With(d.metricsHandler).Record(1, metrics.SourceClusterTag(source),
 			metrics.OperationTag(nsreplication.OperationMetricValue(task.GetNamespaceOperation())), metrics.OutcomeTag(outcome))
 	}
-	if d.config == nil || d.config.EmitNamespaceLifecycleEvents == nil || !d.config.EmitNamespaceLifecycleEvents() {
+	if stage == "trigger" || d.config == nil || d.config.EmitNamespaceLifecycleEvents == nil || !d.config.EmitNamespaceLifecycleEvents() {
 		return
 	}
 	details := map[string]any{"component_business_id": businessID, "target_clusters": peers, "apply_stage": stage}
-	if stage == "trigger" && observationErr != nil {
-		// A lost start/poll response does not establish whether creation committed.
-		details["component_creation_outcome"] = "unknown"
-	}
 	wideevents.EmitNamespaceReplicationLifecycle(d.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase: wideevents.NamespaceReplicationPhase(stage), Outcome: wideevents.NamespaceReplicationOutcome(outcome),
 		EventData: shadowReplicationEventData(task, payload, details), SourceCluster: source,

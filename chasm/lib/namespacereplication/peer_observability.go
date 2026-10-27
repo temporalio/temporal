@@ -126,14 +126,10 @@ func (h *applyPeerTaskHandler) recordPeerDurations(
 	if endToEndDuration != nil {
 		metrics.NamespaceReplicationCHASMApplyEndToEndLatency.With(h.metricsHandler).Record(*endToEndDuration, tags...)
 	}
-	if pendingAge != nil {
-		if recorded.retryScheduled {
-			metrics.NamespaceReplicationCHASMPeerPendingAge.With(h.metricsHandler).Record(*pendingAge, tags...)
-			if *pendingAge >= pendingAlertThreshold {
-				metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, tags...)
-			}
-		} else {
-			metrics.NamespaceReplicationCHASMPeerPendingLatency.With(h.metricsHandler).Record(*pendingAge, tags...)
+	if pendingAge != nil && recorded.retryScheduled {
+		metrics.NamespaceReplicationCHASMPeerPendingAge.With(h.metricsHandler).Record(*pendingAge, tags...)
+		if *pendingAge >= pendingAlertThreshold {
+			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, tags...)
 		}
 	}
 	return pendingAge, endToEndDuration

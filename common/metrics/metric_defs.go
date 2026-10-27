@@ -1655,10 +1655,6 @@ var (
 		"namespace_replication_shadow_completion_latency",
 		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds; excludes forced terminations."),
 	)
-	NamespaceReplicationCHASMPeerPendingLatency = NewTimerDef(
-		"namespace_replication_chasm_peer_pending_latency",
-		WithDescription("Time from the first persisted peer failure until terminal peer resolution."),
-	)
 	NamespaceReplicationCHASMPeerPendingAge = NewTimerDef(
 		"namespace_replication_chasm_peer_pending_age",
 		WithDescription("Unresolved peer age sampled when a retry is persisted."),

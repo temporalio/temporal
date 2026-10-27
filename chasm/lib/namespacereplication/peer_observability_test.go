@@ -204,12 +204,7 @@ func TestPeerApplyObservability(t *testing.T) {
 				} else {
 					require.Empty(t, threshold)
 				}
-			} else if tc.age > 0 && !tc.saveFailure && !tc.staleOutcome {
-				pending := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name())
-				require.Len(t, pending, 1)
-				require.Equal(t, tc.age, pending[0].Value)
 			} else {
-				require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()))
 				require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name()))
 				require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
 			}

@@ -238,14 +238,15 @@ func TestShadowSourceObservationOutcomes(t *testing.T) {
 			values := capture.SnapshotMetric(metric.Name())
 			require.Len(t, values, 1)
 			require.Equal(t, tc.outcome, values[0].Tags["outcome"])
+			if tc.stage == "trigger" {
+				require.Empty(t, logger.records)
+				return
+			}
 			_, details := remoteClusterEventValues(t, logger.records)
 			require.Equal(t, "business-id", details["component_business_id"])
 			require.Equal(t, "cellA", details["source_cluster"])
 			require.Equal(t, "shadow", details["mode"])
 			require.Equal(t, []any{"cellB"}, details["target_clusters"])
-			if tc.outcome == "rpc_error" {
-				require.Equal(t, "unknown", details["component_creation_outcome"])
-			}
 			if tc.outcome == "error" {
 				require.Equal(t, "incomplete", details["task_payload_status"])
 			}
@@ -377,11 +378,11 @@ func TestShadowSourceObserverPanicDoesNotPreventTrigger(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	metadata := cluster.NewMockMetadata(ctrl)
 	metadata.EXPECT().GetCurrentClusterName().Return("cellA").AnyTimes()
-	panicRecorded := make(chan struct{}, 2)
+	panicRecorded := make(chan struct{}, 1)
 	logger := log.NewMockLogger(ctrl)
 	logger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).Do(func(string, ...tag.Tag) {
 		panicRecorded <- struct{}{}
-	}).Times(2)
+	})
 	mh := metricstest.NewCaptureHandler()
 	capture := mh.StartCapture()
 	defer mh.StopCapture(capture)
@@ -394,9 +395,10 @@ func TestShadowSourceObserverPanicDoesNotPreventTrigger(t *testing.T) {
 	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
 	require.Equal(t, "namespace-id", await.Rcv(t, client.requests).GetNamespaceId())
 	await.Rcv(t, panicRecorded)
-	await.Rcv(t, panicRecorded)
 	require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationShadowPreparationOutcomes.Name()), 1)
-	triggers := capture.SnapshotMetric(metrics.NamespaceReplicationShadowTriggerOutcomes.Name())
-	require.Len(t, triggers, 1)
-	require.Equal(t, "rpc_completed", triggers[0].Tags["outcome"])
+	await.Require(t.Context(), t, func(t *await.T) {
+		triggers := capture.SnapshotMetric(metrics.NamespaceReplicationShadowTriggerOutcomes.Name())
+		require.Len(t, triggers, 1)
+		require.Equal(t, "rpc_completed", triggers[0].Tags["outcome"])
+	}, 5*time.Second, 10*time.Millisecond)
 }
