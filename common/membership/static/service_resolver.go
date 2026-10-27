@@ -2,6 +2,7 @@ package static
 
 import (
 	"sync"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/server/common/membership"
@@ -114,4 +115,8 @@ func (s *staticResolver) AvailableMembers() []membership.HostInfo {
 }
 
 func (s *staticResolver) RequestRefresh() {
+}
+
+func (s *staticResolver) GradualChangeUntil() time.Time {
+	return time.Time{}
 }

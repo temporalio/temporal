@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,6 +76,9 @@ const (
 	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
+
+	// How often to check for loss of ownership while a gradual membership change is in progress.
+	gradualMembershipChangeRescanInterval = 500 * time.Millisecond
 
 	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
 	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
@@ -444,10 +448,47 @@ func (e *matchingEngineImpl) watchMembership() {
 		return err == nil && addr != self
 	}
 
-	for range e.membershipChangedCh {
+	// Partitions that have an unload scheduled, so that we don't schedule duplicate unloads
+	// when rescanning periodically.
+	var pendingLock sync.Mutex
+	pending := make(map[tqid.PartitionKey]struct{})
+	needsUnload := func(p tqid.Partition) bool {
+		if !ownedByOther(p) {
+			return false
+		}
+		pendingLock.Lock()
+		defer pendingLock.Unlock()
+		if _, ok := pending[p.Key()]; ok {
+			return false
+		}
+		pending[p.Key()] = struct{}{}
+		return true
+	}
+
+	// During a gradual membership change, ownership of individual partitions changes without
+	// membership change events, so we also rescan periodically until it's done.
+	// (Unreferenced tickers are garbage collected, so we don't need to stop it.)
+	var rescanCh <-chan time.Time
+
+	for {
+		select {
+		case _, ok := <-e.membershipChangedCh:
+			if !ok {
+				return
+			}
+		case <-rescanCh:
+		}
+
 		delay := e.config.MembershipUnloadDelay()
 		if delay == 0 {
 			continue
+		}
+
+		if !time.Now().Before(e.serviceResolver.GradualChangeUntil()) {
+			// Note that we still do one last scan after the gradual change is done.
+			rescanCh = nil
+		} else if rescanCh == nil {
+			rescanCh = time.NewTicker(gradualMembershipChangeRescanInterval).C
 		}
 
 		e.notifyNexusEndpointsOwnershipChange()
@@ -460,7 +501,9 @@ func (e *matchingEngineImpl) watchMembership() {
 		}
 		e.partitionsLock.RUnlock()
 
-		partitions = util.FilterSlice(partitions, ownedByOther)
+		// Note that batches of this slice are retained by the unload timers below, so we can't
+		// reuse it for the next iteration.
+		partitions = slices.DeleteFunc(partitions, func(p tqid.Partition) bool { return !needsUnload(p) })
 
 		const batchSize = 100
 		for i := 0; i < len(partitions); i += batchSize {
@@ -471,6 +514,13 @@ func (e *matchingEngineImpl) watchMembership() {
 			batch := partitions[i:min(len(partitions), i+batchSize)]
 			wait := backoff.Jitter(delay, 0.1)
 			time.AfterFunc(wait, func() {
+				defer func() {
+					pendingLock.Lock()
+					defer pendingLock.Unlock()
+					for _, p := range batch {
+						delete(pending, p.Key())
+					}
+				}()
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
 					return
@@ -478,7 +528,7 @@ func (e *matchingEngineImpl) watchMembership() {
 				for _, p := range batch {
 					// maybe ownership changed again
 					if !ownedByOther(p) {
-						return
+						continue
 					}
 					// now we can unload
 					e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseMembership)

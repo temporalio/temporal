@@ -41,9 +41,13 @@ const (
 	drainingKey = "draining"
 
 	// These labels control the visibility time of hosts in membership rings.
-	// Value is unix seconds in decimal.
+	// Value is seconds since unix epoch in decimal.
 	startAtKey = "startAt"
 	stopAtKey  = "stopAt"
+	// These labels, if present, make the join/leave gradual: each key switches at a different
+	// time between startAt/stopAt and that time plus this window. Value is seconds in decimal.
+	startWindowKey = "startWin"
+	stopWindowKey  = "stopWin"
 
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
@@ -82,6 +86,9 @@ type (
 		// return the rpmembership.Member that was passed to it, it only returns the address.
 		ring  *hashring.HashRing
 		hosts map[string]*hostInfo
+		// Hosts that are joining or leaving, keyed by address. Hosts in the ring but not in
+		// this map are present for all keys.
+		presence map[string]*presence
 	}
 
 	refreshMode int
@@ -158,26 +165,46 @@ func (r *serviceResolver) RequestRefresh() {
 
 // Lookup finds the host in the ring responsible for serving the given key
 func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
-	ring, hosts := r.ring()
-	addr, found := ring.Lookup(key)
-	if !found {
+	addrs, hosts := r.lookupN(key, 1, time.Now())
+	if len(addrs) == 0 {
 		r.RequestRefresh()
 		return nil, membership.ErrInsufficientHosts
 	}
-	return hosts[addr], nil
+	return hosts[addrs[0]], nil
 }
 
 func (r *serviceResolver) LookupN(key string, n int) []membership.HostInfo {
 	if n <= 0 {
 		return nil
 	}
-	ring, hosts := r.ring()
-	addrs := ring.LookupN(key, n)
+	addrs, hosts := r.lookupN(key, n, time.Now())
 	if len(addrs) == 0 {
 		r.RequestRefresh()
 		return nil
 	}
 	return util.MapSlice(addrs, func(addr string) membership.HostInfo { return hosts[addr] })
+}
+
+func (r *serviceResolver) lookupN(key string, n int, now time.Time) ([]string, map[string]*hostInfo) {
+	rh := r.loadRingAndHosts()
+	if len(rh.presence) == 0 {
+		return rh.ring.LookupN(key, n), rh.hosts
+	}
+	keyHash := gradualKeyHash(key)
+	return rh.ring.LookupNFiltered(key, n, func(addr string) bool {
+		p, ok := rh.presence[addr]
+		return !ok || p.present(keyHash, now)
+	}), rh.hosts
+}
+
+func (r *serviceResolver) GradualChangeUntil() time.Time {
+	var until time.Time
+	for _, p := range r.loadRingAndHosts().presence {
+		if end := p.gradualEnd(); end.After(until) {
+			until = end
+		}
+	}
+	return until
 }
 
 func (r *serviceResolver) AddListener(
@@ -282,16 +309,25 @@ func (r *serviceResolver) refresh(mode refreshMode) error {
 }
 
 func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
-	hosts, nextEvent, err := r.getReachableMembers()
+	hosts, err := r.getReachableMembers()
 	if err != nil {
 		return nil, err
 	}
+
+	hosts, presence, nextEvent := filterMembersByTime(hosts, time.Now())
 
 	// if we found an add/remove event, schedule another refresh right at that time
 	r.scheduleRefresh(nextEvent)
 
 	newMembersMap, changedEvent := r.compareMembers(hosts)
 	if changedEvent == nil {
+		// Membership didn't change, but presence might have (e.g. a join window ended).
+		prev := r.loadRingAndHosts()
+		r.ringAndHosts.Store(ringAndHosts{
+			ring:     prev.ring,
+			hosts:    prev.hosts,
+			presence: presence,
+		})
 		return nil, nil
 	}
 
@@ -300,8 +336,9 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 
 	r.lastRefreshTime = time.Now().UTC()
 	r.ringAndHosts.Store(ringAndHosts{
-		ring:  ring,
-		hosts: newMembersMap,
+		ring:     ring,
+		hosts:    newMembersMap,
+		presence: presence,
 	})
 
 	addrs := util.MapSlice(hosts, func(h *hostInfo) string { return h.summary() })
@@ -332,43 +369,11 @@ func (r *serviceResolver) scheduleRefresh(nextEvent int64) {
 	r.logger.Debug("Membership will refresh at scheduled event", tag.Timestamp(nextEventTime))
 }
 
-func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
+func (r *serviceResolver) getReachableMembers() ([]*hostInfo, error) {
 	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(roleKey, string(r.service)))
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-
-	// Filter members by startAt/stopAt times and extract next scheduled event time. We only
-	// need to keep track of one event since we'll refresh at that time and find the next one.
-	// Note that nextEvent is mutated by the filter functions below.
-	nowUnix := time.Now().Unix()
-	nextEvent := int64(math.MaxInt64)
-
-	// Filter by startAt
-	members = slices.DeleteFunc(members, func(member swim.Member) bool {
-		startAt, err := parseIntLabel(member, startAtKey)
-		if err != nil {
-			return false // ignore label if missing or can't parse
-		} else if startAt <= nowUnix {
-			return false // start time is in the past
-		}
-		// start time is in the future: schedule refresh at that time
-		nextEvent = min(nextEvent, startAt)
-		return true
-	})
-
-	// Filter by stopAt
-	members = slices.DeleteFunc(members, func(member swim.Member) bool {
-		stopAt, err := parseIntLabel(member, stopAtKey)
-		if err != nil {
-			return false // ignore label if missing or can't parse
-		} else if stopAt > nowUnix {
-			// stop time is in the future: schedule refresh at that time
-			nextEvent = min(nextEvent, stopAt)
-			return false
-		}
-		return true // stop time is in the past
-	})
 
 	// Turn swim.Members into hostInfo
 	hosts := make([]*hostInfo, len(members))
@@ -382,7 +387,7 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 		if ok {
 			servicePort, err = strconv.Atoi(servicePortLabel)
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 		} else {
 			r.logger.Debug("unable to find roleport label for ringpop member. using local service's port", tag.Service(r.service))
@@ -390,17 +395,89 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 
 		hostPort, err := replaceServicePort(member.Address, servicePort)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 
 		// We can share member.Labels without copying since we never modify it.
 		hosts[i] = newHostInfo(hostPort, member.Labels)
 	}
 
+	return hosts, nil
+}
+
+// filterMembersByTime filters hosts (in place) by their startAt/stopAt labels (and windows),
+// and returns the hosts that should be in the ring, presence info for hosts that are joining
+// or leaving, and the next time (in unix seconds) at which we should refresh again (or zero).
+// We only need to keep track of one event since we'll refresh at that time and find the next
+// one.
+//
+// Refreshing at the start of a join and the end of a leave is required: that's when a host is
+// added to or removed from the ring, and listeners rely on getting a ChangedEvent at that
+// time (e.g. history, which doesn't use gradual changes). Refreshing at the end of a join
+// window is only to drop the presence and get back to the faster lookup path.
+func filterMembersByTime(
+	hosts []*hostInfo,
+	now time.Time,
+) ([]*hostInfo, map[string]*presence, int64) {
+	var presences map[string]*presence
+	nextEvent := int64(math.MaxInt64)
+	addEvent := func(t time.Time) {
+		if t.After(now) {
+			nextEvent = min(nextEvent, t.Unix())
+		}
+	}
+
+	hosts = slices.DeleteFunc(hosts, func(host *hostInfo) bool {
+		var p presence
+		if start, end, ok := parseWindowLabels(host, startAtKey, startWindowKey); ok {
+			if now.Before(start) {
+				// start time is in the future: exclude and schedule refresh at that time
+				addEvent(start)
+				return true
+			} else if now.Before(end) {
+				// in join window: schedule refresh at the end to clear presence
+				p.joinStart, p.joinEnd = start, end
+				addEvent(end)
+			}
+		}
+		if start, end, ok := parseWindowLabels(host, stopAtKey, stopWindowKey); ok {
+			if !now.Before(end) {
+				return true // stop time is in the past
+			}
+			// stop time or window is in the future: schedule refresh at the end to remove it.
+			// Before that, presence will filter it out of lookups as appropriate.
+			p.leaveStart, p.leaveEnd = start, end
+			addEvent(end)
+		}
+		if p != (presence{}) {
+			if presences == nil {
+				presences = make(map[string]*presence)
+			}
+			presences[host.GetAddress()] = &p
+		}
+		return false
+	})
+
 	if nextEvent == math.MaxInt64 {
 		nextEvent = 0
 	}
-	return hosts, nextEvent, nil
+	return hosts, presences, nextEvent
+}
+
+// parseWindowLabels returns the start and end of a window given by a start time label and an
+// optional window duration label.
+func parseWindowLabels(host *hostInfo, atKey, windowKey string) (start, end time.Time, ok bool) {
+	at, err := parseIntLabel(host, atKey)
+	if err != nil {
+		return time.Time{}, time.Time{}, false // ignore label if missing or can't parse
+	}
+	start = time.Unix(at, 0)
+	window, err := parseIntLabel(host, windowKey)
+	if err != nil || window <= 0 {
+		return start, start, true
+	}
+	window = min(window, int64(maxGradualChangeWindow/time.Second))
+	return start, start.Add(time.Duration(window) * time.Second), true
 }
 
 func (r *serviceResolver) emitEvent(event *membership.ChangedEvent) {
@@ -440,8 +517,12 @@ func (r *serviceResolver) refreshRingWorker() {
 }
 
 func (r *serviceResolver) ring() (*hashring.HashRing, map[string]*hostInfo) {
-	ring := r.ringAndHosts.Load().(ringAndHosts)
+	ring := r.loadRingAndHosts()
 	return ring.ring, ring.hosts
+}
+
+func (r *serviceResolver) loadRingAndHosts() ringAndHosts {
+	return r.ringAndHosts.Load().(ringAndHosts) //nolint:revive // unchecked-type-assertion: we only ever store ringAndHosts
 }
 
 func (r *serviceResolver) compareMembers(hosts []*hostInfo) (map[string]*hostInfo, *membership.ChangedEvent) {
@@ -515,8 +596,8 @@ func buildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 }
 
 // parseIntLabel returns the value of the given label as an integer.
-func parseIntLabel(member swim.Member, label string) (int64, error) {
-	str, ok := member.Label(label)
+func parseIntLabel(host *hostInfo, label string) (int64, error) {
+	str, ok := host.Label(label)
 	if !ok {
 		return 0, errMissingLabel
 	}

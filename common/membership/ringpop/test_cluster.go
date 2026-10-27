@@ -151,7 +151,8 @@ func newTestCluster(
 			resolver,
 			2*time.Second,
 			3*time.Second,
-			joinTime,
+			func() time.Time { return joinTime },
+			0,
 			100,
 		)
 		cluster.rings[i].Start()
