@@ -111,6 +111,9 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
+// executionExistsOnSource reports whether the execution still exists on the source cluster, assuming it does when the
+// source can't be asked. It returns an error when the task should be retried instead: consts.ErrTaskRetry when the
+// namespace has turned active on the current cluster, and consts.ErrNamespaceHandover when the source is in handover.
 func executionExistsOnSource(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -120,10 +123,10 @@ func executionExistsOnSource(
 	clientBean client.Bean,
 	registry namespace.Registry,
 	chasmRegistry *chasm.Registry,
-) bool {
+) (bool, error) {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
 	if err != nil {
-		return true
+		return true, nil
 	}
 
 	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
@@ -134,7 +137,7 @@ func executionExistsOnSource(
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),
 		)
-		return true
+		return true, nil
 	}
 
 	remoteClusterName, err := getSourceClusterName(
@@ -144,11 +147,14 @@ func executionExistsOnSource(
 		workflowKey.GetWorkflowID(),
 	)
 	if err != nil {
-		return true
+		if errors.Is(err, consts.ErrTaskRetry) {
+			return false, err
+		}
+		return true, nil
 	}
 	remoteAdminClient, err := clientBean.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
-		return true
+		return true, nil
 	}
 	_, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespaceEntry.Name().String(),
@@ -161,7 +167,10 @@ func executionExistsOnSource(
 	})
 	if err != nil {
 		if common.IsNotFoundError(err) {
-			return false
+			return false, nil
+		}
+		if common.IsNamespaceHandoverError(err) {
+			return false, consts.ErrNamespaceHandover
 		}
 		logger.Error("Error describe mutable state from remote.",
 			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
@@ -170,7 +179,7 @@ func executionExistsOnSource(
 			tag.ClusterName(remoteClusterName),
 			tag.Error(err))
 	}
-	return true
+	return true, nil
 }
 
 type (
@@ -291,7 +300,7 @@ func getSourceClusterName(
 	remoteClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
-		return "", errors.New("namespace becomes active when processing task as standby")
+		return "", consts.ErrTaskRetry
 	}
 	return remoteClusterName, nil
 }

@@ -840,7 +840,7 @@ func (t *timerQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeD
 	if postActionInfo == nil {
 		return nil
 	}
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
@@ -849,7 +849,11 @@ func (t *timerQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeD
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)

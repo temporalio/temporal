@@ -763,7 +763,7 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 	if postActionInfo == nil {
 		return nil
 	}
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
@@ -772,7 +772,11 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, nil)
@@ -793,7 +797,7 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
 	}
 
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
 		*startChildInfo.childWorkflowKey,
 		chasm.WorkflowArchetypeID,
@@ -802,7 +806,11 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
@@ -823,7 +831,7 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 	}
 
-	if !executionExistsOnSource(
+	exists, err := executionExistsOnSource(
 		ctx,
 		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
@@ -832,7 +840,11 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
-	) {
+	)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
