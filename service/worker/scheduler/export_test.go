@@ -19,13 +19,19 @@ func SchedulerWorkflowWithSpecBuilder(b *SpecBuilder) func(workflow.Context, *sc
 	}
 }
 
-// GenerateScheduledActionsForTest returns the actions generated at each supplied
-// wakeup. Cursor bookkeeping stays inside the adapter.
+// ScheduleGenerationForTest contains the observable results of one generation pass.
+type ScheduleGenerationForTest struct {
+	BufferedStarts []*schedulespb.BufferedStart
+	NextWakeupTime time.Time
+}
+
+// GenerateScheduledActionsForTest returns the actions and next wakeup at each
+// supplied wakeup. Cursor bookkeeping stays inside the adapter.
 func GenerateScheduledActionsForTest(
 	ctx workflow.Context,
 	args *schedulespb.StartScheduleArgs,
 	ends []time.Time,
-) ([][]*schedulespb.BufferedStart, error) {
+) ([]ScheduleGenerationForTest, error) {
 	builder := NewSpecBuilder(dynamicconfig.GetIntPropertyFn(0), dynamicconfig.GetIntPropertyFn(0))
 	spec, err := builder.NewCompiledSpec(args.Schedule.Spec)
 	if err != nil {
@@ -44,15 +50,18 @@ func GenerateScheduledActionsForTest(
 			NextTimeCacheV2Size:  10,
 		},
 	}
-	var results [][]*schedulespb.BufferedStart
+	var results []ScheduleGenerationForTest
 	for _, end := range ends {
 		previousCount := len(s.State.BufferedStarts)
-		_, lastAction := s.processTimeRange(
+		nextWakeup, lastAction := s.processTimeRange(
 			s.State.LastProcessedTime.AsTime(), end,
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false, nil,
 		)
 		s.State.LastProcessedTime = timestamppb.New(lastAction)
-		results = append(results, s.State.BufferedStarts[previousCount:])
+		results = append(results, ScheduleGenerationForTest{
+			BufferedStarts: s.State.BufferedStarts[previousCount:],
+			NextWakeupTime: nextWakeup,
+		})
 	}
 	return results, nil
 }
