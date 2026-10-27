@@ -1,6 +1,7 @@
 package dynamicconfig
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/primitives"
@@ -273,4 +274,30 @@ type LatencyHealthCheckSettings struct {
 type LatencyHealthChecksPerPercentile struct {
 	// PercentileSettings stores settings for the health check of each percentile.
 	PercentileSettings []LatencyHealthCheckSettings
+}
+
+const (
+	HistoryReplicationRateLimiterScopeAll                  = "all"
+	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"
+)
+
+type HistoryReplicationRateLimiterSettings struct {
+	Enabled bool
+	Scope   string
+}
+
+func convertHistoryReplicationRateLimiterSettings(v any) (HistoryReplicationRateLimiterSettings, error) {
+	if enabled, err := convertBool(v); err == nil {
+		return HistoryReplicationRateLimiterSettings{Enabled: enabled, Scope: HistoryReplicationRateLimiterScopeAll}, nil
+	}
+	settings, err := ConvertStructure(HistoryReplicationRateLimiterSettings{})(v)
+	if err != nil {
+		return HistoryReplicationRateLimiterSettings{}, err
+	}
+	switch settings.Scope {
+	case HistoryReplicationRateLimiterScopeAll, HistoryReplicationRateLimiterScopeOpenForceReplication:
+		return settings, nil
+	default:
+		return HistoryReplicationRateLimiterSettings{}, fmt.Errorf("unknown history replication rate limiter scope: %q", settings.Scope)
+	}
 }
