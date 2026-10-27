@@ -19,13 +19,13 @@ func SchedulerWorkflowWithSpecBuilder(b *SpecBuilder) func(workflow.Context, *sc
 	}
 }
 
-// ProcessTimeRangesForTest exposes the V1 processor to external comparison tests
-// without running workflow starts or overlap handling.
-func ProcessTimeRangesForTest(
+// GenerateScheduledActionsForTest returns the actions generated at each supplied
+// wakeup. Cursor bookkeeping stays inside the adapter.
+func GenerateScheduledActionsForTest(
 	ctx workflow.Context,
 	args *schedulespb.StartScheduleArgs,
 	ends []time.Time,
-) ([]*schedulespb.InternalState, error) {
+) ([][]*schedulespb.BufferedStart, error) {
 	builder := NewSpecBuilder(dynamicconfig.GetIntPropertyFn(0), dynamicconfig.GetIntPropertyFn(0))
 	spec, err := builder.NewCompiledSpec(args.Schedule.Spec)
 	if err != nil {
@@ -44,17 +44,15 @@ func ProcessTimeRangesForTest(
 			NextTimeCacheV2Size:  10,
 		},
 	}
-	var results []*schedulespb.InternalState
+	var results [][]*schedulespb.BufferedStart
 	for _, end := range ends {
+		previousCount := len(s.State.BufferedStarts)
 		_, lastAction := s.processTimeRange(
 			s.State.LastProcessedTime.AsTime(), end,
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false, nil,
 		)
 		s.State.LastProcessedTime = timestamppb.New(lastAction)
-		results = append(results, &schedulespb.InternalState{
-			LastProcessedTime: s.State.LastProcessedTime,
-			BufferedStarts:    s.State.BufferedStarts,
-		})
+		results = append(results, s.State.BufferedStarts[previousCount:])
 	}
 	return results, nil
 }
