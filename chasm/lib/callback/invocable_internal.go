@@ -145,6 +145,11 @@ func (c invocableInternal) getHistoryRequest(
 				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", c.completion.Result)
 			}
 		}
+		// A nil payload in the Success oneof arrives as an empty Payload, which has no encoding and
+		// fails SDK decoding. Covers typed nils too.
+		if payload == nil {
+			payload = commonnexus.NilResultPayload()
+		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{

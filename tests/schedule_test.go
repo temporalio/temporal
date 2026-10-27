@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
@@ -1983,8 +1984,9 @@ func (suite *ScheduleSuite) TestInput(chasmEnabled bool) {
 	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-// A workflow with no return value must not hand the next run a last completion
-// result; V2 used to forward an empty, metadata-less payload that codecs reject.
+// After a no-result workflow, V1 hands the next run no last completion result and
+// V2 hands it binary/null. Either way it must decode; V2 used to forward an empty,
+// metadata-less payload that codecs reject.
 func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabled bool) {
 	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)
@@ -1994,10 +1996,14 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	wid := testcore.RandomizeStr("sched-no-result-wf")
 	wt := testcore.RandomizeStr("sched-no-result-wt")
 
-	var runs, sawLastCompletionResult atomic.Int32
+	var runs, sawLastCompletionResult, badLastCompletionResult atomic.Int32
 	workflowFn := func(ctx workflow.Context) error {
 		if workflow.HasLastCompletionResult(ctx) {
 			sawLastCompletionResult.Store(1)
+			var result *string
+			if err := workflow.GetLastCompletionResult(ctx, &result); err != nil || result != nil {
+				badLastCompletionResult.Store(1)
+			}
 		}
 		workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) })
 		return nil
@@ -2028,12 +2034,15 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	require.NoError(t, err)
 
 	await.RequireTrue(t, func() bool { return runs.Load() >= 3 }, 20*time.Second, 200*time.Millisecond)
-	require.Zero(t, sawLastCompletionResult.Load())
+	require.Zero(t, badLastCompletionResult.Load())
+	require.Equal(t, chasmEnabled, sawLastCompletionResult.Load() == 1)
 }
 
 // TestScheduleLastCompletionResultMatchesV1 drives a V1 and a V2 schedule
 // through the same outcomes and requires every started event to be identical,
-// presence-aware (nil != empty Payloads).
+// presence-aware (nil != empty Payloads), except where a no-result run intentionally
+// diverges: V1 keeps the previous result and failure, V2 forwards binary/null and
+// clears the failure.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 	// Must precede env creation, which otherwise fixes the default timeout.
 	ctx := testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
@@ -2156,12 +2165,27 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		return started, events[len(events)-1].GetEventType()
 	}
 
+	v2Null, v2FailureCleared := false, false
 	for i, outcome := range steps {
 		started := make([]*historypb.WorkflowExecutionStartedEventAttributes, len(scheds))
 		closed := make([]enumspb.EventType, len(scheds))
 		for j, sc := range scheds {
 			current.Store(sc.workflowID, step{Index: i, Outcome: outcome})
 			started[j], closed[j] = runEvents(sc, i)
+		}
+		if v2Null {
+			started[0].LastCompletionResult = &commonpb.Payloads{Payloads: []*commonpb.Payload{commonnexus.NilResultPayload()}}
+		}
+		if v2FailureCleared {
+			started[0].ContinuedFailure = nil
+		}
+		switch outcome {
+		case value:
+			v2Null, v2FailureCleared = false, false
+		case noResult:
+			v2Null, v2FailureCleared = true, true
+		default: // fail
+			v2FailureCleared = false
 		}
 		require.Empty(t, protodiff.Diff(started[0], started[1]), "step %d (%s): started event differs (-v1 +v2)", i, outcome)
 		require.Equal(t, closed[0], closed[1], "step %d (%s): close event differs (v1, v2)", i, outcome)

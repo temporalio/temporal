@@ -5,10 +5,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// IsEmptyPayload reports whether p carries no data or metadata. A workflow that
-// returns no result reaches the scheduler's completion callback as an empty
-// Payload; V1 treats that as "no result", and codecs reject a payload without
-// encoding metadata.
+// IsEmptyPayload reports whether p carries no data or metadata. Callback senders
+// now deliver a no-result workflow as binary/null, but older senders delivered an
+// empty Payload, which may still be in flight or persisted. Codecs reject a
+// payload without encoding metadata.
 func IsEmptyPayload(p *commonpb.Payload) bool {
 	return proto.Size(p) == 0
 }

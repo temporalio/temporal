@@ -18,6 +18,12 @@ type payloadSerializer struct{}
 var errSerializer = errors.New("serializer error")
 
 // Deserialize implements nexus.Serializer.
+// NilResultPayload is the payload for a successful operation with no result. It matches what Deserialize
+// produces for an empty HTTP completion body, so internal and HTTP callbacks deliver the same value.
+func NilResultPayload() *commonpb.Payload {
+	return &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("binary/null")}}
+}
+
 func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	payloadRef, ok := v.(**commonpb.Payload)
 	if !ok {
