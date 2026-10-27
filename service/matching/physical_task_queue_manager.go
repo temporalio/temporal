@@ -745,9 +745,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return err
 	}
 
-	// Registration succeeded. Start a monitor to alert if the version never propagates to user data.
-	c.maybeStartDeploymentVersionMonitor()
-
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
 	for {
@@ -762,6 +759,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		select {
 		case <-userDataChanged:
 		case <-ctx.Done():
+			c.maybeStartDeploymentVersionMonitor()
 			c.throttledLogger.Warn("Worker deployment version not yet in user data; background monitoring active",
 				tag.Deployment(workerDeployment.SeriesName),
 				tag.BuildId(workerDeployment.BuildId),

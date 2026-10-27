@@ -1079,11 +1079,8 @@ func TestIsDeploymentVersionInUserData(t *testing.T) {
 	}
 }
 
-// TestDeploymentVersionMonitorStartConditions verifies that the deployment version
-// monitor goroutine is only started after a successful RegisterTaskQueueWorker call,
-// not when registration fails. This prevents false positive
-// deployment_version_missing_from_user_data alerts for expected failures like version
-// limits or transient registration errors.
+// The monitor starts only when registration succeeds and the poll ends
+// while the version is still missing from user data.
 func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 	t.Parallel()
 
@@ -1105,10 +1102,10 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 			wantErr:            errDeploymentVersionNotReady,
 		},
 		{
-			name:               "registration succeeds - monitor started",
+			name:               "poll canceled while version missing - monitor started",
 			registerErr:        nil,
 			wantMonitorRunning: true,
-			wantErr:            context.DeadlineExceeded,
+			wantErr:            context.Canceled,
 		},
 	}
 
@@ -1121,11 +1118,9 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 				BuildId:    buildID,
 			}
 			ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, tc.registerErr)
-
-			// Use a short-lived context so the propagation wait loop (success case)
-			// doesn't block the test.
-			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			deploymentClient.onRegister = cancel
 
 			pollMetadata := &pollMetadata{
 				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
@@ -1140,9 +1135,37 @@ func TestDeploymentVersionMonitorStartConditions(t *testing.T) {
 			require.ErrorIs(t, err, tc.wantErr)
 			require.True(t, deploymentClient.called, "RegisterTaskQueueWorker should have been called")
 			require.Equal(t, tc.wantMonitorRunning, tqMgr.deploymentVersionMonitorRunning.Load(),
-				"monitor should only start after successful registration")
+				"monitor should only start when the propagation wait ends without the version")
 		})
 	}
+}
+
+func TestDeploymentVersionMonitorNotStartedWhenVersionAppearsAfterRegistration(t *testing.T) {
+	t.Parallel()
+
+	deployment := &deploymentpb.Deployment{
+		SeriesName: "my-deployment",
+		BuildId:    "build-1",
+	}
+	ns, tqMgr, deploymentClient := setupVersionedTQManager(t, deployment, nil)
+	deploymentClient.onRegister = func() {
+		userDataMgr := tqMgr.partitionMgr.userDataManager.(*mockUserDataManager)
+		userDataMgr.Lock()
+		defer userDataMgr.Unlock()
+		userDataMgr.data = userDataWithDeploymentVersion(deployment.SeriesName, deployment.BuildId)
+	}
+
+	err := tqMgr.ensureRegisteredInDeploymentVersion(t.Context(), ns, &pollMetadata{
+		deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			DeploymentName:       deployment.SeriesName,
+			BuildId:              deployment.BuildId,
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, deploymentClient.called)
+	require.False(t, tqMgr.deploymentVersionMonitorRunning.Load())
 }
 
 // setupVersionedTQManager creates a physicalTaskQueueManagerImpl for a versioned
@@ -1196,6 +1219,7 @@ type fakeDeploymentClient struct {
 	workerdeployment.Client
 	registerErr error
 	called      bool
+	onRegister  func()
 }
 
 func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
@@ -1207,6 +1231,9 @@ func (f *fakeDeploymentClient) RegisterTaskQueueWorker(
 	_ string,
 ) error {
 	f.called = true
+	if f.onRegister != nil {
+		f.onRegister()
+	}
 	return f.registerErr
 }
 
