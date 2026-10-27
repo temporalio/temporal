@@ -275,15 +275,12 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 	opts ...chasm.TransitionOption,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	options := e.constructTransitionOptions(opts...)
+	// UpdateWithStart is a start request, so a request ID it updates an existing execution with is a
+	// start request ID, whichever option set it.
+	updateTransitionOptions := callerTransitionOptions(opts...)
+	updateTransitionOptions.RequestIDType = chasm.RequestIDTypeStart
 
-	// As in UpdateComponent, only a request ID supplied by the caller deduplicates the update; the one
-	// constructTransitionOptions generates when none is supplied is only for tracing.
-	var explicit chasm.TransitionOptions
-	for _, opt := range opts {
-		opt(&explicit)
-	}
-
-	result, err := e.updateWithStartExecution(ctx, executionRef, startFn, updateFn, options, explicit.RequestID)
+	result, err := e.updateWithStartExecution(ctx, executionRef, startFn, updateFn, options, updateTransitionOptions)
 	return result, e.convertError(err, executionRef, options.RequestID)
 }
 
@@ -293,7 +290,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
-	updateRequestID string,
+	updateTransitionOptions chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
 	shardContext, err := e.getShardContext(ctx, executionRef)
 	if err != nil {
@@ -313,10 +310,10 @@ func (e *ChasmEngine) updateWithStartExecution(
 	switch err.(type) {
 	case nil:
 		mutableState := executionLease.GetMutableState()
-		// UpdateWithStart is a start request, so its request ID is a start request ID: a retry that
-		// already updated (or created) this running execution is rejected without running updateFn.
-		if updateRequestID != "" && mutableState.IsWorkflowExecutionRunning() {
-			used, err := e.isRequestIDUsed(shardContext.GetLogger(), mutableState, updateRequestID, chasm.RequestIDTypeStart)
+		// A retry that already updated (or created) this running execution is rejected without running
+		// updateFn.
+		if updateTransitionOptions.RequestID != "" && mutableState.IsWorkflowExecutionRunning() {
+			used, err := e.isRequestIDUsed(shardContext.GetLogger(), mutableState, updateTransitionOptions)
 			if err != nil {
 				executionLease.GetReleaseFn()(err)
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
@@ -332,7 +329,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 		}()
 
 		if mutableState.IsWorkflowExecutionRunning() {
-			executionKey, newExecutionRef, err := e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn, updateRequestID)
+			executionKey, newExecutionRef, err := e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn, updateTransitionOptions)
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -390,15 +387,13 @@ func (e *ChasmEngine) updateExecution(
 	executionLease api.WorkflowLease,
 	executionRef chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	requestID string,
+	transitionOptions chasm.TransitionOptions,
 ) (chasm.ExecutionKey, []byte, error) {
 	workflowKey := executionLease.GetContext().GetWorkflowKey()
 	actualRef := executionRef
 	actualRef.RunID = workflowKey.RunID
 
-	// Recorded as a start request ID, so a retry after the execution closed also finds it on the current
-	// record (see handleExecutionConflict) instead of starting a new execution.
-	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, requestID, chasm.RequestIDTypeStart)
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, transitionOptions)
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -445,8 +440,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	requestID string,
-	requestIDType chasm.RequestIDType,
+	transitionOptions chasm.TransitionOptions,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, err := chasmTreeFromMutableState(shardContext.GetLogger(), mutableState)
@@ -466,8 +460,8 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	// Record the accepted request ID so a later reuse is deduplicated (see isRequestIDUsed).
 	// The dedup check itself runs earlier in updateComponent, before the lease work.
-	if requestID != "" {
-		if err := e.recordRequestID(mutableState, chasmTree, requestID, requestIDType); err != nil {
+	if transitionOptions.RequestID != "" {
+		if err := e.recordRequestID(mutableState, chasmTree, transitionOptions); err != nil {
 			return nil, err
 		}
 	}
@@ -565,18 +559,7 @@ func (e *ChasmEngine) UpdateComponent(
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
-
-	// constructTransitionOptions generates a RequestID for the benefit of
-	// traceability through logs, when none was supplied as part of the API request.
-	// Because this server-side RequestID isn't useful for idempotency, it isn't
-	// recorded as part of updateComponent, and so we only pass RequestID for recording
-	// when it comes from the client side.
-	var explicit chasm.TransitionOptions
-	for _, opt := range opts {
-		opt(&explicit)
-	}
-
-	result, err := e.updateComponent(ctx, ref, updateFn, explicit.RequestID, explicit.RequestIDType)
+	result, err := e.updateComponent(ctx, ref, updateFn, callerTransitionOptions(opts...))
 	return result, e.convertError(err, ref, options.RequestID)
 }
 
@@ -584,8 +567,7 @@ func (e *ChasmEngine) updateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	requestID string,
-	requestIDType chasm.RequestIDType,
+	transitionOptions chasm.TransitionOptions,
 ) (updatedRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
@@ -594,8 +576,8 @@ func (e *ChasmEngine) updateComponent(
 
 	// When a request ID has already been recorded, we know this is a retry of a successful call, so
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
-	if requestID != "" {
-		used, err := e.isRequestIDUsed(shardContext.GetLogger(), executionLease.GetMutableState(), requestID, requestIDType)
+	if transitionOptions.RequestID != "" {
+		used, err := e.isRequestIDUsed(shardContext.GetLogger(), executionLease.GetMutableState(), transitionOptions)
 		if err != nil {
 			executionLease.GetReleaseFn()(err)
 			return nil, err
@@ -610,26 +592,25 @@ func (e *ChasmEngine) updateComponent(
 		executionLease.GetReleaseFn()(retError)
 	}()
 
-	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID, requestIDType)
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, transitionOptions)
 }
 
-// isRequestIDUsed reports whether requestID was already recorded for the execution, looking only where
-// requestIDType is recorded (see recordRequestID). Start and update request IDs are deduplicated
-// independently, as StartWorkflow and SignalWorkflow request IDs are for workflows.
+// isRequestIDUsed reports whether transitionOptions.RequestID was already recorded for the execution,
+// looking only where its RequestIDType is recorded (see recordRequestID). Start and update request IDs are
+// deduplicated independently, as StartWorkflow and SignalWorkflow request IDs are for workflows.
 func (e *ChasmEngine) isRequestIDUsed(
 	logger log.Logger,
 	mutableState historyi.MutableState,
-	requestID string,
-	requestIDType chasm.RequestIDType,
+	transitionOptions chasm.TransitionOptions,
 ) (bool, error) {
-	if requestIDType == chasm.RequestIDTypeStart {
-		return mutableState.HasRequestID(requestID), nil
+	if transitionOptions.RequestIDType == chasm.RequestIDTypeStart {
+		return mutableState.HasRequestID(transitionOptions.RequestID), nil
 	}
 	chasmTree, err := chasmTreeFromMutableState(logger, mutableState)
 	if err != nil {
 		return false, err
 	}
-	return chasmTree.HasRequestID(requestID, e.config.RequestIDMaxAge(mutableState.GetNamespaceEntry().Name().String()))
+	return chasmTree.HasRequestID(transitionOptions.RequestID, e.config.RequestIDMaxAge(mutableState.GetNamespaceEntry().Name().String()))
 }
 
 // recordRequestID records an accepted request ID for UpdateComponent idempotency.
@@ -641,16 +622,15 @@ func (e *ChasmEngine) isRequestIDUsed(
 func (e *ChasmEngine) recordRequestID(
 	mutableState historyi.MutableState,
 	chasmTree *chasm.Node,
-	requestID string,
-	requestIDType chasm.RequestIDType,
+	transitionOptions chasm.TransitionOptions,
 ) error {
-	if requestIDType == chasm.RequestIDTypeStart {
-		mutableState.AttachChasmRequestID(requestID)
+	if transitionOptions.RequestIDType == chasm.RequestIDTypeStart {
+		mutableState.AttachChasmRequestID(transitionOptions.RequestID)
 		return nil
 	}
 	nsName := mutableState.GetNamespaceEntry().Name().String()
 	return chasmTree.AttachRequestID(
-		requestID,
+		transitionOptions.RequestID,
 		e.config.MaximumRequestIDsInChasmDataNode(nsName),
 		e.config.RequestIDMaxAge(nsName),
 	)
@@ -908,6 +888,19 @@ func (e *ChasmEngine) constructTransitionOptions(
 	}
 	if options.RequestID == "" {
 		options.RequestID = primitives.NewUUID().String()
+	}
+	return options
+}
+
+// callerTransitionOptions returns the options as set by the caller, without the request ID that
+// constructTransitionOptions generates for tracing when none is supplied. A generated request ID isn't
+// useful for idempotency, so an update only deduplicates and records a request ID the caller supplied.
+func callerTransitionOptions(
+	opts ...chasm.TransitionOption,
+) chasm.TransitionOptions {
+	options := defaultTransitionOptions
+	for _, opt := range opts {
+		opt(&options)
 	}
 	return options
 }
