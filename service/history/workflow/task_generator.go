@@ -433,7 +433,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	}
 
 	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
+		scheduleToStartTimeout := timeout.AsDuration()
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -474,7 +475,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 
 	var scheduleToStartTimeout time.Duration
 	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout = timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
+		scheduleToStartTimeout = timeout.AsDuration()
 	} else {
 		// Speculative WT has ScheduleToStart timeout even on normal task queue.
 		// Normally WT should be added to matching right after being created

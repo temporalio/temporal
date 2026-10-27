@@ -18,6 +18,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -574,99 +575,118 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTask() {
-	// Verify that RecordWorkflowTaskStarted persists and converts a speculative Workflow Task when
-	// starting it makes mutable state dirty. Here, assigning the initial Build ID creates persistent
-	// visibility work, so History must not return Noop.
-	const (
-		taskQueue = "testTaskQueue"
-		identity  = "testIdentity"
-		updateID  = "update-id"
-		buildID   = "1.0.0"
-	)
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
+	for _, tc := range []struct {
+		name          string
+		singleSession bool
+	}{
+		{name: "initial build ID"},
+		{name: "initial session binding", singleSession: true},
+	} {
+		s.Run(tc.name, func() {
+			const (
+				taskQueue = "testTaskQueue"
+				identity  = "testIdentity"
+				updateID  = "update-id"
+				buildID   = "1.0.0"
+			)
+			workflowExecution := &commonpb.WorkflowExecution{
+				WorkflowId: "wId",
+				RunId:      tests.RunID,
+			}
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, tests.Version).
-		Return(cluster.TestCurrentClusterName).AnyTimes()
-	ms := s.createExecutionStartedState(workflowExecution, taskQueue, identity, false, false)
-	// Keep the workflow at the active failover version so failover does not independently convert
-	// the speculative Workflow Task before the Build ID assignment is applied.
-	err := ms.UpdateCurrentVersion(tests.GlobalNamespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()), true)
-	s.NoError(err)
+			s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, tests.Version).
+				Return(cluster.TestCurrentClusterName).AnyTimes()
+			ms := s.createExecutionStartedState(workflowExecution, taskQueue, identity, false, false)
+			// Failover must not independently force persistence of the speculative task.
+			err := ms.UpdateCurrentVersion(tests.GlobalNamespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()), true)
+			s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)},
-		nil,
-	)
-	// Capture the write made by RecordWorkflowTaskStarted. If the handler incorrectly returns Noop,
-	// this expected persistence call is never made and the test fails.
-	var persistedExecutionInfo *persistencespb.WorkflowExecutionInfo
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			persistedExecutionInfo = request.UpdateWorkflowMutation.ExecutionInfo
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	)
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
-		&persistence.ReadHistoryBranchResponse{},
-		nil,
-	)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
-		Return(searchattribute.TestNameTypeMap(), nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-
-	// Admit an Update and schedule the speculative Workflow Task that will carry it to the worker.
-	wfCtx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
-		metrics.AddMetricsContext(context.Background()),
-		s.mockShard,
-		tests.NamespaceID,
-		workflowExecution,
-		locks.PriorityHigh,
-	)
-	s.NoError(err)
-	loadedMS, err := wfCtx.LoadMutableState(context.Background(), s.mockShard)
-	s.NoError(err)
-	upd, _, err := wfCtx.UpdateRegistry(context.Background()).FindOrCreate(context.Background(), updateID)
-	s.NoError(err)
-	s.NoError(upd.Admit(
-		&updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: "update"},
-		},
-		workflow.WithEffects(effect.Immediate(context.Background()), loadedMS),
-	))
-	wft, err := loadedMS.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
-	s.NoError(err)
-	release(nil)
-
-	// Matching starts the speculative task with an initial Build ID assignment, which generates a
-	// visibility task and makes mutable state dirty.
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(
-		metrics.AddMetricsContext(context.Background()),
-		&historyservice.RecordWorkflowTaskStartedRequest{
-			NamespaceId:       tests.NamespaceID.String(),
-			WorkflowExecution: workflowExecution,
-			ScheduledEventId:  wft.ScheduledEventID,
-			RequestId:         "request-id",
-			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
-				Identity:  identity,
-				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{ //nolint:staticcheck // SA1019: required to exercise old Build ID-based versioning.
-					UseVersioning: true,
-					BuildId:       buildID,
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)},
+				nil,
+			)
+			// Capture the write made by RecordWorkflowTaskStarted. If the handler incorrectly returns Noop,
+			// this expected persistence call is never made and the test fails.
+			var persistedExecutionInfo *persistencespb.WorkflowExecutionInfo
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					persistedExecutionInfo = request.UpdateWorkflowMutation.ExecutionInfo
+					return tests.UpdateWorkflowExecutionResponse, nil
 				},
-			},
-		},
-	)
-	s.NoError(err)
-	s.NotNil(response)
-	// Transaction close must use the existing conversion path and persist the task as normal.
-	s.Require().NotNil(persistedExecutionInfo)
-	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, persistedExecutionInfo.GetWorkflowTaskType())
-	s.Equal(buildID, persistedExecutionInfo.GetAssignedBuildId())
+			)
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+				&persistence.ReadHistoryBranchResponse{},
+				nil,
+			)
+			s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+				Return(searchattribute.TestNameTypeMap(), nil)
+			s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+				Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+			// Admit an Update and schedule the speculative Workflow Task that will carry it to the worker.
+			wfCtx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+				metrics.AddMetricsContext(context.Background()),
+				s.mockShard,
+				tests.NamespaceID,
+				workflowExecution,
+				locks.PriorityHigh,
+			)
+			s.NoError(err)
+			loadedMS, err := wfCtx.LoadMutableState(context.Background(), s.mockShard)
+			s.NoError(err)
+			upd, _, err := wfCtx.UpdateRegistry(context.Background()).FindOrCreate(context.Background(), updateID)
+			s.NoError(err)
+			s.NoError(upd.Admit(
+				&updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: updateID},
+					Input: &updatepb.Input{Name: "update"},
+				},
+				workflow.WithEffects(effect.Immediate(context.Background()), loadedMS),
+			))
+			wft, err := loadedMS.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+			s.NoError(err)
+			s.False(loadedMS.IsDirty())
+			release(nil)
+
+			pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue}, Identity: identity,
+			}
+			if tc.singleSession {
+				pollRequest.SessionOptions = &sessionpb.WorkerSessionOptions{
+					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"},
+					},
+				}
+			} else {
+				//nolint:staticcheck // SA1019: required to exercise old Build ID-based versioning.
+				pollRequest.WorkerVersionCapabilities = &commonpb.WorkerVersionCapabilities{UseVersioning: true, BuildId: buildID}
+			}
+			response, err := s.historyEngine.RecordWorkflowTaskStarted(
+				metrics.AddMetricsContext(context.Background()),
+				&historyservice.RecordWorkflowTaskStartedRequest{
+					NamespaceId:       tests.NamespaceID.String(),
+					WorkflowExecution: workflowExecution,
+					ScheduledEventId:  wft.ScheduledEventID,
+					RequestId:         "request-id",
+					PollRequest:       pollRequest,
+				},
+			)
+			s.NoError(err)
+			s.NotNil(response)
+			// Transaction close must use the existing conversion path and persist the task as normal.
+			s.Require().NotNil(persistedExecutionInfo)
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, persistedExecutionInfo.GetWorkflowTaskType())
+			s.Equal(taskQueue, persistedExecutionInfo.GetTaskQueue())
+			s.Equal(response.GetStartedEventId(), persistedExecutionInfo.GetWorkflowTaskStartedEventId())
+			if tc.singleSession {
+				s.True(persistedExecutionInfo.GetSingleSessionBound())
+				s.Equal("S", persistedExecutionInfo.GetStickyTaskQueue())
+				s.Empty(persistedExecutionInfo.GetAssignedBuildId())
+			} else {
+				s.Equal(buildID, persistedExecutionInfo.GetAssignedBuildId())
+			}
+		})
+	}
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
@@ -803,98 +823,141 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
-	fakeHistory := []*historypb.HistoryEvent{
-		{
-			EventId:   int64(1),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   int64(2),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
-							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+	for _, name := range []string{"ordinary", "acquire", "replacement"} {
+		singleSessionBound := name != "ordinary"
+		s.Run(name, func() {
+			fakeHistory := []*historypb.HistoryEvent{
+				{
+					EventId:   int64(1),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				},
+				{
+					EventId:   int64(2),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+						WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							SearchAttributes: &commonpb.SearchAttributes{
+								IndexedFields: map[string]*commonpb.Payload{
+									"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+									"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								},
+							},
 						},
 					},
 				},
-			},
-		},
-		{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		},
+				{
+					EventId:   int64(3),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				},
+			}
+
+			historyReads := 1
+			if singleSessionBound {
+				historyReads++
+			}
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
+				HistoryEvents: fakeHistory,
+				NextPageToken: []byte{},
+				Size:          1,
+			}, nil).Times(historyReads)
+			s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).Times(historyReads)
+			s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+				Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+			namespaceID := tests.NamespaceID
+			workflowExecution := &commonpb.WorkflowExecution{
+				WorkflowId: "wId",
+				RunId:      tests.RunID,
+			}
+
+			tl := "testTaskQueue"
+			identity := "testIdentity"
+
+			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
+			if name == "replacement" {
+				ms.SetStickyTaskQueue("S", nil)
+				ms.GetExecutionInfo().SingleSessionBound = true
+			}
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+				info := request.UpdateWorkflowMutation.ExecutionInfo
+				s.Equal(singleSessionBound, info.GetSingleSessionBound())
+				s.Equal(tl, info.GetTaskQueue())
+				s.Equal(int64(3), info.GetWorkflowTaskStartedEventId())
+				if singleSessionBound {
+					s.Equal("S", info.GetStickyTaskQueue())
+				}
+				return tests.UpdateWorkflowExecutionResponse, nil
+			})
+
+			// load mutable state such that it already exists in memory when respond workflow task is called
+			// this enables us to set query registry on it
+			ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+				metrics.AddMetricsContext(context.Background()),
+				s.mockShard,
+				tests.NamespaceID,
+				workflowExecution,
+				locks.PriorityHigh,
+			)
+			s.NoError(err)
+			loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
+			s.NoError(err)
+			qr := workflow.NewQueryRegistry()
+			id1, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+			id2, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+			id3, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+			loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
+			release(nil)
+
+			var sessionOptions *sessionpb.WorkerSessionOptions
+			if singleSessionBound {
+				sessionOptions = &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"}}}
+			}
+			request := &historyservice.RecordWorkflowTaskStartedRequest{
+				NamespaceId:       namespaceID.String(),
+				WorkflowExecution: workflowExecution,
+				ScheduledEventId:  2,
+				RequestId:         "reqId",
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: tl,
+					},
+					Identity:       identity,
+					SessionOptions: sessionOptions,
+				},
+			}
+			if name == "replacement" {
+				request.PollRequest.TaskQueue = &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+				request.PollRequest.Identity = "replacement-process"
+			}
+			response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), request)
+
+			s.NoError(err)
+			s.NotNil(response)
+			s.Equal("wType", response.GetWorkflowType().GetName())
+			s.Zero(response.GetPreviousStartedEventId())
+			s.Equal(int64(3), response.GetStartedEventId())
+			expectedQueryMap := map[string]*querypb.WorkflowQuery{
+				id1: {},
+				id2: {},
+				id3: {},
+			}
+			s.Equal(expectedQueryMap, response.GetQueries())
+			if singleSessionBound {
+				s.True(response.GetStickyExecutionEnabled())
+				s.True(loadedMS.GetExecutionInfo().GetSingleSessionBound())
+				s.Equal("S", loadedMS.CurrentTaskQueue().GetName())
+				retry := common.CloneProto(request)
+				retry.PollRequest.Identity = "retry-process"
+				retryResponse, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), retry)
+				s.Require().NoError(err)
+				s.Equal(response.GetStartedEventId(), retryResponse.GetStartedEventId())
+				s.True(retryResponse.GetStickyExecutionEnabled())
+			}
+		})
 	}
-
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
-		NextPageToken: []byte{},
-		Size:          1,
-	}, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-
-	namespaceID := tests.NamespaceID
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
-
-	tl := "testTaskQueue"
-	identity := "testIdentity"
-
-	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-
-	// load mutable state such that it already exists in memory when respond workflow task is called
-	// this enables us to set query registry on it
-	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
-		metrics.AddMetricsContext(context.Background()),
-		s.mockShard,
-		tests.NamespaceID,
-		workflowExecution,
-		locks.PriorityHigh,
-	)
-	s.NoError(err)
-	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
-	s.NoError(err)
-	qr := workflow.NewQueryRegistry()
-	id1, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
-	id2, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
-	id3, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
-	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
-	release(nil)
-
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: workflowExecution,
-		ScheduledEventId:  2,
-		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tl,
-			},
-			Identity: identity,
-		},
-	})
-
-	s.Nil(err)
-	s.NotNil(response)
-	s.Equal("wType", response.WorkflowType.Name)
-	s.True(response.PreviousStartedEventId == 0)
-	s.Equal(int64(3), response.StartedEventId)
-	expectedQueryMap := map[string]*querypb.WorkflowQuery{
-		id1: {},
-		id2: {},
-		id3: {},
-	}
-	s.Equal(expectedQueryMap, response.Queries)
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistory() {

@@ -565,7 +565,8 @@ type GetMutableStateResponse struct {
 	TaskQueue              *v111.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	StickyTaskQueue        *v111.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
 	CurrentBranchToken                    []byte                      `protobuf:"bytes,13,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
 	WorkflowState                         v112.WorkflowExecutionState `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"workflow_state,omitempty"`
@@ -588,8 +589,10 @@ type GetMutableStateResponse struct {
 	TransientOrSpeculativeTasks *v19.TransientWorkflowTaskInfo `protobuf:"bytes,26,opt,name=transient_or_speculative_tasks,json=transientOrSpeculativeTasks,proto3" json:"transient_or_speculative_tasks,omitempty"`
 	// Nexus operation context for this workflow, used by workers to select payload serialization.
 	NexusSerializationContext *v113.PropagatedSerializationContext `protobuf:"bytes,27,opt,name=nexus_serialization_context,json=nexusSerializationContext,proto3" json:"nexus_serialization_context,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// Prevents queries from falling back to the normal task queue.
+	SingleSessionBound bool `protobuf:"varint,28,opt,name=single_session_bound,json=singleSessionBound,proto3" json:"single_session_bound,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -776,6 +779,13 @@ func (x *GetMutableStateResponse) GetNexusSerializationContext() *v113.Propagate
 	return nil
 }
 
+func (x *GetMutableStateResponse) GetSingleSessionBound() bool {
+	if x != nil {
+		return x.SingleSessionBound
+	}
+	return false
+}
+
 type PollMutableStateRequest struct {
 	state               protoimpl.MessageState  `protogen:"open.v1"`
 	NamespaceId         string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -862,7 +872,8 @@ type PollMutableStateResponse struct {
 	TaskQueue              *v111.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	StickyTaskQueue        *v111.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
 	CurrentBranchToken                    []byte                      `protobuf:"bytes,12,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
 	VersionHistories                      *v19.VersionHistories       `protobuf:"bytes,14,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
@@ -1365,10 +1376,10 @@ type RecordWorkflowTaskStartedResponse struct {
 	// - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
 	//
 	// Version timeline (current version: v1.29):
-	// - v1.31: This change is released. Both flags default to false for backward compatibility.
-	// - v1.32: Both flags will be enabled by default in code.
-	// - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
-	//          as raw_history_bytes (field 21) will be the only field used.
+	//   - v1.31: This change is released. Both flags default to false for backward compatibility.
+	//   - v1.32: Both flags will be enabled by default in code.
+	//   - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+	//     as raw_history_bytes (field 21) will be the only field used.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 	RawHistory      *v17.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
@@ -3014,7 +3025,8 @@ type SignalWithStartWorkflowExecutionRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//     aip.dev/not-precedent: "with" is needed here. --)
+	//
+	//	aip.dev/not-precedent: "with" is needed here. --)
 	SignalWithStartRequest *v1.SignalWithStartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_with_start_request,json=signalWithStartRequest,proto3" json:"signal_with_start_request,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -10851,7 +10863,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16expected_next_event_id\x18\x03 \x01(\x03R\x13expectedNextEventId\x120\n" +
 	"\x14current_branch_token\x18\x04 \x01(\fR\x12currentBranchToken\x12d\n" +
 	"\x14version_history_item\x18\x05 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xea\r\n" +
+	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x9c\x0e\n" +
 	"\x17GetMutableStateResponse\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12I\n" +
 	"\rworkflow_type\x18\x02 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x12\"\n" +
@@ -10875,7 +10887,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x12transition_history\x18\x18 \x03(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x11transitionHistory\x12b\n" +
 	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12~\n" +
 	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasks\x12u\n" +
-	"\x1bnexus_serialization_context\x18\x1b \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContextJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x1bnexus_serialization_context\x18\x1b \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContext\x120\n" +
+	"\x14single_session_bound\x18\x1c \x01(\bR\x12singleSessionBoundJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\xef\x02\n" +
 	"\x17PollMutableStateRequest\x12!\n" +

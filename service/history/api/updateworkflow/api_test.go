@@ -9,15 +9,23 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 func TestRequestIDLinkSelectionForDuplicates(t *testing.T) {
@@ -194,5 +202,49 @@ func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutio
 				},
 			},
 		},
+	}
+}
+
+func TestSingleSessionSpeculativeDispatchDoesNotFallback(t *testing.T) {
+	t.Parallel()
+	for _, bound := range []bool{false, true} {
+		name := "ordinary"
+		if bound {
+			name = "single session"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			shard := historyi.NewMockShardContext(ctrl)
+			registry := namespace.NewMockRegistry(ctrl)
+			namespaceErr := serviceerror.NewNamespaceNotFound("namespace")
+			registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, namespaceErr)
+			shard.EXPECT().GetNamespaceRegistry().Return(registry)
+			shard.EXPECT().NewVectorClock().Return(&clockspb.VectorClock{}, nil).AnyTimes()
+			shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+			calls := 2
+			if bound {
+				calls = 1
+			}
+			count := 0
+			client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *matchingservice.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+					count++
+					if count == 1 {
+						require.Equal(t, "S", req.GetTaskQueue().GetName())
+						return nil, &serviceerrors.StickyWorkerUnavailable{}
+					}
+					require.Equal(t, "foo", req.GetTaskQueue().GetName())
+					return &matchingservice.AddWorkflowTaskResponse{}, nil
+				}).Times(calls)
+			u := &Updater{
+				req: createUpdateRequest("update"), shardCtx: shard, matchingClient: client,
+				scheduledEventID: 5, taskQueue: &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+				normalTaskQueueName: "foo", singleSessionBound: bound,
+			}
+			_, err := u.OnSuccess(context.Background())
+			require.ErrorIs(t, err, namespaceErr)
+		})
 	}
 }

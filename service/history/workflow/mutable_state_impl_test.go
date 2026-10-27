@@ -6280,6 +6280,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.True(proto.Equal(target.LastUpdateTime, current.LastUpdateTime), "LastUpdateTime mismatch")
 	s.Equal(target.CancelRequested, current.CancelRequested, "CancelRequested mismatch")
 	s.Equal(target.CancelRequestId, current.CancelRequestId, "CancelRequestId mismatch")
+	s.Equal(target.GetSingleSessionBound(), current.GetSingleSessionBound(), "SingleSessionBound mismatch")
 	s.Equal(target.StickyTaskQueue, current.StickyTaskQueue, "StickyTaskQueue mismatch")
 	s.True(proto.Equal(target.StickyScheduleToStartTimeout, current.StickyScheduleToStartTimeout), "StickyScheduleToStartTimeout mismatch")
 	s.Equal(target.Attempt, current.Attempt, "Attempt mismatch")
@@ -10199,4 +10200,77 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
+}
+
+func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	ms := TestGlobalMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId: tests.WorkflowID, WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "foo"},
+				WorkflowRunTimeout: durationpb.New(time.Hour), WorkflowTaskTimeout: durationpb.New(time.Second),
+			},
+		})
+	s.Require().NoError(err)
+	ms.SetStickyTaskQueue("S", durationpb.New(time.Second))
+	ms.executionInfo.SingleSessionBound = true
+	ms.executionInfo.DefaultWorkflowTaskTimeout = durationpb.New(time.Second)
+	ms.executionInfo.WorkflowTaskAttempt = 1
+	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.Require().NoError(err)
+	s.Equal("S", wt.TaskQueue.GetName())
+	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0)
+	s.Require().NoError(err)
+	_, err = ms.AddWorkflowTaskTimedOutEvent(wt)
+	s.Require().NoError(err)
+	s.Equal(int32(2), ms.GetExecutionInfo().GetWorkflowTaskAttempt())
+	s.Equal("S", ms.CurrentTaskQueue().GetName())
+	_, _, err = ms.CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	reloaded, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.GlobalNamespaceEntry, ms.CloneToProto(), 123)
+	s.Require().NoError(err)
+	s.True(reloaded.executionInfo.GetSingleSessionBound())
+	s.Require().NoError(reloaded.UpdateCurrentVersion(tests.Version, false))
+	reloaded.ClearStickyTaskQueue()
+	s.Equal("S", reloaded.CurrentTaskQueue().GetName())
+	wt, err = reloaded.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.Require().NoError(err)
+	s.Equal("S", wt.TaskQueue.GetName())
+	s.Equal("foo", reloaded.executionInfo.GetTaskQueue())
+	s.True(reloaded.IsTransientWorkflowTask())
+	failureCount := reloaded.GetExecutionInfo().GetWorkflowTaskAttemptsSinceLastSuccess()
+	s.Equal(int32(1), failureCount)
+
+	_, err = reloaded.AddWorkflowExecutionSignaledEvent("signal", nil, "client", nil, nil, "", nil)
+	s.Require().NoError(err)
+	reloaded.FlushBufferedEvents()
+	scheduledEventID := reloaded.GetNextEventID()
+	s.Greater(scheduledEventID, wt.ScheduledEventID)
+	timedOut, err := reloaded.AddWorkflowTaskScheduleToStartTimeoutEvent(wt)
+	s.Require().NoError(err)
+	s.Equal(scheduledEventID, timedOut.GetWorkflowTaskTimedOutEventAttributes().GetScheduledEventId())
+	s.Less(scheduledEventID, timedOut.GetEventId())
+	s.Equal(failureCount, reloaded.GetExecutionInfo().GetWorkflowTaskAttemptsSinceLastSuccess())
+	wt, err = reloaded.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.Require().NoError(err)
+	s.Equal("S", wt.TaskQueue.GetName())
+	s.Equal(int32(1), wt.Attempt)
+
+	_, eventBatches, err := reloaded.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	var scheduledEvent *historypb.HistoryEvent
+	for _, batch := range eventBatches {
+		for _, event := range batch.Events {
+			if event.GetEventId() == scheduledEventID {
+				scheduledEvent = event
+			}
+		}
+	}
+	s.Require().NotNil(scheduledEvent)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduledEvent.GetEventType())
+	s.Equal("S", scheduledEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue().GetName())
 }

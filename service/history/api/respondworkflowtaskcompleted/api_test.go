@@ -1479,3 +1479,35 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 
 	return wfContext, serializedTaskToken
 }
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestination() {
+	for _, destination := range []string{"S", "other"} {
+		s.Run(destination, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			wfContext := s.createStartedWorkflow(tv)
+			_, _, token := s.createSentUpdate(tv, wfContext)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			ms.SetStickyTaskQueue("S", nil)
+			ms.GetExecutionInfo().SingleSessionBound = true
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
+			if destination == "other" {
+				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)
+				request.StickyAttributes.WorkerTaskQueue.Name = destination
+			}
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(), CompleteRequest: request,
+			})
+			if destination == "other" {
+				var invalid *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalid)
+			} else {
+				s.Require().NoError(err)
+			}
+			s.True(ms.GetExecutionInfo().GetSingleSessionBound())
+			s.Equal("S", ms.GetExecutionInfo().GetStickyTaskQueue())
+		})
+	}
+}
