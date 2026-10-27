@@ -62,3 +62,42 @@ func TestGeneratorJitterGapPreservesPendingAction(t *testing.T) {
 		})
 	}
 }
+
+func TestGeneratorRetiresObsoleteTimerWithoutSkippingPendingAction(t *testing.T) {
+	t.Parallel()
+	schedule := defaultSchedule()
+	schedule.Spec.Interval[0].Phase = durationpb.New(30 * time.Second)
+	env := newTestEnv(t, withSchedule(schedule))
+	generator := env.Scheduler.Generator.Get(env.MutableContext())
+	invoker := env.Scheduler.Invoker.Get(env.MutableContext())
+	handler := newGeneratorHandler(env)
+	base := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	updateTime := base.Add(45 * time.Second)
+	generator.LastProcessedTime = timestamppb.New(updateTime)
+	env.Scheduler.Info.UpdateTime = timestamppb.New(updateTime)
+
+	// An update changes the next fire from 00:01:00 to 00:01:30, but the
+	// timer from the old spec is still queued. Its empty execution must retire it.
+	oldTimer := base.Add(time.Minute)
+	env.TimeSource.Update(oldTimer)
+	attrs := chasm.TaskAttributes{ScheduledTime: oldTimer}
+	valid, err := handler.Validate(env.ReadContext(), generator, chasm.TaskInvocation{TaskAttributes: attrs}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+	require.True(t, valid)
+	require.NoError(t, handler.Execute(env.MutableContext(), generator, attrs, &schedulerpb.GeneratorTask{}))
+	require.Empty(t, invoker.BufferedStarts)
+	require.Equal(t, updateTime, generator.LastProcessedTime.AsTime())
+	valid, err = handler.Validate(env.ReadContext(), generator, chasm.TaskInvocation{TaskAttributes: attrs}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+	require.False(t, valid, "a successful execution must invalidate its scheduled pure task")
+
+	nextFire := base.Add(90 * time.Second)
+	env.TimeSource.Update(nextFire)
+	attrs.ScheduledTime = nextFire
+	valid, err = handler.Validate(env.ReadContext(), generator, chasm.TaskInvocation{TaskAttributes: attrs}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+	require.True(t, valid)
+	require.NoError(t, handler.Execute(env.MutableContext(), generator, attrs, &schedulerpb.GeneratorTask{}))
+	require.Len(t, invoker.BufferedStarts, 1)
+	require.Equal(t, nextFire, invoker.BufferedStarts[0].ActualTime.AsTime())
+}

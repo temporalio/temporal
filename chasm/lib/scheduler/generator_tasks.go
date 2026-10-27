@@ -143,6 +143,9 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	// Task progress is independent of action progress. An obsolete timer can
+	// execute without processing an action and must still invalidate itself.
+	generator.LastProcessedTaskTime = timestamppb.New(util.MaxTime(t2, generator.GetLastProcessedTaskTime().AsTime()))
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	g.rearmTasks(ctx, generator, scheduler, metricsHandler, tweakables.IdleTime, result.NextWakeupTime)
@@ -229,7 +232,7 @@ func (g *GeneratorTaskHandler) Validate(
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(
-		generator.GetLastProcessedTime(),
+		timestamppb.New(util.MaxTime(generator.GetLastProcessedTime().AsTime(), generator.GetLastProcessedTaskTime().AsTime())),
 		attrs.ScheduledTime,
 	)
 }
