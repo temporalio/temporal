@@ -89,8 +89,6 @@ type (
 		// Hosts that are joining or leaving, keyed by address. Hosts in the ring but not in
 		// this map are present for all keys.
 		presence map[string]*presence
-		// End of the latest gradual change window.
-		gradualUntil time.Time
 	}
 
 	refreshMode int
@@ -200,7 +198,13 @@ func (r *serviceResolver) lookupN(key string, n int, now time.Time) ([]string, m
 }
 
 func (r *serviceResolver) GradualChangeUntil() time.Time {
-	return r.loadRingAndHosts().gradualUntil
+	var until time.Time
+	for _, p := range r.loadRingAndHosts().presence {
+		if end := p.gradualEnd(); end.After(until) {
+			until = end
+		}
+	}
+	return until
 }
 
 func (r *serviceResolver) AddListener(
@@ -310,7 +314,7 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		return nil, err
 	}
 
-	hosts, presence, gradualUntil, nextEvent := filterMembersByTime(hosts, time.Now())
+	hosts, presence, nextEvent := filterMembersByTime(hosts, time.Now())
 
 	// if we found an add/remove event, schedule another refresh right at that time
 	r.scheduleRefresh(nextEvent)
@@ -320,10 +324,9 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		// Membership didn't change, but presence might have (e.g. a join window ended).
 		prev := r.loadRingAndHosts()
 		r.ringAndHosts.Store(ringAndHosts{
-			ring:         prev.ring,
-			hosts:        prev.hosts,
-			presence:     presence,
-			gradualUntil: gradualUntil,
+			ring:     prev.ring,
+			hosts:    prev.hosts,
+			presence: presence,
 		})
 		return nil, nil
 	}
@@ -333,10 +336,9 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 
 	r.lastRefreshTime = time.Now().UTC()
 	r.ringAndHosts.Store(ringAndHosts{
-		ring:         ring,
-		hosts:        newMembersMap,
-		presence:     presence,
-		gradualUntil: gradualUntil,
+		ring:     ring,
+		hosts:    newMembersMap,
+		presence: presence,
 	})
 
 	addrs := util.MapSlice(hosts, func(h *hostInfo) string { return h.summary() })
@@ -403,17 +405,21 @@ func (r *serviceResolver) getReachableMembers() ([]*hostInfo, error) {
 	return hosts, nil
 }
 
-// filterMembersByTime filters hosts by their startAt/stopAt labels (and windows), and returns
-// the hosts that should be in the ring, presence info for hosts that are joining or leaving,
-// the end of the latest gradual change window, and the next time (in unix seconds) at which
-// we should refresh again (or zero). We only need to keep track of one event since we'll
-// refresh at that time and find the next one.
+// filterMembersByTime filters hosts (in place) by their startAt/stopAt labels (and windows),
+// and returns the hosts that should be in the ring, presence info for hosts that are joining
+// or leaving, and the next time (in unix seconds) at which we should refresh again (or zero).
+// We only need to keep track of one event since we'll refresh at that time and find the next
+// one.
+//
+// Refreshing at the start of a join and the end of a leave is required: that's when a host is
+// added to or removed from the ring, and listeners rely on getting a ChangedEvent at that
+// time (e.g. history, which doesn't use gradual changes). Refreshing at the end of a join
+// window is only to drop the presence and get back to the faster lookup path.
 func filterMembersByTime(
 	hosts []*hostInfo,
 	now time.Time,
-) ([]*hostInfo, map[string]*presence, time.Time, int64) {
+) ([]*hostInfo, map[string]*presence, int64) {
 	var presences map[string]*presence
-	var gradualUntil time.Time
 	nextEvent := int64(math.MaxInt64)
 	addEvent := func(t time.Time) {
 		if t.After(now) {
@@ -421,7 +427,7 @@ func filterMembersByTime(
 		}
 	}
 
-	hosts = slices.DeleteFunc(slices.Clone(hosts), func(host *hostInfo) bool {
+	hosts = slices.DeleteFunc(hosts, func(host *hostInfo) bool {
 		var p presence
 		if start, end, ok := parseWindowLabels(host, startAtKey, startWindowKey); ok {
 			if now.Before(start) {
@@ -448,9 +454,6 @@ func filterMembersByTime(
 				presences = make(map[string]*presence)
 			}
 			presences[host.GetAddress()] = &p
-			if end := p.gradualEnd(); end.After(gradualUntil) {
-				gradualUntil = end
-			}
 		}
 		return false
 	})
@@ -458,7 +461,7 @@ func filterMembersByTime(
 	if nextEvent == math.MaxInt64 {
 		nextEvent = 0
 	}
-	return hosts, presences, gradualUntil, nextEvent
+	return hosts, presences, nextEvent
 }
 
 // parseWindowLabels returns the start and end of a window given by a start time label and an

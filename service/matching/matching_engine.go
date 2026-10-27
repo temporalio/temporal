@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -466,13 +467,8 @@ func (e *matchingEngineImpl) watchMembership() {
 
 	// During a gradual membership change, ownership of individual partitions changes without
 	// membership change events, so we also rescan periodically until it's done.
-	var rescanTicker *time.Ticker
+	// (Unreferenced tickers are garbage collected, so we don't need to stop it.)
 	var rescanCh <-chan time.Time
-	defer func() {
-		if rescanTicker != nil {
-			rescanTicker.Stop()
-		}
-	}()
 
 	for {
 		select {
@@ -488,15 +484,11 @@ func (e *matchingEngineImpl) watchMembership() {
 			continue
 		}
 
-		if time.Now().Before(e.serviceResolver.GradualChangeUntil()) {
-			if rescanTicker == nil {
-				rescanTicker = time.NewTicker(gradualMembershipChangeRescanInterval)
-				rescanCh = rescanTicker.C
-			}
-		} else if rescanTicker != nil {
+		if !time.Now().Before(e.serviceResolver.GradualChangeUntil()) {
 			// Note that we still do one last scan after the gradual change is done.
-			rescanTicker.Stop()
-			rescanTicker, rescanCh = nil, nil
+			rescanCh = nil
+		} else if rescanCh == nil {
+			rescanCh = time.NewTicker(gradualMembershipChangeRescanInterval).C
 		}
 
 		e.notifyNexusEndpointsOwnershipChange()
@@ -509,7 +501,9 @@ func (e *matchingEngineImpl) watchMembership() {
 		}
 		e.partitionsLock.RUnlock()
 
-		partitions = util.FilterSlice(partitions, needsUnload)
+		// Note that batches of this slice are retained by the unload timers below, so we can't
+		// reuse it for the next iteration.
+		partitions = slices.DeleteFunc(partitions, func(p tqid.Partition) bool { return !needsUnload(p) })
 
 		const batchSize = 100
 		for i := 0; i < len(partitions); i += batchSize {

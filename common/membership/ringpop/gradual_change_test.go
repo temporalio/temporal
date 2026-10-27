@@ -3,6 +3,7 @@ package ringpop
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestFilterMembersByTime(t *testing.T) {
 		newHostInfo("huge-window", map[string]string{startAtKey: unix(-1 * time.Second), startWindowKey: "999999999999"}),
 	}
 
-	filtered, presences, gradualUntil, nextEvent := filterMembersByTime(hosts, now)
+	filtered, presences, nextEvent := filterMembersByTime(slices.Clone(hosts), now)
 
 	addrs := util.MapSlice(filtered, (*hostInfo).GetAddress)
 	require.ElementsMatch(t, []string{
@@ -88,24 +89,26 @@ func TestFilterMembersByTime(t *testing.T) {
 		"huge-window":  {joinStart: now.Add(-1 * time.Second), joinEnd: now.Add(-1*time.Second + maxGradualChangeWindow)},
 	}, presences)
 
-	require.Equal(t, now.Add(-1*time.Second+maxGradualChangeWindow), gradualUntil)
 	require.Equal(t, now.Add(2*time.Second).Unix(), nextEvent) // future-join start
+
+	// future-stop has a zero-length window so it doesn't count
+	require.Equal(t, now.Add(-1*time.Second+maxGradualChangeWindow), gradualTestResolver(hosts, now).GradualChangeUntil())
 }
 
 func TestFilterMembersByTimeNoChange(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1000, 0)
 	hosts := []*hostInfo{newHostInfo("a", nil), newHostInfo("b", nil)}
-	filtered, presences, gradualUntil, nextEvent := filterMembersByTime(hosts, now)
+	filtered, presences, nextEvent := filterMembersByTime(slices.Clone(hosts), now)
 	require.Len(t, filtered, 2)
 	require.Nil(t, presences)
-	require.True(t, gradualUntil.IsZero())
 	require.Zero(t, nextEvent)
+	require.True(t, gradualTestResolver(hosts, now).GradualChangeUntil().IsZero())
 }
 
-// gradualTestCluster builds a resolver as it would look after a refresh at refreshTime.
+// gradualTestResolver builds a resolver as it would look after a refresh at refreshTime.
 func gradualTestResolver(hosts []*hostInfo, refreshTime time.Time) *serviceResolver {
-	hosts, presences, gradualUntil, _ := filterMembersByTime(hosts, refreshTime)
+	hosts, presences, _ := filterMembersByTime(slices.Clone(hosts), refreshTime)
 	ring := newHashRing(100)
 	ring.AddMembers(util.MapSlice(hosts, func(h *hostInfo) rpmembership.Member { return h })...)
 	hostMap := make(map[string]*hostInfo)
@@ -114,10 +117,9 @@ func gradualTestResolver(hosts []*hostInfo, refreshTime time.Time) *serviceResol
 	}
 	r := &serviceResolver{}
 	r.ringAndHosts.Store(ringAndHosts{
-		ring:         ring,
-		hosts:        hostMap,
-		presence:     presences,
-		gradualUntil: gradualUntil,
+		ring:     ring,
+		hosts:    hostMap,
+		presence: presences,
 	})
 	return r
 }
