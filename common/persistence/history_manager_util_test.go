@@ -25,8 +25,8 @@ func TestValidateBatchEmpty(t *testing.T) {
 		require.NotPanics(t, func() {
 			err = p.ValidateBatch(nil, branchToken, 0, logger)
 		})
-		require.Error(t, err)
-		require.IsType(t, &serviceerror.DataLoss{}, err)
+		var dataLossErr *serviceerror.DataLoss
+		require.ErrorAs(t, err, &dataLossErr)
 		require.Contains(t, err.Error(), "empty events")
 	})
 
@@ -54,7 +54,7 @@ func TestValidateBatchEmpty(t *testing.T) {
 		require.NotPanics(t, func() {
 			verr = p.ValidateBatch(events, branchToken, 0, logger)
 		})
-		require.Error(t, verr)
-		require.IsType(t, &serviceerror.DataLoss{}, verr)
+		var dataLossErr *serviceerror.DataLoss
+		require.ErrorAs(t, verr, &dataLossErr)
 	})
 }
