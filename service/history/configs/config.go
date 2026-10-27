@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -45,18 +44,19 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog                            dynamicconfig.BoolPropertyFn
-	EmitImmediateQueueBacklogAge               dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics                      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
-	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkflowTaskCompletionPagination     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange                      dynamicconfig.DurationPropertyFn
-	WorkflowTaskCompletionBufferTotalSizeLimit dynamicconfig.IntPropertyFn
-	WorkflowTaskCompletionBufferSizeLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowTaskCompletionBufferNamespaceRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay                 dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                                dynamicconfig.BoolPropertyFn
+	EmitImmediateQueueBacklogAge                   dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                          dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                                dynamicconfig.IntPropertyFn
+	EnableStickyQuery                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                          dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferTotalSizeLimit     dynamicconfig.IntPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNamespaceRatio     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNewPaginationRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                          dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay                     dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -77,8 +77,6 @@ type Config struct {
 	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnablePrincipalPropagation                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -167,6 +165,8 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionGlobal                      dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionLocal                       dynamicconfig.DurationPropertyFn
 
 	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
@@ -247,26 +247,28 @@ type Config struct {
 	NumParentClosePolicySystemWorkflows dynamicconfig.IntPropertyFn
 
 	// Size limit related settings
-	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitError                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitWarn                      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeSuggestContinueAsNew           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitError                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitWarn                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountSuggestContinueAsNew          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryMaxPageSize                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
-	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
-	MutableStateTombstoneCountLimit           dynamicconfig.IntPropertyFn
-	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingCancelsRequestLimit             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitError                          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitWarn                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeSuggestContinueAsNew                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitError                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitWarn                          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountSuggestContinueAsNew               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryMaxPageSize                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitError      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitWarn       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureTotalSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureTotalSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateSizeLimitError                     dynamicconfig.IntPropertyFn
+	MutableStateSizeLimitWarn                      dynamicconfig.IntPropertyFn
+	MutableStateTombstoneCountLimit                dynamicconfig.IntPropertyFn
+	NumPendingChildExecutionsLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingActivitiesLimit                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalsLimit                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingCancelsRequestLimit                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -357,7 +359,7 @@ type Config struct {
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
 	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
-	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryReplicationRateLimiter                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -412,6 +414,7 @@ type Config struct {
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
 	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
@@ -481,6 +484,11 @@ type Config struct {
 	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
 	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
+
+	// Time-Skipping related settings
+	WorkflowTimeSkippingEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMSchedulerTimeSkippingEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxAccumulatedDuration dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -545,8 +553,6 @@ func NewConfig(
 		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
 		EnablePrincipalPropagation:                 dynamicconfig.EnablePrincipalPropagation.Get(dc),
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
-		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
@@ -628,6 +634,8 @@ func NewConfig(
 		TimerProcessorMaxTimeShift:                       dynamicconfig.TimerProcessorMaxTimeShift.Get(dc),
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
+		NamespaceMinRetentionGlobal:                      dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
+		NamespaceMinRetentionLocal:                       dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 
 		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
@@ -701,7 +709,7 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
 		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
-		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
+		HistoryReplicationRateLimiter:                       dynamicconfig.HistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
@@ -723,26 +731,28 @@ func NewConfig(
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
 		ParentClosePolicyThreshold:          dynamicconfig.ParentClosePolicyThreshold.Get(dc),
 
-		BlobSizeLimitError:                        dynamicconfig.BlobSizeLimitError.Get(dc),
-		BlobSizeLimitWarn:                         dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		MemoSizeLimitError:                        dynamicconfig.MemoSizeLimitError.Get(dc),
-		MemoSizeLimitWarn:                         dynamicconfig.MemoSizeLimitWarn.Get(dc),
-		NumPendingChildExecutionsLimit:            dynamicconfig.NumPendingChildExecutionsLimitError.Get(dc),
-		NumPendingActivitiesLimit:                 dynamicconfig.NumPendingActivitiesLimitError.Get(dc),
-		NumPendingSignalsLimit:                    dynamicconfig.NumPendingSignalsLimitError.Get(dc),
-		NumPendingCancelsRequestLimit:             dynamicconfig.NumPendingCancelRequestsLimitError.Get(dc),
-		HistorySizeLimitError:                     dynamicconfig.HistorySizeLimitError.Get(dc),
-		HistorySizeLimitWarn:                      dynamicconfig.HistorySizeLimitWarn.Get(dc),
-		HistorySizeSuggestContinueAsNew:           dynamicconfig.HistorySizeSuggestContinueAsNew.Get(dc),
-		HistoryCountLimitError:                    dynamicconfig.HistoryCountLimitError.Get(dc),
-		HistoryCountLimitWarn:                     dynamicconfig.HistoryCountLimitWarn.Get(dc),
-		HistoryCountSuggestContinueAsNew:          dynamicconfig.HistoryCountSuggestContinueAsNew.Get(dc),
-		HistoryMaxPageSize:                        dynamicconfig.HistoryMaxPageSize.Get(dc),
-		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
-		MutableStateActivityFailureSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
-		MutableStateSizeLimitError:                dynamicconfig.MutableStateSizeLimitError.Get(dc),
-		MutableStateSizeLimitWarn:                 dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
-		MutableStateTombstoneCountLimit:           dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
+		BlobSizeLimitError:                             dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:                              dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                             dynamicconfig.MemoSizeLimitError.Get(dc),
+		MemoSizeLimitWarn:                              dynamicconfig.MemoSizeLimitWarn.Get(dc),
+		NumPendingChildExecutionsLimit:                 dynamicconfig.NumPendingChildExecutionsLimitError.Get(dc),
+		NumPendingActivitiesLimit:                      dynamicconfig.NumPendingActivitiesLimitError.Get(dc),
+		NumPendingSignalsLimit:                         dynamicconfig.NumPendingSignalsLimitError.Get(dc),
+		NumPendingCancelsRequestLimit:                  dynamicconfig.NumPendingCancelRequestsLimitError.Get(dc),
+		HistorySizeLimitError:                          dynamicconfig.HistorySizeLimitError.Get(dc),
+		HistorySizeLimitWarn:                           dynamicconfig.HistorySizeLimitWarn.Get(dc),
+		HistorySizeSuggestContinueAsNew:                dynamicconfig.HistorySizeSuggestContinueAsNew.Get(dc),
+		HistoryCountLimitError:                         dynamicconfig.HistoryCountLimitError.Get(dc),
+		HistoryCountLimitWarn:                          dynamicconfig.HistoryCountLimitWarn.Get(dc),
+		HistoryCountSuggestContinueAsNew:               dynamicconfig.HistoryCountSuggestContinueAsNew.Get(dc),
+		HistoryMaxPageSize:                             dynamicconfig.HistoryMaxPageSize.Get(dc),
+		MutableStateActivityFailureSizeLimitError:      dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
+		MutableStateActivityFailureSizeLimitWarn:       dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
+		MutableStateActivityFailureTotalSizeLimitError: dynamicconfig.MutableStateActivityFailureTotalSizeLimitError.Get(dc),
+		MutableStateActivityFailureTotalSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureTotalSizeLimitWarn.Get(dc),
+		MutableStateSizeLimitError:                     dynamicconfig.MutableStateSizeLimitError.Get(dc),
+		MutableStateSizeLimitWarn:                      dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
+		MutableStateTombstoneCountLimit:                dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
 
 		ThrottledLogRPS:   dynamicconfig.HistoryThrottledLogRPS.Get(dc),
 		EnableStickyQuery: dynamicconfig.EnableStickyQuery.Get(dc),
@@ -842,6 +852,7 @@ func NewConfig(
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
 		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		EnableWorkflowEagerDispatchCheck:  dynamicconfig.EnableWorkflowEagerDispatchCheck.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
 		// Archival related
@@ -913,10 +924,16 @@ func NewConfig(
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 
 		// Workflow task completion pagination
-		EnableWorkflowTaskCompletionPagination:     dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
-		WorkflowTaskCompletionBufferTotalSizeLimit: dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferSizeLimit:      dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferNamespaceRatio: dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		EnableWorkflowTaskCompletionPagination:         dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferTotalSizeLimit:     dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:          dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferNamespaceRatio:     dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
+
+		// Time-Skipping related settings
+		CHASMSchedulerTimeSkippingEnabled:  dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
+		WorkflowTimeSkippingEnabled:        dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
 	}
 
 	return cfg

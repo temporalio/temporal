@@ -67,7 +67,12 @@ type (
 		logger             log.Logger
 	}
 	workflowLockPriorityContextKey struct{}
+	// unbuildableTaskError identifies a task serialization or source history lookup failure.
+	unbuildableTaskError struct{ err error }
 )
+
+func (e *unbuildableTaskError) Error() string { return e.err.Error() }
+func (e *unbuildableTaskError) Unwrap() error { return e.err }
 
 func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
@@ -116,7 +121,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	if replicationTask != nil {
 		rawTaskInfo, err := c.replicationTaskSerializer.SerializeReplicationTask(task)
 		if err != nil {
-			return nil, err
+			return nil, &unbuildableTaskError{err: err}
 		}
 		replicationTask.RawTaskInfo = rawTaskInfo
 	}
@@ -470,12 +475,14 @@ func getVersionHistoryAndEvents(
 	logger log.Logger,
 ) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
 	if eventBlobCache != nil {
-		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
+		if versionHistory, eventBatches, baseWorkflowInfo, ok := getEventsFromCache(
+			eventBlobCache,
 			workflowKey,
-			firstEventID,
 			eventVersion,
-		)); ok {
-			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil
+			firstEventID,
+			nextEventID,
+		); ok {
+			return versionHistory, eventBatches, baseWorkflowInfo, nil
 		}
 	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
@@ -497,6 +504,41 @@ func getVersionHistoryAndEvents(
 		return nil, nil, nil, convertGetHistoryError(workflowKey, logger, err)
 	}
 	return versionHistory, eventBatches, baseWorkflowInfo, nil
+}
+
+// getEventsFromCache returns the event batches in the range [firstEventID, nextEventID) from eventBlobCache. A
+// transaction can be split across several batches (history.maximumEventBatchSizeInBytes), while a cache
+// entry holds a single batch, so it follows each entry's NextEventID to the next batch. It returns false
+// unless every batch in the range is cached.
+func getEventsFromCache(
+	eventBlobCache persistence.XDCCache,
+	workflowKey definition.WorkflowKey,
+	eventVersion int64,
+	firstEventID int64,
+	nextEventID int64,
+) ([]*historyspb.VersionHistoryItem, []*commonpb.DataBlob, *workflowspb.BaseExecutionInfo, bool) {
+	var eventBatches []*commonpb.DataBlob
+	startEventID := firstEventID
+	startEventVersion := eventVersion
+	for {
+		xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(workflowKey, startEventID, startEventVersion))
+		if !ok {
+			return nil, nil, nil, false
+		}
+		eventBatches = append(eventBatches, xdcCacheValue.EventBlobs...)
+		if xdcCacheValue.NextEventID >= nextEventID {
+			return xdcCacheValue.VersionHistoryItems, eventBatches, xdcCacheValue.BaseWorkflowInfo, true
+		}
+		startEventID = xdcCacheValue.NextEventID
+		var err error
+		startEventVersion, err = versionhistory.GetVersionHistoryEventVersion(
+			&historyspb.VersionHistory{Items: xdcCacheValue.VersionHistoryItems},
+			startEventID,
+		)
+		if err != nil {
+			return nil, nil, nil, false
+		}
+	}
 }
 
 func getVersionHistoryAndEventsWithNewRun(
@@ -581,7 +623,7 @@ func getBranchToken(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -591,7 +633,11 @@ func getBranchToken(
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
-		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		historyItems, branchToken, baseInfo, err := persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
+		if err != nil {
+			return nil, nil, nil, &unbuildableTaskError{err: err}
+		}
+		return historyItems, branchToken, baseInfo, nil
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil, nil, nil
 	default:

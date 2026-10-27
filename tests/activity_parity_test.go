@@ -127,6 +127,8 @@ func (s *activityParityTestSuite) TestEagerActivityMetricParity() {
 			require.Len(t, saa.recordings, 1)
 			require.Equal(t, tagKeys(wfa.recordings[0]), tagKeys(saa.recordings[0]),
 				"WFA and SAA eager activity metrics must use the same label keys")
+			require.Equal(t, "Activity", wfa.recordings[0].Tags[metrics.TaskTypeTagName])
+			require.Equal(t, "Activity", saa.recordings[0].Tags[metrics.TaskTypeTagName])
 
 			expectedTaskQueue := "__omitted__"
 			if breakdownByTaskQueue {

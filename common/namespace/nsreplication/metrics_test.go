@@ -15,6 +15,25 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestOperationMetricValue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		operation enumsspb.NamespaceOperation
+		want      string
+	}{
+		{name: "create", operation: enumsspb.NAMESPACE_OPERATION_CREATE, want: "create"},
+		{name: "update", operation: enumsspb.NAMESPACE_OPERATION_UPDATE, want: "update"},
+		{name: "unspecified", operation: enumsspb.NAMESPACE_OPERATION_UNSPECIFIED, want: "unknown"},
+		{name: "unrecognized", operation: enumsspb.NamespaceOperation(99), want: "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, OperationMetricValue(tc.operation))
+		})
+	}
+}
+
 func TestRecordNamespaceReplicationOutcome(t *testing.T) {
 	task := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,

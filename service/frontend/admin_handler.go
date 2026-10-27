@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -1046,110 +1045,84 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
-) (*adminservice.ApplyNamespaceMutationResponse, error) {
-	if request == nil || request.GetNamespaceTask() == nil {
-		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
-	}
-	payloadTask, actualFingerprint, matches, err := validateNamespaceMutationPayload(request)
-	if err != nil {
-		if request.GetShadow() {
-			adh.recordShadowReceiveComparison(
-				request.GetNamespaceTask().GetNamespaceOperation(),
-				request.GetSourceCluster(),
-				namespaceReplicationShadowOutcomeError,
-			)
-			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
+	var comparisonPanic error
+	comparisonOutcome, comparisonReason := "error", "invalid_request"
+	defer func() {
+		if comparisonPanic != nil {
+			retError = comparisonPanic
+			comparisonOutcome, comparisonReason = "error", "panic"
 		}
-		return nil, err
-	}
-	if !matches {
-		adh.logger.Warn(
-			"namespace replication receive mismatch",
-			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
-			tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
-			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
-		)
 		if request.GetShadow() {
-			adh.recordShadowReceiveComparison(
-				request.GetNamespaceTask().GetNamespaceOperation(),
-				request.GetSourceCluster(),
-				namespaceReplicationShadowOutcomeMismatch,
-			)
-			adh.emitShadowReceiveComparison(
-				request,
-				request.GetFingerprint(),
-				actualFingerprint,
-				namespaceReplicationShadowOutcomeMismatch,
-				nil,
-			)
-			return &adminservice.ApplyNamespaceMutationResponse{
-				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
-			}, nil
+			adh.recordShadowReceiveComparison(request, payloadTask, legacyTask, comparisonOutcome, comparisonReason, retError)
 		}
-		return nil, serviceerror.NewInvalidArgument("namespace mutation fingerprint mismatch")
+	}()
+	// Recover comparison panics before recording the RPC outcome.
+	defer log.CapturePanic(adh.logger, &comparisonPanic)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
+	}
+	if len(request.GetNamespaceTaskPayload()) == 0 {
+		comparisonReason = "missing_payload"
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if request.GetShadow() && len(request.GetShadowLegacyTaskPayload()) == 0 {
+		comparisonReason = "missing_legacy_reference"
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	if request.GetShadow() {
+		comparisonReason = "invalid_legacy_reference"
+		legacyTask = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+			legacyTask = nil
+			return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+		}
 	}
 
-	if request.GetShadow() {
-		adh.recordShadowReceiveComparison(
-			request.GetNamespaceTask().GetNamespaceOperation(),
-			request.GetSourceCluster(),
-			namespaceReplicationShadowOutcomeMatch,
-		)
-		adh.emitShadowReceiveComparison(
-			request,
-			request.GetFingerprint(),
-			actualFingerprint,
-			namespaceReplicationShadowOutcomeMatch,
-			nil,
-		)
+	payloadTask = &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		payloadTask = nil
+		comparisonOutcome, comparisonReason = "error", "invalid_payload"
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	if !request.GetShadow() {
+		outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+		if err != nil {
+			return nil, err
+		}
+		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
+		if err != nil {
+			return nil, err
+		}
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		comparisonOutcome, comparisonReason = "match", "none"
 		return &adminservice.ApplyNamespaceMutationResponse{
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
 	}
+	comparisonOutcome, comparisonReason = "mismatch", "legacy_payload_mismatch"
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
+	)
 
-	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
-	if err != nil {
-		return nil, err
-	}
-	wireOutcome, err := namespaceMutationResponseOutcome(outcome)
-	if err != nil {
-		return nil, err
-	}
-	return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+	}, nil
 }
 
-func validateNamespaceMutationPayload(
-	request *adminservice.ApplyNamespaceMutationRequest,
-) (*replicationspb.NamespaceTaskAttributes, []byte, bool, error) {
-	if request.NamespaceTaskPayload == nil {
-		return nil, nil, false, serviceerror.NewInvalidArgument("namespace_task_payload is required")
-	}
-
-	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
-	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
-		return nil, actualFingerprint, false, nil
-	}
-
-	payloadTask := &replicationspb.NamespaceTaskAttributes{}
-	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
-		return nil, actualFingerprint, false,
-			serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
-	}
-	if proto.Equal(payloadTask, request.GetNamespaceTask()) {
-		return payloadTask, actualFingerprint, true, nil
-	}
-
-	typedFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-	if err != nil {
-		return nil, actualFingerprint, false,
-			serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
-	}
-	return nil, typedFingerprint, false, nil
-}
-
-func namespaceMutationResponseOutcome(
-	outcome nsreplication.ApplyOutcome,
-) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
+func namespaceMutationResponseOutcome(outcome nsreplication.ApplyOutcome) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
 	switch outcome {
 	case nsreplication.ApplyOutcomeCreated:
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, nil
@@ -1162,26 +1135,8 @@ func namespaceMutationResponseOutcome(
 	case nsreplication.ApplyOutcomeNotAdmitted:
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED, nil
 	default:
-		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED,
-			serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
 	}
-}
-
-func (adh *AdminHandler) recordShadowReceiveComparison(
-	operation enumsspb.NamespaceOperation,
-	sourceCluster string,
-	outcome string,
-) {
-	if adh.metricsHandler == nil {
-		return
-	}
-	metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(
-		1,
-		metrics.SourceClusterTag(sourceCluster),
-		metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
-		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
-		metrics.OutcomeTag(outcome),
-	)
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -2389,9 +2344,10 @@ func (adh *AdminHandler) getDLQWorkflowID(
 
 // validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
 // It performs the following checks:
-// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
-// 2. If both archetypeID and archetype are specified, validates they match each other
-// 3. If only archetype is specified, converts it to an ID
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry.
+// 2. If both archetypeID and archetype are specified, validates they match each other.
+// 3. If only archetype is specified, converts it to an ID.
+// 4. If neither is specified (archetypeID is zero and archetype is empty), defaults to WorkflowArchetypeID.
 func (adh *AdminHandler) validateAndResolveArchetypeID(
 	archetype chasm.Archetype,
 	archetypeID uint32,
@@ -2595,28 +2551,13 @@ func (adh *AdminHandler) ListExecutions(
 		return nil, errRequestNotSet
 	}
 
-	pageSize := int(request.GetPageSize())
-	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if pageSize <= 0 || pageSize > maxPageSize {
-		pageSize = maxPageSize
+		request.PageSize = maxPageSize
 	}
 
-	resp, err := adh.visibilityMgr.AdminListExecutions(
-		ctx, &manager.AdminListExecutionsRequest{
-			Namespace:     namespace.Name(request.GetNamespace()),
-			Query:         request.GetQuery(),
-			PageSize:      pageSize,
-			NextPageToken: request.GetNextPageToken(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.ListExecutionsResponse{
-		Executions:    resp.Executions,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
 }
 
 func (adh *AdminHandler) CountExecutions(
@@ -2629,18 +2570,5 @@ func (adh *AdminHandler) CountExecutions(
 		return nil, errRequestNotSet
 	}
 
-	resp, err := adh.visibilityMgr.AdminCountExecutions(
-		ctx, &manager.AdminCountExecutionsRequest{
-			Namespace: namespace.Name(request.GetNamespace()),
-			Query:     request.GetQuery(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.CountExecutionsResponse{
-		Count:  resp.Count,
-		Groups: resp.Groups,
-	}, nil
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }

@@ -1,7 +1,6 @@
 package xdc
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -40,6 +39,7 @@ type (
 
 		observedApplyRequests chan observedNamespaceMutationApply
 		failApplyRequests     atomic.Bool
+		dropApplyField        atomic.Bool
 	}
 
 	observedNamespaceMutationApply struct {
@@ -394,10 +394,7 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurren
 	}
 	s.Require().True(recovered, "no peer apply advanced the standby namespace")
 
-	sourceFingerprint, err := nsreplication.NamespaceTaskFingerprint(
-		nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, sourceNamespace.Namespace),
-	)
-	s.Require().NoError(err)
+	sourceTask := nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, sourceNamespace.Namespace)
 	await.RequireTruef(s.T(), func() bool {
 		standbyNamespace, getErr := standby.TestBase().MetadataManager.GetNamespace(
 			ctx,
@@ -406,10 +403,8 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurren
 		if getErr != nil {
 			return false
 		}
-		standbyFingerprint, fingerprintErr := nsreplication.NamespaceTaskFingerprint(
-			nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, standbyNamespace.Namespace),
-		)
-		return fingerprintErr == nil && bytes.Equal(sourceFingerprint, standbyFingerprint)
+		standbyTask := nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, standbyNamespace.Namespace)
+		return proto.Equal(sourceTask, standbyTask)
 	}, replicationWaitTime, replicationCheckInterval, "standby did not converge to the exact source state")
 
 	s.Require().Never(func() bool {
@@ -613,8 +608,9 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(createApply, namespaceName, enumsspb.NAMESPACE_OPERATION_CREATE)
 	createLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_CREATE, createLegacyTask.task.GetNamespaceOperation())
-	s.Require().True(proto.Equal(createLegacyTask.task, createApply.request.GetNamespaceTask()),
+	s.Require().True(proto.Equal(createLegacyTask.task, s.decodeNamespaceTask(createApply.request)),
 		"CHASM create payload differs from the legacy replication task")
+	s.requireLegacyReference(createApply.request, createLegacyTask.task)
 
 	_, err = standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: namespaceName})
 	s.Require().ErrorAs(err, new(*serviceerror.NamespaceNotFound))
@@ -639,8 +635,9 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(updateApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	updateLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_UPDATE, updateLegacyTask.task.GetNamespaceOperation())
-	s.Require().True(proto.Equal(updateLegacyTask.task, updateApply.request.GetNamespaceTask()),
+	s.Require().True(proto.Equal(updateLegacyTask.task, s.decodeNamespaceTask(updateApply.request)),
 		"CHASM update payload differs from the legacy replication task")
+	s.requireLegacyReference(updateApply.request, updateLegacyTask.task)
 
 	standbyBeforeLegacyUpdate := s.requirePersistedNamespace(ctx, standby, namespaceName)
 	s.Require().Equal(initialConfigVersion, standbyBeforeLegacyUpdate.Namespace.GetConfigVersion())
@@ -684,10 +681,12 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(recoveredApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	failedUpdateLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_UPDATE, failedUpdateLegacyTask.task.GetNamespaceOperation())
-	s.Require().True(proto.Equal(failedApply.request.GetNamespaceTask(), recoveredApply.request.GetNamespaceTask()),
+	s.Require().Equal(failedApply.request.GetNamespaceTaskPayload(), recoveredApply.request.GetNamespaceTaskPayload(),
 		"CHASM retry changed the namespace mutation payload")
-	s.Require().True(proto.Equal(failedUpdateLegacyTask.task, recoveredApply.request.GetNamespaceTask()),
+	s.Require().True(proto.Equal(failedUpdateLegacyTask.task, s.decodeNamespaceTask(recoveredApply.request)),
 		"retried CHASM update payload differs from the legacy replication task")
+	s.requireLegacyReference(recoveredApply.request, failedUpdateLegacyTask.task)
+	s.Require().Equal(failedApply.request.GetShadowLegacyTaskPayload(), recoveredApply.request.GetShadowLegacyTaskPayload())
 
 	standbyBeforeFailedUpdateLegacy := s.requirePersistedNamespace(ctx, standby, namespaceName)
 	s.Require().Equal(initialConfigVersion+1, standbyBeforeFailedUpdateLegacy.Namespace.GetConfigVersion())
@@ -708,6 +707,22 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 			standbyAfterFailedUpdateLegacy.Namespace.GetConfigVersion() == initialConfigVersion+2 &&
 			standbyAfterFailedUpdateLegacy.Namespace.GetInfo().GetDescription() == recoveredDescription
 	}, replicationWaitTime, replicationCheckInterval, "legacy update did not converge after CHASM retry")
+
+	// Simulate a history converter that omits a field. Comparison with the
+	// preserved frontend reference must detect the incomplete output.
+	s.dropApplyField.Store(true)
+	defer s.dropApplyField.Store(false)
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace:  namespaceName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{Description: "field omitted by simulated older history converter"},
+	})
+	s.Require().NoError(err)
+	mismatchedApply := s.receiveObservedApply(ctx)
+	s.Require().NoError(mismatchedApply.err)
+	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, mismatchedApply.response.GetOutcome())
+	finalLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
+	s.requireLegacyReference(mismatchedApply.request, finalLegacyTask.task)
+	s.Require().NoError(finalLegacyTask.execute())
 }
 
 func (s *namespaceReplicationCHASMTestSuite) captureNamespaceMutationApply(
@@ -721,6 +736,20 @@ func (s *namespaceReplicationCHASMTestSuite) captureNamespaceMutationApply(
 	}
 
 	applyRequest, _ := req.(*adminservice.ApplyNamespaceMutationRequest)
+	if s.dropApplyField.Load() {
+		applyRequest = proto.Clone(applyRequest).(*adminservice.ApplyNamespaceMutationRequest)
+		payloadTask := &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(applyRequest.GetNamespaceTaskPayload(), payloadTask); err != nil {
+			return nil, err
+		}
+		payloadTask.Info.Description = ""
+		encodedTask, err := nsreplication.MarshalNamespaceTask(payloadTask)
+		if err != nil {
+			return nil, err
+		}
+		applyRequest.NamespaceTaskPayload = encodedTask
+		req = applyRequest
+	}
 	if s.failApplyRequests.Load() {
 		err := serviceerror.NewUnavailable("injected CHASM namespace replication failure")
 		s.recordObservedApply(applyRequest, nil, err)
@@ -731,6 +760,15 @@ func (s *namespaceReplicationCHASMTestSuite) captureNamespaceMutationApply(
 	applyResponse, _ := response.(*adminservice.ApplyNamespaceMutationResponse)
 	s.recordObservedApply(applyRequest, applyResponse, err)
 	return response, err
+}
+
+func (s *namespaceReplicationCHASMTestSuite) requireLegacyReference(
+	request *adminservice.ApplyNamespaceMutationRequest,
+	legacyTask *replicationspb.NamespaceTaskAttributes,
+) {
+	actual := &replicationspb.NamespaceTaskAttributes{}
+	s.Require().NoError(proto.Unmarshal(request.GetShadowLegacyTaskPayload(), actual))
+	s.Require().True(proto.Equal(legacyTask, actual), "shadow reference differs from the actual legacy queue task")
 }
 
 func (s *namespaceReplicationCHASMTestSuite) recordObservedApply(
@@ -819,11 +857,18 @@ func (s *namespaceReplicationCHASMTestSuite) requireApplyRequest(
 ) {
 	s.Require().NotNil(observed.request)
 	s.Require().Equal(shadow, observed.request.GetShadow())
-	s.Require().Equal(namespaceName, observed.request.GetNamespaceTask().GetInfo().GetName())
-	s.Require().Equal(operation, observed.request.GetNamespaceTask().GetNamespaceOperation())
-	fingerprint, err := nsreplication.NamespaceTaskFingerprint(observed.request.GetNamespaceTask())
-	s.Require().NoError(err)
-	s.Require().True(bytes.Equal(fingerprint, observed.request.GetFingerprint()))
+	payloadTask := s.decodeNamespaceTask(observed.request)
+	s.Require().True(proto.Equal(payloadTask, observed.request.GetNamespaceTask()), "retain the typed field for older receivers")
+	s.Require().Equal(namespaceName, payloadTask.GetInfo().GetName())
+	s.Require().Equal(operation, payloadTask.GetNamespaceOperation())
+}
+
+func (s *namespaceReplicationCHASMTestSuite) decodeNamespaceTask(
+	request *adminservice.ApplyNamespaceMutationRequest,
+) *replicationspb.NamespaceTaskAttributes {
+	task := &replicationspb.NamespaceTaskAttributes{}
+	s.Require().NoError(proto.Unmarshal(request.GetNamespaceTaskPayload(), task))
+	return task
 }
 
 func (s *namespaceReplicationCHASMTestSuite) requireNamespaceDescription(

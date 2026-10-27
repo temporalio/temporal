@@ -8,7 +8,6 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -40,7 +39,6 @@ type (
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
-		ChasmRegistry             *chasm.Registry
 	}
 
 	fxResult struct {
@@ -129,6 +127,5 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
 		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
-		chasmRegistry:                    wc.ChasmRegistry,
 	}
 }

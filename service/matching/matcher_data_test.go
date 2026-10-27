@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -993,6 +994,32 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			}
 		})
 	}
+}
+
+func TestPollerListOrdering(t *testing.T) {
+	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
+	start := time.Unix(1, 0)
+	pollers := []*waitingPoller{
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(2 * time.Second)},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(6 * time.Second)},
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(4 * time.Second)},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(time.Second)},
+	}
+	for _, poller := range pollers {
+		p.Add(poller)
+	}
+
+	expected := []*waitingPoller{pollers[4], pollers[2], pollers[5], pollers[1], pollers[0], pollers[3]}
+	at := p.head
+	for _, poller := range expected {
+		require.Same(t, poller, at)
+		at = at.next
+	}
+	require.Nil(t, at)
+	require.Same(t, expected[len(expected)-1], p.tail)
+	require.Equal(t, len(pollers), p.Len())
 }
 
 func TestCheckConstants(t *testing.T) {

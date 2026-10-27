@@ -9,8 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	persistencesql "go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/persistence/visibility/store/query/querytest"
+	"go.temporal.io/server/common/searchattribute"
 	"go.uber.org/mock/gomock"
 )
 
@@ -1052,4 +1061,46 @@ func parseWhereString(where string) sqlparser.Expr {
 		panic(err)
 	}
 	return stmt.(*sqlparser.Select).Where.Expr
+}
+
+func TestSQLQueryConverter(t *testing.T) {
+	t.Parallel()
+	plugins := []struct {
+		name    string
+		dialect querytest.Dialect
+	}{
+		{name: mysql.PluginName, dialect: querytest.MySQL},
+		{name: postgresql.PluginName, dialect: querytest.PostgreSQL},
+		{name: postgresql.PluginNamePGX, dialect: querytest.PostgreSQL},
+		{name: sqlite.PluginName, dialect: querytest.SQLite},
+	}
+	for _, plugin := range plugins {
+		t.Run(plugin.name, func(t *testing.T) {
+			t.Parallel()
+			pluginVisQC, err := persistencesql.GetPluginVisibilityQueryConverter(plugin.name)
+			require.NoError(t, err)
+			querytest.Run(
+				t,
+				plugin.dialect,
+				func() *query.QueryConverter[sqlparser.Expr] {
+					return query.NewQueryConverter(
+						&SQLQueryConverter{VisibilityQueryConverter: pluginVisQC},
+						namespace.Name("test-namespace"),
+						searchattribute.TestNameTypeMap(),
+						&searchattribute.TestMapper{},
+						metrics.NoopMetricsHandler,
+						log.NewNoopLogger(),
+					)
+				},
+				serializeSQLQuery,
+			)
+		})
+	}
+}
+
+func serializeSQLQuery(expr sqlparser.Expr) (string, error) {
+	if expr == nil {
+		return "", nil
+	}
+	return sqlparser.String(expr), nil
 }

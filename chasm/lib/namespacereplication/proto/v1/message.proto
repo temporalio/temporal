@@ -37,12 +37,16 @@ message NamespaceMutation {
   // writing namespace state in either the source or destination cell.
   bool shadow = 6;
 
+  // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
+  // Required for shadow mutations and preserved unchanged through peer delivery.
+  bytes shadow_legacy_task_payload = 7;
+
   // Replicate-only preserves the legacy no-op UpdateNamespace behavior: the
   // source snapshot is already authoritative, so do not rewrite it, consume a
   // notification-version CAS slot, or emit a namespace-updated lifecycle event.
   // Peer applies remain authoritative. This is deliberately distinct from
   // shadow, which suppresses writes in both the source and destination cells.
-  bool replicate_only = 7;
+  bool replicate_only = 8;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -58,6 +62,10 @@ message NamespaceMutationState {
 
   // Per-peer apply outcomes, keyed by target cell name.
   map<string, PeerApplyStatus> peer_apply = 4;
+
+  // Source-cluster time when the initial local task was scheduled. Retained
+  // across retries to measure end-to-end latency without destination clock skew.
+  google.protobuf.Timestamp started_at = 5;
 }
 
 enum ComponentStatus {
@@ -101,10 +109,10 @@ enum PeerApplyOutcome {
   // FAILED_* so it doesn't read as an error.
   PEER_APPLY_OUTCOME_NOT_ADMITTED = 6;
   // The peer processed a shadow request without writing receiver state and the
-  // received payload matched the sender's fingerprint.
+  // received payload matched the legacy reference.
   PEER_APPLY_OUTCOME_SHADOW_MATCH = 7;
   // The peer processed a shadow request without writing receiver state and the
-  // received payload did not match the sender's fingerprint.
+  // received payload differed from the legacy reference.
   PEER_APPLY_OUTCOME_SHADOW_MISMATCH = 8;
 }
 
