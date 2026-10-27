@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -100,4 +101,72 @@ func TestGeneratorRetiresObsoleteTimerWithoutSkippingPendingAction(t *testing.T)
 	require.NoError(t, handler.Execute(env.MutableContext(), generator, attrs, &schedulerpb.GeneratorTask{}))
 	require.Len(t, invoker.BufferedStarts, 1)
 	require.Equal(t, nextFire, invoker.BufferedStarts[0].ActualTime.AsTime())
+}
+
+func TestGeneratorClockRollbackAndUpdatePreservePendingAction(t *testing.T) {
+	t.Parallel()
+	schedule := defaultSchedule()
+	schedule.Spec.Interval[0].Interval = durationpb.New(time.Hour)
+	schedule.Spec.Interval[0].Phase = durationpb.New(5 * time.Minute)
+	env := newTestEnv(t, withSchedule(schedule))
+	generator := env.Scheduler.Generator.Get(env.MutableContext())
+	invoker := env.Scheduler.Invoker.Get(env.MutableContext())
+	handler := newGeneratorHandler(env)
+	base := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	start := base.Add(-time.Second)
+	generator.LastProcessedTime = timestamppb.New(start)
+	env.Scheduler.Info.UpdateTime = timestamppb.New(start)
+
+	// An empty wakeup records task progress just after 00:01:00. The old
+	// spec's next timer is at 00:05:00. Use sub-millisecond precision to check
+	// that the deferred timer aligns with the queue's millisecond precision.
+	previousNow := base.Add(time.Minute + 500*time.Microsecond)
+	env.TimeSource.Update(previousNow)
+	require.NoError(t, handler.Execute(env.MutableContext(), generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+	require.NoError(t, env.CloseTransaction())
+	require.Empty(t, invoker.BufferedStarts)
+	require.Equal(t, start, generator.LastProcessedTime.AsTime())
+
+	// After the clock rolls back, an update makes a new action due at
+	// 00:00:30, before the most recently observed task time.
+	env.TimeSource.Update(base.Add(15 * time.Second))
+	updated := defaultSchedule()
+	updated.Spec.Interval[0].Phase = durationpb.New(30 * time.Second)
+	_, err := env.Scheduler.Update(env.MutableContext(), &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
+	})
+	require.NoError(t, err)
+	require.NoError(t, env.CloseTransaction())
+	require.Empty(t, invoker.BufferedStarts, "the pending action must not run before its fire time")
+
+	// Inspect persisted tasks after validation and transaction cleanup. A
+	// usable wakeup must remain near the rolled-back period, rather than
+	// relying on the old spec's much later timer to revive the schedule.
+	type pendingTask struct {
+		handler chasm.NodePureTask
+		attrs   chasm.TaskAttributes
+		task    any
+	}
+	var pending []pendingTask
+	require.NoError(t, env.Node.EachPureTask(previousNow.Add(time.Second), func(
+		nodeHandler chasm.NodePureTask, attrs chasm.TaskAttributes, task any,
+	) (bool, error) {
+		if _, ok := task.(*schedulerpb.GeneratorTask); ok {
+			pending = append(pending, pendingTask{nodeHandler, attrs, task})
+		}
+		return false, nil
+	}))
+	require.NotEmpty(t, pending, "clock rollback and an update must leave a usable generator timer")
+	require.Equal(t, base.Add(time.Minute+time.Millisecond), pending[0].attrs.ScheduledTime)
+
+	// Let the clock reach the retained timer and run it through CHASM's
+	// validation and execution path. The new slot must still be generated.
+	env.TimeSource.Update(pending[0].attrs.ScheduledTime)
+	executed, err := pending[0].handler.ExecutePureTask(t.Context(), pending[0].attrs, pending[0].task)
+	require.NoError(t, err)
+	require.True(t, executed)
+	require.Len(t, invoker.BufferedStarts, 1)
+	expectedFire := base.Add(30 * time.Second)
+	require.Equal(t, expectedFire, invoker.BufferedStarts[0].NominalTime.AsTime())
+	require.Equal(t, expectedFire, invoker.BufferedStarts[0].ActualTime.AsTime())
 }
