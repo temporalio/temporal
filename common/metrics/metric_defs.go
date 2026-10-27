@@ -697,6 +697,7 @@ var (
 	ServiceErrInvalidArgumentCounter         = NewCounterDef("service_errors_invalid_argument")
 	ServiceErrNamespaceNotActiveCounter      = NewCounterDef("service_errors_namespace_not_active")
 	ServiceErrResourceExhaustedCounter       = NewCounterDef("service_errors_resource_exhausted")
+	ResourceExhaustedRetryDelayFloorCounter  = NewCounterDef("resource_exhausted_retry_delay_floor", WithDescription("Number of ResourceExhausted responses that carried a google.rpc.RetryInfo retry delay floor."))
 	ServiceErrNotFoundCounter                = NewCounterDef("service_errors_entity_not_found")
 	ServiceErrExecutionAlreadyStartedCounter = NewCounterDef("service_errors_execution_already_started")
 	ServiceErrContextTimeoutCounter          = NewCounterDef("service_errors_context_timeout")
@@ -726,11 +727,15 @@ var (
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
-	ClientFailures                   = NewCounterDef("client_errors")
-	ClientLatency                    = NewTimerDef("client_latency")
-	ClientRedirectionRequests        = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures        = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency         = NewTimerDef("client_redirection_latency")
+	ClientFailures            = NewCounterDef("client_errors")
+	ClientLatency             = NewTimerDef("client_latency")
+	ClientRedirectionRequests = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency  = NewTimerDef("client_redirection_latency")
+	ClientDuplicatedRedirects = NewCounterDef(
+		"client_duplicated_redirects",
+		WithDescription("The number of requests forwarded from another cluster for a namespace that is passive in the receiving cluster."),
+	)
 	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
 	HistorySize                      = NewBytesHistogramDef("history_size")
 	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
@@ -1806,6 +1811,7 @@ var (
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
+	WorkerDeploymentTaskQueueFamilyBloomFilterOutcome = NewCounterDef("worker_deployment_task_queue_family_bloom_filter_outcome")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

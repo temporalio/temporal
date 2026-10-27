@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"math/rand"
+	"slices"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ type (
 		ShardID int32
 
 		store      p.ExecutionManager
+		rawStore   p.ExecutionStore
 		serializer serialization.Serializer
 		logger     log.Logger
 
@@ -67,6 +69,7 @@ func NewHistoryEventsSuite(
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
+		rawStore:   store,
 		serializer: serializer,
 		logger:     logger,
 	}
@@ -205,6 +208,63 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(s.ShardID, branchToken, common.FirstEventID, 4))
 	protorequire.ProtoSliceEqual(s.T(), eventsPacket11.events, s.listHistoryEvents(s.ShardID, branchToken, 4, 6))
 	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(s.ShardID, branchToken))
+}
+
+func (s *HistoryEventsSuite) TestReadReverse_PagesWithinNodeWithMultipleTransactions() {
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
+	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+		treeID,
+		&branchID,
+		[]*persistencespb.HistoryBranchRange{},
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
+	)
+	s.NoError(err)
+
+	type nodeAndTransaction struct{ nodeID, transactionID int64 }
+	firstTransactionID := rand.Int63n(1 << 40)
+	s.appendHistoryEvents(s.ShardID, branchToken, s.newHistoryEvents([]int64{1, 2, 3}, firstTransactionID, 0))
+	// Shadowed writes: several transactions land on the same node ID.
+	var expected []nodeAndTransaction
+	transactionID := firstTransactionID
+	for _, nodeID := range []int64{4, 6, 8} {
+		for range 3 {
+			transactionID++
+			s.appendHistoryEvents(s.ShardID, branchToken, s.newHistoryEvents([]int64{nodeID}, transactionID, firstTransactionID))
+			expected = append(expected, nodeAndTransaction{nodeID, transactionID})
+		}
+	}
+	// Reverse order reads the largest node ID first, and within a node the oldest transaction first.
+	slices.Reverse(expected)
+	for i := 0; i+2 < len(expected); i += 3 {
+		slices.Reverse(expected[i : i+3])
+	}
+
+	var actual []nodeAndTransaction
+	var token []byte
+	for doContinue := true; doContinue; doContinue = len(token) > 0 {
+		resp, err := s.rawStore.ReadHistoryBranch(s.Ctx, &p.InternalReadHistoryBranchRequest{
+			BranchToken:   branchToken,
+			BranchID:      branchID,
+			MinNodeID:     4, // skip the first node, which is outside this test's concern
+			MaxNodeID:     common.LastEventID,
+			PageSize:      2, // does not divide the number of transactions per node
+			NextPageToken: token,
+			ShardID:       s.ShardID,
+			ReverseOrder:  true,
+		})
+		s.NoError(err)
+		for _, node := range resp.Nodes {
+			actual = append(actual, nodeAndTransaction{node.NodeID, node.TransactionID})
+		}
+		token = resp.NextPageToken
+	}
+	s.Equal(expected, actual)
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
