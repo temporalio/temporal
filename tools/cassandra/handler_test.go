@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli"
 	"go.temporal.io/server/temporal/environment"
 )
 
@@ -71,4 +72,59 @@ func (s *HandlerTestSuite) TestCreateKeyspaceError() {
 	app := buildCLIOptions()
 	err := app.Run(args)
 	s.Nil(err)
+}
+
+func (s *HandlerTestSuite) TestCreateKeyspaceDatacenter() {
+	testCases := []struct {
+		name     string
+		env      string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "not set",
+			args:     []string{"create-keyspace", "-k", "foo"},
+			expected: "",
+		},
+		{
+			name:     "command flag",
+			args:     []string{"create-keyspace", "-k", "foo", "--dc", "dc1"},
+			expected: "dc1",
+		},
+		{
+			name:     "global flag",
+			args:     []string{"--dc", "dc1", "create-keyspace", "-k", "foo"},
+			expected: "dc1",
+		},
+		{
+			name:     "env var",
+			env:      "dc1",
+			args:     []string{"create-keyspace", "-k", "foo"},
+			expected: "dc1",
+		},
+		{
+			name:     "command flag overrides global flag",
+			args:     []string{"--dc", "dc1", "create-keyspace", "-k", "foo", "--dc", "dc2"},
+			expected: "dc2",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.T().Setenv("CASSANDRA_DATACENTER", tc.env)
+
+			var datacenter string
+			app := buildCLIOptions()
+			for i := range app.Commands {
+				if app.Commands[i].Name == "create-keyspace" {
+					app.Commands[i].Action = func(c *cli.Context) {
+						datacenter = keyspaceDatacenter(c)
+					}
+				}
+			}
+
+			s.NoError(app.Run(append([]string{"./tool"}, tc.args...)))
+			s.Equal(tc.expected, datacenter)
+		})
+	}
 }
