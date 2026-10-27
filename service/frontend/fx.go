@@ -6,10 +6,13 @@ import (
 
 	"github.com/gorilla/mux"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -112,6 +115,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
+	fx.Provide(RetryDelayFloorInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -153,11 +157,13 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	chasmcallback.Module,
+	namespacereplication.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -256,6 +262,7 @@ func GrpcServerOptionsProvider(
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
+	retryDelayFloorInterceptor *interceptor.RetryDelayFloorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -315,6 +322,8 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Keep this outside telemetry so error metrics see the original limiter errors.
+		retryDelayFloorInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -700,6 +709,22 @@ func NamespaceRateLimitInterceptorProvider(
 	)
 }
 
+func RetryDelayFloorInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) *interceptor.RetryDelayFloorInterceptor {
+	return interceptor.NewRetryDelayFloorInterceptor(
+		namespaceRegistry,
+		serviceConfig.ResourceExhaustedRetryDelayFloor,
+		metricsHandler,
+		[]*serviceerror.ResourceExhausted{
+			interceptor.ErrNamespaceRateLimitServerBusy,
+			interceptor.ErrNamespaceCountLimitServerBusy,
+		},
+	)
+}
+
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
@@ -1013,6 +1038,7 @@ func HandlerProvider(
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1059,6 +1085,7 @@ func HandlerProvider(
 			saMapperProvider,
 			saValidator,
 		),
+		chasmNsReplClient,
 	)
 	return wfHandler
 }

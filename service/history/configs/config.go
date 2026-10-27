@@ -165,6 +165,8 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionGlobal                      dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionLocal                       dynamicconfig.DurationPropertyFn
 
 	MemoryTimerProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
@@ -357,7 +359,7 @@ type Config struct {
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
 	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
-	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryReplicationRateLimiter                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -632,6 +634,8 @@ func NewConfig(
 		TimerProcessorMaxTimeShift:                       dynamicconfig.TimerProcessorMaxTimeShift.Get(dc),
 		TransferQueueMaxReaderCount:                      dynamicconfig.TransferQueueMaxReaderCount.Get(dc),
 		RetentionTimerJitterDuration:                     dynamicconfig.RetentionTimerJitterDuration.Get(dc),
+		NamespaceMinRetentionGlobal:                      dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
+		NamespaceMinRetentionLocal:                       dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 
 		MemoryTimerProcessorSchedulerWorkerCount: dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Subscribe(dc),
 
@@ -705,7 +709,7 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
 		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
-		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
+		HistoryReplicationRateLimiter:                       dynamicconfig.HistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

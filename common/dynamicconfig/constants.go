@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	NamespaceReplicationTransportModeLegacy = "legacy"
+	NamespaceReplicationTransportModeShadow = "shadow"
+)
+
 var (
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
@@ -78,6 +83,12 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
+	)
+	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
+		"system.namespaceReplicationTransportMode",
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		NamespaceReplicationTransportModeLegacy,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -794,6 +805,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		2,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
+	)
+	FrontendResourceExhaustedRetryDelayFloor = NewNamespaceDurationSetting(
+		"frontend.resourceExhaustedRetryDelayFloor",
+		0,
+		`Minimum retry delay duration on ResourceExhausted errors from the frontend namespace RPS and
+concurrency limiters. 0 disables the feature.`,
 	)
 	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
@@ -3210,10 +3227,13 @@ pinned open indefinitely by endless replication streams. 0 disables the max life
 ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
 time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
 	)
-	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
+	HistoryReplicationRateLimiter = NewNamespaceTypedSettingWithConverter(
 		"history.EnableHistoryReplicationRateLimiter",
-		false,
-		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
+		convertHistoryReplicationRateLimiterSettings,
+		HistoryReplicationRateLimiterSettings{},
+		`HistoryReplicationRateLimiter controls the rate limiter on history events appended by replication. Enabled turns it
+on and Scope, which is required, selects the appends it applies to: "all" or "openForceReplication". A bool value is
+also accepted and applies to all appends. An invalid value disables the rate limiter.`,
 	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",
