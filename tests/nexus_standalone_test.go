@@ -100,6 +100,11 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
+		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+			Endpoint:  endpointName,
+			Service:   "test-service",
+			Operation: "test-operation",
+		}, pollResp.GetPropagatedNexusSerializationContext())
 
 		for _, tc := range []struct {
 			name  string
@@ -206,7 +211,8 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 
 	s.Run("IDConflictPolicyUseExisting", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
-		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+		endpointName := env.createAsyncEndpoint(s.Context(), s.T())
+		otherEndpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 
 		resp1, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
@@ -223,6 +229,32 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.NoError(err)
 		s.Equal(resp1.RunId, resp2.RunId)
 		s.False(resp2.GetStarted())
+
+		resp3, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      "test-op",
+			Endpoint:         otherEndpointName,
+			Service:          "different-service",
+			Operation:        "different-operation",
+			RequestId:        "third-request-id",
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+		})
+		s.NoError(err)
+		s.Equal(resp1.RunId, resp3.RunId)
+		s.False(resp3.GetStarted())
+
+		pollResp, err := env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       resp1.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+		})
+		require.NoError(s.T(), err)
+		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
+		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+			Endpoint:  endpointName,
+			Service:   "test-service",
+			Operation: "test-operation",
+		}, pollResp.GetPropagatedNexusSerializationContext())
 	})
 }
 
@@ -633,6 +665,11 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			})
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, expectedResult, pollResp.GetResult())
+			protorequire.ProtoEqual(t, &nexuspb.PropagatedSerializationContext{
+				Endpoint:  endpointName,
+				Service:   "test-service",
+				Operation: "test-operation",
+			}, pollResp.GetPropagatedNexusSerializationContext())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		s.NoError(s.Rcv(pollerErrCh))
@@ -2049,6 +2086,14 @@ func (s *NexusStandaloneTestSuite) TestDeleteStandaloneNexusOperation() {
 }
 
 func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
+	testSerializationContext := func(endpointName string) *nexuspb.PropagatedSerializationContext {
+		return &nexuspb.PropagatedSerializationContext{
+			Endpoint:  endpointName,
+			Service:   "test-service",
+			Operation: "test-operation",
+		}
+	}
+
 	s.Run("WaitStageStarted", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
@@ -2144,9 +2189,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		result := s.Rcv(pollResultCh)
 		s.NoError(result.err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-			RunId:          startResp.RunId,
-			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
-			OperationToken: "test-operation-token",
+			RunId:                               startResp.RunId,
+			WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			OperationToken:                      "test-operation-token",
+			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 		}, result.resp)
 
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -2236,9 +2282,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 				pollResp := result.resp
 
 				protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-					RunId:          startResp.RunId,
-					WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-					OperationToken: pollResp.GetOperationToken(),
+					RunId:                               startResp.RunId,
+					WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+					OperationToken:                      pollResp.GetOperationToken(),
+					PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 					Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 						Failure: pollResp.GetFailure(),
 					},
@@ -2276,9 +2323,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		})
 		s.NoError(err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-			RunId:          startResp.RunId,
-			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-			OperationToken: pollResp.GetOperationToken(),
+			RunId:                               startResp.RunId,
+			WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+			OperationToken:                      pollResp.GetOperationToken(),
+			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 			Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: pollResp.GetFailure(),
 			},

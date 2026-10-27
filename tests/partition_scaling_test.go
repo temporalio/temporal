@@ -48,7 +48,6 @@ func scalerEnvOptions(dcPartitions int, shrink scalerShrink) []testcore.TestOpti
 		settings.ShrinkDelta = 2
 	}
 	return []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, dcPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, dcPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, settings),

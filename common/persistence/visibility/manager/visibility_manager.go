@@ -5,15 +5,22 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+)
+
+var (
+	ErrNotAdminVisibilityStore   = errors.New("AdminVisibilityManager not managing AdminVisibilityStore")
+	ErrNotAdminVisibilityManager = errors.New("VisibilityManager is not AdminVisibilityManager")
 )
 
 type (
@@ -47,6 +54,22 @@ type (
 		) (*visibilityservice.CountChasmExecutionsResponse, error)
 
 		// Admin APIs
+		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
+	}
+
+	AdminVisibilityManager interface {
+		VisibilityManager
+
+		AdminListExecutions(
+			ctx context.Context,
+			request *adminservice.ListExecutionsRequest,
+		) (*adminservice.ListExecutionsResponse, error)
+
+		AdminCountExecutions(
+			ctx context.Context,
+			request *adminservice.CountExecutionsRequest,
+		) (*adminservice.CountExecutionsResponse, error)
+
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
 

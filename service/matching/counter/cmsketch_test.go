@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCMSketch_Basic(t *testing.T) {
@@ -271,4 +272,30 @@ func TestCMSketch_SlideBase_LargeDelta(t *testing.T) {
 		assert.Zero(t, val)
 	}
 	assert.Equal(t, delta, cms.base)
+}
+
+func TestCMSketch_EstimateDistinctKeys(t *testing.T) {
+	for _, n := range []int{0, 10, 100, 1000, 5000} {
+		src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+		cms := NewCMSketchCounter(CMSketchParams{W: 1000, D: 5}, src, nil)
+		for i := range n {
+			cms.GetPass(fmt.Sprintf("key%d", i), 0, 1)
+		}
+		// repeats shouldn't change the estimate
+		for i := range n / 2 {
+			cms.GetPass(fmt.Sprintf("key%d", i), 0, 1)
+		}
+		// std error is ~3% at n=5000, so this should be well over 4 sigma
+		require.InEpsilon(t, float64(n)+1, float64(cms.EstimateDistinctKeys())+1, 0.15, "n=%d", n)
+	}
+}
+
+func TestCMSketch_EstimateDistinctKeys_Saturated(t *testing.T) {
+	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+	cms := NewCMSketchCounter(CMSketchParams{W: 10, D: 3}, src, nil)
+	for i := range 10_000 {
+		cms.GetPass(fmt.Sprintf("key%d", i), 0, 1)
+	}
+	// saturated: should return a finite lower bound around W*ln(2*W*rows)
+	require.InDelta(t, 10*math.Log(2*10*4), cms.EstimateDistinctKeys(), 5)
 }

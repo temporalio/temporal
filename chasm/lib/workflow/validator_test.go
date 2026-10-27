@@ -35,7 +35,9 @@ func newTestValidator() *RequestValidator {
 	)
 	return NewValidator(
 		Config{
-			maxIDLengthLimit: func() int { return testMaxIDLen },
+			maxIDLengthLimit:                   func() int { return testMaxIDLen },
+			timeSkippingMaxSkipPerSession:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(200),
+			timeSkippingMaxAccumulatedDuration: dynamicconfig.GetDurationPropertyFn(10 * 365 * 24 * time.Hour),
 			defaultWorkflowRetrySettings: func(ns string) retrypolicy.DefaultRetrySettings {
 				return retrypolicy.DefaultDefaultRetrySettings
 			},
@@ -157,4 +159,39 @@ func TestValidateSignalWithStartRequest(t *testing.T) {
 		err := v.ValidateSignalWithStartRequest(req)
 		require.ErrorIs(t, err, ErrCronAndStartDelaySet)
 	})
+}
+
+func TestValidateSignalWithStartRequestTimeSkippingConfig(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		namespace string
+		config    *commonpb.TimeSkippingConfig
+		wantError bool
+	}{
+		{name: "no config in disabled namespace", namespace: "ns2"},
+		{name: "disabled config in disabled namespace", namespace: "ns2", config: &commonpb.TimeSkippingConfig{}, wantError: true},
+		{name: "enabled config in disabled namespace", namespace: "ns2", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantError: true},
+		{name: "enabled config in enabled namespace", namespace: "ns1", config: &commonpb.TimeSkippingConfig{Enabled: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			validator := newTestValidator()
+			validator.config.workflowTimeSkippingEnabled = func(namespace string) bool { return namespace == "ns1" }
+			request := validSWSRequest()
+			request.Namespace = tc.namespace
+			request.TimeSkippingConfig = tc.config
+
+			err := validator.ValidateSignalWithStartRequest(request)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrWorkflowTimeSkippingNotEnabled)
+			} else {
+				require.NoError(t, err)
+				if tc.config != nil {
+					require.Equal(t, int32(200), tc.config.GetMaxSessionSkipCount())
+				}
+			}
+		})
+	}
 }

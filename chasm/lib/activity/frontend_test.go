@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -213,5 +214,60 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 		validateTwice(t, req, func() error {
 			return validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, defaultMaxIDLengthLimit)
 		})
+	})
+}
+
+func TestEagerStartFallback(t *testing.T) {
+	newHandler := func(eagerEnabled bool) *frontendHandler {
+		return &frontendHandler{
+			config: &Config{
+				BlobSizeLimitError:         defaultBlobSizeLimitError,
+				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+				DefaultActivityRetryPolicy: getDefaultRetrySettings,
+				EnableEagerStart:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(eagerEnabled),
+				MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+				StartDelayEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			},
+			linkValidator: newLinkValidator(
+				defaultMaxLinksPerRequest,
+				func(string) int { return 2000 },
+				defaultLinkMaxSize,
+			),
+			logger:         log.NewNoopLogger(),
+			metricsHandler: metrics.NoopMetricsHandler,
+		}
+	}
+
+	newRequest := func() *workflowservice.StartActivityExecutionRequest {
+		return &workflowservice.StartActivityExecutionRequest{
+			Namespace:             "test-namespace",
+			RequestEagerExecution: true,
+			ActivityId:            "test-activity",
+			ActivityType:          &commonpb.ActivityType{Name: "test-type"},
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: "test-queue"},
+			StartToCloseTimeout:   durationpb.New(time.Minute),
+		}
+	}
+
+	t.Run("enabled", func(t *testing.T) {
+		req, err := newHandler(true).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
+		require.NoError(t, err)
+		require.True(t, req.GetRequestEagerExecution())
+	})
+
+	t.Run("namespace disabled", func(t *testing.T) {
+		req, err := newHandler(false).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
+		require.NoError(t, err)
+		require.False(t, req.GetRequestEagerExecution())
+	})
+
+	t.Run("start delay", func(t *testing.T) {
+		req := newRequest()
+		req.StartDelay = durationpb.New(time.Minute)
+		req, err := newHandler(true).validateAndPopulateStartRequest(context.Background(), req, "test-namespace-id")
+		require.NoError(t, err)
+		require.False(t, req.GetRequestEagerExecution())
 	})
 }

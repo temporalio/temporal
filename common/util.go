@@ -15,8 +15,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -568,16 +570,17 @@ func CreateHistoryStartWorkflowRequest(
 		startRequest = CloneProto(startRequest)
 	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              namespaceID,
-		StartRequest:             startRequest,
-		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
-		Attempt:                  1,
-		ParentExecutionInfo:      parentExecutionInfo,
-		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
-		ContinuedFailure:         startRequest.ContinuedFailure,
-		LastCompletionResult:     startRequest.LastCompletionResult,
-		RootExecutionInfo:        rootExecutionInfo,
-		VersioningOverride:       startRequest.GetVersioningOverride(),
+		NamespaceId:                  namespaceID,
+		StartRequest:                 startRequest,
+		ContinueAsNewInitiator:       enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                      1,
+		ParentExecutionInfo:          parentExecutionInfo,
+		FirstWorkflowTaskBackoff:     durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
+		ContinuedFailure:             startRequest.ContinuedFailure,
+		LastCompletionResult:         startRequest.LastCompletionResult,
+		RootExecutionInfo:            rootExecutionInfo,
+		VersioningOverride:           startRequest.GetVersioningOverride(),
+		TimeSkippingStatePropagation: startRequest.GetTimeSkippingStatePropagation(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -691,6 +694,35 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one task.
+func GrantEagerDispatch(
+	ctx context.Context,
+	client matchingservice.MatchingServiceClient,
+	namespaceID string,
+	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
+	priority *commonpb.Priority,
+	version *deploymentspb.WorkerDeploymentVersion,
+) bool {
+	if client == nil {
+		return false
+	}
+
+	response, err := client.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: namespaceID,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     taskQueue,
+			TaskQueueType: taskQueueType,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+			Count:    1,
+			Priority: priority,
+			Version:  version,
+		}},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
+}
+
 func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	if src == nil {
 		return nil
@@ -795,7 +827,10 @@ func GetRPCStatus(err error) (*status.Status, bool) {
 
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
 //
-// This does not unwrap err, see [GetRPCStatus].
+// Wrapping is handled exactly as [GetRPCStatus] handles it, which is not the
+// same for both status conventions: a wrapped error carrying a GRPCStatus()
+// method is still recognized, while one implementing only the older Status()
+// method must be unwrapped by the caller first.
 func IsRetryableRPCError(err error) bool {
 	st, ok := GetRPCStatus(err)
 	if !ok {

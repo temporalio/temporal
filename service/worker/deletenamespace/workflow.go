@@ -18,7 +18,9 @@ import (
 )
 
 const (
-	WorkflowName = "temporal-sys-delete-namespace-workflow"
+	WorkflowName                      = "temporal-sys-delete-namespace-workflow"
+	clusterDeletionValidationVersion  = "delete-namespace-cluster-eligibility-validation"
+	clusterDeletionValidationVersion1 = 1
 )
 
 type (
@@ -86,10 +88,20 @@ func validateNamespace(ctx workflow.Context, nsInfo getNamespaceInfoResult) erro
 		return errors.NewFailedPrecondition("unable to delete system namespace", nil)
 	}
 
+	canDeleteFromCurrentCluster := !slices.Contains(nsInfo.Clusters, nsInfo.CurrentCluster) || nsInfo.ActiveCluster == nsInfo.CurrentCluster
+	if workflow.GetVersion(
+		ctx,
+		clusterDeletionValidationVersion,
+		workflow.DefaultVersion,
+		clusterDeletionValidationVersion1,
+	) != workflow.DefaultVersion {
+		canDeleteFromCurrentCluster = nsInfo.CanDeleteFromCurrentCluster
+	}
+
 	// Prevent namespace deletion if namespace is passive in the current cluster,
 	// because then WF executions will keep coming from the active cluster and
 	// namespace will never be deleted (ReclaimResourcesWorkflow will fail).
-	if slices.Contains(nsInfo.Clusters, nsInfo.CurrentCluster) && nsInfo.ActiveCluster != nsInfo.CurrentCluster {
+	if !canDeleteFromCurrentCluster {
 		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %[1]s is passive in current cluster %[2]s: remove cluster %[2]s from cluster list or make namespace active in this cluster and retry", nsInfo.Namespace, nsInfo.CurrentCluster), nil)
 	}
 
