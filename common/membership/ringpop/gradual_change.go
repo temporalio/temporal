@@ -51,18 +51,11 @@ func (p *presence) gradualEnd() time.Time {
 // correlated with the hash used to place keys on the ring: the keys that move to or from one
 // host lie in a small number of short arcs of the ring, and if switch times were derived from
 // ring position, they would be clustered into short bursts instead of spread over the window.
+// The ring uses farm.Fingerprint32, so we use farm.Fingerprint64, which is an unrelated
+// algorithm. (Fingerprint functions, unlike farm's Hash functions, are guaranteed stable
+// across versions, which matters since all hosts must agree on switch times.)
 func gradualKeyHash(key string) uint32 {
-	return mix32(farm.Fingerprint32([]byte(key)))
-}
-
-// mix32 is the murmur3 32-bit finalizer, a bijective function with good avalanche behavior.
-func mix32(h uint32) uint32 {
-	h ^= h >> 16
-	h *= 0x85ebca6b
-	h ^= h >> 13
-	h *= 0xc2b2ae35
-	h ^= h >> 16
-	return h
+	return uint32(farm.Fingerprint64([]byte(key)) >> 32)
 }
 
 // switchTime returns the time within [start, end] at which a key with the given hash
