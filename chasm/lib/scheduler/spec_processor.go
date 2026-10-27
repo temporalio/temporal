@@ -120,6 +120,9 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	// has passed but whose jittered fire time is still in the future. The loop also
 	// advances past actions intentionally skipped or dropped.
 	lastAction := start
+	if !manual && !tweakables.EnableGeneratorJitterFix {
+		lastAction = end
+	}
 
 	var next legacyscheduler.GetNextTimeResult
 	var err error
