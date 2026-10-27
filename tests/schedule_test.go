@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -6357,6 +6358,104 @@ func TestScheduleV1SharedSuite(t *testing.T) {
 
 func TestScheduleCHASMSharedSuite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleSuite{}, true)
+}
+
+// TestJitteredWakeupSurvivesCompletion runs the same public-API assertions against
+// V1 and CHASM. A completion inside a jitter delay must preserve the pending
+// action deadline, and the action must actually fire at that slot.
+func (suite *ScheduleSuite) TestJitteredWakeupSurvivesCompletion(chasmEnabled bool) {
+	t := suite.T()
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := contextFactoryFor(chasmEnabled)(suite.Context())
+	tv := testvars.New(t)
+	wid := tv.WorkflowID()
+	wt := tv.WorkflowType().Name
+	nominal := time.Now().UTC().Truncate(time.Second).Add(10 * time.Second)
+	spec := &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(time.Minute),
+			Phase:    durationpb.New(time.Duration(nominal.Unix()%60) * time.Second),
+		}},
+		Jitter: durationpb.New(10 * time.Second),
+	}
+	builder := scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 })
+	compiled, err := builder.NewCompiledSpec(spec)
+	require.NoError(t, err)
+
+	// Choose an ID with enough jitter to observe the completion before the
+	// pending fire. Expected action times below come from DescribeSchedule.
+	var sid string
+	var next scheduler.GetNextTimeResult
+	for i := range 1000 {
+		sid = fmt.Sprintf("%s-jitter-%d", wid, i)
+		next, err = compiled.GetNextTime(s.NamespaceID().String()+"-"+sid, nominal.Add(-time.Second))
+		require.NoError(t, err)
+		if next.Next.Sub(nominal) >= 8*time.Second {
+			break
+		}
+	}
+	require.Equal(t, nominal, next.Nominal)
+	require.GreaterOrEqual(t, next.Next.Sub(nominal), 8*time.Second)
+	completeAt := nominal.Add(2 * time.Second)
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		if delay := completeAt.Sub(workflow.Now(ctx)); delay > 0 {
+			return workflow.Sleep(ctx, delay)
+		}
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+	_, err = s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace: s.Namespace().String(), ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: spec, Action: startWorkflowAction(s, wid, wt),
+			Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL},
+		},
+		RequestId:    tv.RequestID(),
+		InitialPatch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{}},
+	})
+	require.NoError(t, err)
+	describe := &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid}
+	var pendingFire, followingFire time.Time
+	var immediateWorkflowID string
+	await.Require(ctx, t, func(t *await.T) {
+		resp, err := s.FrontendClient().DescribeSchedule(t.Context(), describe)
+		require.NoError(t, err)
+		require.Len(t, resp.Info.RunningWorkflows, 1)
+		require.GreaterOrEqual(t, len(resp.Info.FutureActionTimes), 2)
+		pendingFire = resp.Info.FutureActionTimes[0].AsTime()
+		followingFire = resp.Info.FutureActionTimes[1].AsTime()
+		immediateWorkflowID = resp.Info.RunningWorkflows[0].WorkflowId
+	}, awaitTimeout, pollInterval)
+	require.True(t, time.Now().Before(nominal), "observe the initial deadline before its nominal time")
+	require.True(t, pendingFire.After(completeAt))
+	require.NoError(t, s.SdkClient().GetWorkflow(ctx, immediateWorkflowID, "").Get(ctx, nil))
+	completed, err := s.SdkClient().DescribeWorkflowExecution(ctx, immediateWorkflowID, "")
+	require.NoError(t, err)
+	require.WithinRange(t, completed.WorkflowExecutionInfo.CloseTime.AsTime(), nominal, pendingFire)
+
+	// Waiting for RunningWorkflows to empty ensures the scheduler has handled
+	// the completion callback, which causes an extra wakeup during the jitter gap.
+	await.Require(ctx, t, func(t *await.T) {
+		resp, err := s.FrontendClient().DescribeSchedule(t.Context(), describe)
+		require.NoError(t, err)
+		require.Empty(t, resp.Info.RunningWorkflows)
+		require.EqualValues(t, 1, resp.Info.ActionCount)
+		require.True(t, time.Now().Before(pendingFire), "observe the completion before the pending fire")
+	}, awaitTimeout, pollInterval)
+
+	// FutureActionTimes is a projection, not the timer deadline. Require the
+	// real action's scheduled time to equal the deadline advertised at creation.
+	expectedID := wid + "-" + nominal.Format(time.RFC3339)
+	await.Require(ctx, t, func(t *await.T) {
+		resp, err := s.FrontendClient().DescribeSchedule(t.Context(), describe)
+		require.NoError(t, err)
+		require.EqualValues(t, 2, resp.Info.ActionCount)
+		require.Len(t, resp.Info.RecentActions, 2)
+		require.Equal(t, expectedID, resp.Info.RecentActions[1].StartWorkflowResult.WorkflowId)
+		require.Equal(t, pendingFire, resp.Info.RecentActions[1].ScheduleTime.AsTime())
+		require.NotEmpty(t, resp.Info.FutureActionTimes)
+		require.Equal(t, followingFire, resp.Info.FutureActionTimes[0].AsTime())
+	}, awaitTimeout, pollInterval)
+	require.NoError(t, s.SdkClient().GetWorkflow(ctx, expectedID, "").Get(ctx, nil))
 }
 
 func (suite *ScheduleSuite) TestTriggerImmediately(chasmEnabled bool) {
