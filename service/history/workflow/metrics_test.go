@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -556,4 +557,36 @@ func testActivityMetricTags(operation string) []metrics.Tag {
 		metrics.WorkflowTypeTag("test-workflow"),
 		metrics.ActivityTypeTag("test-activity"),
 	}
+}
+
+func TestEmitStorageUsageDelta(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockChasmTree := historyi.NewMockChasmTree(ctrl)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	ms := historyi.NewMockMutableState(ctrl)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+	gomock.InOrder(
+		ms.EXPECT().ConsumeStorageUsageDelta().Return(int64(100), int64(0)),
+		ms.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)),
+	)
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	EmitStorageUsageDelta(metricsHandler, nil, ms)
+	// Consumed: a second emit records nothing.
+	EmitStorageUsageDelta(metricsHandler, nil, ms)
+	// Nil mutable state (e.g. no new run) is a no-op.
+	EmitStorageUsageDelta(metricsHandler, nil, nil)
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.MutableStateByteSeconds.Name()]
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(100), recordings[0].Value)
+	archetypeTag := metrics.ArchetypeTag(chasm.WorkflowComponentName)
+	require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), recordings[0].Tags[metrics.NamespaceTag("").Key])
+	require.Equal(t, archetypeTag.Value, recordings[0].Tags[archetypeTag.Key])
+	require.Empty(t, snapshot[metrics.HistoryByteSeconds.Name()])
 }

@@ -176,6 +176,15 @@ type (
 		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
 		activityFailureSize int
 		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
+		// Storage usage accounting on this cluster. Kept in memory (not LastUpdateTime) because on a passive
+		// cluster syncExecutionInfo overwrites LastUpdateTime with the source cluster's value.
+		// sizeAtLastClose is the approximate persisted size as of the last closed transaction, lastCloseTime
+		// is the time of that transaction (zero if unknown),
+		sizeAtLastClose    int64
+		lastCloseTime      time.Time
+		runningAtLastClose bool
+		// Usage accrued since hte last closed.  To be emitted on closed
+		pendingStorageUsageDelta storageUsageDelta
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -605,6 +614,13 @@ func NewMutableStateFromDB(
 	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
 		mutableState.wrapTimeSourceWithTimeSkipping()
 	}
+
+	// The persisted LastUpdateTime was written by this cluster's last closeTransaction, so it is a local baseline.
+	mutableState.sizeAtLastClose = int64(mutableState.GetApproximatePersistedSize())
+	mutableState.runningAtLastClose = mutableState.executionState.GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	if lastUpdateTime := mutableState.executionInfo.GetLastUpdateTime(); lastUpdateTime != nil {
+		mutableState.lastCloseTime = lastUpdateTime.AsTime()
+	}
 	return mutableState, nil
 }
 
@@ -630,6 +646,9 @@ func NewSanitizedMutableState(
 	}
 
 	mutableState.currentVersion = lastWriteVersion
+	// LastUpdateTime came from the source cluster's clock. Start storage usage accounting on this
+	// cluster from the next transaction instead.
+	mutableState.lastCloseTime = time.Time{}
 	return mutableState, nil
 }
 
@@ -8015,8 +8034,11 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	now := ms.timeSource.Now()
+	ms.closeTransactionAccrueStorageUsage(now)
+
 	ms.executionInfo.StateTransitionCount += 1
-	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.timeSource.Now())
+	ms.executionInfo.LastUpdateTime = timestamppb.New(now)
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -8038,6 +8060,27 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionAccrueStorageUsage(
+	now time.Time,
+) {
+	var delta storageUsageDelta
+	if ms.runningAtLastClose {
+		delta = computeStorageUsageDelta(
+			ms.sizeAtLastClose,
+			ms.executionInfo.GetExecutionStats().GetHistorySize(),
+			ms.lastCloseTime,
+			now,
+		)
+	}
+	ms.pendingStorageUsageDelta = delta
+	if !delta.isZero() {
+		ms.executionInfo.StorageUsage = addStorageUsage(ms.executionInfo.StorageUsage, delta)
+	}
+	ms.sizeAtLastClose = int64(ms.GetApproximatePersistedSize())
+	ms.lastCloseTime = now
+	ms.runningAtLastClose = ms.executionState.GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -9832,6 +9875,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskBuildIdRedirectCounter,
 			&info.VersionHistories,
 			&info.ExecutionStats,
+			&info.StorageUsage,
 			&info.LastFirstEventTxnId,
 			&info.ParentClock,
 			&info.CloseTransferTaskId,

@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -159,6 +160,7 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
 	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = r.mutableState.GetExecutionInfo().MutableStateRebuildTime
+	rebuildMutableState.GetExecutionInfo().StorageUsage = common.CloneProto(r.mutableState.GetExecutionInfo().GetStorageUsage())
 	if err != nil {
 		return nil, err
 	}
