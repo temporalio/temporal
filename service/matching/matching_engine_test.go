@@ -3234,6 +3234,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().GradualChangeUntil().Return(time.Time{}).AnyTimes()
 
 	// add Route to MockMatchingServiceClient
 	routingClient := mockRoutingMatchingClient{
@@ -3291,6 +3292,73 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	}
 	s.True(isLoaded(p1))
 	s.False(isLoaded(p2))
+}
+
+func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	gradualUntil := time.Now().Add(5 * time.Second)
+	s.mockServiceResolver.EXPECT().GradualChangeUntil().Return(gradualUntil).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	p1, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	s.NoError(err)
+	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.NoError(err)
+
+	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
+	s.NoError(err)
+	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
+	s.NoError(err)
+	s.Len(e.getTaskQueuePartitions(1000), 2)
+
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+
+	// p2 moves away partway through a gradual change, without a membership changed event
+	var p2Moved atomic.Bool
+	var p2Lookups atomic.Int32
+	p1key, p1n := p1.RoutingKey(0)
+	p2key, p2n := p2.RoutingKey(0)
+	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self}).AnyTimes()
+	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).DoAndReturn(func(string, int) []membership.HostInfo {
+		p2Lookups.Add(1)
+		if p2Moved.Load() {
+			return []membership.HostInfo{other}
+		}
+		return []membership.HostInfo{self}
+	}).AnyTimes()
+
+	// one event to start the gradual change
+	e.membershipChangedCh <- nil
+	await.RequireTrue(s.T(), func() bool { return p2Lookups.Load() > 0 }, time.Second, 10*time.Millisecond)
+	s.Len(e.getTaskQueuePartitions(1000), 2, "nothing should be unloaded yet")
+
+	p2Moved.Store(true)
+	await.RequireTruef(s.T(), func() bool {
+		return len(e.getTaskQueuePartitions(1000)) == 1
+	}, 2*time.Second, 10*time.Millisecond, "p2 should have been unloaded by periodic rescan")
+
+	tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p1, false, loadCauseUnspecified)
+	s.NoError(err)
+	s.NotNil(tqm)
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {

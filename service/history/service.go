@@ -124,7 +124,7 @@ func (s *Service) Stop() {
 		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
 		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
 		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
-		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf, 0)
 	} else {
 		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
 		err = s.membershipMonitor.EvictSelf()

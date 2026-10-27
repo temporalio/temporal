@@ -91,8 +91,10 @@ func (s *Service) Stop() {
 	if align := s.config.AlignMembershipChange(); align > 0 {
 		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
 		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
-		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
-		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+		window := s.config.GradualMembershipChange()
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of",
+			tag.Timestamp(asOf), tag.NewDurationTag("window", window))
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf, window)
 	} else {
 		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
 		err = s.membershipMonitor.EvictSelf()

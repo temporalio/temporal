@@ -45,6 +45,9 @@ const (
 	// allows join/leave times to be. 15 seconds is enough to allow aligning to 10 seconds plus
 	// 3 seconds of propagation time buffer.
 	maxScheduledEventTimeSeconds = 15
+
+	// Gradual change windows are capped as a sanity check.
+	maxGradualChangeWindow = 5 * time.Minute
 )
 
 type monitor struct {
@@ -60,6 +63,7 @@ type monitor struct {
 	maxJoinDuration           time.Duration
 	propagationTime           time.Duration
 	joinTime                  time.Time
+	joinWindow                time.Duration
 	rings                     map[primitives.ServiceName]*serviceResolver
 	replicaPoints             int
 	logger                    log.Logger
@@ -82,6 +86,7 @@ func newMonitor(
 	maxJoinDuration time.Duration,
 	propagationTime time.Duration,
 	joinTime time.Time,
+	joinWindow time.Duration,
 	replicaPoints int,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
@@ -111,6 +116,7 @@ func newMonitor(
 		maxJoinDuration:           maxJoinDuration,
 		propagationTime:           propagationTime,
 		joinTime:                  joinTime,
+		joinWindow:                joinWindow,
 	}
 	for service, port := range services {
 		rpo.rings[service] = newServiceResolver(service, port, rp, replicaPoints, logger)
@@ -157,13 +163,19 @@ func (rpo *monitor) Start() {
 	}
 
 	if until := time.Until(rpo.joinTime); until > 0 && until.Seconds() < maxScheduledEventTimeSeconds {
+		window := truncateWindow(rpo.joinWindow)
+		if window > 0 {
+			if err = labels.Set(startWindowKey, strconv.FormatInt(int64(window/time.Second), 10)); err != nil {
+				rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startWindowKey))
+			}
+		}
 		if err = labels.Set(startAtKey, strconv.FormatInt(rpo.joinTime.Unix(), 10)); err != nil {
 			rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(startAtKey))
 		}
-		// Clean up the label eventually, but we don't really care when.
+		// Clean up the labels eventually (after the window), but we don't really care when.
 		// The jitter doesn't really matter, but if two nodes join/leave at the same aligned
 		// time, it just spreads out the membership gossip traffic a little bit.
-		clearAfter := until + backoff.Jitter(2*rpo.propagationTime, 0.2)
+		clearAfter := until + window + backoff.Jitter(2*rpo.propagationTime, 0.2)
 		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
 
@@ -222,7 +234,14 @@ func (rpo *monitor) clearStartAt() {
 	// This is just to clean up the startAt label.
 	if labels, err := rpo.rp.Labels(); err == nil {
 		_, _ = labels.Remove(startAtKey)
+		_, _ = labels.Remove(startWindowKey)
 	}
+}
+
+// truncateWindow returns the gradual change window rounded down to whole seconds and capped
+// at maxGradualChangeWindow.
+func truncateWindow(window time.Duration) time.Duration {
+	return min(max(window, 0), maxGradualChangeWindow).Truncate(time.Second)
 }
 
 func (rpo *monitor) WaitUntilInitialized(ctx context.Context) error {
@@ -400,7 +419,7 @@ func (rpo *monitor) EvictSelf() error {
 	return rpo.rp.SelfEvict()
 }
 
-func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+func (rpo *monitor) EvictSelfAt(asOf time.Time, window time.Duration) (time.Duration, error) {
 	until := time.Until(asOf)
 	if until <= 0 || until.Seconds() >= maxScheduledEventTimeSeconds {
 		return 0, rpo.rp.SelfEvict()
@@ -411,15 +430,24 @@ func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
 		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
 		return 0, err
 	}
+	// Set the window first so that nobody sees stopAt without it.
+	window = truncateWindow(window)
+	if window > 0 {
+		err = labels.Set(stopWindowKey, strconv.FormatInt(int64(window/time.Second), 10))
+		if err != nil {
+			rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopWindowKey))
+			return 0, err
+		}
+	}
 	err = labels.Set(stopAtKey, strconv.FormatInt(asOf.Unix(), 10))
 	if err != nil {
 		rpo.logger.Error("unable to set ringpop label", tag.Error(err), tag.Key(stopAtKey))
 		return 0, err
 	}
-	// Wait a couple more seconds after the stopAt time before actually leaving.
+	// Wait a couple more seconds after the end of the window before actually leaving.
 	// The jitter doesn't really matter, but if two nodes join/leave at the same aligned time,
 	// it just spreads out the membership gossip traffic a little bit.
-	leaveAfter := until + backoff.Jitter(rpo.propagationTime, 0.2)
+	leaveAfter := until + window + backoff.Jitter(rpo.propagationTime, 0.2)
 	time.AfterFunc(leaveAfter, func() { _ = rpo.rp.SelfEvict() })
 	return leaveAfter + rpo.propagationTime, nil
 }

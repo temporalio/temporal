@@ -49,7 +49,7 @@ func (s *staticMonitor) EvictSelf() error {
 	return nil
 }
 
-func (s *staticMonitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+func (s *staticMonitor) EvictSelfAt(asOf time.Time, window time.Duration) (time.Duration, error) {
 	return 0, nil
 }
 

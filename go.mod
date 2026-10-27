@@ -226,3 +226,5 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+replace github.com/temporalio/ringpop-go => ../ringpop-go

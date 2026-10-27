@@ -43,10 +43,12 @@ type (
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
 		// EvictSelfAt is similar to EvictSelf but causes the change to take effect on all
-		// hosts at that absolute time (assuming it's in the future). This process should stay
-		// alive for at least the returned duration after calling this, so that all membership
-		// information can be propagated correctly. The resolution of asOf is whole seconds.
-		EvictSelfAt(asOf time.Time) (time.Duration, error)
+		// hosts at that absolute time (assuming it's in the future). If window is non-zero,
+		// the change takes effect gradually: each key moves away from this host at a different
+		// time between asOf and asOf+window. This process should stay alive for at least the
+		// returned duration after calling this, so that all membership information can be
+		// propagated correctly. The resolution of asOf and window is whole seconds.
+		EvictSelfAt(asOf time.Time, window time.Duration) (time.Duration, error)
 		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// GetReachableMembers returns addresses of all members of the ring.
@@ -88,6 +90,12 @@ type (
 		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
+		// GradualChangeUntil returns the time until which a gradual membership change is in
+		// progress, or may start. During that time, the result of Lookup/LookupN for some keys
+		// may change without a ChangedEvent being sent to listeners, so listeners that care
+		// about ownership of specific keys should re-check periodically. Returns a time in the
+		// past (or the zero time) if no gradual change is pending.
+		GradualChangeUntil() time.Time
 	}
 
 	HostInfoProvider interface {

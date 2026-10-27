@@ -1483,6 +1483,19 @@ backlog lag, count, and age for VERSIONED queues.`,
 		`MatchingAlignMembershipChange is a duration to align matching's membership changes to.
 This can help reduce effects of task queue movement.`,
 	)
+	MatchingGradualMembershipChange = NewGlobalDurationSetting(
+		"matching.gradualMembershipChange",
+		0*time.Second,
+		`MatchingGradualMembershipChange is the duration over which task queue partitions are moved to
+a matching node that joins, or moved away from a matching node that leaves. Each partition moves at
+a different time within the window (determined by a hash of the routing key), which spreads out
+the load of acquiring partitions on the new owners. The window starts at the aligned time, so this
+only has an effect if matching.alignMembershipChange is also set. It is rounded down to whole
+seconds. When set, shutdown takes this much longer, since the leaving node keeps serving its
+remaining partitions until the window ends.
+All matching nodes must be running a version that understands gradual membership changes before
+this is enabled.`,
+	)
 	MatchingShutdownDrainDuration = NewGlobalDurationSetting(
 		"matching.shutdownDrainDuration",
 		0*time.Second,

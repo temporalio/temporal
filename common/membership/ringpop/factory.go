@@ -122,11 +122,19 @@ func (factory *factory) getMonitor() *monitor {
 			factory.Config.MaxJoinDuration,
 			maxPropagationTime,
 			factory.getJoinTime(maxPropagationTime),
+			factory.getJoinWindow(),
 			replicaPoints,
 		)
 	})
 
 	return factory.monitor
+}
+
+func (factory *factory) getJoinWindow() time.Duration {
+	if factory.ServiceName == primitives.MatchingService {
+		return dynamicconfig.MatchingGradualMembershipChange.Get(factory.DC)()
+	}
+	return 0
 }
 
 func (factory *factory) getJoinTime(maxPropagationTime time.Duration) time.Time {
