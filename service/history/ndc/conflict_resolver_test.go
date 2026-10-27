@@ -113,6 +113,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
+		StorageUsage:     &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222},
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -130,16 +131,15 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.runID,
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
-	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVersionHistories(
-				versionhistory.NewVersionHistory(
-					branchToken1,
-					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
-				),
+	rebuildExecutionInfo := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: versionhistory.NewVersionHistories(
+			versionhistory.NewVersionHistory(
+				branchToken1,
+				[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 			),
-		},
-	).AnyTimes()
+		),
+	}
+	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(rebuildExecutionInfo).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
@@ -166,6 +166,8 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())
+	s.Equal(int64(111), rebuildExecutionInfo.GetStorageUsage().GetMutableStateByteSeconds())
+	s.Equal(int64(222), rebuildExecutionInfo.GetStorageUsage().GetHistoryByteSeconds())
 }
 
 func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_NotCurrent() {

@@ -374,7 +374,20 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
-) error {
+) (retError error) {
+	// These writes bypass workflow.Context, so emit the storage usage of every written run here,
+	// only after the write succeeded.
+	defer func() {
+		if retError != nil {
+			return
+		}
+		for _, w := range []Workflow{baseWorkflow, currentWorkflow, resetWorkflow} {
+			if w != nil {
+				workflow.EmitStorageUsageDelta(r.shardContext.GetMetricsHandler(), r.shardContext.ChasmRegistry(), w.GetMutableState())
+			}
+		}
+	}()
+
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
