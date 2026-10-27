@@ -617,6 +617,10 @@ message ForceCANVersionSignalArgs {
   // If provided, this state will be used instead of the current state
   // when performing continue-as-new.
   VersionLocalState override_state = 1;
+  // Skip waiting for pending propagations before continuing as new. Defaults to
+  // false. Setting this to true can abandon propagation to recover a stuck workflow.
+  // Each force-CaN signal replaces this choice, including signals that omit this field.
+  bool skip_pending_propagations = 2;
 }
 
 // Signal input for demoting a version workflow (fire-and-forget from deployment workflow).

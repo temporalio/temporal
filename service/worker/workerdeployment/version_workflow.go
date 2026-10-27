@@ -52,6 +52,7 @@ type (
 		signalHandler                *SignalHandler
 		drainageStatusSyncInProgress bool
 		forceCAN                     bool
+		skipPendingPropagations      bool
 		// Optional override state for force-CaN
 		overrideState *deploymentspb.VersionLocalState
 		// Track if async propagations are in progress (prevents CaN)
@@ -111,6 +112,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		var args *deploymentspb.ForceCANVersionSignalArgs
 		c.Receive(ctx, &args)
 		d.forceCAN = true
+		d.skipPendingPropagations = args.GetSkipPendingPropagations()
 
 		// Apply override state if provided
 		if args.GetOverrideState() != nil {
@@ -354,20 +356,18 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	// Wait until all async propagations complete before continuing as new or closing.
+	waitForPropagationsBeforeCAN := workflow.GetVersion(ctx, "wait-for-pending-propagations", workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	// Automatic CaN must preserve pending propagation. Force-CaN can bypass it to recover a stuck workflow.
 	err := workflow.Await(ctx, func() bool {
-		if d.asyncPropagationsInProgress != 0 {
+		if waitForPropagationsBeforeCAN && d.asyncPropagationsInProgress != 0 &&
+			(d.deleteVersion || !d.forceCAN || !d.skipPendingPropagations) {
 			return false
 		}
-		// version is deleted -> it's ok to drop all signals and updates.
-		if d.deleteVersion {
-			return true
-		}
-		// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-		return !d.signalHandler.signalSelector.HasPending() &&
-			d.signalHandler.processingSignals == 0 &&
-			workflow.AllHandlersFinished(ctx) &&
-			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested())
+		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
+				// And there is a force CaN or a propagated state change or history got too large
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 	})
 	if err != nil {
 		return err

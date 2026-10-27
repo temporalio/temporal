@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
@@ -315,113 +318,204 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 	s.True(s.env.IsWorkflowCompleted())
 }
 
-// Test_AsyncPropagationsPreventsCanUntilComplete tests that the workflow does not
-// continue-as-new while async propagations are in progress
-func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() {
-	s.testAsyncPropagationPreventsCanUntilComplete(nil)
-}
+func TestVersionWorkflowContinueAsNew(t *testing.T) {
+	t.Parallel()
 
-func (s *VersionWorkflowSuite) Test_ForceCANWaitsForAsyncPropagation() {
-	s.testAsyncPropagationPreventsCanUntilComplete(func() {
-		s.env.SignalWorkflow(ForceCANSignalName, nil)
-	})
-}
+	for _, tc := range []struct {
+		name               string
+		forceCAN           bool
+		signalArgs         *deploymentspb.ForceCANVersionSignalArgs
+		suggested          bool
+		legacy             bool
+		resetSkipping      bool
+		bypassWaiting      bool
+		emptyBypassPayload bool
+		overrideState      bool
+		wantWait           bool
+		deleteVersion      bool
+	}{
+		{name: "state_change", wantWait: true},
+		{name: "history_suggested", suggested: true, wantWait: true},
+		{name: "force_nil", forceCAN: true, wantWait: true},
+		{name: "force_false", forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{}, wantWait: true},
+		{name: "force_skip", forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true}},
+		{name: "force_wait_under_history_pressure", forceCAN: true, suggested: true, wantWait: true},
+		{name: "force_wait_then_skip", forceCAN: true, bypassWaiting: true},
+		{name: "force_skip_then_nil", forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true}, resetSkipping: true, wantWait: true},
+		{name: "force_skip_then_false", forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true}, resetSkipping: true, emptyBypassPayload: true, wantWait: true},
+		{name: "force_wait_with_override", forceCAN: true, overrideState: true, wantWait: true},
+		{name: "legacy_state_change", legacy: true, wantWait: true},
+		{name: "legacy_history_suggested", legacy: true, suggested: true},
+		{name: "legacy_force_nil", legacy: true, forceCAN: true},
+		{name: "legacy_force_false", legacy: true, forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{}},
+		{name: "legacy_force_skip", legacy: true, forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true}},
+		{name: "delete_force_skip", forceCAN: true, signalArgs: &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true}, deleteVersion: true, wantWait: true},
+		{name: "delete_history_suggested", suggested: true, deleteVersion: true, wantWait: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, stage := range []string{"sync", "check"} {
+				t.Run(stage, func(t *testing.T) {
+					t.Parallel()
+					var suite testsuite.WorkflowTestSuite
+					env := suite.NewTestWorkflowEnvironment()
+					tv := testvars.New(t)
+					now := timestamppb.New(env.Now())
+					var a *VersionActivities
+					versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+						return VersionWorkflow(ctx,
+							func() DeploymentWorkflowVersion { return VersionDataRevisionNumber },
+							func() time.Duration { return defaultVisibilityRefresh },
+							func() time.Duration { return defaultVisibilityGrace }, args)
+					}
+					env.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
+					env.OnActivity(a.DescribeWorkerControllerInstanceStatus, mock.Anything, mock.Anything).
+						Return(&deploymentpb.ComputeStatus{}, nil).Maybe()
+					if tc.legacy {
+						env.OnGetVersion("wait-for-pending-propagations", workflow.DefaultVersion, 1).Return(workflow.DefaultVersion).Once()
+					}
 
-func (s *VersionWorkflowSuite) Test_ContinueAsNewSuggestedWaitsForAsyncPropagation() {
-	s.testAsyncPropagationPreventsCanUntilComplete(func() {
-		s.env.SetContinueAsNewSuggested(true)
-	})
-}
+					syncCall := env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
+						Return(&deploymentspb.SyncDeploymentVersionUserDataResponse{
+							TaskQueueMaxVersions: map[string]int64{tv.TaskQueue().GetName(): 10},
+						}, nil).Once()
+					checkCall := env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
+						Return(nil)
+					if stage != "sync" || tc.wantWait {
+						checkCall.Once()
+					}
+					if stage == "sync" {
+						syncCall.After(10 * time.Second)
+						if !tc.wantWait {
+							checkCall.Maybe()
+						}
+					} else {
+						checkCall.After(10 * time.Second)
+					}
+					if tc.deleteVersion {
+						env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Once()
+						env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Once()
+					} else {
+						completionCall := env.OnSignalExternalWorkflow(mock.Anything,
+							GenerateDeploymentWorkflowID(tv.DeploymentSeries()), "", PropagationCompleteSignal,
+							&deploymentspb.PropagationCompletionInfo{RevisionNumber: 5, BuildId: tv.BuildID()}).Return(nil)
+						if tc.wantWait {
+							completionCall.Once()
+						} else {
+							completionCall.Maybe()
+						}
+					}
+					propagationStarted, propagationCompleted := false, false
+					activityName := "SyncDeploymentVersionUserData"
+					if stage == "check" {
+						activityName = "CheckWorkerDeploymentUserDataPropagation"
+					}
+					env.SetOnActivityStartedListener(func(info *activity.Info, _ context.Context, _ converter.EncodedValues) {
+						if info.ActivityType.Name == activityName {
+							propagationStarted = true
+						}
+					})
+					env.SetOnActivityCompletedListener(func(info *activity.Info, _ converter.EncodedValue, _ error) {
+						if info.ActivityType.Name == activityName {
+							propagationCompleted = true
+						}
+					})
 
-func (s *VersionWorkflowSuite) testAsyncPropagationPreventsCanUntilComplete(triggerContinueAsNew func()) {
-	tv := testvars.New(s.T())
-	now := timestamppb.New(time.Now())
+					var override *deploymentspb.VersionLocalState
+					if tc.overrideState {
+						override = &deploymentspb.VersionLocalState{Version: tv.DeploymentVersion()}
+					}
+					updateName := SyncVersionState
+					var updateArgs any = &deploymentspb.SyncVersionStateUpdateArgs{
+						RoutingUpdateTime: now,
+						CurrentSinceTime:  now,
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentVersion:            tv.DeploymentVersionString(),
+							CurrentVersionChangedTime: now,
+							RevisionNumber:            5,
+						},
+					}
+					if tc.deleteVersion {
+						updateName = DeleteVersion
+						updateArgs = &deploymentspb.DeleteVersionArgs{SkipDrainage: true, AsyncPropagation: true}
+					}
+					observedPending := false
+					env.RegisterDelayedCallback(func() {
+						env.UpdateWorkflow(updateName, "", &testsuite.TestUpdateCallback{
+							OnReject: func(err error) { require.NoError(t, err) },
+							OnAccept: func() {},
+							OnComplete: func(_ any, err error) {
+								require.NoError(t, err)
+								env.RegisterDelayedCallback(func() {
+									require.True(t, propagationStarted)
+									require.False(t, propagationCompleted)
+									if tc.forceCAN {
+										args := tc.signalArgs
+										if override != nil {
+											args = &deploymentspb.ForceCANVersionSignalArgs{OverrideState: override}
+										}
+										if tc.resetSkipping {
+											env.SignalWorkflowSkippingWorkflowTask(ForceCANSignalName, args)
+											args = nil
+											if tc.emptyBypassPayload {
+												args = &deploymentspb.ForceCANVersionSignalArgs{}
+											}
+										}
+										env.SignalWorkflow(ForceCANSignalName, args)
+									}
+									if tc.suggested {
+										env.SetContinueAsNewSuggested(true)
+									}
+								}, time.Second)
+								env.RegisterDelayedCallback(func() {
+									observedPending = true
+									require.False(t, env.IsWorkflowCompleted())
+									if tc.bypassWaiting {
+										env.SignalWorkflow(ForceCANSignalName, &deploymentspb.ForceCANVersionSignalArgs{SkipPendingPropagations: true})
+									}
+								}, 2*time.Second)
+							},
+						}, updateArgs)
+					}, 0)
 
-	var a *VersionActivities
-	taskQueueName := tv.TaskQueue().Name
-	releasePropagation := make(chan struct{})
-	var observedWaiting atomic.Bool
-	var completedBeforePropagation atomic.Bool
-	var propagationCompleted atomic.Bool
+					env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+						NamespaceName: tv.NamespaceName().String(),
+						NamespaceId:   tv.NamespaceID().String(),
+						VersionState: &deploymentspb.VersionLocalState{
+							Version: tv.DeploymentVersion(),
+							TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+								tv.TaskQueue().GetName(): {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
+							},
+							SyncBatchSize:             10,
+							StartedDeploymentWorkflow: true,
+						},
+					})
 
-	routingConfig := &deploymentpb.RoutingConfig{
-		CurrentVersion:            tv.DeploymentVersionString(),
-		CurrentVersionChangedTime: now,
-		RevisionNumber:            5,
-	}
-
-	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
-			TaskQueueMaxVersions: map[string]int64{
-				taskQueueName: 10,
-			},
-		}, nil,
-	).Maybe()
-
-	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
-		Return(func(ctx context.Context, _ *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			select {
-			case <-releasePropagation:
-				propagationCompleted.Store(true)
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
+					require.True(t, env.IsWorkflowCompleted())
+					if tc.deleteVersion {
+						require.NoError(t, env.GetWorkflowError())
+					} else {
+						require.True(t, workflow.IsContinueAsNewError(env.GetWorkflowError()))
+					}
+					if tc.wantWait || tc.bypassWaiting {
+						require.True(t, observedPending)
+					}
+					require.Equal(t, tc.wantWait, propagationCompleted)
+					if !tc.wantWait {
+						env.AssertNotCalled(t, "workflow.SignalExternalWorkflow", mock.Anything, mock.Anything, mock.Anything, PropagationCompleteSignal, mock.Anything)
+					}
+					if override != nil {
+						var canErr *workflow.ContinueAsNewError
+						require.ErrorAs(t, env.GetWorkflowError(), &canErr)
+						var nextArgs deploymentspb.WorkerDeploymentVersionWorkflowArgs
+						require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &nextArgs))
+						protorequire.ProtoEqual(t, override, nextArgs.GetVersionState())
+					}
+					env.AssertExpectations(t)
+				})
 			}
-		}).Maybe()
-
-	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-
-	s.env.RegisterDelayedCallback(func() {
-		syncStateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: now,
-			CurrentSinceTime:  now,
-			RoutingConfig:     routingConfig, // Async mode
-		}
-
-		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("sync state update should not have failed")
-			},
-			OnAccept: func() {},
-			OnComplete: func(result any, err error) {
-				s.Require().NoError(err)
-				if triggerContinueAsNew != nil {
-					triggerContinueAsNew()
-				}
-				s.env.RegisterDelayedCallback(func() {
-					observedWaiting.Store(true)
-					completedBeforePropagation.Store(s.env.IsWorkflowCompleted())
-					close(releasePropagation)
-				}, 10*time.Millisecond)
-			},
-		}, syncStateArgs)
-	}, 1*time.Millisecond)
-
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
-		NamespaceName: tv.NamespaceName().String(),
-		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
-			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
-					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
-						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
-					},
-				},
-			},
-			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
-			StartedDeploymentWorkflow: true,
-		},
-	})
-
-	s.Require().True(s.env.IsWorkflowCompleted())
-	s.Require().True(observedWaiting.Load())
-	s.Require().False(completedBeforePropagation.Load())
-	s.Require().True(propagationCompleted.Load())
-	s.Require().True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+		})
+	}
 }
 
 // Test_DeleteVersion_Success tests successful deletion of a version
