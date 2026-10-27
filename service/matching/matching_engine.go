@@ -21,6 +21,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -111,6 +112,7 @@ type (
 	}
 
 	pollMetadata struct {
+		sessionOptions            *sessionpb.WorkerSessionOptions
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -659,12 +661,26 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return "", false, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		assigned, err := e.singleSessionAssigned(ctx, partition)
+		if err != nil {
+			return "", false, err
+		}
+		if !assigned {
+			return "", false, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			// if this sticky task queue partition is dealing with an assigned session, we load it's partition manager.
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+			if err != nil {
+				return "", false, err
+			}
+		}
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -816,6 +832,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -961,6 +978,9 @@ pollLoop:
 				}
 			}
 
+			if pollMetadata.isSingleSessionAcquisition() {
+				return nil, err
+			}
 			continue pollLoop
 		}
 
@@ -1093,6 +1113,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

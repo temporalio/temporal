@@ -93,6 +93,9 @@ type (
 
 		cancelFairnessSub func()
 
+		singleSessionAcquisitionMutex      sync.Mutex
+		singleSessionAcquisitionInProgress bool
+
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
 
@@ -940,7 +943,14 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	// based on whether the effectiveRPS has changed.
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
-	task, err := dbq.PollTask(ctx, pollMetadata)
+	var task *internalTask
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY &&
+		pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
+		pollMetadata.sessionOptions.GetSingleSession() != nil {
+		task, err = pm.pollSingleSession(ctx, dbq, pollMetadata)
+	} else {
+		task, err = dbq.PollTask(ctx, pollMetadata)
+	}
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task)
 	}

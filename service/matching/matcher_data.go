@@ -455,6 +455,10 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 
 		var matched *waitingPoller
 		for poller := d.pollers.head; poller != nil; poller = poller.next {
+			// A bootstrap poll must acquire a workflow task, not a standalone query.
+			if task.isQuery() && poller.pollMetadata.isSingleSessionAcquisition() {
+				continue
+			}
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)

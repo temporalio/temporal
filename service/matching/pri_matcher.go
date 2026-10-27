@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -651,6 +652,11 @@ func (tm *priTaskMatcher) poll(
 		queryOnly:    queryOnly,
 		forwardCtx:   ctx,
 		pollMetadata: pollMetadata,
+	}
+
+	if tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.sessionOptions.GetSingleSession() != nil {
+		// Session acquisition is controlled by the sticky partition, not priority-backlog forwarding.
+		poller.forwardCtx = nil
 	}
 
 	var res *matchResult
