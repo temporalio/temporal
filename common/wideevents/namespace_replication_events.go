@@ -31,6 +31,7 @@ const (
 	NamespaceReplicationDLQed        NamespaceReplicationPhase = "dlqed"
 	NamespaceReplicationCompared     NamespaceReplicationPhase = "compared"
 	NamespaceReplicationPeerDelivery NamespaceReplicationPhase = "peer_delivery"
+	NamespaceReplicationCompleted    NamespaceReplicationPhase = "completed"
 
 	NamespaceReplicationOutcomeCreated     NamespaceReplicationOutcome = "created"
 	NamespaceReplicationOutcomeUpdated     NamespaceReplicationOutcome = "updated"

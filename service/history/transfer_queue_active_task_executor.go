@@ -1213,6 +1213,10 @@ func (t *transferQueueActiveTaskExecutor) getOrphanedChildReplacementInfo(
 	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
 		return nil
 	}
+	// Only a global namespace can fail over, so a local parent never has a losing branch.
+	if !mutableState.GetNamespaceEntry().IsGlobalNamespace() {
+		return nil
+	}
 	executionInfo := mutableState.GetExecutionInfo()
 	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
 	if childInfo.GetNamespaceId() == "" {

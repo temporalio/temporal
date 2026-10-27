@@ -22,6 +22,8 @@ type peerOutcomeRecord struct {
 	retryExhausted   bool
 	firstAttemptAt   time.Time
 	resolvedAt       time.Time
+	startedAt        time.Time
+	completion       *shadowCompletionRecord
 }
 
 func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, recorded peerOutcomeRecord, applyErr, saveErr error, duration time.Duration) {
@@ -45,21 +47,7 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 		metrics.NamespaceReplicationCHASMApplyOutcomes.With(h.metricsHandler).Record(1, tags...)
 		metrics.NamespaceReplicationCHASMApplyLatency.With(h.metricsHandler).Record(duration, tags...)
 	}
-	hasPendingDuration := saveErr == nil && recorded.stateUpdated && !recorded.firstAttemptAt.IsZero()
-	var pendingAge time.Duration
-	if hasPendingDuration {
-		pendingAge = max(recorded.resolvedAt.Sub(recorded.firstAttemptAt), 0)
-	}
-	if hasPendingDuration && h.metricsHandler != nil {
-		if recorded.retryScheduled {
-			metrics.NamespaceReplicationCHASMPeerPendingAge.With(h.metricsHandler).Record(pendingAge, tags...)
-			if pendingAge >= pendingAlertThreshold {
-				metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, tags...)
-			}
-		} else {
-			metrics.NamespaceReplicationCHASMPeerPendingLatency.With(h.metricsHandler).Record(pendingAge, tags...)
-		}
-	}
+	pendingAge, endToEndDuration := h.recordPeerDurations(request, recorded, saveErr, tags)
 	// Metrics cover scheduled retries; wide events describe committed terminal
 	// outcomes or failures to persist an attempt's outcome.
 	if saveErr == nil && (recorded.retryScheduled || !recorded.stateUpdated) {
@@ -85,8 +73,11 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 	} else {
 		details["persisted_peer_outcome"] = recorded.outcome.String()
 	}
-	if hasPendingDuration {
+	if pendingAge != nil {
 		details["pending_duration_ms"] = pendingAge.Milliseconds()
+	}
+	if endToEndDuration != nil {
+		details["end_to_end_duration_ms"] = endToEndDuration.Milliseconds()
 	}
 	eventOutcome := wideevents.NamespaceReplicationOutcome(outcome)
 	if request.Shadow {
@@ -111,6 +102,42 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 		SourceCluster: request.SourceCluster, TargetCluster: request.TargetCluster, AttemptCount: int(request.AttemptCount),
 		Error: observationErr, EmitOnTaskSerializationError: true,
 	})
+}
+
+func (h *applyPeerTaskHandler) recordPeerDurations(
+	request PeerApplyRequest,
+	recorded peerOutcomeRecord,
+	saveErr error,
+	tags []metrics.Tag,
+) (pendingAge, endToEndDuration *time.Duration) {
+	if saveErr != nil || !recorded.stateUpdated {
+		return nil, nil
+	}
+	if !recorded.firstAttemptAt.IsZero() {
+		age := max(recorded.resolvedAt.Sub(recorded.firstAttemptAt), 0)
+		pendingAge = &age
+	}
+	if request.Shadow && !recorded.retryScheduled && !recorded.startedAt.IsZero() {
+		duration := max(recorded.resolvedAt.Sub(recorded.startedAt), 0)
+		endToEndDuration = &duration
+	}
+	if h.metricsHandler == nil {
+		return pendingAge, endToEndDuration
+	}
+	if endToEndDuration != nil {
+		metrics.NamespaceReplicationCHASMApplyEndToEndLatency.With(h.metricsHandler).Record(*endToEndDuration, tags...)
+	}
+	if pendingAge != nil {
+		if recorded.retryScheduled {
+			metrics.NamespaceReplicationCHASMPeerPendingAge.With(h.metricsHandler).Record(*pendingAge, tags...)
+			if *pendingAge >= pendingAlertThreshold {
+				metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(h.metricsHandler).Record(1, tags...)
+			}
+		} else {
+			metrics.NamespaceReplicationCHASMPeerPendingLatency.With(h.metricsHandler).Record(*pendingAge, tags...)
+		}
+	}
+	return pendingAge, endToEndDuration
 }
 
 func peerApplyMetricOutcome(record peerOutcomeRecord) string {

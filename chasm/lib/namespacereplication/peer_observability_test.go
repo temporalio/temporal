@@ -60,16 +60,16 @@ func TestPeerApplyObservability(t *testing.T) {
 		eventOutcome  string
 		wantEvents    int
 	}{
-		{name: "match", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, outcome: "shadow_match", eventOutcome: "match", wantEvents: 1},
-		{name: "mismatch", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, outcome: "shadow_mismatch", eventOutcome: "mismatch", wantEvents: 1},
-		{name: "match after retry", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, age: 2 * time.Minute, outcome: "shadow_match", eventOutcome: "match", wantEvents: 1},
+		{name: "match", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, outcome: "shadow_match", eventOutcome: "match", wantEvents: 2},
+		{name: "mismatch", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, outcome: "shadow_mismatch", eventOutcome: "mismatch", wantEvents: 2},
+		{name: "match after retry", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, age: 2 * time.Minute, outcome: "shadow_match", eventOutcome: "match", wantEvents: 2},
 		{name: "unavailable peer", applyErr: serviceerror.NewUnavailable("peer down"), outcome: "retryable_error"},
 		{name: "retry below alert threshold", applyErr: serviceerror.NewUnavailable("peer down"), age: 59 * time.Second, outcome: "retryable_error"},
 		{name: "retry at alert threshold", applyErr: serviceerror.NewUnavailable("peer down"), age: time.Minute, outcome: "retryable_error"},
 		{name: "retry above alert threshold", applyErr: serviceerror.NewUnavailable("peer down"), age: 61 * time.Second, outcome: "retryable_error"},
 		{name: "aged retry", applyErr: serviceerror.NewUnavailable("peer down"), age: 2 * time.Minute, outcome: "retryable_error"},
-		{name: "terminal error", applyErr: serviceerror.NewInvalidArgument("invalid reference"), outcome: "terminal_error", eventOutcome: "error", wantEvents: 1},
-		{name: "retry exhausted", applyErr: serviceerror.NewUnavailable("peer down"), age: 8 * 24 * time.Hour, outcome: "retry_exhausted", eventOutcome: "error", wantEvents: 1},
+		{name: "terminal error", applyErr: serviceerror.NewInvalidArgument("invalid reference"), outcome: "terminal_error", eventOutcome: "error", wantEvents: 2},
+		{name: "retry exhausted", applyErr: serviceerror.NewUnavailable("peer down"), age: 8 * 24 * time.Hour, outcome: "retry_exhausted", eventOutcome: "error", wantEvents: 2},
 		{name: "state save failure", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, saveFailure: true, outcome: "state_transition_error", eventOutcome: "error", wantEvents: 1},
 		{name: "retry save failure", applyErr: serviceerror.NewUnavailable("peer down"), saveFailure: true, outcome: "state_transition_error", eventOutcome: "error", wantEvents: 1},
 		{name: "stale outcome", wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, staleOutcome: true, outcome: "state_update_skipped"},
@@ -90,7 +90,11 @@ func TestPeerApplyObservability(t *testing.T) {
 			env.peerHandler.emitNamespaceLifecycleEvents = func() bool { return !tc.disableEvents }
 			if tc.observerPanic {
 				panicLogger := log.NewMockLogger(gomock.NewController(t))
-				panicLogger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any())
+				panics := 2
+				if tc.saveFailure {
+					panics = 1
+				}
+				panicLogger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).Times(panics)
 				env.peerHandler.logger = panicLogger
 				env.peerHandler.emitNamespaceLifecycleEvents = func() bool { panic("observation panic") }
 			}
@@ -146,6 +150,16 @@ func TestPeerApplyObservability(t *testing.T) {
 			require.Equal(t, map[string]string{"source_cluster": "cellA", "target_cluster": "cellB", "operation": "update", "outcome": tc.outcome, "mode": "shadow", "apply_stage": "peer"}, outcomes[0].Tags)
 			require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyLatency.Name()), 1)
 			require.Len(t, logger.records, tc.wantEvents)
+			completions := capture.SnapshotMetric(metrics.NamespaceReplicationShadowCompletionOutcomes.Name())
+			if !tc.saveFailure && !tc.staleOutcome && tc.outcome != "retryable_error" {
+				require.Len(t, completions, 1)
+			} else {
+				require.Empty(t, completions)
+			}
+			// These fixtures omit the scheduling timestamp. Do not fabricate an
+			// end-to-end duration when timing is unavailable.
+			require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyEndToEndLatency.Name()))
+			require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationShadowCompletionLatency.Name()))
 			if tc.wantEvents > 0 {
 				var phase string
 				logger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {

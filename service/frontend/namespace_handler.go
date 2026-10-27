@@ -269,52 +269,61 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
 
-	namespaceResponse, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID, registerRequest))
-
-	err = d.namespaceReplicator.HandleTransmissionTask(
-		ctx,
-		enumsspb.NAMESPACE_OPERATION_CREATE,
-		namespaceRequest.Namespace.Info,
-		namespaceRequest.Namespace.Config,
-		namespaceRequest.Namespace.ReplicationConfig,
-		false,
-		namespaceRequest.Namespace.ConfigVersion,
-		namespaceRequest.Namespace.FailoverVersion,
-		namespaceRequest.IsGlobalNamespace,
-		nil,
-		false, // forceReplicate
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	d.invokeShadowNamespaceMutation(
-		ctx,
-		transportMode,
-		enumsspb.NAMESPACE_OPERATION_CREATE,
-		namespaceRequest.Namespace,
-		nsreplication.NamespaceDetailFromTransmissionTask(
+	applyLegacy := func() (string, error) {
+		response, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
+		if err != nil {
+			return "", err
+		}
+		d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, response.ID, registerRequest))
+		err = d.namespaceReplicator.HandleTransmissionTask(
+			ctx,
+			enumsspb.NAMESPACE_OPERATION_CREATE,
 			namespaceRequest.Namespace.Info,
 			namespaceRequest.Namespace.Config,
 			namespaceRequest.Namespace.ReplicationConfig,
+			false,
 			namespaceRequest.Namespace.ConfigVersion,
 			namespaceRequest.Namespace.FailoverVersion,
+			namespaceRequest.IsGlobalNamespace,
 			nil,
-		),
-		0,
-		nil,
-		isGlobalNamespace,
-		false,
-	)
+			false, // forceReplicate
+		)
+		return response.ID, err
+	}
+
+	var namespaceID string
+	switch transportMode {
+	case namespaceReplicationTransportShadow:
+		namespaceID, err = applyLegacy()
+		if err == nil {
+			d.invokeShadowNamespaceMutation(
+				ctx,
+				enumsspb.NAMESPACE_OPERATION_CREATE,
+				namespaceRequest.Namespace,
+				nsreplication.NamespaceDetailFromTransmissionTask(
+					namespaceRequest.Namespace.Info,
+					namespaceRequest.Namespace.Config,
+					namespaceRequest.Namespace.ReplicationConfig,
+					namespaceRequest.Namespace.ConfigVersion,
+					namespaceRequest.Namespace.FailoverVersion,
+					nil,
+				),
+				0,
+				nil,
+				isGlobalNamespace,
+				false,
+			)
+		}
+	default:
+		namespaceID, err = applyLegacy()
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	d.logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(registerRequest.GetNamespace()),
-		tag.WorkflowNamespaceID(namespaceResponse.ID),
+		tag.WorkflowNamespaceID(namespaceID),
 	)
 
 	return &workflowservice.RegisterNamespaceResponse{}, nil
@@ -650,6 +659,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	}
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
+	var updateReq *persistence.UpdateNamespaceRequest
 	if configurationChanged || activeClusterChanged || needsNamespacePromotion {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
@@ -675,7 +685,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 
 		replicationConfig.FailoverHistory = failoverHistory
-		updateReq := &persistence.UpdateNamespaceRequest{
+		updateReq = &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
 				Config:                      config,
@@ -687,63 +697,72 @@ func (d *namespaceHandler) UpdateNamespace(
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
 		}
-		err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
-		if err != nil {
-			return nil, err
+	}
+
+	applyLegacy := func() error {
+		if updateReq != nil {
+			if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+				return err
+			}
+			d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
+				eventBefore,
+				updateReq.Namespace,
+				isGlobalNamespace,
+				activeClusterChanged && isGlobalNamespace,
+				needsNamespacePromotion,
+				updateRequest,
+			))
 		}
-
-		d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
-			eventBefore,
-			updateReq.Namespace,
-			isGlobalNamespace,
-			activeClusterChanged && isGlobalNamespace,
-			needsNamespacePromotion,
-			updateRequest,
-		))
-	}
-
-	err = d.namespaceReplicator.HandleTransmissionTask(
-		ctx,
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		info,
-		config,
-		replicationConfig,
-		clusterListChanged,
-		configVersion,
-		failoverVersion,
-		isGlobalNamespace,
-		failoverHistory,
-		false, // forceReplicate
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	d.invokeShadowNamespaceMutation(
-		ctx,
-		transportMode,
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		&persistencespb.NamespaceDetail{
-			Info:                        info,
-			Config:                      config,
-			ReplicationConfig:           replicationConfig,
-			ConfigVersion:               configVersion,
-			FailoverVersion:             failoverVersion,
-			FailoverNotificationVersion: failoverNotificationVersion,
-		},
-		nsreplication.NamespaceDetailFromTransmissionTask(
+		return d.namespaceReplicator.HandleTransmissionTask(
+			ctx,
+			enumsspb.NAMESPACE_OPERATION_UPDATE,
 			info,
 			config,
 			replicationConfig,
+			clusterListChanged,
 			configVersion,
 			failoverVersion,
+			isGlobalNamespace,
 			failoverHistory,
-		),
-		notificationVersion,
-		oldReplicationClusters,
-		isGlobalNamespace,
-		clusterListChanged,
-	)
+			false, // forceReplicate
+		)
+	}
+
+	switch transportMode {
+	case namespaceReplicationTransportShadow:
+		err = applyLegacy()
+		if err == nil {
+			d.invokeShadowNamespaceMutation(
+				ctx,
+				enumsspb.NAMESPACE_OPERATION_UPDATE,
+				&persistencespb.NamespaceDetail{
+					Info:                        info,
+					Config:                      config,
+					ReplicationConfig:           replicationConfig,
+					ConfigVersion:               configVersion,
+					FailoverVersion:             failoverVersion,
+					FailoverNotificationVersion: failoverNotificationVersion,
+				},
+				nsreplication.NamespaceDetailFromTransmissionTask(
+					info,
+					config,
+					replicationConfig,
+					configVersion,
+					failoverVersion,
+					failoverHistory,
+				),
+				notificationVersion,
+				oldReplicationClusters,
+				isGlobalNamespace,
+				clusterListChanged,
+			)
+		}
+	default:
+		err = applyLegacy()
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
 		IsGlobalNamespace: isGlobalNamespace,
@@ -1449,7 +1468,6 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 
 func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	ctx context.Context,
-	transportMode namespaceReplicationTransportMode,
 	operation enumsspb.NamespaceOperation,
 	chasmDetail *persistencespb.NamespaceDetail,
 	legacyDetail *persistencespb.NamespaceDetail,
@@ -1458,14 +1476,13 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	isGlobalNamespace bool,
 	clusterListChanged bool,
 ) {
-	if transportMode != namespaceReplicationTransportShadow ||
-		!nsreplication.ShouldReplicateNamespace(
-			false,
-			isGlobalNamespace,
-			chasmDetail.GetReplicationConfig().GetClusters(),
-			clusterListChanged,
-			chasmDetail.GetInfo().GetState(),
-		) {
+	if !nsreplication.ShouldReplicateNamespace(
+		false,
+		isGlobalNamespace,
+		chasmDetail.GetReplicationConfig().GetClusters(),
+		clusterListChanged,
+		chasmDetail.GetInfo().GetState(),
+	) {
 		return
 	}
 

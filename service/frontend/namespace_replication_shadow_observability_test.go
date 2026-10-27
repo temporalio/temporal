@@ -34,29 +34,42 @@ func shadowObservationTask() *replicationspb.NamespaceTaskAttributes {
 func TestShadowReceiverObservability(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name           string
-		mutate         func(*adminservice.ApplyNamespaceMutationRequest)
-		outcome        string
-		reason         string
-		alterIdentity  bool
-		legacyMetadata bool
-		disableEvents  bool
+		name            string
+		mutate          func(*adminservice.ApplyNamespaceMutationRequest)
+		outcome         string
+		reason          string
+		differingFields []any
+		receivedTask    map[string]any
+		disableEvents   bool
 	}{
 		{name: "match ignores typed diagnostic field", outcome: "match", reason: "none"},
-		{name: "legacy payload mismatch", outcome: "mismatch", reason: "legacy_payload_mismatch", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
+		{name: "legacy payload mismatch", outcome: "mismatch", reason: "legacy_payload_mismatch", differingFields: []any{"info"}, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
 			task := shadowObservationTask()
 			task.Info.Description = "CHASM description"
 			req.NamespaceTaskPayload, _ = nsreplication.MarshalNamespaceTask(task)
-			req.Fingerprint = nsreplication.NamespaceTaskFingerprintFromPayload(req.NamespaceTaskPayload)
 		}},
-		{name: "integrity mismatch", outcome: "mismatch", reason: "integrity", legacyMetadata: true, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.Fingerprint = []byte("wrong") }},
-		{name: "integrity mismatch with altered identity", outcome: "mismatch", reason: "integrity", alterIdentity: true, legacyMetadata: true},
+		{
+			name: "mismatch attributed to legacy metadata", outcome: "mismatch", reason: "legacy_payload_mismatch",
+			differingFields: []any{"namespace_operation", "id", "info", "config_version", "failover_version"},
+			receivedTask: map[string]any{
+				"id": "different-namespace-id", "namespace_operation": "NAMESPACE_OPERATION_CREATE",
+				"info":           map[string]any{"name": "orders", "description": "legacy description"},
+				"config_version": "99", "failover_version": "101",
+			},
+			mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
+				task := shadowObservationTask()
+				task.Id = "different-namespace-id"
+				task.Info.Name = "orders"
+				task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
+				task.ConfigVersion, task.FailoverVersion = 99, 101
+				req.NamespaceTaskPayload, _ = nsreplication.MarshalNamespaceTask(task)
+			},
+		},
 		{name: "missing legacy reference", outcome: "error", reason: "missing_legacy_reference", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.ShadowLegacyTaskPayload = nil }},
 		{name: "invalid legacy reference", outcome: "error", reason: "invalid_legacy_reference", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.ShadowLegacyTaskPayload = []byte{0xff} }},
-		{name: "missing actual payload", outcome: "error", reason: "missing_payload", legacyMetadata: true, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.NamespaceTaskPayload = nil }},
-		{name: "invalid actual payload", outcome: "error", reason: "invalid_payload", legacyMetadata: true, mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
+		{name: "missing actual payload", outcome: "error", reason: "missing_payload", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) { req.NamespaceTaskPayload = nil }},
+		{name: "invalid actual payload", outcome: "error", reason: "invalid_payload", mutate: func(req *adminservice.ApplyNamespaceMutationRequest) {
 			req.NamespaceTaskPayload = []byte{0xff}
-			req.Fingerprint = nsreplication.NamespaceTaskFingerprintFromPayload(req.NamespaceTaskPayload)
 		}},
 		{name: "events disabled", outcome: "match", reason: "none", disableEvents: true},
 	} {
@@ -76,19 +89,11 @@ func TestShadowReceiverObservability(t *testing.T) {
 			payload = append(protowire.AppendVarint(protowire.AppendTag(nil, 100, protowire.VarintType), 1), payload...)
 			req := &adminservice.ApplyNamespaceMutationRequest{
 				Shadow: true, NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "untrusted-typed-field"},
-				NamespaceTaskPayload: payload, ShadowLegacyTaskPayload: payload, Fingerprint: nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+				NamespaceTaskPayload: payload, ShadowLegacyTaskPayload: payload,
 				SourceCluster: "cellA", ComponentBusinessId: "business-id", ComponentRunId: "run-id", AttemptCount: 2,
 			}
 			if tc.mutate != nil {
 				tc.mutate(req)
-			}
-			if tc.alterIdentity {
-				task := shadowObservationTask()
-				task.Id, task.Info.Name = "altered-id", "altered-name"
-				task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
-				task.ConfigVersion, task.FailoverVersion = 99, 88
-				req.NamespaceTaskPayload, err = nsreplication.MarshalNamespaceTask(task)
-				require.NoError(t, err)
 			}
 			response, err := handler.ApplyNamespaceMutation(t.Context(), req)
 			if tc.outcome == "error" {
@@ -132,19 +137,17 @@ func TestShadowReceiverObservability(t *testing.T) {
 			}
 			require.InDelta(t, 17, details["config_version"], 0)
 			require.InDelta(t, 23, details["failover_version"], 0)
-			if tc.legacyMetadata {
+			if tc.reason != "missing_legacy_reference" && tc.reason != "invalid_legacy_reference" {
 				require.Equal(t, "legacy_reference", details["metadata_source"])
 			} else {
 				require.NotContains(t, details, "metadata_source")
 			}
 			if tc.reason == "legacy_payload_mismatch" {
-				require.Equal(t, []any{"info"}, details["differing_fields"])
+				require.Equal(t, tc.differingFields, details["differing_fields"])
 				require.Equal(t, "namespace-id", details["legacy_task"].(map[string]any)["id"])
 			}
-			if tc.alterIdentity {
-				receivedTask := details["task"].(map[string]any)
-				require.Equal(t, "altered-id", receivedTask["id"])
-				require.Equal(t, "NAMESPACE_OPERATION_CREATE", receivedTask["namespace_operation"])
+			if tc.receivedTask != nil {
+				require.Equal(t, tc.receivedTask, details["task"])
 			}
 		})
 	}
@@ -272,14 +275,17 @@ func TestShadowReceiverPanicObservability(t *testing.T) {
 			require.NoError(t, err)
 			request := &adminservice.ApplyNamespaceMutationRequest{
 				Shadow: true, NamespaceTaskPayload: payload, ShadowLegacyTaskPayload: payload,
-				Fingerprint: nsreplication.NamespaceTaskFingerprintFromPayload(payload), SourceCluster: "cellA",
+				SourceCluster: "cellA",
 			}
 			if tc.invalidPayload {
 				request.NamespaceTaskPayload = nil
 			}
 			if tc.mismatch || !tc.observerPanic {
-				request.Fingerprint = []byte("wrong")
-				warning := logger.EXPECT().Warn("namespace replication shadow receive mismatch", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				mismatchedTask := shadowObservationTask()
+				mismatchedTask.Info.Description = "CHASM description"
+				request.NamespaceTaskPayload, err = nsreplication.MarshalNamespaceTask(mismatchedTask)
+				require.NoError(t, err)
+				warning := logger.EXPECT().Warn("namespace replication shadow receive mismatch", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				if !tc.observerPanic {
 					warning.Do(func(string, ...tag.Tag) { panic("comparison panic") })
 				}
@@ -337,7 +343,7 @@ func TestShadowTriggerErrorMetricWithoutEvents(t *testing.T) {
 	defer mh.StopCapture(capture)
 	handler := &namespaceHandler{logger: log.NewNoopLogger(), clusterMetadata: metadata, metricsHandler: mh, chasmNsReplClient: &failingShadowTriggerClient{}}
 	detail := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}, Config: &persistencespb.NamespaceConfig{}, ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cellA", "cellB"}}}
-	handler.invokeShadowNamespaceMutation(t.Context(), namespaceReplicationTransportShadow, enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
+	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
 	await.Require(t.Context(), t, func(t *await.T) {
 		values := capture.SnapshotMetric(metrics.NamespaceReplicationShadowTriggerOutcomes.Name())
 		require.Len(t, values, 1)
@@ -365,7 +371,7 @@ func TestShadowSourceObserverPanicDoesNotPreventTrigger(t *testing.T) {
 		eventLogger: &panicRemoteClusterEventLogger{}, config: &Config{EmitNamespaceLifecycleEvents: func() bool { return true }},
 	}
 	detail := &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}, Config: &persistencespb.NamespaceConfig{}, ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cellA", "cellB"}}}
-	handler.invokeShadowNamespaceMutation(t.Context(), namespaceReplicationTransportShadow, enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
+	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 1, nil, true, false)
 	require.Equal(t, "namespace-id", await.Rcv(t, client.requests).GetNamespaceId())
 	await.Rcv(t, panicRecorded)
 	await.Rcv(t, panicRecorded)

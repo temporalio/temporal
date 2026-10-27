@@ -1638,6 +1638,18 @@ var (
 		"namespace_replication_chasm_apply_latency",
 		WithDescription("CHASM namespace replication attempt duration, including outcome persistence."),
 	)
+	NamespaceReplicationCHASMApplyEndToEndLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_end_to_end_latency",
+		WithDescription("Time from component scheduling to a terminal peer transition, including queue waits and retry backoff. Recorded after persistence succeeds."),
+	)
+	NamespaceReplicationShadowCompletionOutcomes = NewCounterDef(
+		"namespace_replication_shadow_completion_outcomes",
+		WithDescription("Shadow mutations whose peers are all terminal, tagged by aggregate match, mismatch, error, or no_peers outcome."),
+	)
+	NamespaceReplicationShadowCompletionLatency = NewTimerDef(
+		"namespace_replication_shadow_completion_latency",
+		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds."),
+	)
 	NamespaceReplicationCHASMPeerPendingLatency = NewTimerDef(
 		"namespace_replication_chasm_peer_pending_latency",
 		WithDescription("Time from the first persisted peer failure until terminal peer resolution."),

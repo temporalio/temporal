@@ -39,15 +39,21 @@ type applyLocalTaskHandlerOptions struct {
 	ClusterMetadata cluster.Metadata
 	Config          *config
 	Logger          log.Logger
+	MetricsHandler  metrics.Handler
+	EventLogger     otellog.Logger
+	DynamicConfig   *dynamicconfig.Collection
 }
 
 type applyLocalTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*namespacereplicationpb.ApplyLocalTask]
 
-	metadataManager persistence.MetadataManager
-	currentCluster  string
-	config          *config
-	logger          log.Logger
+	metadataManager              persistence.MetadataManager
+	currentCluster               string
+	config                       *config
+	logger                       log.Logger
+	metricsHandler               metrics.Handler
+	eventLogger                  otellog.Logger
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 }
 
 type localApplyResolution int
@@ -69,10 +75,13 @@ const (
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
-		metadataManager: opts.MetadataManager,
-		currentCluster:  opts.ClusterMetadata.GetCurrentClusterName(),
-		config:          opts.Config,
-		logger:          opts.Logger,
+		metadataManager:              opts.MetadataManager,
+		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
+		config:                       opts.Config,
+		logger:                       opts.Logger,
+		metricsHandler:               opts.MetricsHandler,
+		eventLogger:                  opts.EventLogger,
+		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(opts.DynamicConfig),
 	}
 }
 
@@ -457,10 +466,10 @@ func (h *applyLocalTaskHandler) resolveLocal(
 	task *namespacereplicationpb.ApplyLocalTask,
 	shadow bool,
 ) error {
-	_, _, err := chasm.UpdateComponent(
+	completion, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*shadowCompletionRecord, error) {
 			if !localTaskIsCurrent(c, task) {
 				return nil, nil
 			}
@@ -475,12 +484,22 @@ func (h *applyLocalTaskHandler) resolveLocal(
 				return nil, err
 			}
 			if c.allPeersTerminal() {
-				return nil, TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{})
+				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
+					return nil, err
+				}
+				return newShadowCompletionRecord(c, mctx.Now(c)), nil
 			}
 			return nil, nil
 		},
 		nil,
 	)
+	if err == nil {
+		observer := shadowCompletionObserver{
+			logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
+			emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
+		}
+		observer.observe(ref, completion)
+	}
 	return err
 }
 
@@ -805,10 +824,17 @@ func (h *applyPeerTaskHandler) Execute(
 		Shadow:                  loaded.Shadow,
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
-	result, applyErr := applyPeer(callCtx, h.peerApplier, request)
+	result, applyErr := h.peerApplier.Apply(callCtx, request)
 	record := func(outcome namespacereplicationpb.PeerApplyOutcome, outcomeErr error) error {
 		recorded, saveErr := h.recordPeerOutcome(ctx, ref, loaded.Detail.GetInfo().GetId(), task, outcome, outcomeErr)
 		h.observePeerApply(request, recorded, outcomeErr, saveErr, time.Since(startTime))
+		if saveErr == nil {
+			observer := shadowCompletionObserver{
+				logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
+				emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
+			}
+			observer.observe(ref, recorded.completion)
+		}
 		return saveErr
 	}
 	if applyErr != nil {
@@ -888,6 +914,9 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			now := mctx.Now(c)
 			completedAttempts := task.GetAttempt() + 1
 			record := peerOutcomeRecord{resolvedAt: now, stateUpdated: true, outcome: outcome}
+			if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
+				record.startedAt = started.AsTime()
+			}
 			firstAt := now
 			if peer.GetFirstAttemptAt() != nil {
 				firstAt = peer.GetFirstAttemptAt().AsTime()
@@ -934,6 +963,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
 					return peerOutcomeRecord{}, err
 				}
+				record.completion = newShadowCompletionRecord(c, now)
 			}
 			return record, nil
 		},

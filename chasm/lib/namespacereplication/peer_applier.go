@@ -45,8 +45,8 @@ const (
 	// writing receiver state and the payload matched the original legacy reference.
 	PeerApplyResultShadowMatch
 	// PeerApplyResultShadowMismatch means the peer processed a shadow request
-	// without writing receiver state and the payload failed integrity validation
-	// or differed from the original legacy reference.
+	// without writing receiver state and the payload differed from the original
+	// legacy reference.
 	PeerApplyResultShadowMismatch
 	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
 	// (apply-if-higher no-op). A success, not a failure.
@@ -71,31 +71,8 @@ const (
 type PeerApplier interface {
 	Apply(
 		ctx context.Context,
-		targetCell string,
-		operation enumsspb.NamespaceOperation,
-		detail *persistencespb.NamespaceDetail,
-		shadow bool,
-	) (PeerApplyResult, error)
-}
-
-// RequestPeerApplier is an optional extension for transports that can carry the
-// legacy task reference required by shadow validation. Existing authoritative
-// transports can continue implementing only PeerApplier.
-type RequestPeerApplier interface {
-	ApplyWithRequest(
-		ctx context.Context,
 		request PeerApplyRequest,
 	) (PeerApplyResult, error)
-}
-
-func applyPeer(ctx context.Context, applier PeerApplier, request PeerApplyRequest) (PeerApplyResult, error) {
-	if withRequest, ok := applier.(RequestPeerApplier); ok {
-		return withRequest.ApplyWithRequest(ctx, request)
-	}
-	if request.Shadow {
-		return PeerApplyResultUnspecified, serviceerror.NewUnimplemented("peer transport does not support shadow legacy references")
-	}
-	return applier.Apply(ctx, request.TargetCluster, request.Operation, request.Detail, request.Shadow)
 }
 
 // adminClientPeerApplier is the default PeerApplier: it sends the full namespace
@@ -112,21 +89,6 @@ func newAdminClientPeerApplier(clientBean serverclient.Bean) PeerApplier {
 
 func (a *adminClientPeerApplier) Apply(
 	ctx context.Context,
-	targetCell string,
-	operation enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-	shadow bool,
-) (PeerApplyResult, error) {
-	return a.ApplyWithRequest(ctx, PeerApplyRequest{
-		TargetCluster: targetCell,
-		Operation:     operation,
-		Detail:        detail,
-		Shadow:        shadow,
-	})
-}
-
-func (a *adminClientPeerApplier) ApplyWithRequest(
-	ctx context.Context,
 	request PeerApplyRequest,
 ) (PeerApplyResult, error) {
 	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(request.Operation, request.Detail)
@@ -136,7 +98,6 @@ func (a *adminClientPeerApplier) ApplyWithRequest(
 			fmt.Sprintf("marshal namespace mutation: %v", err),
 		)
 	}
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
@@ -144,7 +105,6 @@ func (a *adminClientPeerApplier) ApplyWithRequest(
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:           namespaceTask,
 		Shadow:                  request.Shadow,
-		Fingerprint:             fingerprint,
 		NamespaceTaskPayload:    namespaceTaskPayload,
 		ShadowLegacyTaskPayload: request.ShadowLegacyTaskPayload,
 		SourceCluster:           request.SourceCluster,

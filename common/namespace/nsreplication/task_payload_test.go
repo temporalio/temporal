@@ -12,7 +12,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestNamespaceTaskFingerprint_Deterministic(t *testing.T) {
+func TestMarshalNamespaceTaskDeterministic(t *testing.T) {
+	t.Parallel()
 	first := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, &persistencespb.NamespaceDetail{
 		Info:              &persistencespb.NamespaceInfo{Id: "ns-id", Data: map[string]string{"a": "1", "b": "2"}},
 		Config:            &persistencespb.NamespaceConfig{},
@@ -21,11 +22,11 @@ func TestNamespaceTaskFingerprint_Deterministic(t *testing.T) {
 	second := proto.Clone(first).(*replicationspb.NamespaceTaskAttributes)
 	second.Info.Data = map[string]string{"b": "2", "a": "1"}
 
-	firstFingerprint, err := NamespaceTaskFingerprint(first)
+	firstPayload, err := MarshalNamespaceTask(first)
 	require.NoError(t, err)
-	secondFingerprint, err := NamespaceTaskFingerprint(second)
+	secondPayload, err := MarshalNamespaceTask(second)
 	require.NoError(t, err)
-	require.Equal(t, firstFingerprint, secondFingerprint)
+	require.Equal(t, firstPayload, secondPayload)
 }
 
 func TestDifferingNamespaceTaskFields(t *testing.T) {

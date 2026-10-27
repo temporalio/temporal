@@ -214,8 +214,8 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 			standbyAfterFailedUpdateLegacy.Namespace.GetInfo().GetDescription() == recoveredDescription
 	}, replicationWaitTime, replicationCheckInterval, "legacy update did not converge after CHASM retry")
 
-	// Simulate a history converter that omits a field and fingerprints its own
-	// incomplete output. Only comparison with the frontend reference detects it.
+	// Simulate a history converter that omits a field. Comparison with the
+	// preserved frontend reference must detect the incomplete output.
 	s.dropApplyField.Store(true)
 	defer s.dropApplyField.Store(false)
 	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -254,7 +254,6 @@ func (s *namespaceReplicationCHASMTestSuite) captureNamespaceMutationApply(
 			return nil, err
 		}
 		applyRequest.NamespaceTaskPayload = encodedTask
-		applyRequest.Fingerprint = nsreplication.NamespaceTaskFingerprintFromPayload(encodedTask)
 		req = applyRequest
 	}
 	if s.failApplyRequests.Load() {
@@ -343,7 +342,6 @@ func (s *namespaceReplicationCHASMTestSuite) requireShadowApplyRequest(
 	s.Require().True(proto.Equal(payloadTask, observed.request.GetNamespaceTask()), "retain the typed field for older receivers")
 	s.Require().Equal(namespaceName, payloadTask.GetInfo().GetName())
 	s.Require().Equal(operation, payloadTask.GetNamespaceOperation())
-	s.Require().Equal(nsreplication.NamespaceTaskFingerprintFromPayload(observed.request.GetNamespaceTaskPayload()), observed.request.GetFingerprint())
 }
 
 func (s *namespaceReplicationCHASMTestSuite) decodeNamespaceTask(

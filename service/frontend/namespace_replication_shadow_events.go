@@ -86,15 +86,16 @@ func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.App
 			task = nil
 		}
 	}
-	if task == nil && legacyTask == nil && len(request.GetShadowLegacyTaskPayload()) > 0 {
+	if legacyTask == nil && len(request.GetShadowLegacyTaskPayload()) > 0 {
 		legacyTask = &replicationspb.NamespaceTaskAttributes{}
 		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
 			legacyTask = nil
 		}
 	}
-	metadataTask := task
-	if task == nil || reason == "integrity" {
-		metadataTask = legacyTask
+	// Attribute the comparison to the intended mutation, even when CHASM sent different metadata.
+	metadataTask := legacyTask
+	if metadataTask == nil {
+		metadataTask = task
 	}
 	if adh.metricsHandler != nil {
 		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(1,
@@ -107,7 +108,6 @@ func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.App
 	details := map[string]any{
 		"comparison_boundary": "receive", "reason": reason,
 		"component_business_id": request.GetComponentBusinessId(), "component_run_id": request.GetComponentRunId(),
-		"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
 	}
 	if len(request.GetShadowLegacyTaskPayload()) > 0 {
 		details["legacy_task_fingerprint"] = hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))
@@ -125,7 +125,7 @@ func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.App
 		}
 	}
 	data := shadowReplicationEventData(task, request.GetNamespaceTaskPayload(), details)
-	if metadataTask != task {
+	if legacyTask != nil {
 		data.NamespaceID = metadataTask.GetId()
 		data.Namespace = metadataTask.GetInfo().GetName()
 		data.Operation = metadataTask.GetNamespaceOperation().String()
