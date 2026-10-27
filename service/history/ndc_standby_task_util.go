@@ -111,11 +111,13 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
-// executionExistsOnSource reports whether the execution still exists on the source cluster, assuming it does when the
-// source can't be asked. It returns an error when the task should be retried instead: consts.ErrTaskRetry when the
-// namespace has turned active on the current cluster, and consts.ErrNamespaceHandover when the source is in handover.
+// executionExistsOnSource reports whether the execution, which is either the task's own or one it depends on, still
+// exists on the source cluster, assuming it does when the source can't be asked. It returns an error when the task
+// should be retried instead: consts.ErrTaskRetry when the task's execution has turned active on the current cluster,
+// and consts.ErrNamespaceHandover when the source is in handover.
 func executionExistsOnSource(
 	ctx context.Context,
+	taskInfo tasks.Task,
 	workflowKey definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
@@ -147,8 +149,13 @@ func executionExistsOnSource(
 		workflowKey.GetWorkflowID(),
 	)
 	if err != nil {
+		// Retry only if the task's own execution has also turned active, so the next attempt executes it as active.
+		// Otherwise every attempt would get the same answer.
 		if errors.Is(err, consts.ErrTaskRetry) {
-			return false, err
+			_, taskErr := getSourceClusterName(currentCluster, registry, taskInfo.GetNamespaceID(), taskInfo.GetWorkflowID())
+			if errors.Is(taskErr, consts.ErrTaskRetry) {
+				return false, taskErr
+			}
 		}
 		return true, nil
 	}

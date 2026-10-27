@@ -102,6 +102,7 @@ func discardChasmSideEffectTask(
 ) error {
 	exists, err := executionExistsOnSource(
 		ctx,
+		task,
 		taskWorkflowKey(task),
 		getTaskArchetypeID(task),
 		logger,

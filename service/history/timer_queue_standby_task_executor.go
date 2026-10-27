@@ -842,6 +842,7 @@ func (t *timerQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeD
 	}
 	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
 		logger,

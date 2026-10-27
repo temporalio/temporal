@@ -765,6 +765,7 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 	}
 	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
 		logger,
@@ -799,6 +800,7 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 
 	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		*startChildInfo.childWorkflowKey,
 		chasm.WorkflowArchetypeID,
 		logger,
@@ -833,6 +835,7 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 
 	exists, err := executionExistsOnSource(
 		ctx,
+		taskInfo,
 		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
 		logger,

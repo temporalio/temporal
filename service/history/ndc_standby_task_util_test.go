@@ -85,10 +85,13 @@ func TestStandbyTransferTaskPostActionTaskDiscarded_StartChildExecutionLogsChild
 }
 
 func TestExecutionExistsOnSource(t *testing.T) {
-	workflowKey := definition.NewWorkflowKey(tests.StandbyNamespaceID.String(), "workflow-id", "run-id")
+	// The standby namespace is active on the alternative cluster and the other namespace on the current cluster.
+	standbyKey := definition.NewWorkflowKey(tests.StandbyNamespaceID.String(), "workflow-id", "run-id")
+	activeKey := definition.NewWorkflowKey(tests.NamespaceID.String(), "other-workflow-id", "other-run-id")
 	testCases := []struct {
 		name           string
-		namespaceEntry *namespace.Namespace
+		taskKey        definition.WorkflowKey
+		lookupKey      definition.WorkflowKey
 		describeErr    error
 		expectDescribe bool
 		expectedExists bool
@@ -96,42 +99,55 @@ func TestExecutionExistsOnSource(t *testing.T) {
 	}{
 		{
 			name:           "ExecutionExistsOnSource",
-			namespaceEntry: tests.GlobalStandbyNamespaceEntry,
+			taskKey:        standbyKey,
+			lookupKey:      standbyKey,
 			expectDescribe: true,
 			expectedExists: true,
 		},
 		{
 			name:           "ExecutionNotFoundOnSource",
-			namespaceEntry: tests.GlobalStandbyNamespaceEntry,
+			taskKey:        standbyKey,
+			lookupKey:      standbyKey,
 			describeErr:    serviceerror.NewNotFound("workflow not found"),
 			expectDescribe: true,
 			expectedExists: false,
 		},
 		{
 			name:           "SourceInHandover",
-			namespaceEntry: tests.GlobalStandbyNamespaceEntry,
+			taskKey:        standbyKey,
+			lookupKey:      standbyKey,
 			describeErr:    serviceerror.NewUnavailable(consts.ErrNamespaceHandover.Error()),
 			expectDescribe: true,
 			expectedErr:    consts.ErrNamespaceHandover,
 		},
 		{
 			name:           "UnexpectedErrorFromSource",
-			namespaceEntry: tests.GlobalStandbyNamespaceEntry,
+			taskKey:        standbyKey,
+			lookupKey:      standbyKey,
 			describeErr:    serviceerror.NewUnavailable("some random error"),
 			expectDescribe: true,
 			expectedExists: true,
 		},
 		{
-			name:           "NamespaceTurnedActive",
-			namespaceEntry: tests.GlobalNamespaceEntry,
-			expectedErr:    consts.ErrTaskRetry,
+			name:        "TaskExecutionTurnedActive",
+			taskKey:     activeKey,
+			lookupKey:   activeKey,
+			expectedErr: consts.ErrTaskRetry,
+		},
+		{
+			// Retrying would not help: the task stays standby, so every attempt would get the same answer.
+			name:           "OnlyRelatedExecutionActive",
+			taskKey:        standbyKey,
+			lookupKey:      activeKey,
+			expectedExists: true,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			registry := namespace.NewMockRegistry(ctrl)
-			registry.EXPECT().GetNamespaceByID(namespace.ID(workflowKey.NamespaceID)).Return(tc.namespaceEntry, nil).AnyTimes()
+			registry.EXPECT().GetNamespaceByID(tests.StandbyNamespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil).AnyTimes()
+			registry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 			chasmRegistry := chasm.NewRegistry(log.NewNoopLogger())
 			require.NoError(t, chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
 			clientBean := client.NewMockBean(ctrl)
@@ -141,8 +157,8 @@ func TestExecutionExistsOnSource(t *testing.T) {
 				remoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 					Namespace: tests.StandbyNamespace.String(),
 					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: workflowKey.WorkflowID,
-						RunId:      workflowKey.RunID,
+						WorkflowId: tc.lookupKey.WorkflowID,
+						RunId:      tc.lookupKey.RunID,
 					},
 					Archetype:       chasm.WorkflowArchetype,
 					SkipForceReload: true,
@@ -151,7 +167,8 @@ func TestExecutionExistsOnSource(t *testing.T) {
 
 			exists, err := executionExistsOnSource(
 				context.Background(),
-				workflowKey,
+				&tasks.CloseExecutionTask{WorkflowKey: tc.taskKey},
+				tc.lookupKey,
 				chasm.WorkflowArchetypeID,
 				log.NewNoopLogger(),
 				cluster.TestCurrentClusterName,
