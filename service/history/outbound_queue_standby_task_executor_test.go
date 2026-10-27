@@ -143,6 +143,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TearDownTest() {
 func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 	tv := testvars.New(s.T())
 	ctx := context.Background()
+	released := false
 
 	testCases := []struct {
 		name                string
@@ -151,11 +152,11 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 		expectedError       string
 	}{
 		{
-			name: "in tree and valid - retries until discard delay",
+			name: "in tree and valid - retries",
 			setupMocks: func(task *tasks.ChasmTask) {
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(error) { released = true }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).
@@ -163,21 +164,25 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 
 				s.mockMutableState.EXPECT().
 					ChasmTree().
-					Return(s.mockChasmTree)
+					Return(s.mockChasmTree).AnyTimes()
 
 				s.mockChasmTree.EXPECT().
-					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
-					Return(true, true, nil)
+					IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).Return(true, nil)
+				s.mockChasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, chasm.ExecutionKey, *tasks.ChasmTask, func(chasm.NodeBackend, chasm.Context, chasm.Component) error) (bool, error) {
+						s.True(released, "standby validation must run outside the workflow lock")
+						return true, nil
+					})
 			},
 			expectHandlerCalled: true,
 			expectedError:       consts.ErrTaskRetry.Error(),
 		},
 		{
-			name: "in tree but component invalid (e.g. code-deployment) - drop physical task",
+			name: "standby validation rejects - discard",
 			setupMocks: func(task *tasks.ChasmTask) {
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(error) { released = true }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).
@@ -185,11 +190,20 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 
 				s.mockMutableState.EXPECT().
 					ChasmTree().
-					Return(s.mockChasmTree)
+					Return(s.mockChasmTree).AnyTimes()
 
 				s.mockChasmTree.EXPECT().
-					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
-					Return(true, false, nil)
+					IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).Return(true, nil)
+				s.mockChasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, chasm.ExecutionKey, *tasks.ChasmTask, func(chasm.NodeBackend, chasm.Context, chasm.Component) error) (bool, error) {
+						s.True(released, "standby validation must run outside the workflow lock")
+						return false, nil
+					})
+				s.mockChasmTree.EXPECT().ExecuteSideEffectDiscardTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, chasm.ExecutionKey, *tasks.ChasmTask, func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+						s.True(released, "discard must run outside the workflow lock")
+						return nil
+					})
 			},
 			expectHandlerCalled: false,
 			expectedError:       "",
@@ -199,7 +213,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 			setupMocks: func(task *tasks.ChasmTask) {
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(error) { released = true }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).
@@ -207,11 +221,10 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 
 				s.mockMutableState.EXPECT().
 					ChasmTree().
-					Return(s.mockChasmTree)
+					Return(s.mockChasmTree).AnyTimes()
 
 				s.mockChasmTree.EXPECT().
-					ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).
-					Return(false, false, nil)
+					IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).Return(false, nil)
 			},
 			expectHandlerCalled: false,
 			expectedError:       "",
@@ -222,7 +235,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 				// Workflow context loads but mutable state fails
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(error) { released = true }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).
@@ -235,6 +248,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			released = false
 			// Create a CHASM task
 			task := &tasks.ChasmTask{
 				WorkflowKey: tv.Any().WorkflowKey(),
@@ -245,7 +259,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					TypeId:      tv.Any().UInt32(),
 					ArchetypeId: tests.ArchetypeID,
 				},
-				VisibilityTimestamp: s.now,
+				VisibilityTimestamp: s.now.Add(-time.Hour),
 			}
 
 			tc.setupMocks(task)
@@ -335,7 +349,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
+		chasmTree.EXPECT().IsSideEffectTaskInTree(gomock.Any(), gomock.Any()).Return(true, nil)
+		chasmTree.EXPECT().ValidateStandbySideEffectTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)
