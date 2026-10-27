@@ -229,4 +229,4 @@ require (
 tool golang.org/x/perf/cmd/benchstat
 
 // Use the local testx; consumers of the server ignore this replace.
-replace go.temporal.io/testx => ./testx
+replace go.temporal.io/testx => ./common/testx

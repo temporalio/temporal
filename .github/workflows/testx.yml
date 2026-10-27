@@ -3,7 +3,7 @@ name: testx
 on:
   pull_request:
     paths:
-      - "testx/**"
+      - "common/testx/**"
       - ".github/workflows/testx*.yml"
 
 permissions:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     defaults:
       run:
-        working-directory: testx
+        working-directory: common/testx
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -27,14 +27,14 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-            testx/go.sum
+            common/testx/go.sum
 
       - name: Check testx does not depend on other go.temporal.io modules
         run: |
           mods=$(go list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
           deps=$(echo "$mods" | grep '^go.temporal.io/' || true)
           if [ -n "$deps" ]; then
-            echo "::error file=testx/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
+            echo "::error file=common/testx/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
             exit 1
           fi
 
