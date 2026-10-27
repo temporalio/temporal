@@ -41,13 +41,13 @@ const (
 	drainingKey = "draining"
 
 	// These labels control the visibility time of hosts in membership rings.
-	// Value is unix seconds in decimal.
+	// Value is seconds since unix epoch in decimal.
 	startAtKey = "startAt"
 	stopAtKey  = "stopAt"
 	// These labels, if present, make the join/leave gradual: each key switches at a different
 	// time between startAt/stopAt and that time plus this window. Value is seconds in decimal.
-	startWindowKey = "startWindow"
-	stopWindowKey  = "stopWindow"
+	startWindowKey = "startWin"
+	stopWindowKey  = "stopWin"
 
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
