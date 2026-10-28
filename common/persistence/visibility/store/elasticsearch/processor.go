@@ -16,12 +16,12 @@ import (
 	"github.com/olivere/elastic/v7"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -47,17 +47,10 @@ type (
 		shutdownLock            sync.RWMutex
 	}
 
-	// ProcessorConfig contains all configs for processor
-	ProcessorConfig struct {
-		IndexerConcurrency dynamicconfig.IntPropertyFn
-		// TODO: remove ESProcessor prefix
-		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
-		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
-		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
-		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
-
-		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn
-	}
+	// ProcessorConfig is an alias of esconfig.ProcessorConfig.
+	//
+	// Deprecated: use esconfig.ProcessorConfig.
+	ProcessorConfig = esconfig.ProcessorConfig
 
 	ackFuture struct { // value of processorImpl.mapToAckFuture
 		future    *future.FutureImpl[bool]
@@ -79,7 +72,7 @@ var (
 
 // NewProcessor create new processorImpl
 func NewProcessor(
-	cfg *ProcessorConfig,
+	cfg *esconfig.ProcessorConfig,
 	esClient client.Client,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
