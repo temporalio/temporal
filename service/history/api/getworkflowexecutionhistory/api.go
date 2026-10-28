@@ -463,7 +463,6 @@ func Invoke(
 					ctx,
 					shardContext,
 					workflowConsistencyChecker,
-					eventNotifier,
 					namespaceName,
 					namespaceID,
 					execution,

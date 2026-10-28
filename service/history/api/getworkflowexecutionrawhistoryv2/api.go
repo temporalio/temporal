@@ -120,7 +120,6 @@ func Invoke(
 		ctx,
 		shardContext,
 		workflowConsistencyChecker,
-		eventNotifier,
 		ns.Name(),
 		ns.ID(),
 		execution,

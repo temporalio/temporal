@@ -10,6 +10,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -210,7 +211,6 @@ func RefreshBranchTokenAfterRead(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -221,15 +221,11 @@ func RefreshBranchTokenAfterRead(
 		return nil, nil
 	}
 
-	response, err := GetOrPollWorkflowMutableState(
+	response, err := GetMutableState(
 		ctx,
 		shardContext,
-		&historyservice.GetMutableStateRequest{
-			NamespaceId: namespaceID.String(),
-			Execution:   execution,
-		},
+		definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		workflowConsistencyChecker,
-		eventNotifier,
 	)
 	if err != nil {
 		if _, isNotFound := errors.AsType[*serviceerror.NotFound](err); isNotFound {
