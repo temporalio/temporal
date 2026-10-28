@@ -436,8 +436,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return c.matcher.PollForQuery(ctx, metadata)
 	}
 
-	poll := c.matcher.Poll
-	if c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && metadata.isSingleSessionAcquisition() {
+	acquiringSession := c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && metadata.isSingleSessionAcquisition()
+	if acquiringSession {
 		callCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		stop := context.AfterFunc(c.tqCtx, cancel)
@@ -446,14 +446,20 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 			return nil, err
 		}
 		ctx = callCtx
-		poll = func(ctx context.Context, metadata *pollMetadata) (*internalTask, error) {
-			// An empty source lets the Matching client select a normal read partition.
-			return ForwardPollWithTarget(ctx, metadata, c.matchingClient, "", c.partitionMgr.partition.TaskQueue().RootPartition())
-		}
 	}
 
 	for {
-		task, err := poll(ctx, metadata)
+		var (
+			task *internalTask
+			err  error
+		)
+		if acquiringSession {
+			// An empty source lets the Matching client select a normal read partition. The main idea is that the first poll, with stable identity set, on the sticky task task queue
+			// is forwarded to the normal task queue for matching with a task. Once matched, no more polls with a stable identity are forwarded to the normal task queue.
+			task, err = ForwardPollWithTarget(ctx, metadata, c.matchingClient, "", c.partitionMgr.partition.TaskQueue().RootPartition())
+		} else {
+			task, err = c.matcher.Poll(ctx, metadata)
+		}
 		if err != nil {
 			return nil, err
 		}
