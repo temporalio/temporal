@@ -41,7 +41,8 @@ func newDefaultManagerSelector(
 }
 
 func (v *defaultManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
-	switch v.secondaryVisibilityWritingMode() {
+	mode := v.secondaryVisibilityWritingMode()
+	switch mode {
 	case SecondaryVisibilityWritingModeOff:
 		return []manager.VisibilityManager{v.visibilityManager}, nil
 	case SecondaryVisibilityWritingModeOn:
@@ -50,8 +51,8 @@ func (v *defaultManagerSelector) writeManagers() ([]manager.VisibilityManager, e
 		return []manager.VisibilityManager{v.visibilityManager, v.secondaryVisibilityManager}, nil
 	default:
 		return nil, serviceerror.NewInternalf(
-			"Unknown secondary visibility writing mode: %s",
-			v.secondaryVisibilityWritingMode(),
+			"unknown secondary visibility writing mode: %s",
+			mode,
 		)
 	}
 }

@@ -112,6 +112,13 @@ type (
 		PruneClusterMembership(ctx context.Context, request *PruneClusterMembershipRequest) error
 	}
 
+	// RunAlreadyExistsChecker is an optional ExecutionStore capability. A store that implements it and returns true
+	// honors CheckRunAlreadyExists on create and on update with a new run. For any other store, ExecutionManager reads
+	// the run before the write instead and does not pass CheckRunAlreadyExists down.
+	RunAlreadyExistsChecker interface {
+		SupportsCheckRunAlreadyExists() bool
+	}
+
 	// ExecutionStore is used to manage workflow execution including mutable states / history / tasks.
 	ExecutionStore interface {
 		Closeable
@@ -345,6 +352,12 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// CheckRunAlreadyExists is set only for a store that implements RunAlreadyExistsChecker. The store must then
+		// reject the create with WorkflowRunAlreadyExistsError, describing the existing run, if a run with this run ID
+		// already exists. It takes precedence over CurrentWorkflowConditionFailedError when the current run condition
+		// also fails.
+		CheckRunAlreadyExists bool
+
 		NewWorkflowSnapshot  InternalWorkflowSnapshot
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 	}
@@ -361,6 +374,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		ArchetypeID chasm.ArchetypeID
+
+		// CheckRunAlreadyExists is as on InternalCreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
+		CheckRunAlreadyExists bool
 
 		UpdateWorkflowMutation  InternalWorkflowMutation
 		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`

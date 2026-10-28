@@ -248,6 +248,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 		zl:     l.zl,
 		skip:   l.skip + extraSkip,
 		baseZl: l.baseZl,
+		tags:   l.tags,
 	}
 }
 

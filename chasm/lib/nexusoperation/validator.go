@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -37,6 +39,8 @@ type cancelOrTerminateRequest interface {
 type validator struct {
 	config            *Config
 	logger            log.Logger
+	throttledLogger   log.Logger
+	metricsHandler    metrics.Handler
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 	callbackValidator callbacks.Validator
@@ -46,6 +50,8 @@ type validator struct {
 func newValidator(
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.Logger,
+	metricsHandler metrics.Handler,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callbacks.Validator,
@@ -54,6 +60,8 @@ func newValidator(
 	return &validator{
 		config:            config,
 		logger:            logger,
+		throttledLogger:   throttledLogger,
+		metricsHandler:    metricsHandler,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
 		callbackValidator: callbackValidator,
@@ -94,6 +102,13 @@ func (v *validator) validateAndNormalizeStartRequest(
 		return err
 	}
 	req.NexusHeader = loweredHeaders
+	if rejected := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.RejectedHeaderPrefixes(ns)); len(rejected) > 0 {
+		v.recordHeaderPrefixUsage(ns, rejected, true)
+		return serviceerror.NewInvalidArgumentf("nexus_header contains keys with a rejected prefix: %q", rejected.Keys())
+	}
+	if tracked := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.TrackedHeaderPrefixes(ns)); len(tracked) > 0 {
+		v.recordHeaderPrefixUsage(ns, tracked, false)
+	}
 
 	if err := v.validateAndNormalizeSearchAttributes(req); err != nil {
 		return err
@@ -120,6 +135,10 @@ func (v *validator) validateAndNormalizeStartRequest(
 
 	v.normalizeIDPolicies(req)
 	return nil
+}
+
+func (v *validator) recordHeaderPrefixUsage(ns string, matches commonnexus.HeaderPrefixMatches, rejected bool) {
+	RecordHeaderPrefixUsage(v.metricsHandler, v.throttledLogger, ns, HeaderPrefixSourceStandalone, matches, rejected)
 }
 
 func (v *validator) validateAndNormalizeDescribeRequest(

@@ -94,7 +94,7 @@ func (c *esQueryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, e
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return newBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
+	return newBoolQuery().Should(validExprs...), nil
 }
 
 func (c *esQueryConverter) ConvertComparisonExpr(
@@ -123,10 +123,10 @@ func (c *esQueryConverter) ConvertComparisonExpr(
 			},
 		}
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		res = elastic.NewTermQuery(colName, value)
+		res = newTermQuery(colName, value)
 		negate = operator == sqlparser.NotEqualStr
 	case sqlparser.InStr, sqlparser.NotInStr:
-		res = elastic.NewTermsQuery(colName, value.([]any)...)
+		res = newTermsQuery(colName, value.([]any)...)
 		negate = operator == sqlparser.NotInStr
 	default:
 		return nil, query.NewOperatorNotSupportedError(col.Alias, col.ValueType, operator)

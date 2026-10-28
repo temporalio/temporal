@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -114,4 +115,22 @@ func SyncWorkflowStateFromSource(
 	}
 
 	return SyncWorkflowStateResultApplied, nil
+}
+
+// MissingOnSource ignores cached NotFound results from a cluster that is no longer the workflow's source.
+func MissingOnSource(
+	shardContext historyi.ShardContext,
+	notFoundCache SourceNotFoundCache,
+	workflowKey definition.WorkflowKey,
+) bool {
+	missingOn, ok := notFoundCache.SourceNotFound(workflowKey)
+	if !ok {
+		return false
+	}
+	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
+	if err != nil {
+		// Fall back to the resend, which surfaces namespace errors.
+		return false
+	}
+	return namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowKey.WorkflowID}) == missingOn
 }

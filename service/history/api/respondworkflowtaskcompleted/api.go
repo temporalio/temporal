@@ -220,14 +220,29 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	behavior := request.GetVersioningBehavior()
-	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions())
+	deploymentOptions := request.GetDeploymentOptions()
+	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(deploymentOptions)
 	deployment := worker_versioning.DeploymentFromDeploymentVersion(wftDeploymentVersion)
-	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil &&
-		(request.GetDeploymentOptions() == nil || request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED) {
-		// Mutable state wasn't changed yet and doesn't have to be cleared.
-		releaseLeaseWithError = false
-		return nil, serviceerror.NewInvalidArgument("versioning behavior cannot be specified without deployment options being set with versioned mode")
+
+	// A reported behavior only applies when the worker identifies a valid versioned deployment.
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		if deploymentOptions == nil {
+			// Fall back to the deprecated Deployment field for legacy SDKs.
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			if worker_versioning.DeploymentIfValid(request.GetDeployment()) == nil {
+				request.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+			}
+		} else {
+			switch deploymentOptions.GetWorkerVersioningMode() {
+			case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
+			case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
+				request.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+			default:
+				// Mutable state wasn't changed yet and doesn't have to be cleared.
+				releaseLeaseWithError = false
+				return nil, serviceerror.NewInvalidArgument("versioning behavior cannot be specified with an unspecified or unknown worker versioning mode")
+			}
+		}
 	}
 
 	assignedBuildId := ms.GetAssignedBuildId()

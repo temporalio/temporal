@@ -1213,6 +1213,10 @@ func (t *transferQueueActiveTaskExecutor) getOrphanedChildReplacementInfo(
 	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
 		return nil
 	}
+	// Only a global namespace can fail over, so a local parent never has a losing branch.
+	if !mutableState.GetNamespaceEntry().IsGlobalNamespace() {
+		return nil
+	}
 	executionInfo := mutableState.GetExecutionInfo()
 	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
 	if childInfo.GetNamespaceId() == "" {
@@ -2007,6 +2011,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		return err
 	}
 	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
+	var resetRequestID string
+	if t.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+		resetRequestID = uuid.New().String()
+	}
 	baseWorkflow := ndc.NewWorkflow(
 		t.shardContext.GetClusterMetadata(),
 		baseContext,
@@ -2023,6 +2031,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		resetRequestID,
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

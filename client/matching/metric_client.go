@@ -48,16 +48,23 @@ func (c *metricClient) emitForwardedSourceStats(
 	if taskQueue == nil {
 		return
 	}
+	c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, forwardedFrom, taskQueue.GetName())
+}
 
+func (c *metricClient) emitForwardedSourceStatsForTaskQueueName(
+	metricsHandler metrics.Handler,
+	forwardedFrom string,
+	taskQueueName string,
+) {
 	switch {
 	case forwardedFrom != "":
 		metrics.MatchingClientForwardedCounter.With(metricsHandler).Record(1)
 	default:
 		// TODO: confirmed from metrics, it seems this error does happen at the moment...
 		// it means some mangled name come here; need to check why
-		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
+		_, err := tqid.NewTaskQueueFamily("", taskQueueName)
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueue.GetName()))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueueName))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}

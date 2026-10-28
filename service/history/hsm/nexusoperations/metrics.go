@@ -30,6 +30,9 @@ func operationMetricsHandler(
 		metrics.NexusEndpointTag(op.Endpoint),
 		metrics.WorkflowTypeTag(workflowType),
 	}
+	if tagConfig.IncludeBackendTag {
+		tags = append(tags, metrics.NexusOperationBackendTag("hsm"))
+	}
 	if tagConfig.IncludeServiceTag {
 		tags = append(tags, metrics.NexusServiceTag(op.Service))
 	}

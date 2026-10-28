@@ -1,6 +1,7 @@
 package dynamicconfig
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/primitives"
@@ -170,6 +171,10 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
+	// Enabled controls whether partition scaler decisions are put into effect. If Enabled is
+	// false (default), then the scaler acts in "shadow mode", where the scaler is consulted
+	// but the result is only logged and emitted as metrics.
+	Enabled bool
 	// MaxRate limits target change frequency.
 	MaxRate float32
 	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
@@ -193,10 +198,9 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
-	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
-	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
-	// is evaluated and logged at that cadence but decisions are not applied. If the partition
-	// scaler is disabled, shadow mode does not log.
+	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
+	// only). If this is <= 0, or if the partition scaler returns 0 (disabled), shadow mode
+	// doesn't log anything or emit gauge metrics.
 	ShadowModeLogInterval time.Duration
 }
 
@@ -270,4 +274,30 @@ type LatencyHealthCheckSettings struct {
 type LatencyHealthChecksPerPercentile struct {
 	// PercentileSettings stores settings for the health check of each percentile.
 	PercentileSettings []LatencyHealthCheckSettings
+}
+
+const (
+	HistoryReplicationRateLimiterScopeAll                  = "all"
+	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"
+)
+
+type HistoryReplicationRateLimiterSettings struct {
+	Enabled bool
+	Scope   string
+}
+
+func convertHistoryReplicationRateLimiterSettings(v any) (HistoryReplicationRateLimiterSettings, error) {
+	if enabled, err := convertBool(v); err == nil {
+		return HistoryReplicationRateLimiterSettings{Enabled: enabled, Scope: HistoryReplicationRateLimiterScopeAll}, nil
+	}
+	settings, err := ConvertStructure(HistoryReplicationRateLimiterSettings{})(v)
+	if err != nil {
+		return HistoryReplicationRateLimiterSettings{}, err
+	}
+	switch settings.Scope {
+	case HistoryReplicationRateLimiterScopeAll, HistoryReplicationRateLimiterScopeOpenForceReplication:
+		return settings, nil
+	default:
+		return HistoryReplicationRateLimiterSettings{}, fmt.Errorf("unknown history replication rate limiter scope: %q", settings.Scope)
+	}
 }

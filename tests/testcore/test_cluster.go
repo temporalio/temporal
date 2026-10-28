@@ -32,18 +32,18 @@ import (
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
+	"go.temporal.io/testx/freeport"
 	"go.uber.org/multierr"
 )
 
@@ -65,7 +65,7 @@ type (
 		HistoryConfig             HistoryConfig
 		MatchingConfig            MatchingConfig
 		WorkerConfig              WorkerConfig
-		ESConfig                  *esclient.Config
+		ESConfig                  *esconfig.Config
 		MockAdminClient           map[string]adminservice.AdminServiceClient
 		FaultInjection            *config.FaultInjection
 		DCRedirectionPolicy       config.DCRedirectionPolicy
@@ -200,9 +200,9 @@ func newClusterWithPersistenceTestBaseFactory(
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
 
 	if !UseSQLVisibility() {
-		clusterConfig.ESConfig = &esclient.Config{
+		clusterConfig.ESConfig = &esconfig.Config{
 			Indices: map[string]string{
-				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
+				esconfig.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
 			},
 			URL: url.URL{
 				Host:   fmt.Sprintf("%s:%d", environment.GetESAddress(), environment.GetESPort()),

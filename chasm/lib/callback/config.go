@@ -14,10 +14,12 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
-// TODO(chrsmith): This just caps the size of an individual source context payload.
-// We also need to wire through an aggregate max size, for all callbacks in an execution.
-// (We expect that users will want fewer NexusHandler callbacks with larger payloads than the
-// full 2k execution callbacks, with a much smaller per-callback payload size.)
+var TotalMaxSizePerExecution = dynamicconfig.NewNamespaceIntSetting(
+	"callback.totalMaxSizePerExecution",
+	2*1024*1024,
+	`The maximum allowed total size, in bytes, of all [commonpb.Callback]s attached to a single
+execution. This includes things like links, URLs, headers, etc.`,
+)
 
 var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
 	"callback.nexusHandler.sourceContext.maxSize",
@@ -75,14 +77,12 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
+// EncodeInternalTokenWithEnvelope controls token encoding. todo (david.porter): remove this entirely.
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
 	"callback.encodeInternalTokenWithEnvelope",
-	false,
+	true,
 	`Controls how the internal CHASM Nexus completion callback token is encoded. When true the token is
-encoded as a NexusOperationCompletion envelope; when false (default) it is the legacy bare base64-encoded
-ChasmComponentRef. Gates a safe fleet-wide rollout of the envelope encoding: keep disabled until every
-server can read it (any server able to read the envelope also accepts the legacy form), then enable
-per-namespace.`,
+encoded as a NexusOperationCompletion envelope. This can be removed in future and existed only as a means to control a breaking enconding change from a buggy one.`,
 )
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(

@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -575,4 +576,52 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Nil(ai.LastHeartbeatUpdateTime)
 	s.Nil(ai.LastHeartbeatDetails)
+}
+
+// TestResetActivity_ScheduledEventLookupErrors verifies that only a genuinely
+// missing scheduled event is reported as InvalidArgument. Every other lookup
+// failure is transient, and callers retry on error type: the batch reset
+// operation gives up on a target the moment it sees an InvalidArgument.
+func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
+	unavailableErr := serviceerror.NewUnavailable("history service is unavailable")
+
+	for _, tc := range []struct {
+		name      string
+		lookupErr error
+		// assertErr checks how ResetActivity reported lookupErr.
+		assertErr func(err error)
+	}{
+		{
+			name:      "missing scheduled event is permanent",
+			lookupErr: ErrMissingActivityScheduledEvent,
+			assertErr: func(err error) {
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgumentErr)
+			},
+		},
+		{
+			name:      "transient lookup failure is returned unchanged",
+			lookupErr: unavailableErr,
+			assertErr: func(err error) {
+				// NewInvalidArgumentf does not wrap, so this also proves the
+				// error was not relabeled.
+				s.ErrorIs(err, unavailableErr)
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			ai := &persistencespb.ActivityInfo{ActivityId: "activity-id", ScheduledEventId: 1}
+
+			s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+			s.mockMutableState.EXPECT().GetActivityByActivityID(ai.ActivityId).Return(ai, true)
+			s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), ai.ScheduledEventId).
+				Return(nil, tc.lookupErr)
+
+			// resetOptions is what makes ResetActivity read the scheduled event.
+			err := ResetActivity(context.Background(), s.mockShard, s.mockMutableState, ai.ActivityId,
+				false, false, true, 0)
+			s.Require().Error(err)
+			tc.assertErr(err)
+		})
+	}
 }

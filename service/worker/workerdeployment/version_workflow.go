@@ -461,8 +461,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		RemoveScalingGroups: args.GetRemoveScalingGroups(),
 	}).Get(ctx, &computeConfigSummary)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+		if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 			return nil, appErr
 		}
 		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
@@ -714,6 +713,9 @@ func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.Regis
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
+			&deploymentspb.MaxTaskQueuesInVersionFailureDetails{
+				TaskQueueFamilySummary: buildTaskQueueFamilySummary(d.VersionState.TaskQueueFamilies),
+			},
 		)
 	}
 	return nil

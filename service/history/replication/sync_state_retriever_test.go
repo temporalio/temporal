@@ -59,6 +59,52 @@ func TestSyncWorkflowState(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSyncStateRetrieverWorkflowLockPriority(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		priority locks.Priority
+	}{
+		{name: "low", priority: locks.PriorityLow},
+		{name: "high", priority: locks.PriorityHigh},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, path := range []string{"state", "new_run"} {
+				t.Run(path, func(t *testing.T) {
+					t.Parallel()
+					ctrl := gomock.NewController(t)
+					cache := wcache.NewMockCache(ctrl)
+					checker := api.NewMockWorkflowConsistencyChecker(ctrl)
+					shardContext := historyi.NewMockShardContext(ctrl)
+					execution := &commonpb.WorkflowExecution{WorkflowId: "workflow", RunId: "run"}
+					retriever := NewSyncStateRetriever(shardContext, cache, checker, nil, log.NewNoopLogger())
+					ctx := withWorkflowLockPriority(t.Context(), tc.priority)
+					if path == "state" {
+						checker.EXPECT().GetChasmLeaseWithConsistencyCheck(
+							gomock.Any(), nil, gomock.Any(),
+							definition.NewWorkflowKey("namespace", execution.WorkflowId, execution.RunId),
+							chasm.WorkflowArchetypeID, tc.priority,
+						).Return(nil, consts.ErrResourceExhaustedBusyWorkflow)
+						result, err := retriever.GetSyncWorkflowStateArtifact(ctx, "namespace", execution, chasm.WorkflowArchetypeID, nil, nil)
+						require.Nil(t, result)
+						require.ErrorIs(t, err, consts.ErrResourceExhaustedBusyWorkflow)
+					} else {
+						cache.EXPECT().GetOrCreateWorkflowExecution(
+							gomock.Any(), shardContext, namespace.ID("namespace"),
+							&commonpb.WorkflowExecution{WorkflowId: execution.WorkflowId, RunId: "new_run"},
+							tc.priority,
+						).Return(nil, nil, consts.ErrResourceExhaustedBusyWorkflow)
+						result, err := retriever.getNewRunInfo(ctx, "namespace", execution, "new_run")
+						require.Nil(t, result)
+						require.ErrorIs(t, err, consts.ErrResourceExhaustedBusyWorkflow)
+					}
+				})
+			}
+		})
+	}
+}
+
 func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 

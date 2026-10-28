@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -18,6 +19,7 @@ const (
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerRateLimited)(nil)
+var _ manager.AdminVisibilityManager = (*visibilityManagerRateLimited)(nil)
 
 type visibilityManagerRateLimited struct {
 	delegate         manager.VisibilityManager
@@ -161,10 +163,40 @@ func (m *visibilityManagerRateLimited) AddSearchAttributes(
 	ctx context.Context,
 	request *manager.AddSearchAttributesRequest,
 ) error {
-	if ok := allow(ctx, "AddSearchAttributes", m.readRateLimiter); !ok {
+	if ok := allow(ctx, "AddSearchAttributes", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.AddSearchAttributes(ctx, request)
+}
+
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "ListExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.AdminListExecutions(ctx, request)
+}
+
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminCountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "CountExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.AdminCountExecutions(ctx, request)
 }
 
 func allow(

@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -32,8 +33,10 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -287,26 +290,27 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Setup logger
-			logger := log.NewTestLogger()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 
 			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			handler := &invocationTaskHandler{
-				config: &Config{
+			handler := newInvocationTaskHandler(invocationTaskHandlerOptions{
+				Config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metricsHandler,
-				logger:            logger,
-				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+				NamespaceRegistry: nsRegistry,
+				MetricsHandler:    metricsHandler,
+				Logger:            logger,
+				HTTPCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
-			}
+			})
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -337,6 +341,26 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
 				tc.assertOutcome(t, c, executeErr)
 			})
+
+			if tc.expectedEvent != "success" {
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            ns.Name().String(),
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": testCompletionSourceFqn,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.expectedEvent == "retryable-error",
+					},
+				})
+			}
 		})
 	}
 }
@@ -755,7 +779,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					callback,
 				),
 			}))
-			_, err = root.CloseTransaction()
+			_, err = root.CloseTransaction(context.Background(), true)
 			require.NoError(t, err)
 
 			mockEngine.EXPECT().ReadComponent(
@@ -854,4 +878,12 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it repeats InvocationTaskGroup as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestInvocationTaskGroupTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+	task.SetOutboundTaskGroup(InvocationTaskGroup)
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }

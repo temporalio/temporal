@@ -222,7 +222,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
-			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request")
+			logger.Warn("payload size exceeds error limit")
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		successPayload = result
@@ -638,7 +638,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		if retErr != nil {
 			c.RequestErrorHandler.HandleError(
 				request,
-				"",
+				nexusCompletionAPIName,
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(nexusCompletionMethodName), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,

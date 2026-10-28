@@ -18,6 +18,19 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+const shardUUID = "events-cache-test-shard-uuid"
+
+func testEventKey(namespaceID namespace.ID, workflowID, runID string, eventID int64, shardUUID string) EventKey {
+	return EventKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		EventID:     eventID,
+		Version:     common.EmptyVersion,
+		ShardUUID:   shardUUID,
+	}
+}
+
 type (
 	eventsCacheSuite struct {
 		suite.Suite
@@ -82,12 +95,12 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	}
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, eventID, shardUUID),
 		event)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, eventID, shardUUID),
 		eventID, nil)
 	s.NoError(err)
 	s.Equal(event, actualEvent)
@@ -142,12 +155,12 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}, nil)
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, event2.GetEventId(), shardUUID),
 		event2)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, event6.GetEventId(), shardUUID),
 		event1.GetEventId(), []byte("store_token"))
 	s.NoError(err)
 	s.Equal(event6, actualEvent)
@@ -172,7 +185,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, int64(14), shardUUID),
 		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
@@ -207,16 +220,16 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}, nil)
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, event1.GetEventId(), shardUUID),
 		event1)
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, event2.GetEventId(), shardUUID),
 		event2)
 	s.cache.disabled = true
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, event2.GetEventId(), shardUUID),
 		event2.GetEventId(), []byte("store_token"))
 	s.NoError(err)
 	s.Equal(event2, actualEvent)
@@ -248,13 +261,13 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, int64(14), shardUUID),
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		testEventKey(namespaceID, workflowID, runID, int64(14), shardUUID),
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
@@ -262,40 +275,75 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	namespaceID := namespace.ID("events-cache-invalid-key-namespace")
 	workflowID := "events-cache-invalid-key-workflow-id"
-	runID := "" // <-- this is invalid
+	runID := "events-cache-invalid-key-run-id"
 	branchToken := []byte("store_token")
-
 	shardID := int32(10)
-	event1 := &historypb.HistoryEvent{
+	event := &historypb.HistoryEvent{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 	}
+
+	// An invalid key is a caller bug: serve the event from the store, but never cache it.
+	for name, key := range map[string]EventKey{
+		"empty run ID":   testEventKey(namespaceID, workflowID, "", event.EventId, shardUUID),
+		"empty shard ID": testEventKey(namespaceID, workflowID, runID, event.EventId, ""),
+	} {
+		s.Run(name, func() {
+			s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+				&persistence.ReadHistoryBranchResponse{
+					HistoryEvents: []*historypb.HistoryEvent{event},
+				}, nil).Times(2)
+
+			s.cache.PutEvent(key, event)
+			s.Nil(s.cache.Get(key))
+
+			for range 2 {
+				got, err := s.cache.GetEvent(context.Background(), shardID, key, int64(11), branchToken)
+				s.NoError(err)
+				s.Equal(event, got)
+				s.Nil(s.cache.Get(key))
+			}
+		})
+	}
+}
+
+// An entry cached by one shard context instance must not be visible to the next one.
+func (s *eventsCacheSuite) TestEventsCacheNotSharedAcrossShardUUIDs() {
+	namespaceID := namespace.ID("events-cache-shard-uuid-namespace")
+	workflowID := "events-cache-shard-uuid-workflow-id"
+	runID := "events-cache-shard-uuid-run-id"
+	eventID := int64(23)
+	shardID := int32(10)
+
+	staleEvent := &historypb.HistoryEvent{
+		EventId:    eventID,
+		EventType:  enumspb.EVENT_TYPE_TIMER_STARTED,
+		Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{}},
+	}
+	persistedEvent := &historypb.HistoryEvent{
+		EventId:    eventID,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
+	}
+
+	s.cache.PutEvent(
+		testEventKey(namespaceID, workflowID, runID, eventID, "shard-uuid-before-reload"),
+		staleEvent)
+
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    int64(11),
-		MaxEventID:    int64(15),
+		BranchToken:   []byte("store_token"),
+		MinEventID:    eventID,
+		MaxEventID:    eventID + 1,
 		PageSize:      1,
 		NextPageToken: nil,
 		ShardID:       shardID,
-	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{event1},
-		NextPageToken: nil,
-	}, nil).Times(2) // will be called twice since the key is invalid
+	}).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{persistedEvent}}, nil)
 
-	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
-		event1)
-
-	gotEvent1, _ := s.cache.GetEvent(
+	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
 		shardID,
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
-		int64(11), branchToken)
-	s.Equal(gotEvent1, event1)
-	gotEvent2, _ := s.cache.GetEvent(
-		context.Background(),
-		shardID,
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
-		int64(11), branchToken)
-	s.Equal(gotEvent2, event1)
+		testEventKey(namespaceID, workflowID, runID, eventID, "shard-uuid-after-reload"),
+		eventID, []byte("store_token"))
+	s.NoError(err)
+	s.Equal(persistedEvent, actualEvent)
 }

@@ -7,6 +7,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -32,11 +35,15 @@ func newSimplePartitionScalerFactory(
 }
 
 func (s *simplePartitionScalerFactory) New(
-	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType,
+	nsName namespace.Name,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
 	legacyCount := func() int { return s.legacyCount(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource())
+	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource(), logger, metricsHandler)
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
@@ -44,17 +51,28 @@ type simplePartitionScaler struct {
 	cfg scalerCfg
 	// legacyCount returns the "legacy" static partition count that the *AsMultipleOfLegacy
 	// settings are relative to. May be nil, which disables those settings.
-	legacyCount dynamicconfig.IntPropertyFn
-	ts          clock.TimeSource
-	trackers    map[time.Duration]*taskTracker
+	legacyCount               dynamicconfig.IntPropertyFn
+	ts                        clock.TimeSource
+	logger                    log.Logger
+	metricsHandler            metrics.Handler
+	trackers                  map[time.Duration]*taskTracker
+	lastLoggedTargetBeforeMax int
 }
 
-func newSimplePartitionScaler(cfg scalerCfg, legacyCount dynamicconfig.IntPropertyFn, ts clock.TimeSource) *simplePartitionScaler {
+func newSimplePartitionScaler(
+	cfg scalerCfg,
+	legacyCount dynamicconfig.IntPropertyFn,
+	ts clock.TimeSource,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *simplePartitionScaler {
 	return &simplePartitionScaler{
-		cfg:         cfg,
-		legacyCount: legacyCount,
-		ts:          ts,
-		trackers:    make(map[time.Duration]*taskTracker),
+		cfg:            cfg,
+		legacyCount:    legacyCount,
+		ts:             ts,
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		trackers:       make(map[time.Duration]*taskTracker),
 	}
 }
 
@@ -71,6 +89,7 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	cfg := s.cfg()
 
 	if !cfg.Enabled {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: 0}
 	}
 
@@ -86,8 +105,10 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 
 	if cfg.Fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
 	} else if fixed := multiplied(cfg.FixedAsMultipleOfLegacy); fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
@@ -131,11 +152,21 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	if multipliedMin := multiplied(cfg.MinAsMultipleOfLegacy); multipliedMin > 0 {
 		totalTarget = max(totalTarget, multipliedMin)
 	}
+	targetBeforeMax := totalTarget
 	if cfg.Max > 0 {
 		totalTarget = min(totalTarget, int(cfg.Max))
 	}
 	if multipliedMax := multiplied(cfg.MaxAsMultipleOfLegacy); multipliedMax > 0 {
 		totalTarget = min(totalTarget, multipliedMax)
+	}
+	if totalTarget >= targetBeforeMax {
+		s.lastLoggedTargetBeforeMax = 0
+	} else if targetBeforeMax != s.lastLoggedTargetBeforeMax {
+		s.lastLoggedTargetBeforeMax = targetBeforeMax
+		metrics.PartitionScaleMaxClamped.With(s.metricsHandler).Record(1)
+		s.logger.Info("partition scale target clamped by maximum",
+			tag.Int("target-before-max", targetBeforeMax),
+			tag.Int("target", totalTarget))
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
