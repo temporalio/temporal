@@ -1332,8 +1332,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{27},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1342,8 +1341,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            21,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           blobs,
@@ -1352,8 +1350,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            25,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           tailBlobs,
@@ -1497,8 +1494,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{5},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       true,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1507,8 +1503,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            1,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           blobs,
@@ -1517,8 +1512,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            4,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           tailBlobs,
@@ -1687,8 +1681,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{27},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1697,8 +1690,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            21,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           blobs,
@@ -2235,7 +2227,7 @@ func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		TransactionIDs: []int64{12, forkPointTxnID},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		ShardID:           0,
 		IsNewBranch:       isNewBranch,
 		BranchToken:       appendBranchToken,
@@ -2376,7 +2368,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
 	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
