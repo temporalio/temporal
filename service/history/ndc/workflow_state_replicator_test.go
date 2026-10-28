@@ -1186,6 +1186,63 @@ func (m *historyEventMatcher) String() string {
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents() {
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(context.Background())
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_RateLimited() {
+	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	// One wait per appended batch: the gap, the request events and the tail.
+	rateLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).Return(nil).Times(3)
+	s.workflowStateReplicator.persistenceRateLimiter = rateLimiter
+	s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(dynamicconfig.HistoryReplicationRateLimiterSettings{
+		Enabled: true,
+		Scope:   dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication,
+	})
+
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(withReplicationTaskInfo(context.Background(), replicationTaskInfo{
+		isForceReplication: true,
+		workflowStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}))
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_NotRateLimited() {
+	s.workflowStateReplicator.persistenceRateLimiter = quotas.NewMockRequestRateLimiter(s.controller)
+	s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(dynamicconfig.HistoryReplicationRateLimiterSettings{
+		Enabled: true,
+		Scope:   dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication,
+	})
+
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(context.Background())
+}
+
+func (s *workflowReplicatorSuite) Test_shouldRateLimitHistoryAppend() {
+	live := replicationTaskInfo{workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	forceReplicationRunning := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	forceReplicationPaused := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED}
+	forceReplicationClosed := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}
+	testCases := []struct {
+		name     string
+		settings dynamicconfig.HistoryReplicationRateLimiterSettings
+		info     replicationTaskInfo
+		expected bool
+	}{
+		{"disabled", dynamicconfig.HistoryReplicationRateLimiterSettings{Scope: dynamicconfig.HistoryReplicationRateLimiterScopeAll}, forceReplicationRunning, false},
+		{"enabled, no scope", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true}, forceReplicationRunning, false},
+		{"all, live", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeAll}, live, true},
+		{"open force replication, running", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationRunning, true},
+		{"open force replication, paused", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationPaused, true},
+		{"open force replication, closed", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationClosed, false},
+		{"open force replication, live", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, live, false},
+	}
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(tt.settings)
+			s.Equal(tt.expected, s.workflowStateReplicator.shouldRateLimitHistoryAppend(withReplicationTaskInfo(context.Background(), tt.info), "ns"))
+		})
+	}
+}
+
+func (s *workflowReplicatorSuite) bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(ctx context.Context) {
 	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -1363,7 +1420,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
 	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
-		context.Background(),
+		ctx,
 		namespace.ID(namespaceID),
 		s.workflowID,
 		s.runID,
@@ -2390,4 +2447,49 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 		[]*commonpb.DataBlob{eventBlobs},
 		true)
 	s.NoError(err)
+}
+
+func (s *workflowReplicatorSuite) TestApplySnapshotHistorySwitchKeepsParentVerification() {
+	localInfo := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				versionhistory.NewVersionHistory([]byte("local"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 2}}),
+				versionhistory.NewVersionHistory([]byte("source"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 3}}),
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 2, TransitionCount: 3}},
+	}
+	snapshot := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories:  versionhistory.NewVersionHistories(localInfo.VersionHistories.Histories[1]),
+			TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 3, TransitionCount: 4}},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED},
+	}
+	mutableState := historyi.NewMockMutableState(s.controller)
+	mutableState.EXPECT().GetExecutionInfo().Return(localInfo).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(snapshot.ExecutionState)
+	mutableState.EXPECT().IsWorkflow().Return(true)
+	mutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+	mutableState.EXPECT().GetPendingChildIds().Return(nil)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchByBatchResponse{TransactionIDs: []int64{1}}, nil,
+	)
+	mutableState.EXPECT().ApplySnapshot(snapshot).DoAndReturn(func(*persistencespb.WorkflowMutableState) error {
+		localHistory, err := versionhistory.GetCurrentVersionHistory(localInfo.VersionHistories)
+		s.Require().NoError(err)
+		s.True(versionhistory.IsEqualVersionHistoryItems(localHistory.Items, snapshot.ExecutionInfo.VersionHistories.Histories[0].Items))
+		return nil
+	})
+	refresher := workflow.NewMockTaskRefresher(s.controller)
+	refresher.EXPECT().Refresh(gomock.Any(), mutableState, false).Return(nil)
+	transactionManager := NewMockTransactionManager(s.controller)
+	transactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil)
+	s.workflowStateReplicator.taskRefresher = refresher
+	s.workflowStateReplicator.transactionMgr = transactionManager
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
+	s.Require().NoError(s.workflowStateReplicator.applySnapshotWhenWorkflowExist(
+		s.T().Context(), tests.NamespaceID, s.workflowID, s.runID, chasm.WorkflowArchetypeID,
+		workflowContext, wcache.NoopReleaseFn, mutableState, snapshot, nil, nil, "source",
+	))
 }

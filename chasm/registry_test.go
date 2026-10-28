@@ -3,15 +3,19 @@ package chasm_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -107,6 +111,53 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 	// Verify that a component without WithDetached() has IsDetached() return false
 	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
 	s.Require().False(normalRC.IsDetached())
+}
+
+func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithRetention() {
+	r := chasm.NewRegistry(s.logger)
+	ctrl := gomock.NewController(s.T())
+	newNamespace := func(name string) *namespace.Namespace {
+		return namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: name},
+			&persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)},
+			"active",
+		)
+	}
+	testNamespace := newNamespace("test-namespace")
+	lib := chasm.NewMockLibrary(ctrl)
+	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*chasm.MockComponent](
+			"RetentionComponent",
+			chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
+				if ns.Name() == testNamespace.Name() {
+					return 72 * time.Hour
+				}
+				return 0
+			}),
+		),
+	})
+	lib.EXPECT().Tasks().Return(nil)
+	lib.EXPECT().NexusServices().Return(nil)
+	lib.EXPECT().NexusServiceProcessors().Return(nil)
+
+	err := r.Register(lib)
+	s.Require().NoError(err)
+
+	rc, ok := r.Component("TestLibrary.RetentionComponent")
+	s.Require().True(ok)
+	retention, ok := rc.Retention(testNamespace)
+	s.Require().True(ok)
+	s.Require().Equal(72*time.Hour, retention)
+
+	// Verify that a non-positive retention is treated as unset
+	_, ok = rc.Retention(newNamespace("other-namespace"))
+	s.Require().False(ok)
+
+	// Verify that a component without WithRetention() reports no retention
+	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
+	_, ok = normalRC.Retention(testNamespace)
+	s.Require().False(ok)
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
