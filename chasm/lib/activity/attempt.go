@@ -465,6 +465,6 @@ func (a *Activity) releaseAttemptLimiters(ctx chasm.MutableContext) {
 		}
 	}
 	if len(toRelease) != 0 {
-		ctx.AddTask(a, chasm.TaskAttributes{}, &activitypb.ReleaseLimiterTask{Limiters: toRelease})
+		ctx.AddTask(a, chasm.TaskAttributes{}, &activitypb.ReleaseLimiterTask{Limiters: toRelease, ScheduledAt: timestamppb.New(ctx.Now(a))})
 	}
 }

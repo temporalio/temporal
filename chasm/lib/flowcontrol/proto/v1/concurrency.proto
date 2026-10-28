@@ -38,6 +38,8 @@ message ConcurrencyState {
     bool committed = 2;
     // Expiry time for reserved slot.
     google.protobuf.Timestamp expires = 3;
+    // Exact initial reservation time for latency metrics. Cleared when committed.
+    google.protobuf.Timestamp reserved_at = 4;
   }
 }
 

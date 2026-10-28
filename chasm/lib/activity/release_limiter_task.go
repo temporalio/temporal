@@ -10,18 +10,24 @@ import (
 	"go.temporal.io/server/chasm/lib/flowcontrol/concurrency"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 )
 
 type releaseLimiterTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*activitypb.ReleaseLimiterTask]
 	concurrencyServiceClient fcpb.ConcurrencyServiceClient
+	metricsHandler           metrics.Handler
+	timeSource               clock.TimeSource
 }
 
 func newReleaseLimiterTaskHandler(
 	concurrencyServiceClient fcpb.ConcurrencyServiceClient,
 	config *Config,
+	metricsHandler metrics.Handler,
 ) *releaseLimiterTaskHandler {
 	return &releaseLimiterTaskHandler{
+		metricsHandler: metricsHandler,
+		timeSource:     clock.NewRealTimeSource(),
 		concurrencyServiceClient: concurrency.NewBatchingClient(
 			concurrencyServiceClient,
 			config.FlowControlClientBatcherOptions(),
@@ -57,6 +63,8 @@ func (h *releaseLimiterTaskHandler) Execute(
 			})
 			if err != nil {
 				releaseErrors = append(releaseErrors, err)
+			} else if task.GetScheduledAt() != nil {
+				concurrency.RecordReleaseLatency(h.metricsHandler, activityRef.NamespaceID, limiter.GetKey(), h.timeSource.Now().Sub(task.GetScheduledAt().AsTime()))
 			}
 		default:
 		}

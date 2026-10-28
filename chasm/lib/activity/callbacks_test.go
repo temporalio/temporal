@@ -69,7 +69,7 @@ func TestRecordCompletedReleasesLimitersAndSchedulesCallbacks(t *testing.T) {
 	require.Len(t, ctx.Tasks, 2)
 	releaseTask, ok := ctx.Tasks[0].Payload.(*activitypb.ReleaseLimiterTask)
 	require.True(t, ok)
-	protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters}, releaseTask)
+	protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters, ScheduledAt: timestamppb.New(ctx.Now(a))}, releaseTask)
 	require.IsType(t, &callbackspb.InvocationTask{}, ctx.Tasks[1].Payload)
 }
 

@@ -1479,7 +1479,7 @@ func TestAttemptExitReleasesLimiters(t *testing.T) {
 				}
 			}
 			require.Len(t, releases, 1)
-			protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters}, releases[0])
+			protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters, ScheduledAt: timestamppb.New(defaultTime)}, releases[0])
 		})
 	}
 }
