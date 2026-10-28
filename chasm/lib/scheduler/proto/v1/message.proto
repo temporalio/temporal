@@ -72,11 +72,17 @@ message WorkflowMigrationState {
 
 // CHASM scheduler's Generator internal state.
 message GeneratorState {
-  // High water mark.
+  // High water mark for processed schedule actions. This can lag behind the
+  // current time while an action is waiting for its jittered fire time.
   google.protobuf.Timestamp last_processed_time = 3;
 
   // A list of upcoming times an action will be triggered.
   repeated google.protobuf.Timestamp future_action_times = 4;
+
+  // High water mark for generator task executions, used to invalidate timers
+  // even when no schedule action was due. Unset until the first execution
+  // after upgrading; task validation then falls back to last_processed_time.
+  google.protobuf.Timestamp last_processed_task_time = 5;
 }
 
 // CHASM scheduler's Invoker internal state.

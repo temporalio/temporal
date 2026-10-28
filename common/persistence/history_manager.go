@@ -346,6 +346,9 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 			Msg: "eventID cannot be less than 1",
 		}
 	}
+	if err := m.validateTransactionIDs(request.ShardID, request.BranchToken, nodeID, request.PrevTransactionID, request.TransactionID); err != nil {
+		return nil, err
+	}
 	for _, e := range request.Events {
 		if e.Version != version {
 			return nil, &InvalidPersistenceRequestError{
@@ -410,6 +413,31 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	return req, nil
 }
 
+// validateTransactionIDs rejects a node whose TransactionID is not greater than its PrevTransactionID.
+func (m *executionManagerImpl) validateTransactionIDs(
+	shardID int32,
+	branchToken []byte,
+	nodeID int64,
+	prevTransactionID int64,
+	transactionID int64,
+) error {
+	if softassert.That(
+		m.logger,
+		transactionID > prevTransactionID,
+		"history node transaction ID is not greater than previous transaction ID",
+		tag.ShardID(shardID),
+		tag.WorkflowBranchToken(branchToken),
+		tag.NewInt64("node-id", nodeID),
+		tag.NewInt64("transaction-id", transactionID),
+		tag.NewInt64("prev-transaction-id", prevTransactionID),
+	) {
+		return nil
+	}
+	return &InvalidPersistenceRequestError{
+		Msg: fmt.Sprintf("transaction ID %v must be greater than prevTransaction ID %v", transactionID, prevTransactionID),
+	}
+}
+
 func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
@@ -431,6 +459,9 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "eventID cannot be less than 1",
 		}
+	}
+	if err := m.validateTransactionIDs(request.ShardID, request.BranchToken, nodeID, request.PrevTransactionID, request.TransactionID); err != nil {
+		return nil, err
 	}
 	// nodeID will be the first eventID
 	size := len(request.History.Data)

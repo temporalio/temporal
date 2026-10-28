@@ -17,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -35,7 +37,10 @@ import (
 )
 
 const (
-	PersistenceName = "elasticsearch"
+	// PersistenceName is an alias of esconfig.PersistenceName.
+	//
+	// Deprecated: use esconfig.PersistenceName.
+	PersistenceName = esconfig.PersistenceName
 
 	delimiter = "~"
 
@@ -128,8 +133,8 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	cfg *client.Config,
-	processorConfig *ProcessorConfig,
+	cfg *esconfig.Config,
+	processorConfig *esconfig.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
@@ -176,7 +181,7 @@ func (s *VisibilityStore) Close() {
 }
 
 func (s *VisibilityStore) GetName() string {
-	return PersistenceName
+	return esconfig.PersistenceName
 }
 
 func (s *VisibilityStore) GetIndexName() string {
@@ -1535,19 +1540,20 @@ func (s *VisibilityStore) AddSearchAttributes(
 // AdminListExecutions implements [store.AdminVisibilityStore].
 func (s *VisibilityStore) AdminListExecutions(
 	ctx context.Context,
-	request *manager.AdminListExecutionsRequest,
+	request *adminservice.ListExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
 	namespaceID := namespace.EmptyID
-	if request.Namespace != namespace.EmptyName {
+	if nsName != namespace.EmptyName {
 		var err error
-		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	queryConverter, err := s.newQueryConverter(
-		request.Namespace,
+		nsName,
 		nil, // chasmMapper
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -1558,11 +1564,11 @@ func (s *VisibilityStore) AdminListExecutions(
 
 	p, err := s.buildSearchParametersInternal(
 		&searchParametersInternal{
-			NamespaceName: request.Namespace,
+			NamespaceName: nsName,
 			NamespaceID:   namespaceID,
-			Query:         request.Query,
-			PageSize:      request.PageSize,
-			NextPageToken: request.NextPageToken,
+			Query:         request.GetQuery(),
+			PageSize:      int(request.GetPageSize()),
+			NextPageToken: request.GetNextPageToken(),
 		},
 		queryConverter,
 	)
@@ -1579,25 +1585,26 @@ func (s *VisibilityStore) AdminListExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.GetPageSize()), nil)
 }
 
 // AdminCountExecutions implements [store.AdminVisibilityStore].
 func (s *VisibilityStore) AdminCountExecutions(
 	ctx context.Context,
-	request *manager.AdminCountExecutionsRequest,
+	request *adminservice.CountExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
 	namespaceID := namespace.EmptyID
-	if request.Namespace != namespace.EmptyName {
+	if nsName != namespace.EmptyName {
 		var err error
-		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	queryConverter, err := s.newQueryConverter(
-		request.Namespace,
+		nsName,
 		nil, // chasmMapper
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -1606,7 +1613,7 @@ func (s *VisibilityStore) AdminCountExecutions(
 	}
 	queryConverter.WithDisableDefaultNamespaceDivision()
 
-	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.Query)
+	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.GetQuery())
 	if err != nil {
 		return nil, err
 	}

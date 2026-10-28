@@ -2,11 +2,13 @@ package update_test
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -726,6 +728,68 @@ func TestRejectUnprocessed(t *testing.T) {
 	})
 }
 
+func TestRejectUnprocessedWithBufferedCallbacks(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		bufferAfterSend bool
+		rollback        bool
+	}{
+		{name: "buffered while admitted"},
+		{name: "buffered while sent", bufferAfterSend: true},
+		{name: "rejection rolled back", rollback: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			tv := testvars.New(t)
+			reg := update.NewRegistry(emptyUpdateStore)
+			effects := &effect.Buffer{}
+			store := mockEventStore{Controller: effects}
+			upd, _, err := reg.FindOrCreate(ctx, tv.UpdateID())
+			require.NoError(t, err)
+			mustAdmit(t, store, upd)
+			effects.Apply(ctx)
+
+			if tc.bufferAfterSend {
+				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
+			}
+			written, err := upd.AttachCallbacks(&updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+				Input:               &updatepb.Input{Name: tv.HandlerName()},
+				RequestId:           tv.RequestID(),
+				CompletionCallbacks: []*commonpb.Callback{{}},
+			}, store)
+			require.NoError(t, err)
+			require.False(t, written)
+			if !tc.bufferAfterSend {
+				require.Len(t, reg.Send(ctx, skipAlreadySent, testSequencingEventID), 1)
+			}
+
+			require.Equal(t, []string{tv.UpdateID()}, reg.RejectUnprocessed(ctx, effects))
+			if tc.rollback {
+				effects.Cancel(ctx)
+				inFlight, err := reg.InFlightCallbacks()
+				require.NoError(t, err)
+				require.Len(t, inFlight, 1, "rollback must preserve buffered callbacks")
+				require.Equal(t, tv.RequestID(), inFlight[0].RequestID)
+				require.Equal(t, []string{tv.UpdateID()}, reg.RejectUnprocessed(ctx, effects))
+			}
+			effects.Apply(ctx)
+
+			require.Zero(t, reg.Len())
+			status, err := upd.WaitLifecycleStage(ctx, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 0)
+			require.NoError(t, err)
+			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+			require.Equal(t,
+				"Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
+				status.Outcome.GetFailure().GetMessage())
+		})
+	}
+}
+
 // NOTE: tests for various update states can be found in the update tests
 func TestAbort(t *testing.T) {
 	tv := testvars.New(t)
@@ -1037,4 +1101,125 @@ func assertCompleteUpdateInRegistry(
 	require.NoError(t, respondSuccess(t, evStore, upd), "update should be completed")
 	assertCompleted(t, upd, successOutcome)
 	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have been removed")
+}
+
+func TestInFlightCallbacks(t *testing.T) {
+	t.Parallel()
+
+	callbacks := func(n int) []*commonpb.Callback {
+		cbs := make([]*commonpb.Callback, n)
+		for i := range cbs {
+			cbs[i] = &commonpb.Callback{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"}},
+			}
+		}
+		return cbs
+	}
+	request := func(updateID string, requestID string, n int) *updatepb.Request {
+		return &updatepb.Request{
+			Meta:                &updatepb.Meta{UpdateId: updateID},
+			Input:               &updatepb.Input{Name: "not_empty"},
+			RequestId:           requestID,
+			CompletionCallbacks: callbacks(n),
+		}
+	}
+	// inFlight reports what the Registry holds as "updateID/requestID/callback count".
+	inFlight := func(t *testing.T, reg update.Registry) []string {
+		t.Helper()
+		additions, err := reg.InFlightCallbacks()
+		require.NoError(t, err)
+		var reported []string
+		for _, a := range additions {
+			reported = append(reported, fmt.Sprintf("%s/%s/%d", a.UpdateID, a.RequestID, len(a.Callbacks)))
+		}
+		return reported
+	}
+
+	t.Run("reports callbacks until the update is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		reg := update.NewRegistry(emptyUpdateStore)
+		effects := &effect.Buffer{}
+		store := mockEventStore{Controller: effects}
+
+		upd, _, err := reg.FindOrCreate(context.Background(), "u1")
+		require.NoError(t, err)
+		require.Empty(t, inFlight(t, reg), "a created update holds no request yet")
+
+		require.NoError(t, upd.Admit(request("u1", "req-1", 2), store))
+		require.Equal(t, []string{"u1/req-1/2"}, inFlight(t, reg), "provisionally admitted")
+		effects.Apply(context.Background())
+		require.Equal(t, []string{"u1/req-1/2"}, inFlight(t, reg), "admitted")
+
+		require.Len(t, reg.Send(context.Background(), skipAlreadySent, testSequencingEventID), 1)
+		require.Equal(t, []string{"u1/req-1/2"}, inFlight(t, reg), "sent")
+
+		written, err := upd.AttachCallbacks(request("u1", "req-2", 1), store)
+		require.NoError(t, err)
+		require.False(t, written)
+		require.ElementsMatch(t, []string{"u1/req-1/2", "u1/req-2/1"}, inFlight(t, reg), "buffered while sent")
+
+		// Applying the accepted event adds the callbacks to the persisted totals before the
+		// transaction commits, so reporting them from here on would double count them.
+		require.NoError(t, accept(t, store, upd))
+		require.Empty(t, inFlight(t, reg), "provisionally accepted")
+		effects.Apply(context.Background())
+		require.Empty(t, inFlight(t, reg), "accepted")
+	})
+
+	t.Run("reports every in-flight update", func(t *testing.T) {
+		t.Parallel()
+
+		reg := update.NewRegistry(emptyUpdateStore)
+		store := mockEventStore{Controller: effect.Immediate(context.Background())}
+		for _, id := range []string{"u1", "u2", "u3"} {
+			upd, _, err := reg.FindOrCreate(context.Background(), id)
+			require.NoError(t, err)
+			require.NoError(t, upd.Admit(request(id, "req-"+id, 1), store))
+		}
+		// An update without callbacks has nothing to reserve.
+		upd, _, err := reg.FindOrCreate(context.Background(), "u4")
+		require.NoError(t, err)
+		require.NoError(t, upd.Admit(request("u4", "req-u4", 0), store))
+
+		require.ElementsMatch(t, []string{"u1/req-u1/1", "u2/req-u2/1", "u3/req-u3/1"}, inFlight(t, reg))
+	})
+
+	t.Run("excludes an update admitted from history", func(t *testing.T) {
+		t.Parallel()
+
+		// Its callbacks were persisted along with its UpdateAdmitted event.
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor("u1", &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Admission{Admission: &persistencespb.UpdateAdmissionInfo{}},
+				})
+			},
+		})
+		require.Equal(t, 1, reg.Len())
+		require.Empty(t, inFlight(t, reg))
+	})
+}
+
+func TestIsCompleted(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an update completed in the store is completed", func(t *testing.T) {
+		reg := update.NewRegistry(&mockUpdateStore{
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return &updatepb.Outcome{Value: &updatepb.Outcome_Success{}}, nil
+			},
+		})
+		upd := reg.Find(context.Background(), "u1")
+		require.NotNil(t, upd)
+		require.True(t, upd.IsCompleted())
+	})
+
+	t.Run("an in-flight update is not completed", func(t *testing.T) {
+		reg := update.NewRegistry(emptyUpdateStore)
+		upd, _, err := reg.FindOrCreate(context.Background(), "u1")
+		require.NoError(t, err)
+		require.NoError(t, admit(t, mockEventStore{Controller: effect.Immediate(context.Background())}, upd))
+		require.False(t, upd.IsCompleted())
+	})
 }

@@ -58,7 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -166,7 +166,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = tasktoken.NewSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
@@ -249,6 +249,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
+		nil,
 	)
 }
 
@@ -2581,7 +2582,7 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(esconfig.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{

@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -51,6 +52,7 @@ func testLink(workflowID string) *commonpb.Link {
 
 func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 	t.Parallel()
+	cbValidator := test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig())
 
 	newStartReq := func(links ...*commonpb.Link) *nexusoperationpb.StartNexusOperationRequest {
 		return &nexusoperationpb.StartNexusOperationRequest{
@@ -71,7 +73,7 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
 		link := testLink("wf-id")
 
-		op, err := newStandaloneOperation(ctx, newStartReq(link), 10, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(link), cbValidator, newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
@@ -82,7 +84,7 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 	t.Run("WithoutLinks", func(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
 
-		op, err := newStandaloneOperation(ctx, newStartReq(), 10, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(), cbValidator, newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Empty(t, ctx.LinksByRequest[op])
 	})
@@ -93,7 +95,7 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
 		}}
 
-		_, err := newStandaloneOperation(ctx, newStartReq(invalid), 10, newTestLinkValidator(10, 10))
+		_, err := newStandaloneOperation(ctx, newStartReq(invalid), cbValidator, newTestLinkValidator(10, 10))
 		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 		require.ErrorContains(t, err, "must not have an empty namespace")
 	})
@@ -104,7 +106,7 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 		_, err := newStandaloneOperation(
 			ctx,
 			newStartReq(testLink("wf-1"), testLink("wf-2")),
-			10,
+			cbValidator,
 			newTestLinkValidator(10, 1),
 		)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
