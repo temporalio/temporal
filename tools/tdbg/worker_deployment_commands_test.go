@@ -3,6 +3,7 @@ package tdbg
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -17,8 +18,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -49,6 +52,7 @@ func (t *workerDeploymentTestClient) GetWorkflowExecutionRawHistoryV2(_ context.
 }
 
 // newWorkerDeploymentTestClient returns a client whose deployment workflow was started with the given input.
+// DescribeMutableState resolves an empty run ID to testDeploymentRunID, like the server resolves the current run.
 func newWorkerDeploymentTestClient(t *testing.T, input *commonpb.Payload) *workerDeploymentTestClient {
 	blob, err := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
 		EventId:   1,
@@ -94,8 +98,10 @@ func runWorkerDeploymentCommand(client ClientFactory, args ...string) (string, e
 }
 
 // TestDescribeWorkerDeployment tests that the cli decodes the deployment state and counts its versions.
+// Cases don't run in parallel because cli/v2 mutates shared package-level flags (e.g. the help flag) in
+// App.Run, which races across concurrent apps.
 func TestDescribeWorkerDeployment(t *testing.T) {
-	input, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowArgs{
+	deploymentArgs := &deploymentspb.WorkerDeploymentWorkflowArgs{
 		DeploymentName: "my-deployment",
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
@@ -103,59 +109,104 @@ func TestDescribeWorkerDeployment(t *testing.T) {
 				"my-deployment.v2": {Version: "my-deployment.v2", Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
 			},
 		},
-	})
-	require.NoError(t, err)
-	workflowID := worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + "my-deployment"
-
-	// Missing --namespace and --name are enforced by cli/v2 (Required: true) before the action runs.
-	_, err = runWorkerDeploymentCommand(newWorkerDeploymentTestClient(t, input), "--name", "my-deployment")
-	require.ErrorContains(t, err, `Required flag "namespace" not set`)
-	_, err = runWorkerDeploymentCommand(newWorkerDeploymentTestClient(t, input), "--namespace", "default")
-	require.ErrorContains(t, err, `Required flag "name" not set`)
-
-	// No --run-id: the current run is resolved via DescribeMutableState and its history is read.
-	client := newWorkerDeploymentTestClient(t, input)
-	var msRequest *adminservice.DescribeMutableStateRequest
-	var historyRequest *adminservice.GetWorkflowExecutionRawHistoryV2Request
-	describeMutableState, getRawHistory := client.describeMutableStateFn, client.getRawHistoryFn
-	client.describeMutableStateFn = func(request *adminservice.DescribeMutableStateRequest) (*adminservice.DescribeMutableStateResponse, error) {
-		msRequest = request
-		return describeMutableState(request)
 	}
-	client.getRawHistoryFn = func(request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-		historyRequest = request
-		return getRawHistory(request)
-	}
-	stdout, err := runWorkerDeploymentCommand(client, "--namespace", "default", "--name", "my-deployment")
+	validInput, err := sdk.PreferProtoDataConverter.ToPayload(deploymentArgs)
 	require.NoError(t, err)
-	require.Equal(t, workflowID, msRequest.GetExecution().GetWorkflowId())
-	require.Empty(t, msRequest.GetExecution().GetRunId())
-	require.Equal(t, testDeploymentNamespaceID, historyRequest.GetNamespaceId())
-	require.Equal(t, testDeploymentRunID, historyRequest.GetExecution().GetRunId())
-	require.Contains(t, stdout, "Run ID: run-id (Running)")
-	require.Contains(t, stdout, "my-deployment.v1")
-	require.Contains(t, stdout, "WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT")
-	require.Contains(t, stdout, "Version count: 2\n")
-
-	// --run-id is passed through to DescribeMutableState.
-	_, err = runWorkerDeploymentCommand(client, "--namespace", "default", "--name", "my-deployment", "--run-id", "other-run")
-	require.NoError(t, err)
-	require.Equal(t, "other-run", msRequest.GetExecution().GetRunId())
-	require.Equal(t, "other-run", historyRequest.GetExecution().GetRunId())
-
-	// History service returns an error: CLI wraps and returns it.
-	errorClient := newWorkerDeploymentTestClient(t, input)
-	errorClient.describeMutableStateFn = func(request *adminservice.DescribeMutableStateRequest) (*adminservice.DescribeMutableStateResponse, error) {
-		return nil, errors.New("history unavailable")
-	}
-	_, err = runWorkerDeploymentCommand(errorClient, "--namespace", "default", "--name", "my-deployment")
-	require.ErrorContains(t, err, "unable to describe Worker Deployment workflow")
-
-	// Input that isn't a WorkerDeploymentWorkflowArgs fails to decode.
-	badInput := &commonpb.Payload{
+	undecodableInput := &commonpb.Payload{
 		Metadata: map[string][]byte{"encoding": []byte("binary/protobuf")},
 		Data:     []byte{0xff, 0xff, 0xff},
 	}
-	_, err = runWorkerDeploymentCommand(newWorkerDeploymentTestClient(t, badInput), "--namespace", "default", "--name", "my-deployment")
-	require.ErrorContains(t, err, "unable to decode Worker Deployment workflow input")
+	workflowID := worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + "my-deployment"
+
+	tests := []struct {
+		name                    string
+		args                    []string
+		input                   *commonpb.Payload
+		describeMutableStateErr error
+		wantErr                 string
+		wantMSRunID             string
+		wantRunID               string
+	}{
+		{
+			// Enforced by cli/v2 (Required: true) before the action runs.
+			name:    "missing namespace",
+			args:    []string{"--name", "my-deployment"},
+			input:   validInput,
+			wantErr: `Required flag "namespace" not set`,
+		},
+		{
+			// Enforced by cli/v2 (Required: true) before the action runs.
+			name:    "missing name",
+			args:    []string{"--namespace", "default"},
+			input:   validInput,
+			wantErr: `Required flag "name" not set`,
+		},
+		{
+			name:        "current run",
+			args:        []string{"--namespace", "default", "--name", "my-deployment"},
+			input:       validInput,
+			wantMSRunID: "",
+			wantRunID:   testDeploymentRunID,
+		},
+		{
+			name:        "specific run",
+			args:        []string{"--namespace", "default", "--name", "my-deployment", "--run-id", "other-run"},
+			input:       validInput,
+			wantMSRunID: "other-run",
+			wantRunID:   "other-run",
+		},
+		{
+			name:                    "DescribeMutableState error",
+			args:                    []string{"--namespace", "default", "--name", "my-deployment"},
+			input:                   validInput,
+			describeMutableStateErr: errors.New("history unavailable"),
+			wantErr:                 "unable to describe Worker Deployment workflow: history unavailable",
+		},
+		{
+			name:    "undecodable input",
+			args:    []string{"--namespace", "default", "--name", "my-deployment"},
+			input:   undecodableInput,
+			wantErr: "unable to decode Worker Deployment workflow input",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := newWorkerDeploymentTestClient(t, tc.input)
+			var msRequest *adminservice.DescribeMutableStateRequest
+			var historyRequest *adminservice.GetWorkflowExecutionRawHistoryV2Request
+			describeMutableState, getRawHistory := client.describeMutableStateFn, client.getRawHistoryFn
+			client.describeMutableStateFn = func(request *adminservice.DescribeMutableStateRequest) (*adminservice.DescribeMutableStateResponse, error) {
+				msRequest = request
+				if tc.describeMutableStateErr != nil {
+					return nil, tc.describeMutableStateErr
+				}
+				return describeMutableState(request)
+			}
+			client.getRawHistoryFn = func(request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+				historyRequest = request
+				return getRawHistory(request)
+			}
+
+			stdout, err := runWorkerDeploymentCommand(client, tc.args...)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, workflowID, msRequest.GetExecution().GetWorkflowId())
+			require.Equal(t, tc.wantMSRunID, msRequest.GetExecution().GetRunId())
+			require.Equal(t, testDeploymentNamespaceID, historyRequest.GetNamespaceId())
+			require.Equal(t, tc.wantRunID, historyRequest.GetExecution().GetRunId())
+
+			var description workerDeploymentDescription
+			require.NoError(t, json.Unmarshal([]byte(stdout), &description))
+			require.Equal(t, tc.wantRunID, description.RunID)
+			require.Equal(t, "Running", description.Status)
+			require.Equal(t, 2, description.VersionCount)
+			var state deploymentspb.WorkerDeploymentWorkflowArgs
+			require.NoError(t, protojson.Unmarshal(description.State, &state))
+			protorequire.ProtoEqual(t, deploymentArgs, &state)
+		})
+	}
 }

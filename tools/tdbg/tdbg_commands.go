@@ -85,7 +85,7 @@ func getCommands(
 		{
 			Name:        "worker-deployment",
 			Aliases:     []string{"wd"},
-			Usage:       "Run admin operation on a worker deployment",
+			Usage:       "Run admin operation on a Worker Deployment",
 			Subcommands: newAdminWorkerDeploymentCommands(clientFactory),
 		},
 		{
@@ -373,7 +373,7 @@ func newAdminWorkerDeploymentCommands(clientFactory ClientFactory) []*cli.Comman
 	return []*cli.Command{
 		{
 			Name:  "describe",
-			Usage: "Print the worker deployment workflow's state as of the start of its current (or given) run as JSON, followed by its version count",
+			Usage: "Print a Worker Deployment's state as JSON, including its version count, as of the start of its current (or given) run",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagNamespace,
@@ -382,13 +382,13 @@ func newAdminWorkerDeploymentCommands(clientFactory ClientFactory) []*cli.Comman
 				},
 				&cli.StringFlag{
 					Name:     FlagDeploymentName,
-					Usage:    "Worker deployment name",
+					Usage:    "Worker Deployment name",
 					Required: true,
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID of the worker deployment workflow (default: current run)",
+					Usage:   "Run ID of the Worker Deployment workflow (default: current run)",
 				},
 			},
 			Action: func(c *cli.Context) error {
