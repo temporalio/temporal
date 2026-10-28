@@ -73,10 +73,20 @@ func getMinTaskKey(
 		taskKey := ConvertFromPersistenceTaskKey(queueState.ExclusiveReaderHighWatermark)
 		minTaskKey = &taskKey
 	}
-	for _, readerState := range queueState.ReaderStates {
-		taskKey := ConvertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin)
+	consider := func(persistenceKey *persistencespb.TaskKey) {
+		taskKey := ConvertFromPersistenceTaskKey(persistenceKey)
 		if minTaskKey == nil || taskKey.CompareTo(*minTaskKey) < 0 {
 			minTaskKey = &taskKey
+		}
+	}
+	for _, readerState := range queueState.ReaderStates {
+		for _, scope := range readerState.Scopes {
+			consider(scope.Range.InclusiveMin)
+		}
+		for _, group := range readerState.PredicateGroups {
+			for _, taskRange := range group.Ranges {
+				consider(taskRange.InclusiveMin)
+			}
 		}
 	}
 	return minTaskKey

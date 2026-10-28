@@ -448,6 +448,152 @@ func TestFromPersistenceQueueState_CountsScopesThatLostResolutionOnRead(t *testi
 	require.Equal(t, 2, got.lostResolutionOnReadCount)
 }
 
+func TestFromPersistenceQueueState_ExpandsPredicateGroups(t *testing.T) {
+	ns := uuid.NewString()
+	r0 := NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(200))
+	r1 := NewRange(tasks.NewImmediateKey(200), tasks.NewImmediateKey(300))
+	r2 := NewRange(tasks.NewImmediateKey(300), tasks.NewImmediateKey(400))
+	r3 := NewRange(tasks.NewImmediateKey(400), tasks.NewImmediateKey(500))
+	otherNS := uuid.NewString()
+	watermark := tasks.NewImmediateKey(1000)
+	groupPredicate := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIds: []string{ns},
+	})
+	otherGroupPredicate := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIds: []string{otherNS},
+	})
+
+	tests := []struct {
+		name   string
+		reader *persistencespb.QueueReaderState
+		want   []Scope
+	}{
+		{
+			name: "group only",
+			reader: &persistencespb.QueueReaderState{
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{
+						Predicate: groupPredicate,
+						Ranges:    []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r1)},
+					},
+				},
+			},
+			want: []Scope{
+				NewScope(r0, tasks.NewNamespacePredicate([]string{ns})),
+				NewScope(r1, tasks.NewNamespacePredicate([]string{ns})),
+			},
+		},
+		{
+			name: "group ranges straddle a plain scope",
+			reader: &persistencespb.QueueReaderState{
+				Scopes: []*persistencespb.QueueSliceScope{
+					{Range: ToPersistenceRange(r1), Predicate: otherGroupPredicate},
+				},
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{
+						Predicate: groupPredicate,
+						Ranges:    []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r2)},
+					},
+				},
+			},
+			want: []Scope{
+				NewScope(r0, tasks.NewNamespacePredicate([]string{ns})),
+				NewScope(r1, tasks.NewNamespacePredicate([]string{otherNS})),
+				NewScope(r2, tasks.NewNamespacePredicate([]string{ns})),
+			},
+		},
+		{
+			name: "two groups interleave",
+			reader: &persistencespb.QueueReaderState{
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{
+						Predicate: groupPredicate,
+						Ranges:    []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r2)},
+					},
+					{
+						Predicate: otherGroupPredicate,
+						Ranges:    []*persistencespb.QueueSliceRange{ToPersistenceRange(r1), ToPersistenceRange(r3)},
+					},
+				},
+			},
+			want: []Scope{
+				NewScope(r0, tasks.NewNamespacePredicate([]string{ns})),
+				NewScope(r1, tasks.NewNamespacePredicate([]string{otherNS})),
+				NewScope(r2, tasks.NewNamespacePredicate([]string{ns})),
+				NewScope(r3, tasks.NewNamespacePredicate([]string{otherNS})),
+			},
+		},
+		{
+			name: "ranges listed out of order within a group",
+			reader: &persistencespb.QueueReaderState{
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{
+						Predicate: groupPredicate,
+						Ranges:    []*persistencespb.QueueSliceRange{ToPersistenceRange(r2), ToPersistenceRange(r0)},
+					},
+				},
+			},
+			want: []Scope{
+				NewScope(r0, tasks.NewNamespacePredicate([]string{ns})),
+				NewScope(r2, tasks.NewNamespacePredicate([]string{ns})),
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &persistencespb.QueueState{
+				ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+				ReaderStates:                 map[int64]*persistencespb.QueueReaderState{0: tc.reader},
+			}
+
+			got := FromPersistenceQueueState(state)
+
+			require.Equal(t, map[int64][]Scope{0: tc.want}, got.readerScopes)
+		})
+	}
+}
+
+func TestFromPersistenceQueueState_GroupWithUnresolvableIndexCountsEachScope(t *testing.T) {
+	known := uuid.New()
+	r0 := NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(200))
+	r1 := NewRange(tasks.NewImmediateKey(200), tasks.NewImmediateKey(300))
+	r2 := NewRange(tasks.NewImmediateKey(300), tasks.NewImmediateKey(400))
+	watermark := tasks.NewImmediateKey(1000)
+
+	state := &persistencespb.QueueState{
+		NamespaceIdTable:             [][]byte{known[:]},
+		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			0: {PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+				{
+					Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+						NamespaceIdIndexes: []int32{7},
+					}),
+					Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r2)},
+				},
+				{
+					Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+						NamespaceIdIndexes: []int32{0},
+					}),
+					Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r1)},
+				},
+			}},
+		},
+	}
+
+	got := FromPersistenceQueueState(state)
+
+	universal := predicates.Universal[tasks.Task]()
+	require.Equal(t, map[int64][]Scope{
+		0: {
+			NewScope(r0, universal),
+			NewScope(r1, tasks.NewNamespacePredicate([]string{known.String()})),
+			NewScope(r2, universal),
+		},
+	}, got.readerScopes)
+	require.Equal(t, 2, got.lostResolutionOnReadCount)
+}
+
 func (s *convertSuite) TestConvertQueueState() {
 	readerScopes := map[int64][]Scope{
 		0: {},

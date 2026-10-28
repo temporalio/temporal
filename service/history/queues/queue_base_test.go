@@ -521,12 +521,68 @@ func (s *queueBaseSuite) TestNewQueueBase_RecordsPredicateResolutionLossOnRead()
 
 			recordings := capture.Snapshot()[metrics.QueuePredicateResolutionLoss.Name()]
 			if tc.wantLosses == 0 {
-				s.Empty(recordings)
+				require.Empty(s.T(), recordings)
 				return
 			}
-			s.Require().Len(recordings, 1)
-			s.Equal(tc.wantLosses, recordings[0].Value)
-			s.Equal(string(predicateResolutionLossUnresolvedNamespaceIndex), recordings[0].Tags["reason"])
+			require.Len(s.T(), recordings, 1)
+			require.Equal(s.T(), tc.wantLosses, recordings[0].Value)
+			require.Equal(s.T(), string(predicateResolutionLossUnresolvedNamespaceIndex), recordings[0].Tags["reason"])
+		})
+	}
+}
+
+func (s *queueBaseSuite) TestNewQueueBase_DeletionWatermarkIsLowestRangeAcrossPredicateGroups() {
+	rangeOf := func(minTaskID, maxTaskID int64) *persistencespb.QueueSliceRange {
+		return ToPersistenceRange(NewRange(tasks.NewImmediateKey(minTaskID), tasks.NewImmediateKey(maxTaskID)))
+	}
+	predicate := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIds: []string{uuid.NewString()},
+	})
+
+	testCases := []struct {
+		name   string
+		reader *persistencespb.QueueReaderState
+	}{
+		{
+			name: "group ranges listed out of order",
+			reader: &persistencespb.QueueReaderState{
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{Predicate: predicate, Ranges: []*persistencespb.QueueSliceRange{rangeOf(3000, 4000), rangeOf(1000, 2000)}},
+				},
+			},
+		},
+		{
+			name: "group range lower than a plain scope",
+			reader: &persistencespb.QueueReaderState{
+				Scopes: []*persistencespb.QueueSliceScope{
+					{Range: rangeOf(2000, 3000), Predicate: predicate},
+				},
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{Predicate: predicate, Ranges: []*persistencespb.QueueSliceRange{rangeOf(1000, 2000)}},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			mockShard := shard.NewTestContext(
+				s.controller,
+				&persistencespb.ShardInfo{
+					ShardId: 0,
+					RangeId: 10,
+					QueueStates: map[int32]*persistencespb.QueueState{
+						int32(tasks.CategoryIDTransfer): {
+							ReaderStates:                 map[int64]*persistencespb.QueueReaderState{DefaultReaderId: tc.reader},
+							ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 5000},
+						},
+					},
+				},
+				s.config,
+			)
+
+			base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
+
+			require.Equal(s.T(), tasks.NewImmediateKey(1000), base.exclusiveDeletionHighWatermark)
 		})
 	}
 }

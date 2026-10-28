@@ -41,12 +41,26 @@ func FromPersistenceQueueState(
 	readerScopes := make(map[int64][]Scope, len(state.ReaderStates))
 	for id, persistenceReaderState := range state.ReaderStates {
 		scopes := make([]Scope, 0, len(persistenceReaderState.Scopes))
-		for _, persistenceScope := range persistenceReaderState.Scopes {
+		appendScope := func(persistenceScope *persistencespb.QueueSliceScope) {
 			scope, lostResolutionOnRead := FromPersistenceScope(persistenceScope, table)
 			if lostResolutionOnRead {
 				lostResolutionOnReadCount++
 			}
 			scopes = append(scopes, scope)
+		}
+		for _, persistenceScope := range persistenceReaderState.Scopes {
+			appendScope(persistenceScope)
+		}
+		for _, group := range persistenceReaderState.PredicateGroups {
+			for _, persistenceRange := range group.Ranges {
+				appendScope(&persistencespb.QueueSliceScope{Range: persistenceRange, Predicate: group.Predicate})
+			}
+		}
+		if len(persistenceReaderState.PredicateGroups) > 0 {
+			// queue_base reads scopes[0] as the reader's lowest key.
+			slices.SortStableFunc(scopes, func(a, b Scope) int {
+				return a.Range.InclusiveMin.CompareTo(b.Range.InclusiveMin)
+			})
 		}
 		readerScopes[id] = scopes
 	}
