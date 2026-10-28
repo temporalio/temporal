@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -58,6 +59,8 @@ type testMatcherOpts struct {
 	validator taskValidator
 	// config, if set, can modify the task queue config before the matcher is created.
 	config func(*taskQueueConfig)
+	// metricsHandler defaults to a no-op handler.
+	metricsHandler metrics.Handler
 }
 
 // newTestMatcher returns a priTaskMatcher for tests. It's not started: the caller should call
@@ -79,6 +82,10 @@ func (s *PriMatcherSuite) newTestMatcher(ctx context.Context, opts testMatcherOp
 			panic(err) // only fails for non-normal partitions
 		}
 	}
+	handler := opts.metricsHandler
+	if handler == nil {
+		handler = metrics.NoopMetricsHandler
+	}
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	rateLimitManager.Start()
 	return newPriTaskMatcher(
@@ -89,7 +96,7 @@ func (s *PriMatcherSuite) newTestMatcher(ctx context.Context, opts testMatcherOp
 		opts.client,
 		opts.validator,
 		s.logger,
-		metrics.NoopMetricsHandler,
+		handler,
 		rateLimitManager,
 		func() {}, // onRateLimited
 		func() {}, // markAlive
@@ -531,6 +538,133 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			require.Equal(t, syncMatchBacklogPresent, outcome)
 		})
 	})
+}
+
+// newCapturingMatcher returns a started matcher with a capturing metrics handler. The caller must
+// Stop the matcher inside its synctest bubble.
+func (s *PriMatcherSuite) newCapturingMatcher(ctx context.Context) (*priTaskMatcher, *metricstest.Capture) {
+	handler := metricstest.NewCaptureHandler()
+	tm := s.newTestMatcher(ctx, testMatcherOpts{metricsHandler: handler})
+	tm.Start()
+	return tm, handler.StartCapture()
+}
+
+func pollSuccessCounts(c *metricstest.Capture) (pollSuccess, pollSuccessSync int) {
+	snap := c.Snapshot()
+	return len(snap[metrics.PollSuccessPerTaskQueueCounter.Name()]),
+		len(snap[metrics.PollSuccessWithSyncPerTaskQueueCounter.Name()])
+}
+
+// TestPollSuccessRecordedOnSuccessfulDispatch checks that poll_success is recorded only when a
+// polled backlog task's dispatch succeeds, so a task that is dropped or retried leaves the backlog
+// once across poll_success and tasks_dropped.
+func (s *PriMatcherSuite) TestPollSuccessRecordedOnSuccessfulDispatch() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		tm, capture := s.newCapturingMatcher(ctx)
+		defer tm.Stop()
+
+		// The root validator may take the task and send it back for reprocessing; put it back so
+		// the poll still gets it.
+		done := make(chan taskResponse, 1)
+		var task *internalTask
+		task = newTestBacklogTask(0, func(_ *internalTask, res taskResponse) {
+			if errors.Is(res.err(), errReprocessTask) {
+				task.resetMatcherState()
+				_ = tm.AddTask(task)
+				return
+			}
+			done <- res
+		})
+		dispatch := func(r taskFinishResult) {
+			task.resetMatcherState()
+			_ = tm.AddTask(task)
+			polled, err := tm.Poll(ctx, &pollMetadata{})
+			require.NoError(t, err)
+			polled.finish(r)
+			<-done
+		}
+
+		for _, r := range []taskFinishResult{
+			{dropReason: dropReasonNotFound},            // e.g. RecordTaskStarted: NotFound
+			{dropReason: dropReasonExpiredMemory},       // found expired after the poll
+			{err: serviceerror.NewUnavailable("retry")}, // transient start error
+		} {
+			dispatch(r)
+			n, _ := pollSuccessCounts(capture)
+			require.Zero(t, n, "poll_success recorded for unsuccessful dispatch %+v", r)
+		}
+
+		dispatch(taskFinishResult{consumedToken: true})
+		n, nSync := pollSuccessCounts(capture)
+		require.Equal(t, 1, n)
+		require.Zero(t, nSync)
+	})
+}
+
+// TestOfferDispatchMetrics checks the metrics recorded for a task offered to a waiting poller:
+// poll_success_sync counts only tasks from history (not backlog tasks forwarded to the root), and a
+// task dropped at dispatch is recorded in tasks_dropped by Offer, since Offer still reports it as
+// matched so that it isn't spooled.
+func (s *PriMatcherSuite) TestOfferDispatchMetrics() {
+	for _, tc := range []struct {
+		name     string
+		source   enumsspb.TaskSource
+		drop     dropReason
+		wantSync int
+	}{
+		{"HistoryTask", enumsspb.TASK_SOURCE_HISTORY, dropReasonUnspecified, 1},
+		{"ForwardedBacklogTask", enumsspb.TASK_SOURCE_DB_BACKLOG, dropReasonUnspecified, 0},
+		{"DroppedHistoryTask", enumsspb.TASK_SOURCE_HISTORY, dropReasonNotFound, 0},
+		{"DroppedForwardedBacklogTask", enumsspb.TASK_SOURCE_DB_BACKLOG, dropReasonExpiredMemory, 0},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				tm, capture := s.newCapturingMatcher(ctx)
+				defer tm.Stop()
+
+				polledC := make(chan *internalTask, 1)
+				go func() {
+					polled, err := tm.Poll(ctx, &pollMetadata{})
+					require.NoError(t, err)
+					polledC <- polled
+				}()
+				synctest.Wait() // poller is waiting, so the offer matches immediately
+
+				forwardInfo := &taskqueuespb.TaskForwardInfo{
+					SourcePartition: testMatcherTaskQueue.NormalPartition(1).RpcName(),
+					TaskSource:      tc.source,
+				}
+				task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{CreateTime: timestamppb.Now()}, forwardInfo, 0, nil)
+				offerDone := make(chan syncMatchOutcome, 1)
+				go func() {
+					outcome, _, err := tm.Offer(ctx, task)
+					require.NoError(t, err)
+					offerDone <- outcome
+				}()
+				polled := <-polledC
+				n, _ := pollSuccessCounts(capture)
+				require.Zero(t, n, "poll_success recorded before the dispatch finished")
+
+				polled.finish(taskFinishResult{consumedToken: tc.drop == dropReasonUnspecified, dropReason: tc.drop})
+				require.Equal(t, syncMatchSuccess, <-offerDone)
+				n, nSync := pollSuccessCounts(capture)
+				dropped := capture.Snapshot()[metrics.DroppedTasksCounter.Name()]
+				if tc.drop == dropReasonUnspecified {
+					require.Equal(t, 1, n)
+					require.Empty(t, dropped)
+				} else {
+					require.Zero(t, n)
+					require.Len(t, dropped, 1)
+					require.Equal(t, tc.drop.tag().Value, dropped[0].Tags["reason"])
+				}
+				require.Equal(t, tc.wantSync, nSync)
+			})
+		})
+	}
 }
 
 // TestRootOfferQueryNoRecentPoller checks that a query on the root partition fails fast with

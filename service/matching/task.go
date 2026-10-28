@@ -79,6 +79,9 @@ type (
 		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
 		taskDispatchRevisionNumber    int64
 		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
+		// recordPollSuccess records poll_success for the poller this task was handed to. It is
+		// set by the matcher and called by finish if the dispatch succeeded.
+		recordPollSuccess func()
 
 		// The following fields are for use by priMatcher/matcherData:
 		waitableMatchResult
@@ -370,7 +373,15 @@ func (task *internalTask) setEvicted() {
 // When a backlog task is being dropped rather than dispatched, set r.dropReason; it is
 // carried on the taskResponse and counted in tasks_dropped by the backlog completion
 // callback (reader.completeTask).
+//
+// A successful dispatch (no err and no dropReason) records poll_success, so each task leaves the
+// backlog exactly once across poll_success and tasks_dropped.
 func (task *internalTask) finish(r taskFinishResult) {
+	recordPollSuccess := task.recordPollSuccess
+	task.recordPollSuccess = nil // clear so it's only used once; a re-dispatch sets it again
+	if recordPollSuccess != nil && r.err == nil && r.dropReason == dropReasonUnspecified {
+		recordPollSuccess()
+	}
 	task.finishInternal(taskResponse{
 		startErr:   r.err,
 		dropReason: r.dropReason,

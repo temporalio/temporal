@@ -436,6 +436,10 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
+		// A dropped task is reported as a successful match so that it isn't spooled, and the
+		// caller records it as added (or, if it's a forwarded backlog task, the child partition
+		// completes it without a drop), so record the drop here.
+		recordDroppedTask(tm.metricsHandler, tm.config, res.dropReason, task.getPriority())
 		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
 		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
 		return syncMatchSuccess, false, res.startErr
@@ -687,13 +691,15 @@ func (tm *priTaskMatcher) poll(
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
 		fairnessKeyTag := metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), tm.config.BreakdownMetricsByFairnessKey())
-		if !task.isQuery() {
-			if task.isSyncMatchTask() {
+		// A task never sat in a backlog if it came straight from history. Backlog tasks
+		// forwarded from a child are sync-match tasks here but keep their DB_BACKLOG source.
+		syncMatch := task.isQuery() || (task.isSyncMatchTask() && task.source == enumsspb.TASK_SOURCE_HISTORY)
+		// The task may still fail to start or be dropped, so poll_success is recorded by
+		// internalTask.finish once the dispatch succeeds.
+		task.recordPollSuccess = func() {
+			if syncMatch {
 				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			}
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
-		} else {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		}
 		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
