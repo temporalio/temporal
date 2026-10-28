@@ -326,8 +326,8 @@ type continueAsNewTest struct {
 
 func newContinueAsNewTest(t *testing.T) *continueAsNewTest {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
+	var workflowSuite testsuite.WorkflowTestSuite
+	env := workflowSuite.NewTestWorkflowEnvironment()
 	tv := testvars.New(t)
 	now := timestamppb.New(env.Now())
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
@@ -368,13 +368,13 @@ func newContinueAsNewTest(t *testing.T) *continueAsNewTest {
 	}
 }
 
-func mockPropagation(f *continueAsNewTest) (*testsuite.MockCallWrapper, *testsuite.MockCallWrapper) {
+func mockPropagation(f *continueAsNewTest) (syncCall, checkCall *testsuite.MockCallWrapper) {
 	var a *VersionActivities
-	syncCall := f.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
+	syncCall = f.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
 		Return(&deploymentspb.SyncDeploymentVersionUserDataResponse{
 			TaskQueueMaxVersions: map[string]int64{f.tv.TaskQueue().GetName(): 10},
 		}, nil)
-	checkCall := f.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil)
+	checkCall = f.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil)
 	return syncCall, checkCall
 }
 
