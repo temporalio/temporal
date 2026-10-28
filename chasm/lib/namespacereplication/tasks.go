@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
@@ -851,14 +852,18 @@ func (h *applyPeerTaskHandler) Execute(
 	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
 	defer cancel()
 	request := PeerApplyRequest{
-		SourceCluster:           h.currentCluster,
-		ComponentBusinessID:     ref.BusinessID,
-		ComponentRunID:          ref.RunID,
-		AttemptCount:            task.GetAttempt() + 1,
-		TargetCluster:           task.GetTargetCell(),
-		Operation:               loaded.Operation,
-		Detail:                  loaded.Detail,
-		Shadow:                  loaded.Shadow,
+		SourceCluster:       h.currentCluster,
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		AttemptCount:        task.GetAttempt() + 1,
+		TargetCluster:       task.GetTargetCell(),
+		Operation:           loaded.Operation,
+		Detail:              loaded.Detail,
+		Shadow:              loaded.Shadow,
+		// Targets are the union of previous and new membership. A target absent
+		// from the new list must retain the removal snapshot to fence older adds.
+		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
+			!slices.Contains(loaded.Detail.GetReplicationConfig().GetClusters(), task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)

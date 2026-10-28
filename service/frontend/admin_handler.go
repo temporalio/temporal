@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -1065,6 +1067,14 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
+	// Shadow must expose the same feature prerequisite as authoritative applies.
+	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
+		comparisonReason = "global_namespace_disabled"
+		return nil, serviceerror.NewFailedPrecondition("global namespace replication is disabled on this cluster")
+	}
+	if request.GetRemovedPeer() && request.GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("removed_peer is only valid for authoritative updates")
+	}
 	if len(request.GetNamespaceTaskPayload()) == 0 {
 		comparisonReason = "missing_payload"
 		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
@@ -1089,7 +1099,28 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
 	if !request.GetShadow() {
-		outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+		if request.GetRemovedPeer() {
+			clusters := payloadTask.GetReplicationConfig().GetClusters()
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
+				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
+					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
+				}) {
+				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+			}
+			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
+		}
+		// Absorb brief cell-wide metadata CAS contention before reporting a
+		// destination failure to the source circuit breaker. Each call rereads
+		// metadata and reruns apply-if-higher; durable retries remain in CHASM.
+		policy := backoff.NewExponentialRetryPolicy(20 * time.Millisecond).
+			WithBackoffCoefficient(2).
+			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
+		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+		}, policy, func(err error) bool {
+			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
+			return retryable
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -1121,6 +1152,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
 	}, nil
 }
+
+// Three total receiver attempts bound transient retries within the RPC deadline.
+const namespaceMutationApplyMaxAttempts = 3
 
 func namespaceMutationResponseOutcome(outcome nsreplication.ApplyOutcome) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
 	switch outcome {

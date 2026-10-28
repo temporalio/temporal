@@ -32,12 +32,6 @@ func (h *serviceHandler) TriggerNamespaceMutation(
 	if err := validateTriggerNamespaceMutationRequest(req); err != nil {
 		return nil, err
 	}
-	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
-		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
-	}
-	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE {
-		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
-	}
 
 	key := executionKey(req)
 	startResult, err := chasm.StartExecution[*NamespaceMutationComponent, *namespacereplicationpb.NamespaceMutation](
@@ -90,6 +84,12 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 	}
 	if !req.GetMutation().GetIsGlobalNamespace() {
 		return serviceerror.NewInvalidArgument("mutation.is_global_namespace must be true")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
 	}
 	if req.GetMutation().GetShadow() {
 		if len(req.GetMutation().GetShadowLegacyTaskPayload()) == 0 {

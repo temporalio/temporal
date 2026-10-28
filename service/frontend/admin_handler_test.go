@@ -147,6 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
+	s.mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -232,7 +233,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.handler = NewAdminHandler(args, namespaceDLQHandler, &testNamespaceMutationExecutor{})
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
 	s.handler.Start()
 }
 

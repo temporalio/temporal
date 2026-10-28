@@ -40,7 +40,7 @@ func TestShadowReceiverAcceptsMergedPR2WireFormat(t *testing.T) {
 	wire = protowire.AppendBytes(wire, payload)
 	var request adminservice.ApplyNamespaceMutationRequest
 	require.NoError(t, proto.Unmarshal(wire, &request))
-	handler := &AdminHandler{logger: log.NewNoopLogger()}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t)}
 	response, err := handler.ApplyNamespaceMutation(context.Background(), &request)
 	require.NoError(t, err)
 	require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
@@ -97,6 +97,7 @@ func TestShadowReceiverObservability(t *testing.T) {
 			t.Parallel()
 			metadata := cluster.NewMockMetadata(gomock.NewController(t))
 			metadata.EXPECT().GetCurrentClusterName().Return("cellB").AnyTimes()
+			metadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			mh := metricstest.NewCaptureHandler()
 			capture := mh.StartCapture()
 			defer mh.StopCapture(capture)
@@ -186,6 +187,7 @@ func TestShadowReceiverWithoutDecodableMetadata(t *testing.T) {
 			t.Parallel()
 			metadata := cluster.NewMockMetadata(gomock.NewController(t))
 			metadata.EXPECT().GetCurrentClusterName().Return("cellB").AnyTimes()
+			metadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			logger := &captureRemoteClusterEventLogger{}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: metadata, eventLogger: logger,
 				config: &Config{EmitNamespaceLifecycleEvents: func() bool { return true }}}
@@ -274,6 +276,7 @@ func TestShadowReceiverPanicObservability(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			metadata := cluster.NewMockMetadata(ctrl)
 			metadata.EXPECT().GetCurrentClusterName().Return("cellB").AnyTimes()
+			metadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			logger := log.NewMockLogger(ctrl)
 			logger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any())
 			mh := metricstest.NewCaptureHandler()
