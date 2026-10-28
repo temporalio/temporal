@@ -20,7 +20,7 @@ import (
 // byte-seconds counter instead of copying the active cluster's, and that after failover the new
 // active cluster keeps accruing from its own value.
 func (s *FunctionalClustersTestSuite) TestStorageUsagePerCluster() {
-	const holdTime = 1100 * time.Millisecond
+	const holdTime = 250 * time.Millisecond
 	ns := s.createGlobalNamespace()
 	workflowID := testcore.RandomizeStr("storage-usage")
 

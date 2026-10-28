@@ -59,7 +59,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 				// Hold the first workflow task open so the execution accrues a non-zero storage usage
 				// before the rebuild. Adds no events or state transitions. Must stay under the SDK's
 				// 1s deadlock detection.
-				time.Sleep(500 * time.Millisecond) //nolint:forbidigo
+				time.Sleep(250 * time.Millisecond) //nolint:forbidigo
 				return uuid.New().String()
 			},
 		).Get(&randomUUID)

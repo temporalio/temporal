@@ -24,7 +24,7 @@ import (
 
 // storageUsageHoldTime is how long the tests hold an execution between two state transitions,
 // so that the second transition accrues a non-zero byte-seconds delta.
-const storageUsageHoldTime = 1100 * time.Millisecond
+const storageUsageHoldTime = 250 * time.Millisecond
 
 type StorageUsageSuite struct {
 	parallelsuite.Suite[*StorageUsageSuite]
