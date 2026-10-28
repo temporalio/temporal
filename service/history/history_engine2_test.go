@@ -1845,7 +1845,6 @@ func (s *engine2Suite) testOrphanedChildReplacementPostCommitObservability(emitE
 	s.historyEngine.shardContext = &replacementEventCheckingShard{
 		ShardContext: s.mockShard,
 		checkLocksReleased: func() {
-			// Bound the probe so emitting while the workflow-ID lock is held fails instead of hanging.
 			ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
 			defer cancel()
 			release, err := s.workflowCache.GetOrCreateCurrentExecution(

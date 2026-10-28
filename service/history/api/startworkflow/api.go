@@ -575,7 +575,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		if s.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
 			replaceAction := currentExecutionUpdateAction
 			currentExecutionUpdateAction = func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-				// Capture the old child's state and parent initiation under its existing lock.
 				mutableState := lease.GetMutableState()
 				state := mutableState.GetExecutionState()
 				executionInfo := mutableState.GetExecutionInfo()
