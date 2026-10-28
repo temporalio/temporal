@@ -13,6 +13,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type (
+	namespaceIDTable struct {
+		entries           [][]byte
+		unresolvedIndexes int
+	}
+)
+
 func ToPersistenceQueueState(
 	queueState *queueState,
 ) *persistencespb.QueueState {
@@ -319,11 +326,6 @@ func FromPersistenceNamespaceIDPredicate(
 		}
 	}
 	return tasks.NewNamespacePredicate(namespaceIDs)
-}
-
-type namespaceIDTable struct {
-	entries           [][]byte
-	unresolvedIndexes int
 }
 
 func newNamespaceIDTable(entries [][]byte) *namespaceIDTable {
