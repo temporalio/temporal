@@ -194,7 +194,7 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (u *Updater) applyRequest(
 		return &api.UpdateWorkflowAction{
 			// Persist only the event written by AttachCallbacks, if any. Persisting mutable state
 			// otherwise would convert a speculative workflow task to a normal one.
-			Noop:               !callbacksWritten,
+			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
 		}, nil
 	}
