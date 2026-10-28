@@ -71,9 +71,10 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.opentelemetry.io/proto/otlp v1.11.0
-	go.temporal.io/api v1.63.8-0.20261016215345-3926793dec12
+	go.temporal.io/api v1.64.1-0.20261027235544-fa71e29e58da
 	go.temporal.io/auto-scaled-workers v0.0.0-20261013231030-67ffdef6330d
 	go.temporal.io/sdk v1.49.0
+	go.temporal.io/testx v0.0.0-20261028001837-eec3975de26f
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -226,3 +227,6 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+// Use the local testx; consumers of the server ignore this replace.
+replace go.temporal.io/testx => ./common/testx

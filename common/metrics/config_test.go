@@ -21,9 +21,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testutils"
+	"go.temporal.io/testx/freeport"
 	"go.uber.org/mock/gomock"
 )
 
