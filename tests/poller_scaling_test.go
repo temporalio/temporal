@@ -415,9 +415,9 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }
 
-// The following tests cover the hold and scale-down branches of the poller scaling decision, plus the
-// v2 delay signal. Each opts into the poller_scale_decision metric so the reason behind a decision
-// (or a withheld one) can be asserted, not just its presence.
+// The following tests cover the hold and scale-down branches of the poller scaling decision. Each
+// opts into the poller_scale_decision metric so the reason behind a decision (or a withheld one) can
+// be asserted, not just its presence.
 
 func (s *PollerScalingIntegSuite) TestPollerScalingScaleDownWhenIdle() {
 	env := s.setupEnv(
@@ -427,7 +427,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingScaleDownWhenIdle() {
 	capture := env.StartNamespaceMetricCapture()
 	tq := testcore.RandomizeStr(s.T().Name())
 
-	resp := s.pollAfterIdle(env, tq, 400*time.Millisecond)
+	resp := s.startWorkflowAfterPollerWait(env, tq, 400*time.Millisecond)
 	s.NotNil(resp.PollerScalingDecision)
 	s.Equal(int32(-1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle), 1)
@@ -464,7 +464,6 @@ func (s *PollerScalingIntegSuite) TestPollerScalingNoScaleDownForBacklogTasks() 
 func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsRateLimited() {
 	env := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 200*time.Millisecond),
 		// Low enough that the limiter's burst can't cover a single decision.
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingDecisionsPerSecond, 0.001),
 	)
@@ -482,13 +481,8 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsRateLimited() {
 			nonNil++
 		}
 	}
-	s.LessOrEqual(nonNil, 1)
-	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited), numTasks-1)
-
-	// Scale-down is decided before the limiter is consulted, so an idle poller still gets one.
-	resp := s.pollAfterIdle(env, tq, 400*time.Millisecond)
-	s.NotNil(resp.PollerScalingDecision)
-	s.Equal(int32(-1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Zero(nonNil)
+	s.Equal(numTasks, pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited))
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited() {
@@ -510,6 +504,19 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 		},
 	})
 	s.NoError(err)
+
+	// Wait for the limit to be in effect before building the backlog. Otherwise the activities
+	// could be dispatched unthrottled and the queue would never report rate limiting.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportConfig:  true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, float32(1), res.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond())
+	}, 20*time.Second, 100*time.Millisecond)
 
 	// Build an activity backlog by scheduling activities from a single workflow task.
 	const numActivities = 10
@@ -542,7 +549,10 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 	// as active. A backlog that adding pollers can't drain any faster must not produce a scale-up.
 	// The rate-limited tracker is a sliding window, so assert on the metric rather than per-poll timing.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+		// Bound each poll so an empty queue can't block past the Eventually timeout.
+		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+		resp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test",
@@ -553,17 +563,16 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
-func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV1() {
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2Off() {
 	s.testPollerScalingNexusRatioScaleUp(false)
 }
 
-func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2() {
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2On() {
 	s.testPollerScalingNexusRatioScaleUp(true)
 }
 
 // Nexus tasks are never backlogged, so the ratio signal is what scales up Nexus pollers. The delay
-// signal is disabled here so a scale-up can only come from the ratio of adds to dispatches (v1) or
-// sync matches (v2).
+// signal is disabled here so a scale-up can only come from the ratio signal.
 func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV2 bool) {
 	env := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
@@ -674,19 +683,24 @@ func (s *PollerScalingIntegSuite) pollWorkflowTask(env *testcore.TestEnv, tq str
 	return resp
 }
 
-// pollAfterIdle parks a workflow poller on an empty queue for at least idle, then starts a workflow so
-// its task sync-matches to that poller, and returns the poll response.
-func (s *PollerScalingIntegSuite) pollAfterIdle(env *testcore.TestEnv, tq string, idle time.Duration) *workflowservice.PollWorkflowTaskQueueResponse {
+// startWorkflowAfterPollerWait starts a workflow poller on an empty queue, waits at least wait, then
+// starts a workflow so its task sync-matches to that poller, and returns the poll response.
+func (s *PollerScalingIntegSuite) startWorkflowAfterPollerWait(env *testcore.TestEnv, tq string, wait time.Duration) *workflowservice.PollWorkflowTaskQueueResponse {
 	const identity = "idle-poller"
-	respCh := make(chan *workflowservice.PollWorkflowTaskQueueResponse, 1)
+	// Assert on the poll result in the test goroutine, not the poller's, so a failure there can't
+	// report on a test that has already finished.
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+	resCh := make(chan pollResult, 1)
 	go func() {
 		resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  identity,
 		})
-		s.NoError(err)
-		respCh <- resp
+		resCh <- pollResult{resp: resp, err: err}
 	}()
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -702,18 +716,19 @@ func (s *PollerScalingIntegSuite) pollAfterIdle(env *testcore.TestEnv, tq string
 		}
 		require.True(t, found)
 	}, 10*time.Second, 50*time.Millisecond)
-	time.Sleep(idle) //nolint:forbidigo // the poll has to wait past PollerScalingWaitTime to look idle
+	time.Sleep(wait) //nolint:forbidigo // the poll has to wait past PollerScalingWaitTime to look idle
 
 	_, err := env.SdkClient().ExecuteWorkflow(
 		s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
 	select {
-	case resp := <-respCh:
-		s.NotEmpty(resp.GetTaskToken())
-		return resp
+	case res := <-resCh:
+		s.NoError(res.err)
+		s.NotEmpty(res.resp.GetTaskToken())
+		return res.resp
 	case <-s.Context().Done():
-		s.FailNow("idle poll did not return")
+		s.FailNow("poll did not return")
 		return nil
 	}
 }
