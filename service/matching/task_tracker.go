@@ -110,6 +110,10 @@ func (s *taskTracker) incOver(n int, from time.Time) {
 		s.tasks.inc(n)
 		return
 	}
+	// The share of tasks that arrived before startTime is dropped: the rate only measures time
+	// since startTime, so counting them would overstate it. For a tracker created during this
+	// call that is the whole batch, which is intended: e.g. a batch accumulated over 20s
+	// counted in a new 2s window would read ~10x the true rate.
 	lower := from
 	if s.startTime.After(lower) {
 		lower = s.startTime

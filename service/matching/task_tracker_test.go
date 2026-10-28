@@ -147,6 +147,18 @@ func TestTaskTrackerIncOver(t *testing.T) {
 		require.Equal(t, withInc.tasks, withIncOver.tasks)
 		require.InEpsilon(t, withInc.rate(), withIncOver.rate(), 1e-6)
 	})
+
+	t.Run("new tracker drops batch from before start", func(t *testing.T) {
+		t.Parallel()
+		timeSource := clock.NewEventTimeSource()
+		timeSource.Update(time.Now())
+		tr := newTaskTracker(timeSource, time.Second, 10*time.Second)
+
+		// the whole batch arrived before the tracker existed, so none of it is in the
+		// interval the rate measures
+		tr.incOver(50, timeSource.Now().Add(-2*time.Second))
+		require.Equal(t, 0, tr.tasks.totalTasks())
+	})
 }
 
 // TestTaskTrackerIncOverRemovesBatchBias checks that batches flushed less often than the
