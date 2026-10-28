@@ -239,6 +239,9 @@ message WorkerDeploymentVersionSummary {
 
   // Compute status for this version. Synced from the version workflow when WCI signals a status change.
   temporal.api.deployment.v1.ComputeStatus compute_status = 14;
+
+  // Snapshot of registered task queue families returned by the Version workflow when the limit is reached.
+  TaskQueueFamilySummary task_queue_family_summary = 15;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -624,4 +627,23 @@ message ForceCANVersionSignalArgs {
 // and propagate to task queues.
 message DemoteVersionSignalArgs {
   temporal.api.deployment.v1.RoutingConfig routing_config = 1;
+}
+
+message TaskQueueFamilySummary {
+  // Exact number of task queue families registered in the Version. This is n when sizing the Bloom filter.
+  int32 count = 1;
+  // Number of bits in the Bloom filter.
+  int64 bloom_filter_size = 2;
+  // Number of hash functions used by the Bloom filter.
+  int32 bloom_filter_hash_count = 3;
+  // Bloom filter words containing the registered task queue family names.
+  repeated int64 bloom_filter_words = 4;
+}
+
+// MaxTaskQueuesInVersionFailureDetails is the details of the failure when the maximum number
+// of task queues in a version is exceeded. By storing the task queue family summary, the deployment workflow
+// uses a bloom filter, during subsequent registrations, to determine if a task queue family may exist in the version
+// at the time of registration of a new task queue.
+message MaxTaskQueuesInVersionFailureDetails {
+  TaskQueueFamilySummary task_queue_family_summary = 1;
 }
