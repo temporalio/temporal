@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -110,13 +109,8 @@ func (c invocableInternal) Invoke(
 	// RPC to History for cross-shard completion delivery.
 	_, err = h.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		// GetRPCStatus, not status.Code: the internode interceptor returns serviceerror
-		// types, which expose Status() rather than GRPCStatus(), so status.Code reports
-		// Unknown for all of them. IsRetryableRPCError below reads the code the same way.
-		outcome = outcomeTag(errorOutcomePrefix + codes.Unknown.String())
-		if st, ok := common.GetRPCStatus(err); ok {
-			outcome = outcomeTag(errorOutcomePrefix + st.Code().String())
-		}
+		// Set the outcome tag based on the gRPC error received (if applicable).
+		outcome = grpcErrorOutcome(err)
 		if ctx.Err() != nil {
 			outcome = outcomeRequestTimeout
 		}
@@ -160,17 +154,10 @@ func (c invocableInternal) getHistoryRequest(
 			Completion: completion,
 		}
 	} else {
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+		// Convert the nexus.OperationError into a failurepb.Failure.
+		apiFailure, err := commonnexus.OperationErrorToTemporalFailure(c.completion.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
-		}
-		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
-		if failure.Cause != nil {
-			failure = *failure.Cause
-		}
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %w", err)
+			return nil, err
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{

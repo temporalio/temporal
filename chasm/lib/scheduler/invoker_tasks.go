@@ -175,6 +175,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
 	var schedulerRef []byte
+	var timeSkippingConfig *commonpb.TimeSkippingConfig
+	var timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation
 	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
@@ -196,6 +198,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 
 			lcs := s.LastCompletionResult.Get(ctx)
 			lastCompletionState = common.CloneProto(lcs)
+			timeSkippingConfig, timeSkippingStatePropagation =
+				ctx.GetTimeSkippingPropagateState()
 
 			// Capture the scheduler's component ref so a per-start completion callback (carrying that
 			// start's request ID in its token) can be built outside the MS lock.
@@ -233,7 +237,18 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
+	result = result.Append(h.startWorkflows(
+		ictx,
+		logger,
+		metricsHandler,
+		scheduler,
+		invoker,
+		lastCompletionState,
+		schedulerRef,
+		timeSkippingConfig,
+		timeSkippingStatePropagation,
+		now,
+	))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -365,6 +380,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 	now time.Time,
 ) (result executeResult) {
 	metricsWithTag := metricsHandler.WithTags(
@@ -388,7 +405,16 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, schedulerRef)
+			err := h.startWorkflow(
+				newCtx,
+				metricsHandler,
+				scheduler,
+				start,
+				lastCompletionState,
+				schedulerRef,
+				timeSkippingConfig,
+				timeSkippingStatePropagation,
+			)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -638,6 +664,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
@@ -664,10 +692,12 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	}
 
 	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
-	var lcr []*commonpb.Payload
+	// Nil unless there is a result: SDKs treat any non-nil Payloads as present (V1 parity).
+	var lcr *commonpb.Payloads
 	continuedFailure := lastCompletionState.Failure
-	if tracksCompletionResult && lastCompletionState.Success != nil {
-		lcr = append(lcr, lastCompletionState.Success)
+	// Older binaries may have persisted an empty payload from a no-result workflow.
+	if tracksCompletionResult && !internal.IsEmptyPayload(lastCompletionState.Success) {
+		lcr = &commonpb.Payloads{Payloads: []*commonpb.Payload{lastCompletionState.Success}}
 	}
 	if !tracksCompletionResult {
 		continuedFailure = nil
@@ -680,28 +710,28 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		return err
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
-		Header:                   requestSpec.Header,
-		Identity:                 scheduler.identity(),
-		Input:                    requestSpec.Input,
-		Memo:                     requestSpec.Memo,
-		Namespace:                scheduler.Namespace,
-		RequestId:                start.RequestId,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
-		TaskQueue:                requestSpec.TaskQueue,
-		UserMetadata:             requestSpec.UserMetadata,
-		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
-		WorkflowId:               start.WorkflowId,
-		WorkflowIdReusePolicy:    reusePolicy,
-		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		WorkflowType:             requestSpec.WorkflowType,
-		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         continuedFailure,
-		LastCompletionResult: &commonpb.Payloads{
-			Payloads: lcr,
-		},
+		CompletionCallbacks:          []*commonpb.Callback{callback},
+		Header:                       requestSpec.Header,
+		Identity:                     scheduler.identity(),
+		Input:                        requestSpec.Input,
+		Memo:                         requestSpec.Memo,
+		Namespace:                    scheduler.Namespace,
+		RequestId:                    start.RequestId,
+		RetryPolicy:                  requestSpec.RetryPolicy,
+		SearchAttributes:             scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
+		TaskQueue:                    requestSpec.TaskQueue,
+		UserMetadata:                 requestSpec.UserMetadata,
+		WorkflowExecutionTimeout:     requestSpec.WorkflowExecutionTimeout,
+		WorkflowId:                   start.WorkflowId,
+		WorkflowIdReusePolicy:        reusePolicy,
+		WorkflowRunTimeout:           requestSpec.WorkflowRunTimeout,
+		WorkflowTaskTimeout:          requestSpec.WorkflowTaskTimeout,
+		WorkflowType:                 requestSpec.WorkflowType,
+		Priority:                     requestSpec.Priority,
+		TimeSkippingConfig:           timeSkippingConfig,
+		TimeSkippingStatePropagation: timeSkippingStatePropagation,
+		ContinuedFailure:             continuedFailure,
+		LastCompletionResult:         lcr,
 	}
 	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
 		request.VersioningOverride = requestSpec.VersioningOverride
@@ -712,6 +742,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		return err
 	}
 	actualStartTime := time.Now()
+	// Reconstruct virtual time from wall time.
+	actualStartTime = actualStartTime.Add(
+		timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration(),
+	)
 
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
@@ -721,7 +755,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start.HasCallback = true
 
 	// Record time taken from action eligible to workflow started.
-	if !start.Manual {
+	if !start.Manual && !timeSkippingConfig.GetEnabled() {
 		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).

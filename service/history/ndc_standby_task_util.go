@@ -54,13 +54,45 @@ func standbyTransferTaskPostActionTaskDiscarded(
 	taskInfo tasks.Task,
 	postActionInfo any,
 	logger log.Logger,
+	eventDetails map[string]any,
 ) error {
 
 	if postActionInfo == nil {
 		return nil
 	}
 
-	logger.Warn("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
+	logTags := []tag.Tag{tag.Task(taskInfo)}
+	switch taskInfo.(type) {
+	case *tasks.CloseExecutionTask:
+		if info, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo); ok && info.parentWorkflowKey != nil {
+			logTags = append(logTags,
+				tag.NewStringTag("parent-namespace-id", info.parentWorkflowKey.NamespaceID),
+				tag.NewStringTag("parent-workflow-id", info.parentWorkflowKey.WorkflowID),
+				tag.NewStringTag("parent-run-id", info.parentWorkflowKey.RunID),
+			)
+			if eventDetails != nil {
+				eventDetails["parent_namespace_id"] = info.parentWorkflowKey.NamespaceID
+				eventDetails["parent_workflow_id"] = info.parentWorkflowKey.WorkflowID
+				eventDetails["parent_run_id"] = info.parentWorkflowKey.RunID
+			}
+		}
+	case *tasks.StartChildExecutionTask:
+		if info, ok := postActionInfo.(*startChildExecutionPostActionInfo); ok && info.childWorkflowKey != nil {
+			logTags = append(logTags,
+				tag.NewStringTag("child-namespace-id", info.childWorkflowKey.NamespaceID),
+				tag.NewStringTag("child-workflow-id", info.childWorkflowKey.WorkflowID),
+				tag.NewStringTag("child-run-id", info.childWorkflowKey.RunID),
+			)
+			if eventDetails != nil {
+				eventDetails["child_namespace_id"] = info.childWorkflowKey.NamespaceID
+				eventDetails["child_workflow_id"] = info.childWorkflowKey.WorkflowID
+				eventDetails["child_run_id"] = info.childWorkflowKey.RunID
+			}
+		}
+	default:
+	}
+
+	logger.Warn("Discarding standby transfer task due to task being pending for too long.", logTags...)
 	return consts.ErrTaskDiscarded
 }
 
@@ -79,8 +111,13 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
+// executionExistsOnSource reports whether the execution, which is either the task's own or one it depends on, still
+// exists on the source cluster, assuming it does when the source can't be asked. It returns an error when the task
+// should be retried instead: consts.ErrTaskRetry when the task's execution has turned active on the current cluster,
+// and consts.ErrNamespaceHandover when the source is in handover.
 func executionExistsOnSource(
 	ctx context.Context,
+	taskInfo tasks.Task,
 	workflowKey definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
@@ -88,10 +125,10 @@ func executionExistsOnSource(
 	clientBean client.Bean,
 	registry namespace.Registry,
 	chasmRegistry *chasm.Registry,
-) bool {
+) (bool, error) {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
 	if err != nil {
-		return true
+		return true, nil
 	}
 
 	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
@@ -102,7 +139,7 @@ func executionExistsOnSource(
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),
 		)
-		return true
+		return true, nil
 	}
 
 	remoteClusterName, err := getSourceClusterName(
@@ -112,11 +149,19 @@ func executionExistsOnSource(
 		workflowKey.GetWorkflowID(),
 	)
 	if err != nil {
-		return true
+		// Retry only if the task's own execution has also turned active, so the next attempt executes it as active.
+		// Otherwise every attempt would get the same answer.
+		if errors.Is(err, consts.ErrTaskRetry) {
+			_, taskErr := getSourceClusterName(currentCluster, registry, taskInfo.GetNamespaceID(), taskInfo.GetWorkflowID())
+			if errors.Is(taskErr, consts.ErrTaskRetry) {
+				return false, taskErr
+			}
+		}
+		return true, nil
 	}
 	remoteAdminClient, err := clientBean.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
-		return true
+		return true, nil
 	}
 	_, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespaceEntry.Name().String(),
@@ -129,7 +174,10 @@ func executionExistsOnSource(
 	})
 	if err != nil {
 		if common.IsNotFoundError(err) {
-			return false
+			return false, nil
+		}
+		if common.IsNamespaceHandoverError(err) {
+			return false, consts.ErrNamespaceHandover
 		}
 		logger.Error("Error describe mutable state from remote.",
 			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
@@ -138,7 +186,7 @@ func executionExistsOnSource(
 			tag.ClusterName(remoteClusterName),
 			tag.Error(err))
 	}
-	return true
+	return true, nil
 }
 
 type (
@@ -259,7 +307,7 @@ func getSourceClusterName(
 	remoteClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
-		return "", errors.New("namespace becomes active when processing task as standby")
+		return "", consts.ErrTaskRetry
 	}
 	return remoteClusterName, nil
 }

@@ -137,7 +137,8 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag). Used by callers and handlers.
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag). Used by callers and handlers.
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
+3. Backend tag - adds the HSM or CHASM backend to caller outcome and latency metrics (IncludeBackendTag).
+4. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage
@@ -161,6 +162,8 @@ type Config struct {
 	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
+	TrackedHeaderPrefixes               dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes              dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
@@ -180,6 +183,8 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:             MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:              MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:          DisallowedOperationHeaders.Get(dc),
+		TrackedHeaderPrefixes:               chasmnexus.TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:              chasmnexus.RejectedHeaderPrefixes.Get(dc),
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),

@@ -166,7 +166,7 @@ type HistoryServiceClient interface {
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(ctx context.Context, in *RespondActivityTaskCanceledRequest, opts ...grpc.CallOption) (*RespondActivityTaskCanceledResponse, error)
-	// IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+	// IsActivityTaskValid is called by matching service checking whether the activity task is valid.
 	IsActivityTaskValid(ctx context.Context, in *IsActivityTaskValidRequest, opts ...grpc.CallOption) (*IsActivityTaskValidResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
@@ -1184,7 +1184,7 @@ type HistoryServiceServer interface {
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(context.Context, *RespondActivityTaskCanceledRequest) (*RespondActivityTaskCanceledResponse, error)
-	// IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+	// IsActivityTaskValid is called by matching service checking whether the activity task is valid.
 	IsActivityTaskValid(context.Context, *IsActivityTaskValidRequest) (*IsActivityTaskValidResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.

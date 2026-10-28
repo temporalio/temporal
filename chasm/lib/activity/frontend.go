@@ -375,6 +375,11 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+	nexusSerializationContext := req.GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusSerializationContext, maxIDLengthLimit); err != nil {
+		return nil, err
+	}
 
 	if req.RetryPolicy == nil {
 		req.RetryPolicy = &commonpb.RetryPolicy{}
@@ -386,14 +391,17 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
 		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
 	}
-	// TODO(saa): when eager start is supported, deny it if start delay > 0 (same as workflow behavior).
+	if req.GetRequestEagerExecution() &&
+		(!h.config.EnableEagerStart(req.GetNamespace()) || req.GetStartDelay().AsDuration() > 0) {
+		req.RequestEagerExecution = false
+	}
 
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
-		h.config.MaxIDLengthLimit(),
+		maxIDLengthLimit,
 		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
@@ -418,7 +426,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if !h.config.EnableCallbacks(req.GetNamespace()) {
 			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
-		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
+		}
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}

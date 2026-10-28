@@ -25,11 +25,9 @@ import (
 )
 
 // watchRunningStart decides, per buffered start, whether a completion callback was attached to
-// a still-running action or whether the action had already finished. Two of the "finished"
-// paths *synthesize* a result rather than reading one off the workflow -- a target that is
-// gone entirely is recorded TERMINATED, and one that closes mid-attach is recorded COMPLETED.
-// Those are the paths that were previously invisible, so the reason each result carries is
-// what ScheduleCallbackReattach is built on and is worth pinning down.
+// a still-running action or whether the action had already finished. A target that is gone
+// entirely is recorded TERMINATED; a target that closes mid-attach is retried so its actual
+// terminal status can be observed.
 func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 	closeTime := timestamppb.New(time.Now().UTC())
 
@@ -100,7 +98,7 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 			wantStatus:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
 		{
-			name: "closed mid-attach synthesizes COMPLETED",
+			name: "closed mid-attach is retried",
 			setupHistory: func(c *historyservicemock.MockHistoryServiceClient) {
 				c.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&historyservice.DescribeWorkflowExecutionResponse{
@@ -113,8 +111,7 @@ func TestWatchRunningStart_ReattachClassification(t *testing.T) {
 				c.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					nil, serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "req-id", "run-id"))
 			},
-			wantReason: reasonReattachRace,
-			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr: true,
 		},
 		{
 			name: "unexpected describe error is surfaced, not classified",

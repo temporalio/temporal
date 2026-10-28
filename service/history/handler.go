@@ -245,6 +245,18 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+	if componentRefBytes := request.GetComponentRef(); len(componentRefBytes) > 0 {
+		isValid, err := chasm.ReadComponent(
+			ctx,
+			componentRefBytes,
+			(*activity.Activity).IsDispatchTaskValid,
+			request.GetStamp(),
+		)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
+		return &historyservice.IsActivityTaskValidResponse{IsValid: isValid}, nil
+	}
 	workflowID := request.Execution.WorkflowId
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
@@ -2602,7 +2614,7 @@ func (h *Handler) StartNexusOperation(
 	case interface{ ValueAsAny() any }:
 		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
-			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
+			h.logger.Error("failed to encode payload", tag.NexusStageHandlerInbound, tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 		}
 
@@ -2642,7 +2654,7 @@ func (h *Handler) StartNexusOperation(
 			},
 		}
 	default:
-		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
+		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.NexusStageHandlerInbound, tag.RequestID(req.Request.RequestId))
 		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 	}
 

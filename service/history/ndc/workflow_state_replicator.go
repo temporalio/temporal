@@ -76,11 +76,18 @@ type (
 		historySerializer            serialization.Serializer
 		transactionMgr               TransactionManager
 		persistenceRateLimiter       quotas.RequestRateLimiter
-		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		persistenceRateLimiterConfig dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
 		testHooks                    testhooks.TestHooks
+	}
+
+	replicationTaskInfoContextKey struct{}
+
+	replicationTaskInfo struct {
+		isForceReplication bool
+		workflowStatus     enumspb.WorkflowExecutionStatus
 	}
 )
 
@@ -105,7 +112,7 @@ func NewWorkflowStateReplicator(
 		historySerializer:            eventSerializer,
 		transactionMgr:               NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
 		persistenceRateLimiter:       persistenceRateLimiter,
-		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
+		persistenceRateLimiterConfig: shardContext.GetConfig().HistoryReplicationRateLimiter,
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
@@ -132,6 +139,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	if executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
+	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
+		isForceReplication: request.GetIsForceReplication(),
+		workflowStatus:     executionState.GetStatus(),
+	})
 
 	// SyncWorkflowState is not used by new state-based replication stack,
 	// but CHASM only uses state-based replication, so we can continue to use
@@ -215,7 +226,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	default:
 		return err
 	}
-	skipCloseTransferTask := request.GetIsForceReplication() && request.GetIsCloseTransferTaskAcked()
+	skipParentVerification := request.GetIsForceReplication() && request.GetIsCloseTransferTaskAcked()
 	return r.applySnapshotWhenWorkflowNotExist(
 		ctx,
 		namespaceID,
@@ -228,7 +239,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		request.RemoteCluster,
 		nil,
 		false,
-		skipCloseTransferTask,
+		skipParentVerification,
 		nil,
 	)
 }
@@ -295,6 +306,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if err != nil {
 		return err
 	}
+	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
+		isForceReplication: versionedTransitionArtifact.GetIsForceReplication(),
+		workflowStatus:     executionState.GetStatus(),
+	})
 
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
@@ -1115,6 +1130,10 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	newRunInfo *replicationspb.NewRunInfo,
 	sourceClusterName string,
 ) (retErr error) {
+	skipParentVerification, err := workflow.CanSkipParentVerification(r.shardContext, localMutableState, sourceMutableState.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
 	var localVersionedTransition *persistencespb.VersionedTransition
@@ -1197,14 +1216,14 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	)
 	if isBranchSwitched || len(localTransitionHistory) == 0 {
 		// TODO: If branch switched, maybe refresh from LCA?
-		err = r.taskRefresher.Refresh(ctx, localMutableState, false)
+		err = r.taskRefresher.Refresh(ctx, localMutableState, skipParentVerification)
 		if err != nil {
 			return err
 		}
 	} else {
 		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 		nextVersionedTransition.TransitionCount++
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, false)
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, skipParentVerification)
 		if err != nil {
 			return err
 		}
@@ -1428,6 +1447,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil, nil
 	}
 
+	originalIndex := localVersionHistories.CurrentVersionHistoryIndex
 	index, isNewBranch, err := r.getBranchToAppend(
 		ctx,
 		wfCtx,
@@ -1456,6 +1476,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		localLastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistoryToAppend)
 		if err != nil {
 			return newBranchToken, err
+		}
+		// LastFirstEventTxnId still points at the branch we moved off. Chain onto this branch instead.
+		if isNewBranch || index != originalIndex {
+			lastTxnID, err := r.lastTransactionID(ctx, versionHistoryToAppend.GetBranchToken(), localLastItem.GetEventId())
+			if err != nil {
+				return newBranchToken, err
+			}
+			localMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnID
 		}
 	}
 
@@ -1556,7 +1584,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
-			if r.enablePersistenceRateLimiter(nsName) {
+			if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 				if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 					return err
 				}
@@ -1627,7 +1655,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
-		if r.enablePersistenceRateLimiter(nsName) {
+		if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return newBranchToken, err
 			}
@@ -1680,6 +1708,41 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 	localMutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return newBranchToken, nil
+}
+
+// lastTransactionID returns the txn ID of the node containing lastEventID. Nodes are keyed by their
+// first event ID, so this has to read from the start of the branch.
+func (r *WorkflowStateReplicatorImpl) lastTransactionID(
+	ctx context.Context,
+	branchToken []byte,
+	lastEventID int64,
+) (int64, error) {
+	lastTxnID := common.EmptyEventTaskID
+	var pageToken []byte
+	for {
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:       r.shardContext.GetShardID(),
+			BranchToken:   branchToken,
+			MinEventID:    common.FirstEventID,
+			MaxEventID:    lastEventID + 1,
+			PageSize:      defaultPageSize,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return 0, err
+		}
+		if n := len(resp.TransactionIDs); n > 0 {
+			lastTxnID = resp.TransactionIDs[n-1]
+		}
+		pageToken = resp.NextPageToken
+		if len(pageToken) == 0 {
+			break
+		}
+	}
+	if lastTxnID == common.EmptyEventTaskID {
+		return 0, serviceerror.NewInternalf("no history node found up to event %v", lastEventID)
+	}
+	return lastTxnID, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getBranchToAppend(
@@ -1735,7 +1798,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	sourceCluster string,
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
-	skipGenerateCloseTransferTask bool,
+	skipParentVerification bool,
 	captureMutableState func(historyi.MutableState),
 ) error {
 	var lastWriteVersion int64
@@ -1800,7 +1863,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 
 	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
+	err = taskRefresher.Refresh(ctx, mutableState, skipParentVerification)
 	if err != nil {
 		return err
 	}
@@ -2110,7 +2173,7 @@ BackfillLoop:
 			return err
 		}
 
-		if r.enablePersistenceRateLimiter(nsName) {
+		if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return err
 			}
@@ -2138,6 +2201,35 @@ BackfillLoop:
 
 	mutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return mutableState.SetCurrentBranchToken(backfillBranchToken)
+}
+
+func withReplicationTaskInfo(ctx context.Context, info replicationTaskInfo) context.Context {
+	return context.WithValue(ctx, replicationTaskInfoContextKey{}, info)
+}
+
+func replicationTaskInfoFromContext(ctx context.Context) replicationTaskInfo {
+	if info, ok := ctx.Value(replicationTaskInfoContextKey{}).(replicationTaskInfo); ok {
+		return info
+	}
+	return replicationTaskInfo{}
+}
+
+func (r *WorkflowStateReplicatorImpl) shouldRateLimitHistoryAppend(ctx context.Context, nsName string) bool {
+	settings := r.persistenceRateLimiterConfig(nsName)
+	if !settings.Enabled {
+		return false
+	}
+	info := replicationTaskInfoFromContext(ctx)
+	switch settings.Scope {
+	case dynamicconfig.HistoryReplicationRateLimiterScopeAll:
+		return true
+	case dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication:
+		return info.isForceReplication &&
+			(info.workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+				info.workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)
+	default:
+		return false
+	}
 }
 
 func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(
@@ -2228,6 +2320,7 @@ func (r *WorkflowStateReplicatorImpl) addEventToCache(
 				RunID:       workflowKey.RunID,
 				EventID:     event.GetEventId(),
 				Version:     event.GetVersion(),
+				ShardUUID:   r.shardContext.GetOwner(),
 			},
 			event,
 		)

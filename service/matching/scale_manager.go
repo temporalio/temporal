@@ -180,7 +180,7 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	settings := sm.settings()
-	shadowMode := settings.ShadowModeLogInterval > 0
+	shadowMode := !settings.Enabled
 
 	// Entering shadow mode on top of a previously-applied managed target releases
 	// control back to the dynamic-config baseline: zero the managed target once so
@@ -250,7 +250,8 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	if shadowMode {
-		if sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
+		if settings.ShadowModeLogInterval <= 0 || // no logging
+			sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
 			sm.prevShadowTarget == target || // only log new changes
 			target <= 0 { // only log if scaler is enabled
 			// emit scale event metric as a heartbeat even if no shadow log
@@ -412,6 +413,11 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 }
 
 func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
+	if !sm.settings().Enabled {
+		// if we're not enabled, we don't have to do any of this
+		return
+	}
+
 	scaleState := sm.scaleState
 	read := scaleStateToReadCount(scaleState)
 	if read == 0 {
@@ -464,14 +470,6 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	}
 
 	if !backlogChanged && len(toClear) == 0 {
-		return
-	}
-
-	// Reachable only in the brief window after shadow mode is enabled but before
-	// releaseManagedState has zeroed a leftover target>0 (callScaler is still in
-	// cooldown). Shadow mode must not persist drain completion or mutate read
-	// partitions, so bail before applying toClear.
-	if settings.ShadowModeLogInterval > 0 {
 		return
 	}
 

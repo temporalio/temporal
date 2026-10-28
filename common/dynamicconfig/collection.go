@@ -7,6 +7,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -641,6 +642,19 @@ func convertString(val any) (string, error) {
 		return stringVal, nil
 	}
 	return "", errors.New("value type is not string")
+}
+
+func convertStringEnum(vals []string) func(any) (string, error) {
+	return func(val any) (string, error) {
+		s, err := convertString(val)
+		if err != nil {
+			return "", err
+		}
+		if !slices.Contains(vals, s) {
+			return "", fmt.Errorf("invalid value %q, must be one of: %v", s, vals)
+		}
+		return s, nil
+	}
 }
 
 func convertBool(val any) (bool, error) {

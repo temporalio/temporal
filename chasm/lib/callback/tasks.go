@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -32,7 +33,12 @@ type invocationResult interface {
 }
 
 // invocationResultOK marks an invocation as successful.
-type invocationResultOK struct{}
+type invocationResultOK struct {
+	// links are the links the target returned when it accepted the delivery, to be recorded on the
+	// CHASM Callback. Only a NexusHandler-variant callback will produce these. A Nexus-variant callback
+	// just delivers the completion result, without receiving any links in return.
+	links []nexus.Link
+}
 
 func (invocationResultOK) mustImplementInvocationResult() {}
 
@@ -80,6 +86,7 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	MatchingClient     resource.MatchingClient
 }
 
 type invocationTaskHandler struct {
@@ -91,6 +98,7 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	matchingClient     resource.MatchingClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -102,6 +110,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		matchingClient:     opts.MatchingClient,
 	}
 }
 
@@ -160,14 +169,14 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	task *callbackspb.InvocationTask,
 	result invocationResult,
 ) {
-	var outcome outcomeTag
+	var outcome coarseOutcomeTag
 	switch result.(type) {
 	case invocationResultOK:
-		outcome = outcomeSuccess
+		outcome = outcomeEventSuccess
 	case invocationResultRetry:
-		outcome = outcomeRetryableError
+		outcome = outcomeEventRetryableError
 	case invocationResultFail:
-		outcome = outcomeNonretryableError
+		outcome = outcomeEventNonRetryableError
 	default:
 		// saveResult rejects anything else as an unprocessable task.
 		return
@@ -180,10 +189,9 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	}
 	h.metricsHandler.Counter(InvocationEventCounter.Name()).Record(1, tags...)
 
-	if outcome != outcomeRetryableError {
+	if outcome != outcomeEventRetryableError {
 		// Attempt is 0-based, so +1 is the count. Only terminal events have a final total.
-		h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
-			Record(int64(task.GetAttempt())+1, tags...)
+		InvocationAttemptsHistogram.With(h.metricsHandler).Record(int64(task.GetAttempt())+1, tags...)
 	}
 }
 

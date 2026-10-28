@@ -134,7 +134,7 @@ func serializeTimerTask(
 		timerTask = timerChasmTaskToProto(task)
 	case *tasks.ChasmTaskPure:
 		timerTask = timerChasmPureTaskToProto(task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		timerTask = timeSkippingTimerTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
@@ -142,7 +142,7 @@ func serializeTimerTask(
 	return encoder.TimerTaskInfoToBlob(timerTask)
 }
 
-func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
+func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingFastForwardTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:         task.NamespaceID,
 		WorkflowId:          task.WorkflowID,
@@ -159,8 +159,8 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 	}
 }
 
-func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingTimerTask {
-	return &tasks.TimeSkippingTimerTask{
+func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingFastForwardTimerTask {
+	return &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
 			info.WorkflowId,
@@ -632,6 +632,7 @@ func transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				SkipParentVerification:    closeTask.SkipParentVerification,
 			},
 		},
 	}
@@ -646,10 +647,11 @@ func transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:    closeTask.VisibilityTime.AsTime(),
+		TaskID:                 closeTask.TaskId,
+		Version:                closeTask.Version,
+		DeleteAfterClose:       closeTask.DeleteAfterClose,
+		SkipParentVerification: closeTask.GetCloseExecutionTaskDetails().GetSkipParentVerification(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -1417,6 +1419,7 @@ func replicationSyncVersionedTransitionTaskToProto(
 		NextEventId:            syncVersionedTransitionTask.NextEventID,
 		NewRunId:               syncVersionedTransitionTask.NewRunID,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		CurrentVersionHistory:  syncVersionedTransitionTask.CurrentVersionHistory,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
@@ -1458,6 +1461,7 @@ func replicationSyncVersionedTransitionTaskFromProto(
 		NewRunID:               syncVersionedTransitionTask.NewRunId,
 		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		CurrentVersionHistory:  syncVersionedTransitionTask.CurrentVersionHistory,
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,

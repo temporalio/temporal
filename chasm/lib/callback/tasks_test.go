@@ -13,6 +13,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -24,14 +25,18 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -80,8 +85,83 @@ func (l *mockNexusCompletionGetterLibrary) Name() string {
 
 func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent](
+			"nexusCompletionGetter",
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+		),
 	}
+}
+
+// newInvocationTaskTest builds a CHASM tree holding cb underneath a completion source that returns the
+// given completion, and returns an engine context plus a ref to the callback to invoke task handlers with.
+func newInvocationTaskTest(
+	t *testing.T,
+	handler *invocationTaskHandler,
+	cb *Callback,
+	completion nexusrpc.CompleteOperationOptions,
+) (context.Context, chasm.ComponentRef) {
+	t.Helper()
+
+	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, chasmRegistry.Register(&Library{InvocationTaskHandler: handler}))
+	require.NoError(t, chasmRegistry.Register(&mockNexusCompletionGetterLibrary{}))
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: "namespace-id",
+		BusinessID:  "workflow-id",
+		RunID:       "run-id",
+	}
+	engineCtx := chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, chasmRegistry))
+	_, err := chasm.StartExecution(
+		engineCtx,
+		executionKey,
+		func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
+			return &mockNexusCompletionGetterComponent{
+				completion: completion,
+				Callback:   chasm.NewComponentField(ctx, cb),
+			}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
+	callbackRef, err := chasm.ReadComponent(
+		engineCtx,
+		rootRef,
+		func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
+			serialized, err := chasmCtx.Ref(cb)
+			if err != nil {
+				return chasm.ComponentRef{}, err
+			}
+			return chasm.DeserializeComponentRef(serialized)
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+	return engineCtx, callbackRef
+}
+
+// readCallbackState runs assert against the persisted callback state, so that assertions see what the task
+// handler committed rather than the in-memory component it was handed.
+func readCallbackState(
+	engineCtx context.Context,
+	t *testing.T,
+	ref chasm.ComponentRef,
+	assert func(chasm.Context, *Callback),
+) {
+	t.Helper()
+
+	_, err := chasm.ReadComponent(
+		engineCtx,
+		ref,
+		func(c *Callback, chasmCtx chasm.Context, _ struct{}) (struct{}, error) {
+			assert(chasmCtx, c)
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
 }
 
 // Test the full executeInvocationTask flow with direct handler calls
@@ -171,17 +251,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Setup namespace
-			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
-					Id:   "namespace-id",
-					Name: "namespace-name",
-				},
-				Config: &persistencespb.NamespaceConfig{},
-			}
-			ns, err := namespace.FromPersistentState(detail, factory(detail))
-			require.NoError(t, err)
+			ns := test.NewNamespace(t)
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
@@ -190,13 +260,13 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			timer := metrics.NewMockTimerIface(ctrl)
 			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
 			counter.EXPECT().Record(int64(1),
-				metrics.NamespaceTag("namespace-name"),
+				metrics.NamespaceTag(ns.Name().String()),
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome),
 				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
 			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
-				metrics.NamespaceTag("namespace-name"),
+				metrics.NamespaceTag(ns.Name().String()),
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome),
 				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
@@ -204,14 +274,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			// The committed event is recorded for the outbound path too, not just the
 			// internal one, so a permanently dropped external callback is also visible.
 			eventTags := []metrics.Tag{
-				metrics.NamespaceTag("namespace-name"),
+				metrics.NamespaceTag(ns.Name().String()),
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedEvent),
 			}
 			eventCounter := metrics.NewMockCounterIface(ctrl)
 			metricsHandler.EXPECT().Counter(InvocationEventCounter.Name()).Return(eventCounter)
 			eventCounter.EXPECT().Record(int64(1), eventTags)
-			if tc.expectedEvent != string(outcomeRetryableError) {
+			if tc.expectedEvent != string(outcomeEventRetryableError) {
 				attemptHistogram := metrics.NewMockHistogramIface(ctrl)
 				metricsHandler.EXPECT().
 					Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
@@ -220,34 +290,27 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Setup logger
-			logger := log.NewTestLogger()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 
 			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			handler := &invocationTaskHandler{
-				config: &Config{
+			handler := newInvocationTaskHandler(invocationTaskHandlerOptions{
+				Config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metricsHandler,
-				logger:            logger,
-				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+				NamespaceRegistry: nsRegistry,
+				MetricsHandler:    metricsHandler,
+				Logger:            logger,
+				HTTPCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
-			}
-
-			chasmRegistry := chasm.NewRegistry(logger)
-			err = chasmRegistry.Register(&Library{
-				InvocationTaskHandler: handler,
 			})
-			require.NoError(t, err)
-			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
-			require.NoError(t, err)
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -265,43 +328,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Create completion
-			completion := nexusrpc.CompleteOperationOptions{}
-
-			executionKey := chasm.ExecutionKey{
-				NamespaceID: "namespace-id",
-				BusinessID:  "workflow-id",
-				RunID:       "run-id",
-			}
-			testEngine := chasmtest.NewEngine(t, chasmRegistry)
-			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
-			_, err = chasm.StartExecution(
-				engineCtx,
-				executionKey,
-				func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
-					return &mockNexusCompletionGetterComponent{
-						completion: completion,
-						Callback:   chasm.NewComponentField(ctx, callback),
-					}, nil
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
-
-			rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
-			callbackRef, err := chasm.ReadComponent(
-				engineCtx,
-				rootRef,
-				func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
-					serialized, err := chasmCtx.Ref(callback)
-					if err != nil {
-						return chasm.ComponentRef{}, err
-					}
-					return chasm.DeserializeComponentRef(serialized)
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
+			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, nexusrpc.CompleteOperationOptions{})
 
 			executeErr := handler.Execute(
 				engineCtx,
@@ -311,16 +338,29 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			// Verify outcome by reading component state directly.
-			resultCallback, err := chasm.ReadComponent(
-				engineCtx,
-				callbackRef,
-				func(c *Callback, _ chasm.Context, _ struct{}) (*Callback, error) {
-					return c, nil
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
-			tc.assertOutcome(t, resultCallback, executeErr)
+			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
+				tc.assertOutcome(t, c, executeErr)
+			})
+
+			if tc.expectedEvent != "success" {
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            ns.Name().String(),
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": testCompletionSourceFqn,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.expectedEvent == "retryable-error",
+					},
+				})
+			}
 		})
 	}
 }
@@ -704,7 +744,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
+			root := chasm.NewEmptyTree(chasmRegistry, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			// Create headers
 			headers := nexus.Header{}
@@ -739,7 +779,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					callback,
 				),
 			}))
-			_, err = root.CloseTransaction()
+			_, err = root.CloseTransaction(context.Background(), true)
 			require.NoError(t, err)
 
 			mockEngine.EXPECT().ReadComponent(
@@ -838,4 +878,12 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it repeats InvocationTaskGroup as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestInvocationTaskGroupTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+	task.SetOutboundTaskGroup(InvocationTaskGroup)
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }

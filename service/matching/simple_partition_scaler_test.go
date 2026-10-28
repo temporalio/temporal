@@ -7,6 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/number"
 )
 
@@ -27,7 +30,10 @@ func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
 				{Window: time.Second, TargetRate: 100},
 			},
 		}),
+		nil,
 		clock.NewEventTimeSource(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 
 	// The first call reaches getTracker. Must report no change because no full
@@ -115,7 +121,10 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 	}
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil, // no legacy count
 		nil, // time source unused on the fixed path
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
 	require.Equal(t, 2, decision.NewTarget)
@@ -128,7 +137,13 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 func TestOnTasksFloorsAddTargetAtOne(t *testing.T) {
 	t.Parallel()
 	cfg := dynamicconfig.SimplePartitionScalerSettings{Enabled: true}
-	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(cfg), nil)
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 0})
 	require.Equal(t, 1, decision.NewTarget, "add baseline must floor at 1, not disable scaling")
@@ -146,7 +161,13 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 		BacklogCap:   1000,
 		Max:          4,
 	}
-	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(cfg), nil)
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 
 	// One partition, occupied: baseline 1 + 1 occupied = 2.
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1, BacklogCounts: encodeCounts(500)})
@@ -176,4 +197,289 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 		PrivateState:  d.PrivateState,
 	})
 	require.Equal(t, 1, d.NewTarget)
+}
+
+func TestOnTasksReportsMaxClamping(t *testing.T) {
+	t.Parallel()
+
+	const backlogReset, backlogBase = 100, 300
+	for _, tc := range []struct {
+		name        string
+		max         int32
+		maxMultiple float32
+		legacyCount int
+		counts      []int64
+		wantTarget  int
+		wantMetric  bool
+	}{
+		{
+			name:       "below maximum",
+			max:        4,
+			counts:     []int64{500},
+			wantTarget: 2,
+			wantMetric: false,
+		},
+		{
+			name:       "explicit maximum",
+			max:        2,
+			counts:     []int64{500, 500},
+			wantTarget: 2,
+			wantMetric: true,
+		},
+		{
+			name:        "legacy-derived maximum",
+			maxMultiple: 1,
+			legacyCount: 2,
+			counts:      []int64{500, 500},
+			wantTarget:  2,
+			wantMetric:  true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			var legacyCount dynamicconfig.IntPropertyFn
+			if tc.legacyCount > 0 {
+				legacyCount = dynamicconfig.GetIntPropertyFn(tc.legacyCount)
+			}
+			scaler := newSimplePartitionScaler(
+				dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+					Enabled:               true,
+					BacklogReset:          backlogReset,
+					BacklogBase:           backlogBase,
+					Max:                   tc.max,
+					MaxAsMultipleOfLegacy: tc.maxMultiple,
+				}),
+				legacyCount,
+				nil,
+				log.NewNoopLogger(),
+				metricsHandler,
+			)
+
+			decision := scaler.OnTasks(PartitionScalerInput{
+				CurrentTarget: 1,
+				BacklogCounts: encodeCounts(tc.counts...),
+			})
+			require.Equal(t, tc.wantTarget, decision.NewTarget)
+			recordings := capture.SnapshotMetric(metrics.PartitionScaleMaxClamped.Name())
+			if tc.wantMetric {
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+			} else {
+				require.Empty(t, recordings)
+			}
+		})
+	}
+}
+
+func TestOnTasksReportsMaxClampingWhenUnclampedTargetChanges(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled:      true,
+			BacklogReset: 100,
+			BacklogBase:  300,
+			Max:          2,
+		}),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metricsHandler,
+	)
+	var decision PartitionScalerDecision
+	onTasks := func(wantTarget int, counts ...int64) {
+		decision = scaler.OnTasks(PartitionScalerInput{
+			CurrentTarget: 1,
+			BacklogCounts: encodeCounts(counts...),
+			PrivateState:  decision.PrivateState,
+		})
+		require.Equal(t, wantTarget, decision.NewTarget)
+	}
+	requireMetricCount := func(count int) {
+		require.Len(t, capture.SnapshotMetric(metrics.PartitionScaleMaxClamped.Name()), count)
+	}
+
+	// Entering the clamp reports once. Repeating the same calculation does not.
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+
+	// A new unclamped target reports once, even though the clamped target is unchanged.
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+
+	// Leaving the clamp resets deduplication, so re-entering reports again.
+	onTasks(1, 32, 32, 32)
+	onTasks(2, 500, 500)
+	requireMetricCount(3)
+}
+
+// TestOnTasksLegacyMultiples covers the *AsMultipleOfLegacy settings and how they combine
+// with the explicit Fixed/Min/Max: an explicit Fixed wins over the derived one, while derived
+// Min/Max apply in addition to explicit ones, so the more restrictive of the pair wins.
+//
+// Each case uses no Ups/Downs and CurrentTarget 1, so the pre-clamp target is
+// 1 (add baseline) + the number of occupied partitions.
+func TestOnTasksLegacyMultiples(t *testing.T) {
+	t.Parallel()
+
+	// backlog knobs shared by the non-fixed cases, so backlog counts above 300 occupy a
+	// partition and add one to the target
+	const backlogReset, backlogBase = 100, 300
+
+	for _, tc := range []struct {
+		name        string
+		cfg         dynamicconfig.SimplePartitionScalerSettings
+		legacyCount func() int
+		counts      []int64
+		expected    int
+	}{{
+		name: "derived max clamps",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			MaxAsMultipleOfLegacy: 1,
+		},
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // capped at the legacy count: the rollback-safety case
+	}, {
+		name: "derived min raises",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			MinAsMultipleOfLegacy: 2,
+		},
+		legacyCount: func() int { return 2 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,
+	}, {
+		name: "derived min more restrictive than explicit",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			Min: 2, MinAsMultipleOfLegacy: 1,
+		},
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,   // derived min 4 beats explicit min 2
+	}, {
+		name: "explicit min more restrictive than derived",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			Min: 6, MinAsMultipleOfLegacy: 1,
+		},
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    6,   // explicit min 6 beats derived min 4
+	}, {
+		name: "derived max more restrictive than explicit",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			Max: 100, MaxAsMultipleOfLegacy: 1,
+		},
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // derived max 2 beats explicit max 100
+	}, {
+		name: "explicit max more restrictive than derived",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			Max: 2, MaxAsMultipleOfLegacy: 4,
+		},
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // explicit max 2 beats derived max 8
+	}, {
+		name: "multiple rounds to nearest",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			MaxAsMultipleOfLegacy: 1.5,
+		},
+		legacyCount: func() int { return 3 },
+		counts:      []int64{500, 500, 500, 500, 500, 500}, // pre-clamp 1+6 = 7
+		expected:    5,                                     // 1.5*3 = 4.5 rounds to 5
+	}, {
+		name: "small multiple still yields at least one",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			MaxAsMultipleOfLegacy: 0.1,
+		},
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500}, // pre-clamp 1+1 = 2
+		expected:    1,            // 0.1*2 = 0.2 would round down to 0
+	}, {
+		name: "nil legacy count disables derivation",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			MaxAsMultipleOfLegacy: 1,
+		},
+		legacyCount: nil,
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    4,                      // unclamped
+	}, {
+		name: "max wins over a conflicting min",
+		cfg: dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
+			Max: 4, MinAsMultipleOfLegacy: 2,
+		},
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,   // derived min 8 raises it, then explicit max 4 pulls it back down
+	}, {
+		name:        "derived fixed",
+		cfg:         dynamicconfig.SimplePartitionScalerSettings{Enabled: true, FixedAsMultipleOfLegacy: 2},
+		legacyCount: func() int { return 4 },
+		expected:    8,
+	}, {
+		name:        "explicit fixed wins over derived",
+		cfg:         dynamicconfig.SimplePartitionScalerSettings{Enabled: true, Fixed: 3, FixedAsMultipleOfLegacy: 2},
+		legacyCount: func() int { return 8 },
+		expected:    3,
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scaler := newSimplePartitionScaler(
+				dynamicconfig.GetTypedPropertyFn(tc.cfg),
+				tc.legacyCount,
+				nil, // time source unused with no Ups/Downs
+				log.NewNoopLogger(),
+				metrics.NoopMetricsHandler,
+			)
+			d := scaler.OnTasks(PartitionScalerInput{
+				CurrentTarget: 1,
+				BacklogCounts: encodeCounts(tc.counts...),
+			})
+			require.Equal(t, tc.expected, d.NewTarget)
+		})
+	}
+}
+
+// TestOnTasksFixedFromLegacyIncludesBacklogCap verifies the derived-Fixed fast path
+// propagates BacklogCap, like the explicit-Fixed path does.
+func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
+	t.Parallel()
+	cfg := dynamicconfig.SimplePartitionScalerSettings{
+		Enabled:                 true,
+		FixedAsMultipleOfLegacy: 2,
+		BacklogCap:              1000,
+	}
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		func() int { return 4 },
+		nil, // time source unused on the fixed path
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
+	require.Equal(t, 8, d.NewTarget)
+	require.Equal(t, 1000, d.BacklogCap)
 }

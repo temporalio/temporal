@@ -365,23 +365,6 @@ func TestClassifyOperationDispatch(t *testing.T) {
 			},
 		},
 
-		// DispatchOutcomeWorkerFailure
-		{
-			Name:     "worker error",
-			Response: taskFailureResponse(applicationFailure("worker exploded", "ErrTypeStr")),
-			Want: DispatchResult{
-				Outcome: DispatchOutcomeWorkerFailure,
-				Failure: &failurepb.Failure{
-					Message: "worker exploded",
-					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-							Type: "ErrTypeStr",
-						},
-					},
-				},
-			},
-		},
-
 		// DispatchOutcomeUnrecognized
 		{
 			Name:     "unrecognized (no outcome)",

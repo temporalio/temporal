@@ -1,9 +1,13 @@
 package workerdeployment
 
 import (
+	"errors"
+
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -13,6 +17,7 @@ func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.Com
 	for name, sg := range scalingGroups {
 		groupSpec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
+			RegionIds: sg.GetRegionIds(),
 			Compute: wciiface.ComputeProviderSpec{
 				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
 			},
@@ -35,6 +40,7 @@ func scalingGroupUpdatesToWCI(updates map[string]*computepb.ComputeConfigScaling
 		sg := update.GetScalingGroup()
 		spec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
+			RegionIds: sg.GetRegionIds(),
 			Compute: wciiface.ComputeProviderSpec{
 				ProviderType:  wciiface.ComputeProviderType(sg.GetProvider().GetType()),
 				Config:        sg.GetProvider().GetDetails(),
@@ -63,6 +69,7 @@ func wciSpecToComputeConfig(spec *wciiface.WorkerControllerInstanceSpec) *comput
 	for name, sg := range spec.ScalingGroupSpecs {
 		group := &computepb.ComputeConfigScalingGroup{
 			TaskQueueTypes: sg.TaskTypes,
+			RegionIds:      sg.RegionIds,
 			Provider: &computepb.ComputeProvider{
 				Type:    string(sg.Compute.ProviderType),
 				Details: sg.Compute.Config,
@@ -90,6 +97,7 @@ func wciSpecToComputeConfigSummary(spec *wciiface.WorkerControllerInstanceSpec) 
 		groups[name] = &computepb.ComputeConfigScalingGroupSummary{
 			TaskQueueTypes: sg.TaskTypes,
 			ProviderType:   string(sg.Compute.ProviderType),
+			RegionIds:      sg.RegionIds,
 		}
 	}
 	return &computepb.ComputeConfigSummary{ScalingGroups: groups}
@@ -120,4 +128,14 @@ func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deployme
 		pv.ErrorMessage = vs.ErrMessage
 	}
 	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
+}
+
+func wciClientErrorToActivityError(err error) error {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+	}
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errFailedPrecondition, nil)
+	}
+	return err
 }

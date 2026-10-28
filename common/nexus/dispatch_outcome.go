@@ -50,12 +50,6 @@ const (
 	//     nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "cannot deserialize input")
 	DispatchOutcomeHandlerFailure DispatchOutcome = "nexus-handler-failure"
 
-	// DispatchOutcomeWorkerFailure means the worker failed the task with a failure carrying no Nexus
-	// handler failure info. RespondNexusTaskFailed rejects such a response, so matching cannot produce
-	// this outcome today. It exists so that a malformed response is classified rather than read as a
-	// handler error with no type.
-	DispatchOutcomeWorkerFailure DispatchOutcome = "worker-failure"
-
 	// DispatchOutcomeRequestTimeout means matching gave up before the task was answered: no worker
 	// was polling the task queue, or a worker took the task and never responded.
 	DispatchOutcomeRequestTimeout DispatchOutcome = "request-timeout"
@@ -88,8 +82,8 @@ type DispatchResult struct {
 	// DispatchOutcomeSyncSuccess and DispatchOutcomeAsyncSuccess.
 	Links []*nexuspb.Link
 
-	// Failure is the Temporal failure the worker reported. Set for DispatchOutcomeHandlerFailure,
-	// DispatchOutcomeWorkerFailure and DispatchOutcomeOperationFailure.
+	// Failure is the Temporal failure the worker reported. Set for DispatchOutcomeHandlerFailure
+	// and DispatchOutcomeOperationFailure.
 	//
 	// IMPORTANT: For the current response formats this aliases the proto inside the response rather
 	// than copying it, so callers that convert it in place mutate the response too.
@@ -112,11 +106,7 @@ func baseClassifyDispatchNexusTaskResponse(
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		// A handler error is a Nexus-level refusal whose retry behavior is meaningful; anything else
 		// is an arbitrary failure the worker chose to report.
-		outcome := DispatchOutcomeWorkerFailure
-		if t.Failure.GetNexusHandlerFailureInfo() != nil {
-			outcome = DispatchOutcomeHandlerFailure
-		}
-		return DispatchResult{Outcome: outcome, Failure: t.Failure}
+		return DispatchResult{Outcome: DispatchOutcomeHandlerFailure, Failure: t.Failure}
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated, still sent by older workers.
 		return DispatchResult{
@@ -284,8 +274,7 @@ func (r DispatchResult) metricOutcome() string {
 			return "operation_error"
 		}
 		return "failure"
-	case DispatchOutcomeHandlerFailure,
-		DispatchOutcomeWorkerFailure:
+	case DispatchOutcomeHandlerFailure:
 		// A worker failure has no handler error type to report and will map to UNKNOWN.
 		hErrType := r.Failure.GetNexusHandlerFailureInfo().GetType()
 		return "handler_error:" + BoundHandlerErrorType(hErrType)

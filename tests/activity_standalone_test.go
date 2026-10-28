@@ -7,12 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -20,14 +23,19 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
+	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
@@ -116,6 +124,237 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
+}
+
+func (s *standaloneActivityTestSuite) TestPrincipalAttributionIsPersistedAndDescribed() {
+	const (
+		principalType        = "jwt"
+		startPrincipalName   = "client-subject"
+		pollPrincipalName    = "poll-worker-subject"
+		respondPrincipalName = "respond-worker-subject"
+		respondIdentity      = "respond-worker-identity"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
+	t := s.T()
+
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  "test-subject",
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(_ context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		principalName := startPrincipalName
+		switch target.APIName {
+		case "/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":
+			principalName = pollPrincipalName
+		case "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":
+			principalName = respondPrincipalName
+		default:
+		}
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+	pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, startResp.RunId)
+
+	shardID := common.WorkflowIDToHistoryShard(
+		env.NamespaceID().String(),
+		activityID,
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+	)
+	loadLastAttempt := func() *activitystatepb.ActivityAttemptState {
+		persistedExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
+			ShardID:     shardID,
+			NamespaceID: env.NamespaceID().String(),
+			WorkflowID:  activityID,
+			RunID:       startResp.RunId,
+			ArchetypeID: activity.ArchetypeID,
+		})
+		require.NoError(t, err)
+
+		attemptNode := persistedExecution.State.ChasmNodes["LastAttempt"]
+		require.NotNil(t, attemptNode)
+		attemptState := &activitystatepb.ActivityAttemptState{}
+		require.NoError(t, serialization.Decode(attemptNode.Data, attemptState))
+		return attemptState
+	}
+
+	attemptState := loadLastAttempt()
+	require.Equal(t, env.Tv().WorkerIdentity(), attemptState.GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: pollPrincipalName,
+	}, attemptState.GetLastWorkerPrincipal())
+
+	_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+		Identity:  respondIdentity,
+	})
+	require.NoError(t, err)
+
+	attemptState = loadLastAttempt()
+	require.Equal(t, respondIdentity, attemptState.GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: respondPrincipalName,
+	}, attemptState.GetLastWorkerPrincipal())
+
+	describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	info := describeResp.GetInfo()
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: startPrincipalName,
+	}, info.GetStartedByPrincipal())
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: respondPrincipalName,
+	}, info.GetClosedByPrincipal())
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: respondPrincipalName,
+	}, info.GetLastWorkerPrincipal())
+}
+
+func (s *standaloneActivityTestSuite) TestLastWorkerAttributionSurvivesTerminationAndTimeout() {
+	const (
+		principalType           = "jwt"
+		startPrincipalName      = "client-subject"
+		workerPrincipalName     = "worker-subject"
+		terminatorPrincipalName = "terminator-subject"
+		workerIdentity          = "worker-identity"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
+	t := s.T()
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  "test-subject",
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(_ context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		principalName := startPrincipalName
+		switch target.APIName {
+		case "/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":
+			principalName = workerPrincipalName
+		case "/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":
+			principalName = terminatorPrincipalName
+		default:
+		}
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
+
+	assertLastWorker := func(t *testing.T, activityID, runID string) *activitypb.ActivityExecutionInfo {
+		t.Helper()
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
+		protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+			Type:            principalType,
+			NameAtWriteTime: workerPrincipalName,
+		}, info.GetLastWorkerPrincipal())
+		return info
+	}
+
+	t.Run("termination does not overwrite the last worker", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+
+		pollTaskResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: workerIdentity,
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollTaskResp.GetActivityId())
+
+		_, err = env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   terminatorPrincipalName,
+		})
+		require.NoError(t, err)
+
+		info := assertLastWorker(t, activityID, startResp.RunId)
+		protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+			Type:            principalType,
+			NameAtWriteTime: terminatorPrincipalName,
+		}, info.GetClosedByPrincipal())
+	})
+
+	t.Run("timeout does not overwrite the last worker", func(t *testing.T) {
+		timedOutCtx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startResp, err := env.FrontendClient().StartActivityExecution(timedOutCtx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+			RequestId:           env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(timedOutCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: workerIdentity,
+		})
+		require.NoError(t, err)
+		env.eventuallyTimedOut(timedOutCtx, t, activityID, startResp.RunId)
+
+		info := assertLastWorker(t, activityID, startResp.RunId)
+		require.Nil(t, info.GetClosedByPrincipal())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
@@ -848,6 +1087,34 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
+
+		t.Run("SearchAttributesReserved", func(t *testing.T) {
+			// BuildIds passes frontend validation (predefined whitelist) but is rejected by the CHASM
+			// Visibility component because it is a reserved name.
+			reservedSearchAttributes := &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.BuildIds: sadefs.MustEncodeValue([]string{"build-id"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+				},
+			}
+
+			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+				Namespace:    env.Namespace().String(),
+				ActivityId:   env.Tv().ActivityID(),
+				ActivityType: env.Tv().ActivityType(),
+				Identity:     env.Tv().WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: env.Tv().TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           env.Tv().RequestID(),
+				SearchAttributes:    reservedSearchAttributes,
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "search attribute BuildIds is reserved by system", invalidArgErr.Message)
+		})
 	})
 
 	t.Run("ResponseFields", func(t *testing.T) {
@@ -938,6 +1205,16 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		serializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "other-endpoint",
+			Service:   "other-service",
+			Operation: "other-operation",
+		}
 
 		firstLinks := []*commonpb.Link{
 			{
@@ -977,10 +1254,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               firstLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               firstLinks,
+			PropagatedNexusSerializationContext: serializationContext,
 		})
 		require.NoError(t, err)
 		require.True(t, firstResp.Started)
@@ -994,10 +1272,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               secondLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               secondLinks,
+			PropagatedNexusSerializationContext: otherSerializationContext,
 			OnConflictOptions: &commonpb.OnConflictOptions{
 				AttachLinks: true,
 			},
@@ -1012,6 +1291,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
+		protorequire.ProtoEqual(t, serializationContext, descResp.GetInfo().GetPropagatedNexusSerializationContext())
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
 		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
@@ -1200,6 +1480,294 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.NoError(t, err, "over-cap Links must be ignored when attach_links is unset")
 		require.False(t, secondResp.Started)
 		require.Equal(t, firstResp.RunId, secondResp.RunId)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
+	const (
+		principalType = "jwt"
+		principalName = "eager-worker-subject"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
+	t := s.T()
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  principalName,
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
+	ctx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
+		headers.ClientNameHeaderName, headers.ClientNameGoSDK,
+		headers.ClientVersionHeaderName, temporal.SDKVersion,
+	))
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	requestID := testcore.RandomizeStr(t.Name())
+	request := &workflowservice.StartActivityExecutionRequest{
+		Namespace:             env.Namespace().String(),
+		RequestEagerExecution: true,
+		ActivityId:            activityID,
+		ActivityType:          env.Tv().ActivityType(),
+		Identity:              defaultIdentity,
+		Input:                 defaultInput,
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+		RequestId:             requestID,
+	}
+
+	first, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.True(t, first.GetStarted())
+	require.NotNil(t, first.GetEagerActivityTask())
+	require.Equal(t, activityID, first.GetEagerActivityTask().GetActivityId())
+	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetActivityRunId())
+	require.Nil(t, first.GetEagerActivityTask().GetWorkflowExecution())
+	require.EqualValues(t, 1, first.GetEagerActivityTask().GetAttempt())
+
+	describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      first.GetRunId(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, headers.ClientNameGoSDK, describe.GetInfo().GetSdkName())
+	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
+	require.True(t, describe.GetInfo().GetEagerExecutionAccepted())
+	require.Equal(t, defaultIdentity, describe.GetInfo().GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: principalName,
+	}, describe.GetInfo().GetLastWorkerPrincipal())
+
+	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.False(t, retry.GetStarted())
+	require.Nil(t, retry.GetEagerActivityTask())
+
+	useExisting := common.CloneProto(request)
+	useExisting.RequestId = testcore.RandomizeStr(t.Name())
+	useExisting.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING
+	conflict, err := env.FrontendClient().StartActivityExecution(ctx, useExisting)
+	require.NoError(t, err)
+	require.False(t, conflict.GetStarted())
+	require.Nil(t, conflict.GetEagerActivityTask())
+
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: first.GetEagerActivityTask().GetTaskToken(),
+		Result:    defaultResult,
+		Identity:  defaultIdentity,
+	})
+	require.NoError(t, err)
+	env.validateCompletion(ctx, t, activityID, first.GetRunId(), defaultIdentity)
+
+}
+
+func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies() {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	t := s.T()
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(t.Name())
+	backloggedActivityID := testcore.RandomizeStr(t.Name() + "-backlogged")
+	eagerActivityID := testcore.RandomizeStr(t.Name() + "-eager")
+
+	start := func(activityID string, eager bool, priority int32) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:             env.Namespace().String(),
+			RequestEagerExecution: eager,
+			ActivityId:            activityID,
+			ActivityType:          env.Tv().ActivityType(),
+			Identity:              defaultIdentity,
+			Input:                 defaultInput,
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+			Priority:              &commonpb.Priority{PriorityKey: priority},
+			StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+			RequestId:             testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		return response
+	}
+
+	backlogged := start(backloggedActivityID, false, 1)
+	await.RequireTruef(t, func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		return err == nil && response.GetStats().GetApproximateBacklogCount() >= 1
+	}, 10*time.Second, 100*time.Millisecond, "backlogged standalone activity never reached Matching")
+
+	eager := start(eagerActivityID, true, 5)
+	require.Nil(t, eager.GetEagerActivityTask(), "Matching denial must fall back to normal dispatch")
+
+	for _, startedActivity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: startedActivity.id,
+			RunId:      startedActivity.runID,
+		})
+		require.NoError(t, err)
+		require.False(t, describe.GetInfo().GetEagerExecutionAccepted())
+	}
+
+	for _, startedActivity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		task := env.pollActivityTaskAndValidate(ctx, t, startedActivity.id, taskQueue, startedActivity.runID)
+		_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		env.validateCompletion(ctx, t, startedActivity.id, startedActivity.runID, defaultIdentity)
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestLostEagerActivityTaskResponseRecovery() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, false))
+	t := s.T()
+
+	startEagerActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		startToCloseTimeout time.Duration,
+		heartbeatTimeout time.Duration,
+		scheduleToCloseTimeout time.Duration,
+	) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			RequestEagerExecution:  true,
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               defaultIdentity,
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartToCloseTimeout:    durationpb.New(startToCloseTimeout),
+			HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1,
+				MaximumAttempts:    2,
+			},
+			RequestId: testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		require.NotNil(t, response.GetEagerActivityTask())
+		return response
+	}
+
+	completeRetriedActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		runID string,
+	) {
+		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.Equal(t, activityID, task.GetActivityId())
+		require.EqualValues(t, 2, task.GetAttempt(), "retry must use the normal task-queue poll path")
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describe.GetInfo().GetStatus())
+		require.EqualValues(t, 2, describe.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, describe.GetOutcome().GetResult())
+	}
+
+	t.Run("StartToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Second, 0, time.Minute)
+		// Simulate a client that lost the eager response: it never responds using this token.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("HeartbeatTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, time.Second, time.Minute)
+		// Simulate a client that lost the eager response: it never heartbeats or completes.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("ScheduleToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, 0, time.Second)
+		// Schedule-to-close is the activity's terminal deadline, so a lost eager task must not retry.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+
+		outcome, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      response.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, outcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 }
 
@@ -2908,7 +3476,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.NoError(t, err)
 	})
 
-	t.Run("DifferentRequestIDFails", func(t *testing.T) {
+	t.Run("DifferentRequestIDIsNotFound", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2935,8 +3503,8 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			Reason:     "Test Termination",
 			Identity:   "terminator",
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("NonExistent", func(t *testing.T) {
@@ -4768,6 +5336,108 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	}
 }
 
+func (s *standaloneActivityTestSuite) TestNexusSerializationContextPropagation() {
+	env := s.newTestEnv()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "test-endpoint",
+		Service:   "test-service",
+		Operation: "test-operation",
+	}
+
+	for _, tc := range []struct {
+		name   string
+		failed bool
+	}{
+		{name: "Completed"},
+		{name: "Failed", failed: true},
+	} {
+		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
+			t := s.T()
+			ctx := s.Context()
+			activityID := testcore.RandomizeStr(t.Name())
+			taskQueue := testcore.RandomizeStr(t.Name())
+
+			// Start with a context that should remain unchanged across retries.
+			startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:                           env.Namespace().String(),
+				ActivityId:                          activityID,
+				ActivityType:                        env.Tv().ActivityType(),
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout:              durationpb.New(time.Minute),
+				RetryPolicy:                         &commonpb.RetryPolicy{MaximumAttempts: 2},
+				PropagatedNexusSerializationContext: serializationContext,
+			})
+			require.NoError(t, err)
+
+			firstTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, firstTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, firstTask.GetPropagatedNexusSerializationContext())
+
+			// Fail the first attempt so the server dispatches a second worker task.
+			_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: firstTask.GetTaskToken(),
+				Failure: &failurepb.Failure{
+					Message: "retryable failure",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NextRetryDelay: durationpb.New(time.Second),
+					}},
+				},
+			})
+			require.NoError(t, err)
+
+			secondTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, secondTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, secondTask.GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Failure:   defaultFailure,
+				})
+			} else {
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Result:    defaultResult,
+				})
+			}
+			require.NoError(t, err)
+
+			// Check that both result APIs retain the context after either outcome.
+			pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, pollResp.GetPropagatedNexusSerializationContext())
+
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      env.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.GetRunId(),
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, describeResp.GetInfo().GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultFailure, pollResp.GetOutcome().GetFailure())
+				protorequire.ProtoEqual(t, defaultFailure, describeResp.GetOutcome().GetFailure())
+			} else {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+				protorequire.ProtoEqual(t, defaultResult, describeResp.GetOutcome().GetResult())
+			}
+		})
+	}
+}
+
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
 	env := s.newTestEnv()
 	t := s.T()
@@ -6402,8 +7072,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.True(t, startResp.Started)
 
 		// Verify activity stays in SCHEDULED state throughout the delay (not dispatched early).
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.GetRunId(),
@@ -6494,8 +7165,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToStartTimeout.
 		// The timeout should only fire after startDelay + scheduleToStartTimeout.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -6550,8 +7222,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToCloseTimeout.
 		// The timeout should only fire after startDelay + scheduleToCloseTimeout.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -6814,8 +7487,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 
 		// Activity should stay SCHEDULED past the original 2s delay, since the new target is at T+5s.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -7028,8 +7702,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.Equal(t, expectedExpiration, descResp.GetInfo().GetExpirationTime().AsTime())
 
 		// Must not time out before startDelay + scheduleToClose elapses (would happen with the bug).
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -7645,16 +8320,18 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			StartDelay:             durationpb.New(originalStartDelay),
 		})
 		require.NoError(t, err)
-		describe := func() *workflowservice.DescribeActivityExecutionResponse {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+
+		ctx := s.Context()
+		describe := func() (*workflowservice.DescribeActivityExecutionResponse, error) {
+			return env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			require.NoError(t, err)
-			return resp
 		}
-		desc := describe()
+
+		desc, err := describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
@@ -7668,7 +8345,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
 		})
 		require.NoError(t, err)
-		desc = describe()
+		desc, err = describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(0+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
@@ -7681,13 +8359,15 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RestoreOriginalOptions: true,
 		})
 		require.NoError(t, err)
-		desc = describe()
+		desc, err = describe()
+		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
 
 		require.Never(t, func() bool {
-			return describe().GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			resp, err := describe()
+			return err != nil || resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 		}, 3500*time.Millisecond, 200*time.Millisecond,
 			"ScheduleToStart and ScheduleToClose timeouts should have been pushed back to 6s by the start delay")
 
@@ -7767,8 +8447,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Must not time out before scheduleTime + updatedDelay + scheduleToStartTimeout = T+5s.
 		// With the bug, would time out at scheduleTime + originalDelay + scheduleToStartTimeout = T+2s.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -8247,8 +8928,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// No worker polls. ScheduleToStart should fire at scheduleTime + start_delay + scheduleToStart,
 		// not at unpauseTime + scheduleToStart. Verify no timeout before the correct deadline.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
@@ -10066,6 +10748,31 @@ func (env *standaloneActivityEnv) startActivityWithType(ctx context.Context, act
 	})
 }
 
+// awaitCallbackInfo polls DescribeActivityExecution until the activity's single completion
+// callback reaches wantState, and returns that CallbackInfo.
+func (env *standaloneActivityEnv) awaitCallbackInfo(
+	ctx context.Context,
+	t *testing.T,
+	activityID string,
+	wantState enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+	var cbInfo *callbackpb.CallbackInfo
+	await.Require(ctx, t, func(c *await.T) {
+		descResp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(c, err)
+		require.Len(c, descResp.GetCallbacks(), 1)
+		cbInfo = descResp.GetCallbacks()[0].GetInfo()
+		require.NotNil(c, cbInfo)
+		require.Equal(c, wantState, cbInfo.GetState())
+	}, 10*time.Second, 100*time.Millisecond)
+	return cbInfo
+}
+
+// Tests verifying that completion callbacks attached to standalone Activities get triggered.
 func (s *standaloneActivityTestSuite) TestCallbacks() {
 	env := s.newTestEnv()
 	t := s.T()
@@ -10257,6 +10964,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and confirm it has a Success result.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("FailsWithCallbacks", func(t *testing.T) {
@@ -10323,6 +11033,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+
+		// The Activity may have failed, but the callback reporting the failure should be successful.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("TerminatedWithCallbacks", func(t *testing.T) {
@@ -10390,6 +11103,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+
+		// The callback reporting the termination should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("CanceledWithCallbacks", func(t *testing.T) {
@@ -10462,6 +11178,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+
+		// The callback reporting the cancellation should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	// This test covers the timeout callback path using schedule-to-start, but the callback behavior
@@ -10517,6 +11236,193 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+
+		// The callback delivering the timeout failure should itself succeed.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+	})
+
+	// Verify that if the callback fails to be delivered for some reason, that the failure is
+	// persisted correctly and available from the Describe operation.
+	t.Run("CallbackDeliveryFailure", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch, callbackAddress := newNexusCompletionHandler(t)
+
+		// Start and successfully complete a standalone Activity.
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		// Simulate the completion handler returning a retryable error followed by
+		// an unretryable error. Confirm the SAA's CallbackInfo includes the terminal
+		// failure.
+		for deliveryAttempt := 1; deliveryAttempt <= 2; deliveryAttempt++ {
+			select {
+			case completion := <-ch.requestCh:
+				// Pull the completion request from the channel.
+				require.Equal(t, nexus.OperationStateSucceeded, completion.State)
+				if deliveryAttempt == 1 {
+					// The first attempt to deliver the Activity's completion callback reports a retryable error.
+					// Call Describe and confirm the Callback has just been scheduled.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 0, cbInfo.GetAttempt()) // zero attempts so far.
+					require.Nil(t, cbInfo.GetLastAttemptFailure())
+
+					// Retryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "delivery #1")
+				} else {
+					// The second attempt to deliver the Activity's completion callback should report a
+					// non-retryable error.
+					// Call Describe and confirm the CallbackInfo describes the previous delivery attempt.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 1, cbInfo.GetAttempt()) // 1 attempt so far, the 2nd is in-progress.
+					require.NotNil(t, cbInfo.GetLastAttemptFailure())
+					require.Contains(t, cbInfo.GetLastAttemptFailure().GetMessage(), "delivery #1")
+
+					// Unretryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "delivery #2")
+				}
+
+			case <-s.Context().Done():
+				require.Fail(t, "timed out waiting for completion callback")
+			}
+		}
+
+		// Verify the Activity is in completed state.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Verify the completion callback delivery has failed.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_FAILED)
+		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
+		require.Equal(t, lastDeliveryFailureMessage, cbInfo.GetLastAttemptFailure().GetMessage())
+	})
+
+	// Verify that a NexusHandler-variant callback links in both directions: the handler is handed a link
+	// to the callback, and the links the handler returns are recorded on the callback.
+	t.Run("NexusHandlerCallbackLinks", func(t *testing.T) {
+		env.OverrideDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler})
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		handlerTaskQueue := testcore.RandomizeStr("nh-callback-" + t.Name())
+		requestID := env.Tv().Any().String()
+
+		// Stands in for a workflow the handler started to process the completion.
+		handlerReturnLink := &commonpb.Link_WorkflowEvent{
+			Namespace:  env.Namespace().String(),
+			WorkflowId: "nh-callback-handler-wf-id",
+			RunId:      uuid.NewString(),
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		}
+		nexusEnv := &NexusTestEnv{TestEnv: env.TestEnv, useTemporalFailures: true}
+		inboundLinks := make(chan []*nexuspb.Link, 1)
+		pollerErrCh := nexusEnv.nexusTaskPoller(s.Context(), t, handlerTaskQueue, func(
+			_ *testing.T,
+			res *workflowservice.PollNexusTaskQueueResponse,
+		) (*nexusTaskResponse, error) {
+			inboundLinks <- res.GetRequest().GetStartOperation().GetLinks()
+			return &nexusTaskResponse{
+				StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "nh-callback-op-token"},
+				Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerReturnLink)},
+			}, nil
+		})
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
+						TaskQueueName: handlerTaskQueue,
+						// The shared poller only accepts tasks addressed to "test-service".
+						Service:   "test-service",
+						Operation: "OnComplete",
+					},
+				},
+			}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		require.NoError(t, await.Rcv(t, pollerErrCh))
+
+		gotLinks := await.Rcv(t, inboundLinks)
+		require.Len(t, gotLinks, 1)
+		gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &commonpb.Link_Callback{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: activityID,
+				RunId:      startResp.GetRunId(),
+			},
+			RequestId: requestID,
+		}, gotCallbackLink)
+
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		// TODO(https://github.com/temporalio/temporal/issues/11958): Callback invocations should have their own request ID, since its used as an idempotency key.
+		require.Equal(t, requestID, cbInfo.GetRequestId())
+		protorequire.ProtoSliceEqual(t,
+			[]*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerReturnLink}}},
+			cbInfo.GetCallback().GetLinks())
 	})
 }
 
@@ -10825,7 +11731,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Pause should fail with FailedPrecondition on a terminal activity.
+		// Pause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -10834,8 +11740,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Reason:     "test",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// PauseWhileRunning: pause a STARTED activity, fail the attempt, then verify the activity
@@ -12459,7 +13365,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Unpause should fail with FailedPrecondition on a terminal activity.
+		// Unpause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -12467,8 +13373,8 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			Identity:   "test-identity",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// UnpauseWhileCancelRequestedFails: unpausing a CANCEL_REQUESTED activity must be rejected with
@@ -13338,8 +14244,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 	}
 
-	t.Run("TerminalStateReturnsFailedPrecondition", func(t *testing.T) {
-		// Resetting a completed activity should return FailedPrecondition.
+	t.Run("TerminalStateReturnsNotFound", func(t *testing.T) {
+		// Resetting a completed activity should return NotFound.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -13355,14 +14261,14 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempt to reset — should fail with FailedPrecondition since the activity is in a terminal state
+		// Attempt to reset — should fail with NotFound since the activity is in a terminal state
 		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("KeepPaused", func(t *testing.T) {
@@ -14048,8 +14954,9 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// The in-flight attempt must not time out at the restored 2s deadline. Buggy code re-arms
 		// ScheduleToClose at 2s immediately → TIMED_OUT within ~2s; correct code leaves it at 8s.
+		ctx := s.Context()
 		require.Never(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
