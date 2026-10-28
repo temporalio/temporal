@@ -71,7 +71,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.opentelemetry.io/proto/otlp v1.11.0
-	go.temporal.io/api v1.63.8-0.20261016215345-3926793dec12
+	go.temporal.io/api v1.64.1-0.20261028055333-764ec699aeee
 	go.temporal.io/auto-scaled-workers v0.0.0-20261013231030-67ffdef6330d
 	go.temporal.io/sdk v1.49.0
 	go.temporal.io/testx v0.0.0-20261027232519-5bbe816c4239
