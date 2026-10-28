@@ -3,6 +3,7 @@ package dynamicconfig_test
 import (
 	"errors"
 	"maps"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -216,6 +217,24 @@ func (s *collectionSuite) TestGetPositiveDurationPropertyConstrainedDefault() {
 	s.Equal(7*time.Second, value("ns1", "tq1", 0))
 }
 
+func (s *collectionSuite) TestPositiveIntervalSettingsRejectZero() {
+	for _, setting := range []dynamicconfig.GenericSetting{
+		dynamicconfig.ClusterMetadataRefreshInterval,
+		dynamicconfig.NamespaceCacheRefreshInterval,
+		dynamicconfig.MatchingUpdateAckInterval,
+		dynamicconfig.MatchingGetUserDataRefresh,
+		dynamicconfig.MatchingNexusEndpointsRefreshInterval,
+		dynamicconfig.TimerProcessorUpdateAckInterval,
+		dynamicconfig.TimerProcessorMaxPollInterval,
+		dynamicconfig.ArchivalProcessorMaxPollInterval,
+		dynamicconfig.ArchivalProcessorUpdateAckInterval,
+	} {
+		s.Error(setting.Validate(0), setting.Key().String())
+		s.Error(setting.Validate("-1s"), setting.Key().String())
+		s.NoError(setting.Validate("1s"), setting.Key().String())
+	}
+}
+
 func (s *collectionSuite) TestWithValidation() {
 	setting := dynamicconfig.NewGlobalTypedSettingWithConverter(
 		testWithValidationKey,
@@ -249,6 +268,7 @@ func (s *collectionSuite) TestWithValidation() {
 		s.Error(setting.Validate(bad))
 	}
 	s.NoError(setting.Validate(100))
+	s.Error(dynamicconfig.Positive(math.NaN()))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {

@@ -2779,9 +2779,8 @@ execution for UpdateComponent idempotency; the oldest are swept beyond this limi
 		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
 UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
 	)
-	ShardUpdateMinInterval = NewGlobalTypedSettingWithConverter(
+	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
-		WithValidation(convertDuration, Positive[time.Duration]),
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
 	)

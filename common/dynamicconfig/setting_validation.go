@@ -1,17 +1,15 @@
 package dynamicconfig
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 type (
-	// Validator checks a converted setting value. A non-nil error rejects the value.
+	// Validator checks a converted setting value and returns a non-nil error to reject it. Write
+	// one for any rule a setting needs and pass it to WithValidation.
 	Validator[T any] func(T) error
 
 	// Number is the set of numeric types a validator such as Positive can check.
 	Number interface {
-		~int | ~int64 | ~float64
+		~int | ~int32 | ~int64 | ~float32 | ~float64
 	}
 )
 
@@ -36,13 +34,10 @@ func WithValidation[T any](convert func(any) (T, error), validators ...Validator
 	}
 }
 
-// Positive rejects values <= 0. Use it for intervals and sizes where zero does not mean
-// "disabled" and would instead spin a loop, panic a ticker, or multiply the work done.
+// Positive rejects values <= 0 (and NaN). Use it for intervals and sizes where zero does not
+// mean "disabled" and would instead spin a loop, panic a ticker, or multiply the work done.
 func Positive[T Number](v T) error {
-	if v <= 0 {
-		if d, ok := any(v).(time.Duration); ok {
-			return fmt.Errorf("duration must be positive, got %v", d)
-		}
+	if !(v > 0) {
 		return fmt.Errorf("value must be positive, got %v", v)
 	}
 	return nil
