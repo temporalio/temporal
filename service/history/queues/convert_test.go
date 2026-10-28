@@ -198,10 +198,8 @@ func (s *convertSuite) TestConvertScope() {
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 	)
 
-	s.Equal(scope, FromPersistenceScope(
-		ToPersistenceScope(scope),
-		nil,
-	))
+	got, _ := FromPersistenceScope(ToPersistenceScope(scope), nil)
+	s.Equal(scope, got)
 }
 
 func TestFromPersistenceScope_ResolvesIndexes(t *testing.T) {
@@ -223,7 +221,8 @@ func TestFromPersistenceScope_ResolvesIndexes(t *testing.T) {
 	}
 
 	want := NewScope(r, tasks.NewNamespacePredicate([]string{first.String(), second.String()}))
-	require.Equal(t, want, FromPersistenceScope(persisted, table))
+	got, _ := FromPersistenceScope(persisted, table)
+	require.Equal(t, want, got)
 }
 
 func namespaceIDPredicateProto(
@@ -234,6 +233,96 @@ func namespaceIDPredicateProto(
 		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 			NamespaceIdPredicateAttributes: attributes,
 		},
+	}
+}
+
+func notPredicateProto(p *persistencespb.Predicate) *persistencespb.Predicate {
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_NOT,
+		Attributes: &persistencespb.Predicate_NotPredicateAttributes{
+			NotPredicateAttributes: &persistencespb.NotPredicateAttributes{Predicate: p},
+		},
+	}
+}
+
+func andPredicateProto(ps ...*persistencespb.Predicate) *persistencespb.Predicate {
+	return &persistencespb.Predicate{
+		PredicateType: enumsspb.PREDICATE_TYPE_AND,
+		Attributes: &persistencespb.Predicate_AndPredicateAttributes{
+			AndPredicateAttributes: &persistencespb.AndPredicateAttributes{Predicates: ps},
+		},
+	}
+}
+
+func TestFromPersistenceScope_UnresolvableIndexFallsBackToUniversal(t *testing.T) {
+	known := uuid.New()
+	table := newNamespaceIDTable([][]byte{known[:]})
+	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIdIndexes: []int32{0},
+	})
+	unresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIdIndexes: []int32{5},
+	})
+	universal := predicates.Universal[tasks.Task]()
+	r := NewRandomRange()
+
+	tests := []struct {
+		name         string
+		predicate    *persistencespb.Predicate
+		table        *namespaceIDTable
+		want         tasks.Predicate
+		wantReadLoss bool
+	}{
+		{
+			name:         "bare leaf",
+			predicate:    unresolvable,
+			table:        table,
+			want:         universal,
+			wantReadLoss: true,
+		},
+		{
+			name:         "inside not",
+			predicate:    notPredicateProto(unresolvable),
+			table:        table,
+			want:         universal,
+			wantReadLoss: true,
+		},
+		{
+			name:         "inside and, next to a resolvable sibling",
+			predicate:    andPredicateProto(resolvable, unresolvable),
+			table:        table,
+			want:         universal,
+			wantReadLoss: true,
+		},
+		{
+			name:         "all indexes resolvable",
+			predicate:    resolvable,
+			table:        table,
+			want:         tasks.NewNamespacePredicate([]string{known.String()}),
+			wantReadLoss: false,
+		},
+		{
+			// FromPersistenceQueueState always builds a table, so this is not a production path.
+			// A nil table cannot count lookups, so its unresolved indexes are dropped, not given the universal predicate.
+			name:         "nil table is not detected",
+			predicate:    unresolvable,
+			table:        nil,
+			want:         tasks.NewNamespacePredicate(nil),
+			wantReadLoss: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			persisted := &persistencespb.QueueSliceScope{
+				Range:     ToPersistenceRange(r),
+				Predicate: tc.predicate,
+			}
+
+			got, lostResolutionOnRead := FromPersistenceScope(persisted, tc.table)
+
+			require.Equal(t, NewScope(r, tc.want), got)
+			require.Equal(t, tc.wantReadLoss, lostResolutionOnRead)
+		})
 	}
 }
 
@@ -319,6 +408,46 @@ func TestFromPersistenceQueueState_ResolvesNamespaceIDTable(t *testing.T) {
 	}
 }
 
+func TestFromPersistenceQueueState_CountsScopesThatLostResolutionOnRead(t *testing.T) {
+	known := uuid.New()
+	r0, r1, r2, r3 := NewRandomRange(), NewRandomRange(), NewRandomRange(), NewRandomRange()
+	watermark := tasks.NewKey(time.Unix(0, rand.Int63()).UTC(), 0)
+	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIdIndexes: []int32{0},
+	})
+	oneUnresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIdIndexes: []int32{7},
+	})
+	twoUnresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+		NamespaceIdIndexes: []int32{8, 9},
+	})
+
+	state := &persistencespb.QueueState{
+		NamespaceIdTable:             [][]byte{known[:]},
+		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			0: {Scopes: []*persistencespb.QueueSliceScope{
+				{Range: ToPersistenceRange(r0), Predicate: resolvable},
+				{Range: ToPersistenceRange(r1), Predicate: twoUnresolvable},
+			}},
+			1: {Scopes: []*persistencespb.QueueSliceScope{
+				{Range: ToPersistenceRange(r2), Predicate: oneUnresolvable},
+				{Range: ToPersistenceRange(r3), Predicate: resolvable},
+			}},
+		},
+	}
+
+	got := FromPersistenceQueueState(state)
+
+	universal := predicates.Universal[tasks.Task]()
+	knownPredicate := tasks.NewNamespacePredicate([]string{known.String()})
+	require.Equal(t, map[int64][]Scope{
+		0: {NewScope(r0, knownPredicate), NewScope(r1, universal)},
+		1: {NewScope(r2, universal), NewScope(r3, knownPredicate)},
+	}, got.readerScopes)
+	require.Equal(t, 2, got.lostResolutionOnReadCount)
+}
+
 func (s *convertSuite) TestConvertQueueState() {
 	readerScopes := map[int64][]Scope{
 		0: {},
@@ -381,6 +510,21 @@ func TestNamespaceIDTable_Resolve(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestNamespaceIDTable_CountsUnresolved(t *testing.T) {
+	valid := uuid.New()
+	table := newNamespaceIDTable([][]byte{valid[:], valid[:15]})
+
+	_, ok := table.resolve(0)
+	require.True(t, ok)
+	require.Equal(t, 0, table.unresolvedIndexes)
+
+	for _, index := range []int32{1, 2, -1} {
+		_, ok = table.resolve(index)
+		require.False(t, ok)
+	}
+	require.Equal(t, 3, table.unresolvedIndexes)
 }
 
 func TestFromPersistenceNamespaceIDPredicate_ResolvesIndexes(t *testing.T) {
