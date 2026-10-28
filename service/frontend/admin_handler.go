@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -70,6 +71,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1031,6 +1033,54 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		return nil, err
 	}
 	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
+}
+
+func (adh *AdminHandler) ApplyNamespaceMutation(
+	_ context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
+	}
+	if !request.GetShadow() {
+		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	}
+	if len(request.GetNamespaceTaskPayload()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if len(request.GetShadowLegacyTaskPayload()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	legacyTask := &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+	}
+
+	payloadTask := &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		return &adminservice.ApplyNamespaceMutationResponse{
+			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+		}, nil
+	}
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
+	)
+
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+	}, nil
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.

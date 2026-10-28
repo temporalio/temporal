@@ -1036,9 +1036,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
+	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
+	// the source lookup finds the namespace active here and retries the task instead of discarding it.
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Success() {
@@ -1166,9 +1168,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
+	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
+	// the source lookup finds the namespace active here and retries the task instead of discarding it.
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Success() {
@@ -1386,6 +1390,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, &serviceerror.NotFound{})
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, serviceerror.NewUnavailable(consts.ErrNamespaceHandover.Error()))
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrNamespaceHandover, resp.ExecutionErr)
 
 	randomErr := errors.New("some random error")
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, randomErr)
