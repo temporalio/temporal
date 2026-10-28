@@ -321,9 +321,6 @@ type (
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
-		// ConsumeStorageUsageDelta returns the byte-seconds this cluster accrued in the last closed
-		// transaction and resets it, so each delta is emitted as a metric at most once.
-		ConsumeStorageUsageDelta() (msByteSeconds int64, historyByteSeconds int64)
 		// CurrentStorageUsage returns this cluster's storage usage as of now, including the interval since
 		// its last closed transaction that is not accrued yet. It does not modify the mutable state.
 		CurrentStorageUsage() *persistencespb.StorageUsage

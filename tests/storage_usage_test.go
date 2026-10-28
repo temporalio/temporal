@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -39,7 +38,6 @@ func (s *StorageUsageSuite) TestStorageUsage_Workflow() {
 	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
 	ctx := s.Context()
-	capture := env.StartNamespaceMetricCapture()
 
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.NewString(),
@@ -72,9 +70,6 @@ func (s *StorageUsageSuite) TestStorageUsage_Workflow() {
 	env.True(proto.Equal(usage, laterUsage))
 	env.Greater(laterCurrent.GetMutableStateByteSeconds(), current.GetMutableStateByteSeconds())
 	env.Greater(laterCurrent.GetHistoryByteSeconds(), current.GetHistoryByteSeconds())
-
-	env.NotEmpty(capture.Metric(metrics.MutableStateByteSeconds.Name()))
-	env.NotEmpty(capture.Metric(metrics.HistoryByteSeconds.Name()))
 }
 
 func (s *StorageUsageSuite) TestStorageUsage_StandaloneActivity() {
@@ -87,7 +82,6 @@ func (s *StorageUsageSuite) TestStorageUsage_StandaloneActivity() {
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues)
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
-	capture := env.StartNamespaceMetricCapture()
 
 	startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:           env.Namespace().String(),
@@ -113,8 +107,6 @@ func (s *StorageUsageSuite) TestStorageUsage_StandaloneActivity() {
 	env.Positive(usage.GetMutableStateByteSeconds())
 	// Closed: accrual has stopped, so the current value is the stored one.
 	env.True(proto.Equal(usage, current))
-
-	env.NotEmpty(capture.Metric(metrics.MutableStateByteSeconds.Name()))
 }
 
 func (s *StorageUsageSuite) describeStorageUsage(
