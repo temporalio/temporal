@@ -183,8 +183,6 @@ type (
 		sizeAtLastClose    int64
 		lastCloseTime      time.Time
 		runningAtLastClose bool
-		// Usage accrued since hte last closed.  To be emitted on closed
-		pendingStorageUsageDelta storageUsageDelta
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -8074,7 +8072,6 @@ func (ms *MutableStateImpl) closeTransactionAccrueStorageUsage(
 			now,
 		)
 	}
-	ms.pendingStorageUsageDelta = delta
 	if !delta.isZero() {
 		ms.executionInfo.StorageUsage = addStorageUsage(ms.executionInfo.StorageUsage, delta)
 	}

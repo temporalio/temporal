@@ -215,17 +215,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		true,  // isWorkflow
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
-	// After a successful write, the storage usage delta of each written run is emitted once.
-	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	currentChasmTree := historyi.NewMockChasmTree(s.controller)
-	currentChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	currentMutableState.EXPECT().ChasmTree().Return(currentChasmTree).AnyTimes()
-	gomock.InOrder(
-		currentMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(100), int64(200)),
-		currentMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)).AnyTimes(),
-	)
-	resetMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0))
-
 	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
@@ -238,7 +227,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentReleaseCalled := false
 	currentContext := historyi.NewMockWorkflowContext(s.controller)
 	currentMutableState := historyi.NewMockMutableState(s.controller)
-	currentMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)).AnyTimes()
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
@@ -257,7 +245,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetReleaseCalled := false
 	resetContext := historyi.NewMockWorkflowContext(s.controller)
 	resetMutableState := historyi.NewMockMutableState(s.controller)
-	resetMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	var tarGetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
@@ -309,7 +296,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 	// CreateWorkflowModeBrandNew. The nil current must not be touched.
 	baseWorkflow := NewMockWorkflow(s.controller)
 	baseMutableState := historyi.NewMockMutableState(s.controller)
-	baseMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)).AnyTimes()
 	baseWorkflow.EXPECT().GetMutableState().Return(baseMutableState).AnyTimes()
 	baseMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	baseMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
@@ -318,7 +304,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 	resetReleaseCalled := false
 	resetContext := historyi.NewMockWorkflowContext(s.controller)
 	resetMutableState := historyi.NewMockMutableState(s.controller)
-	resetMutableState.EXPECT().ConsumeStorageUsageDelta().Return(int64(0), int64(0)).AnyTimes()
 	var resetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()

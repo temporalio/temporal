@@ -10243,7 +10243,6 @@ func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_Active() {
 	usage := mutableState.GetExecutionInfo().GetStorageUsage()
 	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, usage.GetMutableStateByteSeconds())
 	s.Equal(before.GetHistoryByteSeconds()+10*4096, usage.GetHistoryByteSeconds())
-	s.Equal(storageUsageDelta{MutableStateByteSeconds: 10 * msSize, HistoryByteSeconds: 10 * 4096}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_Passive() {
@@ -10259,7 +10258,6 @@ func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_Passive() {
 	usage := mutableState.GetExecutionInfo().GetStorageUsage()
 	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, usage.GetMutableStateByteSeconds())
 	s.Equal(before.GetHistoryByteSeconds()+10*4096, usage.GetHistoryByteSeconds())
-	s.Equal(storageUsageDelta{MutableStateByteSeconds: 10 * msSize, HistoryByteSeconds: 10 * 4096}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCounterOnSync() {
@@ -10292,7 +10290,6 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCoun
 	// measured from the local baseline rather than the source's LastUpdateTime.
 	s.Equal(local.GetMutableStateByteSeconds()+5*msSize, mutableState.GetExecutionInfo().GetStorageUsage().GetMutableStateByteSeconds())
 	s.Equal(local.GetHistoryByteSeconds()+5*4096, mutableState.GetExecutionInfo().GetStorageUsage().GetHistoryByteSeconds())
-	s.Equal(storageUsageDelta{MutableStateByteSeconds: 5 * msSize, HistoryByteSeconds: 5 * 4096}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_TimeSkipping() {
@@ -10352,6 +10349,7 @@ func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
+	before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
 	msSize := mutableState.sizeAtLastClose
 
 	// The transaction that closes the execution still accrues the interval before it.
@@ -10363,16 +10361,15 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	s.NoError(err)
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
-	s.Equal(10*msSize, mutableState.pendingStorageUsageDelta.MutableStateByteSeconds)
 	atClose := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, atClose.GetMutableStateByteSeconds())
 
 	// Later transactions on the closed execution (reset of a closed base run, callbacks, timers)
-	// must not accrue: post-close retention is not part of the counter or the metric.
+	// must not accrue: post-close retention is not part of the counter.
 	ts.Update(ts.Now().Add(7 * 24 * time.Hour))
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.True(proto.Equal(atClose, mutableState.GetExecutionInfo().GetStorageUsage()))
-	s.Equal(storageUsageDelta{}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_ClosedOnLoad() {
@@ -10392,7 +10389,6 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_ClosedOnLoad() {
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Nil(mutableState.GetExecutionInfo().GetStorageUsage())
-	s.Equal(storageUsageDelta{}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCurrentStorageUsage_Running() {
@@ -10405,9 +10401,8 @@ func (s *mutableStateSuite) TestCurrentStorageUsage_Running() {
 	current := mutableState.CurrentStorageUsage()
 	s.Equal(stored.GetMutableStateByteSeconds()+10*msSize, current.GetMutableStateByteSeconds())
 	s.Equal(stored.GetHistoryByteSeconds()+10*4096, current.GetHistoryByteSeconds())
-	// The stored counter and the pending metric delta are not changed.
+	// The stored counter is not changed.
 	s.True(proto.Equal(stored, mutableState.GetExecutionInfo().GetStorageUsage()))
-	s.Equal(storageUsageDelta{}, mutableState.pendingStorageUsageDelta)
 }
 
 func (s *mutableStateSuite) TestCurrentStorageUsage_Closed() {

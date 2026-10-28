@@ -1116,14 +1116,6 @@ var (
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
 	)
-	MutableStateByteSeconds = NewCounterDef(
-		"mutable_state_byte_seconds",
-		WithDescription("Byte-seconds of mutable state held in storage by this cluster, accrued at each state transition of a Workflow or CHASM execution until it closes. Emitted by both active and passive clusters for their own storage. Tagged by namespace and archetype."),
-	)
-	HistoryByteSeconds = NewCounterDef(
-		"history_byte_seconds",
-		WithDescription("Byte-seconds of history events held in storage by this cluster, accrued at each state transition of a Workflow or CHASM execution until it closes. Emitted by both active and passive clusters for their own storage. Tagged by namespace and archetype."),
-	)
 	PersistedMutableStateSize = NewBytesHistogramDef(
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),

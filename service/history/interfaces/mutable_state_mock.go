@@ -1895,21 +1895,6 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(ctx, transact
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), ctx, transactionPolicy)
 }
 
-// ConsumeStorageUsageDelta mocks base method.
-func (m *MockMutableState) ConsumeStorageUsageDelta() (int64, int64) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConsumeStorageUsageDelta")
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(int64)
-	return ret0, ret1
-}
-
-// ConsumeStorageUsageDelta indicates an expected call of ConsumeStorageUsageDelta.
-func (mr *MockMutableStateMockRecorder) ConsumeStorageUsageDelta() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumeStorageUsageDelta", reflect.TypeOf((*MockMutableState)(nil).ConsumeStorageUsageDelta))
-}
-
 // ContinueAsNewMinBackoff mocks base method.
 func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	m.ctrl.T.Helper()

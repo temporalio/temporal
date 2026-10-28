@@ -4,10 +4,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/metrics"
-	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // storageUsageDelta is the byte-seconds accrued by one execution over one interval between
@@ -50,38 +47,6 @@ func addStorageUsage(
 	usage.MutableStateByteSeconds += d.MutableStateByteSeconds
 	usage.HistoryByteSeconds += d.HistoryByteSeconds
 	return usage
-}
-
-func (ms *MutableStateImpl) ConsumeStorageUsageDelta() (mutableStateByteSeconds, historyByteSeconds int64) {
-	delta := ms.pendingStorageUsageDelta
-	ms.pendingStorageUsageDelta = storageUsageDelta{}
-	return delta.MutableStateByteSeconds, delta.HistoryByteSeconds
-}
-
-// EmitStorageUsageDelta emits the byte-seconds this cluster accrued in the mutable state's last closed
-// transaction. Call it only after that transaction is persisted.
-func EmitStorageUsageDelta(
-	metricsHandler metrics.Handler,
-	chasmRegistry *chasm.Registry,
-	mutableState historyi.MutableState,
-) {
-	if mutableState == nil {
-		return
-	}
-	msByteSeconds, historyByteSeconds := mutableState.ConsumeStorageUsageDelta()
-	if msByteSeconds == 0 && historyByteSeconds == 0 {
-		return
-	}
-	handler := metricsHandler.WithTags(metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()))
-	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, mutableState.ChasmTree().ArchetypeID()); ok {
-		handler = handler.WithTags(archetypeTag)
-	}
-	if msByteSeconds > 0 {
-		metrics.MutableStateByteSeconds.With(handler).Record(msByteSeconds)
-	}
-	if historyByteSeconds > 0 {
-		metrics.HistoryByteSeconds.With(handler).Record(historyByteSeconds)
-	}
 }
 
 // CurrentStorageUsage returns this cluster's storage usage as of now: the stored counters plus the

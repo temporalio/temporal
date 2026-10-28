@@ -12,38 +12,18 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 )
 
 // TestStorageUsagePerCluster checks that each cluster (active and passive) accrues its own stored
-// byte-seconds counter instead of copying the active cluster's, that each cluster's stored counter
-// matches the byte-seconds metrics it emitted, and that after failover the new active cluster keeps
-// accruing from its own value.
+// byte-seconds counter instead of copying the active cluster's, and that after failover the new
+// active cluster keeps accruing from its own value.
 func (s *FunctionalClustersTestSuite) TestStorageUsagePerCluster() {
 	const holdTime = 1100 * time.Millisecond
 	ns := s.createGlobalNamespace()
 	workflowID := testcore.RandomizeStr("storage-usage")
 
-	captures := make([]*metricstest.Capture, len(s.clusters))
-	for i, c := range s.clusters {
-		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
-		s.Require().True(ok, "cluster metrics handler does not support capture")
-		capture := captureHandler.StartCapture()
-		captures[i] = capture
-		s.T().Cleanup(func() { captureHandler.StopCapture(capture) })
-	}
-	msByteSecondsMetric := func(clusterIdx int) int64 {
-		var total int64
-		for _, r := range captures[clusterIdx].SnapshotMetric(metrics.MutableStateByteSeconds.Name()) {
-			if r.Tags["namespace"] == ns {
-				total += r.Value.(int64)
-			}
-		}
-		return total
-	}
 	describe := func(t require.TestingT, clusterIdx int, runID string) *persistencespb.StorageUsage {
 		resp, err := s.clusters[clusterIdx].AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 			Namespace: ns,
@@ -95,14 +75,12 @@ func (s *FunctionalClustersTestSuite) TestStorageUsagePerCluster() {
 		waitReplicated(runID)
 	}
 
-	// Each cluster accrues its own counter, with either replication mode, and its stored counter is
-	// the sum of the metric deltas it emitted.
+	// Each cluster accrues its own counter, with either replication mode.
 	for clusterIdx := range 2 {
 		await.Require(s.T().Context(), s.T(), func(t *await.T) {
 			usage := describe(t, clusterIdx, runID)
 			require.Positive(t, usage.GetMutableStateByteSeconds())
 			require.Positive(t, usage.GetHistoryByteSeconds())
-			require.Equal(t, usage.GetMutableStateByteSeconds(), msByteSecondsMetric(clusterIdx))
 		}, replicationWaitTime, replicationCheckInterval)
 	}
 	activeUsage := describe(s.T(), 0, runID)

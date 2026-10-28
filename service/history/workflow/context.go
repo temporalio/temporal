@@ -600,7 +600,6 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	NotifyOnExecutionSnapshot(engine, c.archetypeID, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), newMutableState)
 
 	return nil
 }
@@ -719,9 +718,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), resetMutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), currentMutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), resetMutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), newMutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), currentMutableState)
 
 	return nil
 }
@@ -1094,8 +1090,6 @@ func (c *ContextImpl) executeWorkflowTransaction(
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), c.MutableState)
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), newMutableState)
 
 	// finally emit session stats
 	emitWorkflowHistoryStats(
@@ -1143,16 +1137,11 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 
-	err = NewTransaction(shardContext).SetWorkflowExecution(
+	return NewTransaction(shardContext).SetWorkflowExecution(
 		ctx,
 		c.archetypeID,
 		resetWorkflowSnapshot,
 	)
-	if err != nil {
-		return err
-	}
-	EmitStorageUsageDelta(c.metricsHandler, shardContext.ChasmRegistry(), c.MutableState)
-	return nil
 }
 
 func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
