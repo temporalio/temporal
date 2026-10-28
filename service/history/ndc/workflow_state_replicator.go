@@ -215,7 +215,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	default:
 		return err
 	}
-	skipCloseTransferTask := request.GetIsForceReplication() && request.GetIsCloseTransferTaskAcked()
+	skipParentVerification := request.GetIsForceReplication() && request.GetIsCloseTransferTaskAcked()
 	return r.applySnapshotWhenWorkflowNotExist(
 		ctx,
 		namespaceID,
@@ -228,7 +228,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		request.RemoteCluster,
 		nil,
 		false,
-		skipCloseTransferTask,
+		skipParentVerification,
 		nil,
 	)
 }
@@ -1115,6 +1115,10 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	newRunInfo *replicationspb.NewRunInfo,
 	sourceClusterName string,
 ) (retErr error) {
+	skipParentVerification, err := workflow.CanSkipParentVerification(r.shardContext, localMutableState, sourceMutableState.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
 	var localVersionedTransition *persistencespb.VersionedTransition
@@ -1197,14 +1201,14 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	)
 	if isBranchSwitched || len(localTransitionHistory) == 0 {
 		// TODO: If branch switched, maybe refresh from LCA?
-		err = r.taskRefresher.Refresh(ctx, localMutableState, false)
+		err = r.taskRefresher.Refresh(ctx, localMutableState, skipParentVerification)
 		if err != nil {
 			return err
 		}
 	} else {
 		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 		nextVersionedTransition.TransitionCount++
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, false)
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, skipParentVerification)
 		if err != nil {
 			return err
 		}
@@ -1779,7 +1783,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	sourceCluster string,
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
-	skipGenerateCloseTransferTask bool,
+	skipParentVerification bool,
 	captureMutableState func(historyi.MutableState),
 ) error {
 	var lastWriteVersion int64
@@ -1844,7 +1848,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 
 	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
+	err = taskRefresher.Refresh(ctx, mutableState, skipParentVerification)
 	if err != nil {
 		return err
 	}
