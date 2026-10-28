@@ -173,6 +173,8 @@ func loadSQLiteConfig(t *testing.T) *config.Config {
 	require.NoError(t, err)
 
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
+	// Only filestore archival is needed; without GCS the config also works in temporal_minimal builds.
+	cfg.Archival.History.Provider.Gstorage = nil
 
 	return cfg
 }
