@@ -1468,11 +1468,20 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
+	if ms.executionInfo.GetSingleSessionBound() && name != ms.executionInfo.GetStickyTaskQueue() {
+		// Workflow-task completion rejects a different destination before calling this setter, which is why
+		// we do not need to return an error here.
+		return
+	}
 	ms.executionInfo.StickyTaskQueue = name
 	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
 }
 
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
+	// If the sticky task queue is already bound to a single sesssion, then clearing it is not allowed.
+	if ms.executionInfo.GetSingleSessionBound() {
+		return
+	}
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
 }
@@ -1486,6 +1495,10 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 // in mutable state and provided name.
 // ScheduleToStartTimeout is set based on queue kind and workflow task type.
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	if ms.executionInfo.GetSingleSessionBound() {
+		// TODO (Shivam) -- may require more thinking if we want a larger TTL for session tasks?
+		return ms.CurrentTaskQueue(), durationpb.New(tasks.SingleSessionWorkflowTaskScheduleToStartTimeout)
+	}
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {
 		return &taskqueuepb.TaskQueue{

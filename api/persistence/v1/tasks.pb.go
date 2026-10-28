@@ -255,8 +255,11 @@ type TaskQueueInfo struct {
 	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	// Dynamic partition scaling state (root only):
 	PartitionScaleState *PartitionScaleState `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Records that a workflow sticky destination has acquired its single session.
+	// Retained after workflow completion and worker replacement to prevent reuse.
+	SingleSessionAssigned bool `protobuf:"varint,12,opt,name=single_session_assigned,json=singleSessionAssigned,proto3" json:"single_session_assigned,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *TaskQueueInfo) Reset() {
@@ -364,6 +367,13 @@ func (x *TaskQueueInfo) GetPartitionScaleState() *PartitionScaleState {
 		return x.PartitionScaleState
 	}
 	return nil
+}
+
+func (x *TaskQueueInfo) GetSingleSessionAssigned() bool {
+	if x != nil {
+		return x.SingleSessionAssigned
+	}
+	return false
 }
 
 type SubqueueInfo struct {
@@ -565,7 +575,8 @@ type PartitionScaleState struct {
 	// Bit field of partitions that may have backlog. Partition i is represented by:
 	// backlog_state[i/64] & (1 << i%64).
 	// (-- api-linter: core::0141::forbidden-types=disabled
-	//     aip.dev/not-precedent: This is a bit field --)
+	//
+	//	aip.dev/not-precedent: This is a bit field --)
 	BacklogState []uint64 `protobuf:"varint,4,rep,packed,name=backlog_state,json=backlogState,proto3" json:"backlog_state,omitempty"`
 	// Summary of backlog counts, 8 bits per partition (see common/number/compact8.go).
 	// This is different from backlog_state: a partition will have a 1 bit in backlog_state
@@ -578,7 +589,8 @@ type PartitionScaleState struct {
 	BacklogCap int32 `protobuf:"varint,6,opt,name=backlog_cap,json=backlogCap,proto3" json:"backlog_cap,omitempty"`
 	// Arbitrary state kept by the scaler implementation.
 	// (-- api-linter: core::0146::any=disabled
-	//     aip.dev/not-precedent: This is not public. --)
+	//
+	//	aip.dev/not-precedent: This is not public. --)
 	PrivateScalerState *anypb.Any `protobuf:"bytes,100,opt,name=private_scaler_state,json=privateScalerState,proto3" json:"private_scaler_state,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -670,7 +682,8 @@ type SimplePartitionScalerState struct {
 	// Partitions to reserve based on backlog count. This is a bitfield where a 1 means "this has
 	// gone above BacklogBase and not gone below BacklogReset".
 	// (-- api-linter: core::0141::forbidden-types=disabled
-	//     aip.dev/not-precedent: This is a bit field --)
+	//
+	//	aip.dev/not-precedent: This is a bit field --)
 	BacklogTarget []uint64 `protobuf:"varint,2,rep,packed,name=backlog_target,json=backlogTarget,proto3" json:"backlog_target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -744,7 +757,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12#\n" +
-	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\x84\x05\n" +
+	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\xbc\x05\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -758,7 +771,8 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\x12&\n" +
 	"\x0fother_has_tasks\x18\n" +
 	" \x01(\bR\rotherHasTasks\x12k\n" +
-	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\"\xc2\x03\n" +
+	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\x126\n" +
+	"\x17single_session_assigned\x18\f \x01(\bR\x15singleSessionAssigned\"\xc2\x03\n" +
 	"\fSubqueueInfo\x12A\n" +
 	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12\x1b\n" +
 	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12Q\n" +

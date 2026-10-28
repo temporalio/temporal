@@ -28,6 +28,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -7102,4 +7103,125 @@ func (s *matchingEngineSuite) testStickyActivityRouting(versioned, mismatchedDep
 	s.Require().NotNil(response)
 	s.Require().Equal("session-activity", response.GetActivityId())
 	s.Require().NotEmpty(response.GetTaskToken())
+}
+
+func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
+	for _, tc := range []struct {
+		name                      string
+		assigned, loaded, missing bool
+	}{
+		{name: "assigned unloaded", assigned: true},
+		{name: "assigned loaded without pollers", assigned: true, loaded: true},
+		{name: "ordinary unloaded"},
+		{name: "ordinary loaded without pollers", loaded: true},
+		{name: "metadata missing", missing: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+			queue := UnversionedQueueKey(partition)
+			if !tc.missing {
+				expiry := timestamppb.New(time.Now().Add(time.Hour))
+				if tc.assigned {
+					expiry = nil
+				}
+				_, err := s.v1TaskManager.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+					RangeID: 1,
+					TaskQueueInfo: &persistencespb.TaskQueueInfo{
+						NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
+						Kind: enumspb.TASK_QUEUE_KIND_STICKY, SingleSessionAssigned: tc.assigned,
+						LastUpdateTime: timestamppb.Now(), ExpiryTime: expiry,
+					},
+				})
+				require.NoError(t, err)
+			}
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.False(t, stickyWorkerAvailable(pm))
+
+			_, syncMatch, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute),
+			})
+			require.False(t, syncMatch)
+			require.Zero(t, s.v1TaskManager.getTaskCount(newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+			if !tc.assigned {
+				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				require.Zero(t, s.v1TaskManager.getTaskCount(queue))
+				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.Equal(t, tc.loaded, pm != nil)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, 1, s.v1TaskManager.getTaskCount(queue))
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.NotNil(t, pm)
+			require.False(t, stickyWorkerAvailable(pm))
+			s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+			require.NoError(t, err)
+			task, _, err := pm.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				},
+			}})
+			require.NoError(t, err)
+			require.NotNil(t, task)
+			require.Equal(t, tv.WorkflowID(), task.event.GetData().GetWorkflowId())
+			require.Equal(t, int64(7), task.event.GetData().GetScheduledEventId())
+			task.finish(taskFinishResult{consumedToken: true})
+		})
+	}
+}
+
+func TestSingleSessionOfflineAdmissionReadFailure(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t)
+	store := persistence.NewMockTaskManager(gomock.NewController(t))
+	readErr := serviceerror.NewUnavailable("metadata read failed")
+	store.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
+		NamespaceID: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue().GetName(), TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	}).Return(nil, readErr)
+	engine := &matchingEngineImpl{taskManager: store, logger: log.NewTestLogger()}
+	_, syncMatch, err := engine.AddWorkflowTask(t.Context(), &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+	})
+	require.ErrorIs(t, err, readErr)
+	require.False(t, syncMatch)
+	require.Empty(t, engine.partitions)
+}
+
+func (s *matchingEngineSuite) TestSingleSessionAcquisitionStartError() {
+	t := s.T()
+	tv := testvars.New(t)
+	for execution := range 2 {
+		_, _, err := s.matchingEngine.AddWorkflowTask(t.Context(), &matchingservice.AddWorkflowTaskRequest{
+			NamespaceId:            tv.NamespaceID().String(),
+			Execution:              tv.WithWorkflowIDNumber(execution).WorkflowExecution(),
+			ScheduledEventId:       1,
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToStartTimeout: durationpb.New(time.Minute),
+		})
+		require.NoError(t, err)
+	}
+	startErr := serviceerror.NewUnavailable("start result unavailable")
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, startErr)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, err := s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: tv.NamespaceID().String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: tv.TaskQueue(), Identity: tv.WorkerIdentity(),
+			SessionOptions: &sessionpb.WorkerSessionOptions{
+				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				},
+			},
+		},
+	}, metrics.NoopMetricsHandler)
+	require.ErrorIs(t, err, startErr)
 }

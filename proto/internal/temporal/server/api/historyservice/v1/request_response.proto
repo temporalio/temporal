@@ -176,6 +176,8 @@ message GetMutableStateResponse {
   temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
   // Nexus operation context for this workflow, used by workers to select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext nexus_serialization_context = 27;
+  // Prevents queries from falling back to the normal task queue.
+  bool single_session_bound = 28;
 }
 
 message PollMutableStateRequest {

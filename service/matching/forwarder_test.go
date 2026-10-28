@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -270,10 +271,15 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 		},
 	).Return(resp, nil)
 
+	sessionOptions := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+	}}
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
 		workerInstanceKey: workerInstanceKey,
+		sessionOptions:    sessionOptions,
 	})
 	t.Require().NoError(err)
+	t.Require().Same(sessionOptions, request.GetPollRequest().GetSessionOptions())
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
@@ -328,10 +334,15 @@ func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKe
 		},
 	).Return(resp, nil)
 
+	sessionOptions := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+	}}
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
 		workerInstanceKey: workerInstanceKey,
+		sessionOptions:    sessionOptions,
 	})
 	t.Require().NoError(err)
+	t.Require().Same(sessionOptions, request.GetPollRequest().GetSessionOptions())
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),

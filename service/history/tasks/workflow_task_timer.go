@@ -12,6 +12,9 @@ import (
 )
 
 const (
+	// SingleSessionWorkflowTaskScheduleToStartTimeout bounds each wait before retrying on the bound sticky queue.
+	SingleSessionWorkflowTaskScheduleToStartTimeout = 5 * time.Second
+
 	// SpeculativeWorkflowTaskScheduleToStartTimeout is the timeout for a speculative workflow task on a normal task queue.
 	// Default ScheduleToStart timeout for a sticky task queue is 5 seconds.
 	// Setting this value also to 5 seconds to match the sticky queue timeout.

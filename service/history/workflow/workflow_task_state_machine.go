@@ -279,8 +279,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+	}
 
-		// Create corresponding WorkflowTaskScheduled event for speculative WT.
+	singleSessionTransient := m.ms.GetExecutionInfo().GetSingleSessionBound() && m.ms.IsTransientWorkflowTask()
+	// Like speculative tasks, single-session transient retries have no persisted scheduled event.
+	// They can hit schedule-to-start timeouts on their sticky queue, so materialize the event
+	// before recording a timeout that references it.
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE || singleSessionTransient {
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
@@ -1047,9 +1052,10 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	currentWorkflowTask := m.getWorkflowTaskInfo()
 	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
 
-	// Increment attempts only if workflow task is failing on non-sticky task queue.
-	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
-	if m.ms.IsStickyTaskQueueSet() {
+	// Ordinary sticky failures get one retry on the normal queue before creating a transient task.
+	// Single-session failures retain their destination and increment attempts. This is because single-session
+	// workflow and activity tasks, bar the very first one, are only placed on the sticky queue.
+	if m.ms.IsStickyTaskQueueSet() && !m.ms.executionInfo.GetSingleSessionBound() {
 		incrementAttempt = false
 		m.ms.ClearStickyTaskQueue()
 	}

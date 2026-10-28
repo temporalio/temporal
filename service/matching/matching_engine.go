@@ -21,6 +21,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -111,6 +112,8 @@ type (
 	}
 
 	pollMetadata struct {
+		sessionOptions            *sessionpb.WorkerSessionOptions
+		singleSessionAcquisition  bool // This is set to true when a poller is *attempting to acquire* a single session for a stable identity
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -209,6 +212,10 @@ type (
 		taskHookFactories []hooks.TaskHookFactory
 	}
 )
+
+func (m *pollMetadata) isSingleSessionAcquisition() bool {
+	return m != nil && m.singleSessionAcquisition
+}
 
 // Add registers a poller for a worker instance. Thread-safe.
 func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
@@ -659,12 +666,26 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return "", false, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		assigned, err := e.singleSessionAssigned(ctx, partition)
+		if err != nil {
+			return "", false, err
+		}
+		if !assigned {
+			return "", false, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			// if this sticky task queue partition is dealing with an assigned session, we load it's partition manager.
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+			if err != nil {
+				return "", false, err
+			}
+		}
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -755,6 +776,22 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+	queue := UnversionedQueueKey(partition)
+	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(),
+		TaskQueue:   queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+	})
+	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return persistence.IsTaskQueueMetadataRetained(response.TaskQueueInfo), nil
+}
+
 func (e *matchingEngineImpl) GrantEagerDispatch(
 	ctx context.Context,
 	request *matchingservice.GrantEagerDispatchRequest,
@@ -816,6 +853,8 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
+			singleSessionAcquisition:  partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -961,6 +1000,9 @@ pollLoop:
 				}
 			}
 
+			if pollMetadata.isSingleSessionAcquisition() {
+				return nil, err
+			}
 			continue pollLoop
 		}
 
@@ -1093,6 +1135,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

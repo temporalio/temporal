@@ -328,6 +328,10 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+
+  // Prevents ordinary sticky resets and fallback from changing this run's destination.
+  // Once set to true for a workflow execution, it shall be retained for the lifetime of the workflow execution.
+  bool single_session_bound = 118;
 }
 
 message TimeSkippingInfo {

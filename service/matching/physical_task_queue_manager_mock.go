@@ -74,6 +74,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTaskToMatcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTaskToMatcher), task)
 }
 
+// AssignSingleSession mocks base method.
+func (m *MockphysicalTaskQueueManager) AssignSingleSession() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssignSingleSession")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AssignSingleSession indicates an expected call of AssignSingleSession.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AssignSingleSession() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignSingleSession", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AssignSingleSession))
+}
+
 // DispatchNexusTask mocks base method.
 func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -315,6 +329,20 @@ func (m *MockphysicalTaskQueueManager) SetupDraining() {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) SetupDraining() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SetupDraining))
+}
+
+// SingleSessionAssigned mocks base method.
+func (m *MockphysicalTaskQueueManager) SingleSessionAssigned() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SingleSessionAssigned")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SingleSessionAssigned indicates an expected call of SingleSessionAssigned.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) SingleSessionAssigned() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SingleSessionAssigned", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SingleSessionAssigned))
 }
 
 // SpoolTask mocks base method.

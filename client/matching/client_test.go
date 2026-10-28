@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -15,6 +17,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -238,23 +241,38 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 	client := newTestClient(cache, loadBalancer)
 	request := &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: testNamespaceID,
+		PollerId:    "poller-id",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: testTaskQueueName},
 			Identity:  "worker",
+			SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+				SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session-identity"},
+			}},
+			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName: "deployment", BuildId: "v1", WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
 		},
+		Conditions: &matchingservice.PollConditions{NoWait: true},
 	}
 	response := &matchingservice.PollWorkflowTaskQueueResponse{}
 
 	serviceClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, outgoing *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+		func(ctx context.Context, outgoing *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetPollRequest().GetTaskQueue().GetName())
 			require.Equal(t, "worker", outgoing.GetPollRequest().GetIdentity())
+			require.Equal(t, request.GetPollerId(), outgoing.GetPollerId())
+			protorequire.ProtoEqual(t, request.GetPollRequest().GetSessionOptions(), outgoing.GetPollRequest().GetSessionOptions())
+			protorequire.ProtoEqual(t, request.GetPollRequest().GetDeploymentOptions(), outgoing.GetPollRequest().GetDeploymentOptions())
+			protorequire.ProtoEqual(t, request.GetConditions(), outgoing.GetConditions())
+			outgoingMetadata, ok := metadata.FromOutgoingContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, []string{"worker"}, outgoingMetadata.Get("acquisition-trace"))
 			return response, nil
 		},
 	)
 
 	actual, err := client.doPollWorkflowTaskQueue(
-		context.Background(),
+		metadata.NewOutgoingContext(t.Context(), metadata.Pairs("acquisition-trace", "worker")),
 		taskQueue.RootPartition(),
 		true,
 		PartitionCounts{Read: 4, Write: 4},

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -1161,4 +1162,25 @@ func gosched(n int) {
 	for range n {
 		runtime.Gosched()
 	}
+}
+
+func (s *MatcherDataSuite) TestSingleSessionAcquisitionSkipsQuery() {
+	query := s.newQueryTask("query")
+	s.md.tasks.Add(query)
+	metadata := &pollMetadata{
+		sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
+		}},
+		singleSessionAcquisition: true,
+	}
+	s.Require().Nil(s.pollImmediately(metadata))
+	workflow := s.newBacklogTask(1, 0, nil)
+	s.md.tasks.Add(workflow)
+	result := s.pollImmediately(metadata)
+	s.Require().NotNil(result)
+	s.Require().Same(workflow, result.task)
+	metadata.singleSessionAcquisition = false
+	result = s.pollImmediately(metadata)
+	s.Require().NotNil(result)
+	s.Require().Same(query, result.task)
 }

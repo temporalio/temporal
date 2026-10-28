@@ -455,6 +455,12 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 
 		var matched *waitingPoller
 		for poller := d.pollers.head; poller != nil; poller = poller.next {
+			// Standalone queries do not call RecordWorkflowTaskStarted to bind the workflow to the session.
+			// Accepting one would mark the destination assigned in Matching without establishing History's
+			// destination binding, so subsequent workflow tasks would not be routed to this session.
+			if task.isQuery() && poller.pollMetadata.isSingleSessionAcquisition() {
+				continue
+			}
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)

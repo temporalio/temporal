@@ -224,7 +224,7 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 			UseRampingVersion: false,
 		}
 	}
-	if activityInfo.GetSessionOptions().GetUseWorkflowSession() {
+	if activityInfo.GetSessionOptions().GetWorkflowSession() != nil {
 		// For now, session activities bypass legacy V1/V2 directives; V3 is handled above.
 		return nil
 	} else if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {

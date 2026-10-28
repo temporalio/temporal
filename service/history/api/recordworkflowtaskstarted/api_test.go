@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -63,7 +64,7 @@ func TestRecordWorkflowTaskStarted_Errors(t *testing.T) {
 	})
 }
 
-func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+func invoke(t *testing.T, modifyMutableState mutableStateModifier, modifyRequest ...func(*historyservice.RecordWorkflowTaskStartedRequest)) func() (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
@@ -88,6 +89,10 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 		},
+	}
+
+	for _, modify := range modifyRequest {
+		modify(request)
 	}
 
 	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
@@ -119,5 +124,36 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 
 	return func() (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 		return Invoke(ctx, request, shardContext, config, nil, nil, consistencyChecker)
+	}
+}
+
+func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
+	for _, tc := range []struct {
+		name, stableIdentity string
+		singleSession        bool
+	}{
+		{name: "normal poll cannot start bound workflow"},
+		{name: "different session cannot start bound workflow", singleSession: true, stableIdentity: "other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := invoke(t, func(ms *historyi.MockMutableState) {
+				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+					SingleSessionBound: true, StickyTaskQueue: "S",
+				}).AnyTimes()
+				// Validate the destination even for a duplicate task-start request.
+				ms.EXPECT().GetWorkflowTaskByID(gomock.Any()).Return(&historyi.WorkflowTaskInfo{
+					ScheduledEventID: 42, StartedEventID: 43, RequestID: "test-request",
+				})
+			}, func(req *historyservice.RecordWorkflowTaskStartedRequest) {
+				if tc.singleSession {
+					req.PollRequest.SessionOptions = &sessionpb.WorkerSessionOptions{
+						Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
+					}
+				}
+			})()
+			require.Nil(t, resp)
+			var obsolete *serviceerrors.ObsoleteMatchingTask
+			require.ErrorAs(t, err, &obsolete)
+		})
 	}
 }

@@ -44,10 +44,11 @@ type (
 
 		// mutable
 		sync.Mutex
-		rangeID       int64
-		subqueues     []*dbSubqueue
-		otherHasTasks bool
-		scaleState    *persistencespb.PartitionScaleState
+		rangeID               int64
+		subqueues             []*dbSubqueue
+		otherHasTasks         bool
+		scaleState            *persistencespb.PartitionScaleState
+		singleSessionAssigned bool
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -108,6 +109,24 @@ func newTaskQueueDB(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 	}
+}
+
+func (db *taskQueueDB) SingleSessionAssigned() bool {
+	db.Lock()
+	defer db.Unlock()
+	return db.singleSessionAssigned
+}
+
+func (db *taskQueueDB) assignSingleSession(ctx context.Context) (bool, error) {
+	db.Lock()
+	defer db.Unlock()
+	if db.singleSessionAssigned {
+		return false, nil
+	}
+	db.singleSessionAssigned = true
+	db.lastChange = time.Now()
+	// Fence scanner snapshots captured before this record became retained metadata.
+	return true, db.updateTaskQueueLocked(ctx, true)
 }
 
 // RangeID returns the current persistence view of rangeID
@@ -191,6 +210,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
 		db.scaleState = response.TaskQueueInfo.PartitionScaleState
+		db.singleSessionAssigned = response.TaskQueueInfo.GetSingleSessionAssigned()
 		err := db.updateTaskQueueLocked(ctx, true)
 		if err != nil {
 			db.rangeID = 0
@@ -801,19 +821,30 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	for i := range db.subqueues {
 		infos[i] = &db.subqueues[i].SubqueueInfo
 	}
-	return &persistencespb.TaskQueueInfo{
+	info := &persistencespb.TaskQueueInfo{
 		NamespaceId:             db.queue.NamespaceId(),
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
 		AckLevel:                db.subqueues[subqueueZero].AckLevel, // backwards compatibility
-		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
 		Subqueues:               infos,
 		OtherHasTasks:           db.otherHasTasks,
 		PartitionScaleState:     db.scaleState,
+		SingleSessionAssigned:   db.singleSessionAssigned,
 	}
+	// The initial POC of single session assignment does not set the expiry time for sticky task queues with the main
+	// reason being that we always want to retain the task queue metadata for sticky task queues with single session assigned.
+	// The reason for this being that agentCore Sessions have no TTL technically, and the corresponding TaskQueueInfo record should also not have
+	// an expiry time.
+	// Note: Even if the workflow assigned to a agentCore session were to be completed, we may not want to permanently remove the task queue metadata
+	// only because no other workflow should be assigned to this session anymore.
+	// TODO (Shivam) -- more thinking and discussion required on the scavenging of this task queue metadata.
+	if !persistence.IsTaskQueueMetadataRetained(info) {
+		info.ExpiryTime = db.expiryTime()
+	}
+	return info
 }
 
 // emitPhysicalBacklogGaugesLocked emits backlog gauges tagged by priority key, along with

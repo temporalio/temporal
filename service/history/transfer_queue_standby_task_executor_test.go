@@ -62,6 +62,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // TODO: remove all SetCurrentTime usage in this test suite
@@ -280,7 +281,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSe
 
 	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if useSession {
-		activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+		activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 		if !missingPlacement {
 			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 		}

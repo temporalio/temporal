@@ -7982,8 +7982,14 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
 	}
-	if options.GetIsolation() != nil {
-		return serviceerror.NewUnimplemented("Single-session isolation is not supported")
+	if singleSession := options.GetSingleSession(); singleSession != nil {
+		stableIdentity := singleSession.GetStableIdentity()
+		if stableIdentity == "" {
+			return serviceerror.NewInvalidArgument("single-session stable identity is required")
+		}
+		if taskQueue.GetName() != stableIdentity {
+			return serviceerror.NewInvalidArgument("single-session sticky queue must match stable identity")
+		}
 	}
 	return nil
 }

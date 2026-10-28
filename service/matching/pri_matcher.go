@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -355,7 +356,7 @@ func (tm *priTaskMatcher) forwardPolls(
 		// closes, so use AfterFunc to join them.
 		callCtx, cancel := context.WithCancel(poller.forwardCtx)
 		stop := context.AfterFunc(ctx, cancel)
-		task, err := ForwardPollWithTarget(callCtx, meta, tm.client, tm.partition, target)
+		task, err := ForwardPollWithTarget(callCtx, meta, tm.client, tm.partition.RpcName(), target)
 		cancel()
 		_ = stop()
 		if err == nil {
@@ -651,6 +652,15 @@ func (tm *priTaskMatcher) poll(
 		queryOnly:    queryOnly,
 		forwardCtx:   ctx,
 		pollMetadata: pollMetadata,
+	}
+
+	if pollMetadata.sessionOptions.GetSingleSession() != nil &&
+		(pollMetadata.conditions.GetNoWait() ||
+			(tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !pollMetadata.isSingleSessionAcquisition())) {
+		// Only an acquisition owner may forward. NoWait cannot await an asynchronous forward. In other words,
+		// if the poller is not the acquisition owner, it will not forward the poll, preventing multiple pollers
+		// from acquiring different workflow tasks at the same time for the same stable identity.
+		poller.forwardCtx = nil
 	}
 
 	var res *matchResult

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -92,6 +93,10 @@ type (
 		initCancel         func()
 
 		cancelFairnessSub func()
+
+		singleSessionAcquisitionMutex      sync.Mutex
+		singleSessionAcquisitionInProgress bool
+		singleSessionAcquisitionCV         *locks.ConditionVariableImpl
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -940,7 +945,15 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	// based on whether the effectiveRPS has changed.
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
-	task, err := dbq.PollTask(ctx, pollMetadata)
+	var task *internalTask
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY &&
+		pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
+		pollMetadata.sessionOptions.GetSingleSession() != nil {
+		// This is a single session poller and has a slightly different overall flow of polling.
+		task, err = pm.pollSingleSession(ctx, dbq, pollMetadata)
+	} else {
+		task, err = dbq.PollTask(ctx, pollMetadata)
+	}
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task)
 	}
@@ -952,6 +965,91 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	return task, versionSetUsed, err
+}
+
+func (pm *taskQueuePartitionManagerImpl) pollSingleSession(
+	ctx context.Context,
+	queue physicalTaskQueueManager,
+	metadata *pollMetadata,
+) (*internalTask, error) {
+	shouldAcquire, err := pm.beginSingleSessionAcquisition(ctx, queue, metadata.conditions.GetNoWait())
+	if err != nil {
+		return nil, err
+	}
+	if !shouldAcquire {
+		// If the poller is not allowed to acquire a session, it means that another poller is already acquiring a session
+		// or has already acquired a session for the same identity. Poll only on the sticky task queue in this case.
+		return queue.PollTask(ctx, metadata)
+	}
+
+	// CONSIDER(shivam): Reconcile uncertain starts after errors, cancellation, or timeouts
+	// before allowing another acquisition. Failure handling is deferred in this POC.
+	defer pm.finishSingleSessionAcquisition()
+	return pm.acquireSingleSession(ctx, queue, metadata)
+}
+
+func (pm *taskQueuePartitionManagerImpl) beginSingleSessionAcquisition(
+	ctx context.Context,
+	queue physicalTaskQueueManager,
+	noWait bool,
+) (bool, error) {
+	// The main idea here is to have a sequential allowance of pollers that are polling with the
+	// same stable identity so that we do not have multiple pollers for the same identity acquiring tasks
+	// from multiple workflows at the same time
+	pm.singleSessionAcquisitionMutex.Lock()
+	defer pm.singleSessionAcquisitionMutex.Unlock()
+
+	// Wait instead of repeatedly returning empty polls that consume poll RPS.
+	for pm.singleSessionAcquisitionInProgress {
+		if noWait || ctx.Err() != nil {
+			return false, errNoTasks
+		}
+		queue.MarkAlive()
+		if pm.singleSessionAcquisitionCV == nil {
+			pm.singleSessionAcquisitionCV = locks.NewConditionVariable(&pm.singleSessionAcquisitionMutex)
+		}
+		// This poller shall wait until a previous poller completes its acquisition or returns with an empty poll.
+		pm.singleSessionAcquisitionCV.Wait(ctx.Done())
+	}
+	if ctx.Err() != nil {
+		return false, errNoTasks
+	}
+	if queue.SingleSessionAssigned() {
+		return false, nil
+	}
+	if pm.partition.TaskQueue().Name() == "" {
+		return false, serviceerror.NewInvalidArgument("single-session workflow polls require a normal task queue name")
+	}
+	pm.singleSessionAcquisitionInProgress = true
+	return true, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) finishSingleSessionAcquisition() {
+	pm.singleSessionAcquisitionMutex.Lock()
+	defer pm.singleSessionAcquisitionMutex.Unlock()
+	pm.singleSessionAcquisitionInProgress = false
+	if pm.singleSessionAcquisitionCV != nil {
+		// Wake up all pollers that are waiting for this acquisition to complete
+		pm.singleSessionAcquisitionCV.Broadcast()
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) acquireSingleSession(
+	ctx context.Context,
+	queue physicalTaskQueueManager,
+	metadata *pollMetadata,
+) (*internalTask, error) {
+	acquisitionMetadata := *metadata
+	acquisitionMetadata.singleSessionAcquisition = true
+	task, err := queue.PollTask(ctx, &acquisitionMetadata)
+	if err != nil {
+		return nil, err
+	}
+	if err := queue.AssignSingleSession(); err != nil {
+		return nil, err
+	}
+	task.namespace = pm.ns.Name()
+	return task, nil
 }
 
 // GetPhysicalQueueAdjustedStats retrieves task queue stats for the given physical queue.
@@ -1755,9 +1853,10 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
 	}
-	dbq, err := pm.defaultQueueFuture.GetIfReady()
+	// Wait so initial backlog notifications are not lost during queue initialization.
+	dbq, err := pm.defaultQueueFuture.Get(context.Background())
 	if err != nil {
-		return // not initialized yet
+		return // initialization failed
 	}
 
 	// transpose map to more useful form
@@ -1793,6 +1892,7 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
+	// TODO (Shivam): seems to be a gap for sticky queues that are using the stable identity over here!
 	for key, pqm := range pm.versionedQueues {
 		update(key, pqm)
 	}
@@ -2236,6 +2336,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+			// TODO (Shivam): we need to add the aforementioned deployment validation logic here since right now,
+			// we do not do versioning checks if a worker is using a single session option with a stable identity.
+			// What this means is that if another worker polls with the same stable identity but a different deployment
+			// version, then matching shall not respect versioning directives.
+			// For WFT's, this is fine since history invalidates such a match in RecordWorkflowTaskStarted. However,
+			// for activities, this is not the case and the task shall be dispatched thinking as an independent activity.
 			return dbq, dbq, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 		}
 

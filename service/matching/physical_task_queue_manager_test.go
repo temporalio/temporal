@@ -11,8 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -27,9 +30,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -250,6 +256,128 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
 	}
 	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
+	for _, tc := range []struct {
+		name   string
+		empty  bool
+		noWait bool
+		err    error
+	}{
+		{name: "workflow task"},
+		{name: "empty poll", empty: true},
+		{name: "no wait", noWait: true},
+		{name: "rpc failure", err: serviceerror.NewUnavailable("matching unavailable")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			queue := s.tqMgr
+			partition := queue.partitionMgr.partition.TaskQueue().StickyPartition(tv.StickyTaskQueue().GetName())
+			queue.partitionMgr.partition = partition
+			queue.queue = UnversionedQueueKey(partition)
+			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+			queue.matchingClient = client
+			metadata := &pollMetadata{
+				singleSessionAcquisition: true,
+				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
+				}},
+				deploymentOptions:      tv.WorkerDeploymentOptions(true),
+				workerInstanceKey:      tv.WorkerInstanceKey(),
+				workerControlTaskQueue: tv.Any().String(),
+				conditions:             &matchingservice.PollConditions{NoWait: tc.noWait},
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+			defer cancel()
+			ctx = context.WithValue(ctx, identityKey, tv.WorkerIdentity())
+			ctx = context.WithValue(ctx, pollerIDKey, tv.Any().String())
+			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+			if tc.empty {
+				response.TaskToken = nil
+			}
+			client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(callCtx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+					require.Empty(t, request.GetForwardedSource(), "normal read partition selection must remain enabled")
+					require.Equal(t, partition.NamespaceId(), request.GetNamespaceId())
+					require.Equal(t, partition.TaskQueue().Name(), request.GetPollRequest().GetTaskQueue().GetName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_NORMAL, request.GetPollRequest().GetTaskQueue().GetKind())
+					require.Equal(t, tv.WorkerIdentity(), request.GetPollRequest().GetIdentity())
+					require.Equal(t, ctx.Value(pollerIDKey), request.GetPollerId())
+					protorequire.ProtoEqual(t, metadata.sessionOptions, request.GetPollRequest().GetSessionOptions())
+					protorequire.ProtoEqual(t, metadata.deploymentOptions, request.GetPollRequest().GetDeploymentOptions())
+					require.Equal(t, metadata.workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey())
+					require.Equal(t, metadata.workerControlTaskQueue, request.GetPollRequest().GetWorkerControlTaskQueue())
+					protorequire.ProtoEqual(t, metadata.conditions, request.GetConditions())
+					deadline, ok := callCtx.Deadline()
+					require.True(t, ok)
+					originalDeadline, _ := ctx.Deadline()
+					require.Equal(t, originalDeadline, deadline)
+					return response, tc.err
+				})
+			clock := clock.NewEventTimeSource()
+			idle := false
+			queue.liveness = newLiveness(clock, func() time.Duration { return time.Minute }, func() { idle = true })
+			queue.liveness.Start()
+			defer queue.liveness.Stop()
+			clock.Advance(30 * time.Second)
+			task, err := queue.PollTask(ctx, metadata)
+			switch {
+			case tc.err != nil:
+				require.ErrorIs(t, err, tc.err)
+			case tc.empty:
+				require.ErrorIs(t, err, errNoTasks)
+			default:
+				require.NoError(t, err)
+				require.Same(t, response, task.pollWorkflowTaskQueueResponse())
+			}
+			clock.Advance(30 * time.Second)
+			require.False(t, idle, "the acquisition poll must refresh the sticky queue's idle timer")
+			clock.Advance(30 * time.Second)
+			require.True(t, idle)
+		})
+	}
+}
+
+// Caller cancellation or the sticky task queue shutting down should cancel the long poll
+func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCancellation() {
+	for _, sourceStops := range []bool{false, true} {
+		name := "caller cancels"
+		if sourceStops {
+			name = "sticky queue stops"
+		}
+		s.Run(name, func() {
+			t := s.T()
+			queue := s.tqMgr
+			queue.partitionMgr.partition = queue.partitionMgr.partition.TaskQueue().StickyPartition("session")
+			queue.queue = UnversionedQueueKey(queue.partitionMgr.partition)
+			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+			queue.matchingClient = client
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			entered := make(chan struct{})
+			client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(callCtx context.Context, _ *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+					close(entered)
+					<-callCtx.Done()
+					return nil, callCtx.Err()
+				})
+			done := make(chan error, 1)
+			go func() {
+				_, err := queue.PollTask(ctx, &pollMetadata{singleSessionAcquisition: true})
+				done <- err
+			}()
+			await.Rcv(t, entered)
+			if sourceStops {
+				queue.tqCtxCancel()
+				require.NoError(t, ctx.Err())
+			} else {
+				cancel()
+			}
+			require.ErrorIs(t, await.Rcv(t, done), context.Canceled)
+		})
+	}
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {

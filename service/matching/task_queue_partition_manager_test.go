@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/hooks"
@@ -2962,4 +2965,354 @@ func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager(
 	limiter.wholeQueueLimit = simplelimiter.MakeParams(1, 0)
 	partitionMgr.rateLimitManager = limiter
 	return partitionMgr
+}
+
+func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
+	writeErr := serviceerror.NewUnavailable("assignment failed")
+	for _, tc := range []struct {
+		name          string
+		assigned      bool
+		activity      bool
+		ordinary      bool
+		empty         bool
+		forwardErr    error
+		assignmentErr error
+	}{
+		{name: "acquire workflow"},
+		{name: "empty poll", empty: true},
+		{name: "forwarding failed", forwardErr: context.DeadlineExceeded},
+		{name: "assignment failed", assignmentErr: writeErr},
+		{name: "assigned polls locally", assigned: true},
+		{name: "activity polls locally", activity: true},
+		{name: "ordinary sticky poll", ordinary: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			pm := s.newEagerDispatchPartitionManager(0, nil)
+			taskType := enumspb.TASK_QUEUE_TYPE_WORKFLOW
+			if tc.activity {
+				taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+			}
+			pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+			metadata := &pollMetadata{}
+			if !tc.ordinary {
+				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				}}
+			}
+			local := tc.assigned || tc.activity || tc.ordinary
+			if !tc.activity && !tc.ordinary {
+				queue.EXPECT().SingleSessionAssigned().Return(tc.assigned)
+			}
+			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+			var expectedErr error
+			if local {
+				queue.EXPECT().PollTask(gomock.Any(), metadata).Return(nil, errNoTasks)
+				expectedErr = errNoTasks
+			} else {
+				expectedErr = tc.forwardErr
+				if tc.empty {
+					expectedErr = errNoTasks
+				}
+				pollErr := expectedErr
+				forwarded := queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool {
+					return m.isSingleSessionAcquisition()
+				})).DoAndReturn(func(_ context.Context, m *pollMetadata) (*internalTask, error) {
+					require.NotSame(t, metadata, m)
+					require.Same(t, metadata.sessionOptions, m.sessionOptions)
+					if pollErr != nil {
+						return nil, pollErr
+					}
+					return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
+				})
+				if expectedErr == nil {
+					queue.EXPECT().AssignSingleSession().After(forwarded).Return(tc.assignmentErr)
+					expectedErr = tc.assignmentErr
+				}
+			}
+
+			if expectedErr == nil {
+				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+			}
+			ctx := context.WithValue(t.Context(), identityKey, tv.WorkerIdentity())
+			queue.EXPECT().UpdatePollerInfo(pollerIdentity(tv.WorkerIdentity()), metadata).Times(2)
+			task, _, err := pm.PollTask(ctx, metadata)
+			if expectedErr != nil {
+				require.ErrorIs(t, err, expectedErr)
+				require.Nil(t, task)
+			} else {
+				require.NoError(t, err)
+				require.Same(t, response, task.pollWorkflowTaskQueueResponse())
+				require.Equal(t, pm.ns.Name(), task.namespace)
+			}
+		})
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
+	for _, tc := range []struct {
+		name           string
+		persistBlocked bool
+	}{
+		{name: "forwarding"},
+		{name: "persisting assignment", persistBlocked: true},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				tv := testvars.New(t)
+				pm := s.newEagerDispatchPartitionManager(0, nil)
+				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+				var assigned atomic.Bool
+				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
+				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+					},
+				}}
+				entered := make(chan struct{}, 1)
+				release := make(chan struct{})
+				block := func() error {
+					entered <- struct{}{}
+					select {
+					case <-release:
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).DoAndReturn(
+					func(context.Context, *pollMetadata) (*internalTask, error) {
+						if !tc.persistBlocked {
+							if err := block(); err != nil {
+								return nil, err
+							}
+						}
+						return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
+					})
+				queue.EXPECT().AssignSingleSession().DoAndReturn(func() error {
+					assigned.Store(true)
+					if tc.persistBlocked {
+						return block()
+					}
+					return nil
+				})
+				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				type result struct {
+					task *internalTask
+					err  error
+				}
+				completed := make(chan result, 1)
+				go func() {
+					task, _, err := pm.PollTask(ctx, metadata)
+					completed <- result{task: task, err: err}
+				}()
+				await.Rcv(t, entered)
+
+				competing := make(chan result, 2)
+				for range 2 {
+					go func() {
+						task, _, err := pm.PollTask(ctx, metadata)
+						competing <- result{task: task, err: err}
+					}()
+				}
+				synctest.Wait()
+				select {
+				case <-competing:
+					t.Fatal("competing polls must wait for acquisition to finish")
+				default:
+				}
+
+				task, _, err := pm.PollTask(ctx, &pollMetadata{
+					sessionOptions: metadata.sessionOptions,
+					conditions:     &matchingservice.PollConditions{NoWait: true},
+				})
+				require.ErrorIs(t, err, errNoTasks)
+				require.Nil(t, task)
+				queue.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(nil, errNoTasks)
+				_, _, err = pm.PollTask(ctx, &pollMetadata{})
+				require.ErrorIs(t, err, errNoTasks, "ordinary polls do not enter the acquisition guard")
+
+				other := s.newEagerDispatchPartitionManager(0, nil)
+				other.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName() + "-2")
+				otherQueue := other.defaultQueue().(*MockphysicalTaskQueueManager)
+				otherQueue.EXPECT().SingleSessionAssigned().Return(false)
+				otherQueue.EXPECT().AssignSingleSession().Return(nil)
+				otherQueue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
+				task, _, err = other.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: other.partition.RpcName()},
+					},
+				}})
+				require.NoError(t, err)
+				require.NotNil(t, task, "a different session acquires independently")
+
+				localEntered := make(chan struct{}, 2)
+				localRelease := make(chan struct{})
+				queue.EXPECT().PollTask(gomock.Any(), metadata).DoAndReturn(func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
+					localEntered <- struct{}{}
+					select {
+					case <-localRelease:
+					case <-ctx.Done():
+					}
+					return nil, errNoTasks
+				}).Times(2)
+				close(release)
+				first := await.Rcv(t, completed)
+				require.NoError(t, first.err)
+				require.Same(t, response, first.task.pollWorkflowTaskQueueResponse())
+				for range 2 {
+					await.Rcv(t, localEntered)
+				}
+				close(localRelease)
+				for range 2 {
+					waiter := await.Rcv(t, competing)
+					require.ErrorIs(t, waiter.err, errNoTasks)
+					require.Nil(t, waiter.task)
+				}
+			})
+		})
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
+	for _, tc := range []struct {
+		name     string
+		cancel   bool
+		assigned bool
+	}{
+		{name: "cancelled while waiting", cancel: true},
+		{name: "deadline while waiting"},
+		{name: "deadline retained after assignment", assigned: true},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				tv := testvars.New(t)
+				pm := s.newEagerDispatchPartitionManager(0, nil)
+				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+				var assigned atomic.Bool
+				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
+				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+					},
+				}}
+				entered := make(chan struct{})
+				release := make(chan struct{})
+				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).DoAndReturn(
+					func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
+						close(entered)
+						select {
+						case <-release:
+							return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}}), nil
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						}
+					})
+				queue.EXPECT().AssignSingleSession().DoAndReturn(func() error {
+					assigned.Store(true)
+					return nil
+				})
+				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				owner := make(chan error, 1)
+				go func() {
+					_, _, err := pm.PollTask(ctx, metadata)
+					owner <- err
+				}()
+				await.Rcv(t, entered)
+
+				deadline := time.Now().Add(10 * time.Second)
+				waiterCtx, cancelWaiter := context.WithDeadline(ctx, deadline)
+				defer cancelWaiter()
+				waiter := make(chan error, 1)
+				go func() {
+					_, _, err := pm.PollTask(waiterCtx, metadata)
+					waiter <- err
+				}()
+				synctest.Wait()
+				select {
+				case <-waiter:
+					t.Fatal("competing poll must wait for acquisition or its context")
+				default:
+				}
+
+				if tc.assigned {
+					localEntered := make(chan context.Context, 1)
+					queue.EXPECT().PollTask(gomock.Any(), metadata).DoAndReturn(func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
+						localEntered <- ctx
+						<-ctx.Done()
+						return nil, errNoTasks
+					})
+					timer := time.NewTimer(3 * time.Second)
+					defer timer.Stop()
+					await.Rcv(t, timer.C)
+					close(release)
+					require.NoError(t, await.Rcv(t, owner))
+					localCtx := await.Rcv(t, localEntered)
+					localDeadline, ok := localCtx.Deadline()
+					require.True(t, ok)
+					require.Equal(t, deadline, localDeadline)
+					require.Equal(t, 7*time.Second, time.Until(localDeadline))
+					require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
+					require.ErrorIs(t, localCtx.Err(), context.DeadlineExceeded)
+					return
+				}
+				if tc.cancel {
+					cancelWaiter()
+				}
+				require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
+				require.NoError(t, ctx.Err(), "a waiting poll must not cancel the acquisition owner")
+				select {
+				case <-owner:
+					t.Fatal("acquisition must remain pending when a waiting poll ends")
+				default:
+				}
+				close(release)
+				require.NoError(t, await.Rcv(t, owner))
+			})
+		})
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestStickyBacklogNotificationBeforeQueueInitialization() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		tv := testvars.New(t)
+		pm := s.newEagerDispatchPartitionManager(0, nil)
+		pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+			StickyPartition(tv.StickyTaskQueue().GetName())
+		queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+		pm.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+		queue.EXPECT().UpdateRemotePriorityBacklogs(remotePriorityBacklogSet{
+			{partition: 2, priority: 3}: {},
+		})
+		done := make(chan struct{}, 1)
+		go func() {
+			pm.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+				Partition: []*taskqueuespb.EphemeralData_ByPartition{{
+					Partition: 2,
+					Version: []*taskqueuespb.EphemeralData_ByVersion{{
+						BacklogPriorityLevels: 1 << 3,
+					}},
+				}},
+			})
+			done <- struct{}{}
+		}()
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("backlog notification must wait for queue initialization")
+		default:
+		}
+		pm.defaultQueueFuture.Set(queue, nil)
+		await.Rcv(t, done)
+	})
 }

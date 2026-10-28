@@ -499,7 +499,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	if attr.GetSessionOptions().GetUseWorkflowSession() && executionInfo.GetStickyTaskQueue() == "" {
+	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetStickyTaskQueue() == "" {
 		err := serviceerror.NewInvalidArgument("Workflow-session activities require a sticky workflow task queue")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}

@@ -28,6 +28,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -633,7 +634,7 @@ func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
 }
 
 func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
-	options := &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+	options := &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 	command := &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             "session-activity",
 		ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
@@ -672,9 +673,8 @@ func TestActivityTaskQueue(t *testing.T) {
 	}{
 		{name: "no session options"},
 		{name: "empty session options", options: &sessionpb.ActivitySessionOptions{}},
-		{name: "session disabled", options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{}}},
-		{name: "session enabled", options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}},
-		{name: "session missing placement", missingPlacement: true, options: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}},
+		{name: "session enabled", options: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+		{name: "session missing placement", missingPlacement: true, options: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -682,7 +682,7 @@ func TestActivityTaskQueue(t *testing.T) {
 			ms := historyi.NewMockMutableState(gomock.NewController(t))
 			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionOptions: tc.options}
 			expected := tv.TaskQueue()
-			if tc.options.GetUseWorkflowSession() {
+			if tc.options.GetWorkflowSession() != nil {
 				current := tv.StickyTaskQueue()
 				if tc.missingPlacement {
 					current = tv.TaskQueue()

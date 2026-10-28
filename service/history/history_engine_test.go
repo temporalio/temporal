@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -708,6 +709,66 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
 	s.True(ok, "context task queue must be set")
 	s.Equal(taskqueue, contextTaskQueue)
+}
+
+func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
+	s.historyEngine.matchingClient = s.mockMatchingClient
+	s.historyEngine.rawMatchingClient = s.mockMatchingClient
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "success"},
+		{name: "worker unavailable", err: &serviceerrors.StickyWorkerUnavailable{}},
+		{name: "deadline", err: context.DeadlineExceeded},
+		{name: "cancelled", err: context.Canceled},
+		{name: "internal", err: serviceerror.NewInternal("failure")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			execution := &commonpb.WorkflowExecution{WorkflowId: t.Name(), RunId: tests.RunID}
+			ms := workflow.TestLocalMutableState(s.mockShard, s.eventsCache, tests.LocalNamespaceEntry,
+				execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, execution, "wType", "foo", payloads.EncodeString("input"),
+				100*time.Second, 50*time.Second, 200*time.Second, "worker")
+			wt := addWorkflowTaskScheduledEvent(ms)
+			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
+			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
+			ms.SetStickyTaskQueue("S", nil)
+			ms.GetExecutionInfo().SingleSessionBound = true
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
+
+			ctx, cancel := context.WithTimeout(contextutil.WithMetadataContext(t.Context()), time.Minute)
+			defer cancel()
+			expectedResult := payloads.EncodeBytes([]byte{1, 2, 3})
+			s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(callCtx context.Context, req *matchingservice.QueryWorkflowRequest, _ ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+					require.NoError(t, callCtx.Err())
+					require.Equal(t, "S", req.GetTaskQueue().GetName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, req.GetTaskQueue().GetKind())
+					deadline, ok := callCtx.Deadline()
+					require.True(t, ok)
+					callerDeadline, _ := ctx.Deadline()
+					require.Equal(t, callerDeadline, deadline)
+					return &matchingservice.QueryWorkflowResponse{QueryResult: expectedResult}, tc.err
+				}).Times(1)
+			response, err := s.historyEngine.QueryWorkflow(ctx, &historyservice.QueryWorkflowRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Request: &workflowservice.QueryWorkflowRequest{
+					Execution: execution,
+					Query:     &querypb.WorkflowQuery{},
+				},
+			})
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+				require.Nil(t, response)
+			} else {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expectedResult, response.GetResponse().GetQueryResult())
+			}
+		})
+	}
 }
 
 func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
