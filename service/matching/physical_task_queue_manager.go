@@ -410,7 +410,7 @@ func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bo
 // to be dispatched from this task queue to pollers
 func (c *physicalTaskQueueManagerImpl) PollTask(
 	ctx context.Context,
-	metadata *pollMetadata,
+	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
@@ -426,17 +426,17 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
-		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, metadata); err != nil {
+		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
 		}
 	}
 
 	//nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(ctx, metadata)
+		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	acquiringSession := c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && metadata.isSingleSessionAcquisition()
+	acquiringSession := c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.isSingleSessionAcquisition()
 	if acquiringSession {
 		callCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -456,9 +456,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		if acquiringSession {
 			// An empty source lets the Matching client select a normal read partition. The main idea is that the first poll, with stable identity set, on the sticky task task queue
 			// is forwarded to the normal task queue for matching with a task. Once matched, no more polls with a stable identity are forwarded to the normal task queue.
-			task, err = ForwardPollWithTarget(ctx, metadata, c.matchingClient, "", c.partitionMgr.partition.TaskQueue().RootPartition())
+			task, err = ForwardPollWithTarget(ctx, pollMetadata, c.matchingClient, "", c.partitionMgr.partition.TaskQueue().RootPartition())
 		} else {
-			task, err = c.matcher.Poll(ctx, metadata)
+			task, err = c.matcher.Poll(ctx, pollMetadata)
 		}
 		if err != nil {
 			return nil, err
@@ -479,7 +479,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogCountHint
 
-		if metadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
+		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			pri := priorityKey(task.getPriority().GetPriorityKey())
 			c.incTaskTracker(c.tasksDispatched, pri, 1)
 			// Mirror the !task.isForwarded() guard on tasksAdded in TrySyncMatch. A task forwarded

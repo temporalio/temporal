@@ -838,6 +838,9 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	// reason being that we always want to retain the task queue metadata for sticky task queues with single session assigned.
 	// The reason for this being that agentCore Sessions have no TTL technically, and the corresponding TaskQueueInfo record should also not have
 	// an expiry time.
+	// Note: Even if the workflow assigned to a agentCore session were to be completed, we may not want to permanently remove the task queue metadata
+	// only because no other workflow should be assigned to this session anymore.
+	// TODO (Shivam) -- more thinking and discussion required on the scavenging of this task queue metadata.
 	if !persistence.IsTaskQueueMetadataRetained(info) {
 		info.ExpiryTime = db.expiryTime()
 	}

@@ -419,6 +419,9 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 			}()
 
 			// Only the sticky poll is started; its acquisition reaches the normal read partition without advertisements.
+			// The main idea of this test is that for workers that have opted-in to Sessions and Worker-Versioning, their first poll should
+			// land on a normal task queue partition. After that, the poll metadata shall dictate if this poller is matched with a versioned task
+			// or a non-versioned task.
 			await.Require(t.Context(), t, func(t *await.T) {
 				response, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: env.NamespaceID().String(),

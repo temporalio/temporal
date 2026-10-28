@@ -281,8 +281,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 	}
 
-	// Transient and speculative tasks need a scheduled event before their timeout is recorded.
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE || m.ms.IsTransientWorkflowTask() {
+	singleSessionTransient := m.ms.GetExecutionInfo().GetSingleSessionBound() && m.ms.IsTransientWorkflowTask()
+	// Like speculative tasks, single-session transient retries have no persisted scheduled event.
+	// They can hit schedule-to-start timeouts on their sticky queue, so materialize the event
+	// before recording a timeout that references it.
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE || singleSessionTransient {
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),

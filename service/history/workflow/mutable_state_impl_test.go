@@ -10274,3 +10274,43 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduledEvent.GetEventType())
 	s.Equal("S", scheduledEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue().GetName())
 }
+
+func TestSingleSessionStickyPolicy(t *testing.T) {
+	t.Parallel()
+	for _, bound := range []bool{false, true} {
+		name := "ordinary"
+		if bound {
+			name = "single session"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{
+				TaskQueue: "foo", StickyTaskQueue: "S", SingleSessionBound: bound,
+				StickyScheduleToStartTimeout: durationpb.New(time.Second),
+			}}
+			ms.SetStickyTaskQueue("other", durationpb.New(2*time.Second))
+			if bound {
+				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
+				ms.SetStickyTaskQueue("S", durationpb.New(3*time.Second))
+				require.Equal(t, 3*time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+				for _, queueName := range []string{"foo", "S"} {
+					queue, timeout := ms.TaskQueueScheduleToStartTimeout(queueName)
+					require.Equal(t, "S", queue.GetName())
+					require.Equal(t, "foo", queue.GetNormalName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, queue.GetKind())
+					require.Equal(t, 5*time.Second, timeout.AsDuration())
+				}
+			} else {
+				require.Equal(t, "other", ms.executionInfo.GetStickyTaskQueue())
+			}
+			ms.ClearStickyTaskQueue()
+			if bound {
+				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
+			} else {
+				require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
+				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+			}
+			require.Equal(t, "foo", ms.executionInfo.GetTaskQueue())
+		})
+	}
+}

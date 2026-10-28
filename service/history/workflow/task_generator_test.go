@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -2099,5 +2100,54 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 		"TimeSkippingFastForwardTimerTask",
 	} {
 		require.Truef(t, seen[name], "expected RegenerateTimerTasksForTimeSkipping to emit a %s", name)
+	}
+}
+
+func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
+	t.Parallel()
+	for _, bound := range []bool{false, true} {
+		name := "ordinary"
+		if bound {
+			name = "single session"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			key := definition.NewWorkflowKey("namespace", "workflow", "run")
+			info := &persistencespb.WorkflowExecutionInfo{SingleSessionBound: bound, StickyScheduleToStartTimeout: durationpb.New(time.Second)}
+			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+			ms.EXPECT().IsStickyTaskQueueSet().Return(true).AnyTimes()
+			ms.EXPECT().GetWorkflowKey().Return(key).AnyTimes()
+			wt := &historyi.WorkflowTaskInfo{
+				ScheduledEventID: 5, ScheduledTime: time.Now(), Attempt: 1,
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+				Type:      enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+			}
+			ms.EXPECT().GetWorkflowTaskByID(int64(5)).Return(wt)
+			expectedTimeout := time.Second
+			if bound {
+				expectedTimeout = 5 * time.Second
+			}
+			ms.EXPECT().TaskQueueScheduleToStartTimeout("S").Return(wt.TaskQueue, durationpb.New(expectedTimeout)).Times(2)
+			ms.EXPECT().AddTasks(gomock.AssignableToTypeOf(&tasks.WorkflowTaskTimeoutTask{})).Do(func(task tasks.Task) {
+				timer := task.(*tasks.WorkflowTaskTimeoutTask)
+				require.Equal(t, wt.ScheduledTime.Add(expectedTimeout), timer.VisibilityTimestamp)
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timer.TimeoutType)
+			})
+			ms.EXPECT().SetWorkflowTaskScheduleToStartTimeoutTask(gomock.Any())
+			ms.EXPECT().AddTasks(gomock.AssignableToTypeOf(&tasks.WorkflowTask{})).Do(func(task tasks.Task) {
+				require.Equal(t, "S", task.(*tasks.WorkflowTask).TaskQueue)
+			})
+			generator := &TaskGeneratorImpl{mutableState: ms}
+			require.NoError(t, generator.GenerateScheduleWorkflowTaskTasks(5))
+
+			wt.Type = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			ms.EXPECT().SetSpeculativeWorkflowTaskTimeoutTask(gomock.Any()).DoAndReturn(func(task *tasks.WorkflowTaskTimeoutTask) error {
+				require.Equal(t, wt.ScheduledTime.Add(expectedTimeout), task.VisibilityTimestamp)
+				return nil
+			})
+			require.NoError(t, generator.GenerateScheduleSpeculativeWorkflowTaskTasks(wt))
+		})
 	}
 }

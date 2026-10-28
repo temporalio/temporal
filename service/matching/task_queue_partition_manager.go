@@ -1892,6 +1892,7 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 
+	// TODO (Shivam): seems to be a gap for sticky queues that are using the stable identity over here!
 	for key, pqm := range pm.versionedQueues {
 		update(key, pqm)
 	}
@@ -2335,6 +2336,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+			// TODO (Shivam): we need to add the aforementioned deployment validation logic here since right now,
+			// we do not do versioning checks if a worker is using a single session option with a stable identity.
+			// What this means is that if another worker polls with the same stable identity but a different deployment
+			// version, then matching shall not respect versioning directives.
+			// For WFT's, this is fine since history invalidates such a match in RecordWorkflowTaskStarted. However,
+			// for activities, this is not the case and the task shall be dispatched thinking as an independent activity.
 			return dbq, dbq, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 		}
 

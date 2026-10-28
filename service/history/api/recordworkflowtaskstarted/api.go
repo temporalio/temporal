@@ -197,8 +197,8 @@ func Invoke(
 				// A speculative workflow task can remain in memory only if starting it did not
 				// produce changes that need to be persisted. Otherwise, closing the transaction
 				// converts it to a normal workflow task and persists all of the changes.
-				// Note: The extra check with the newSingleSessionBinding is to ensure that once
-				// this bit is set, we have to persist it immediately.
+				// Note: newSingleSessionBinding is set to true when a worker is bound to a single-session sticky task queue.
+				// When this bit is set, we have to persist it immediately, which is why we don't have updateAction.Noop set to true.
 				updateAction.Noop = !newSingleSessionBinding && !mutableState.IsDirty()
 			} else {
 				// Start the deployment transition here only for a normal WFT. For a speculative WFT,

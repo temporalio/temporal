@@ -383,6 +383,9 @@ func queryDirectlyThroughMatching(
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
+		// Note: For session based queries, the timeout used is the timeout provided by the caller itself and
+		// not the default sticky query timeout. This is because unlike the non-session query, the session based query
+		// is not dispatched to the normal queue on timeout.
 		var stickyContext context.Context
 		var cancel context.CancelFunc
 		if msResp.GetSingleSessionBound() {

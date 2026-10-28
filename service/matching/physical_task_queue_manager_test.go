@@ -340,6 +340,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 	}
 }
 
+// Caller cancellation or the sticky task queue shutting down should cancel the long poll
 func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCancellation() {
 	for _, sourceStops := range []bool{false, true} {
 		name := "caller cancels"
