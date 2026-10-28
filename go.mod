@@ -25,7 +25,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-faker/faker/v4 v4.7.0
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
