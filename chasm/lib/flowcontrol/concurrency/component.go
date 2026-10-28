@@ -31,7 +31,7 @@ func (c *Component) ContextMetadata(_ chasm.Context) map[string]string {
 }
 
 func expiredReservation(slot *fcpb.ConcurrencyState_Slot, nowSec int64) bool {
-	return !slot.Committed && slot.Expires != nil && slot.Expires.Seconds < nowSec+1
+	return !slot.Committed && slot.Expires != nil && slot.Expires.Seconds < nowSec
 }
 
 func (c *Component) expire(now time.Time) {
