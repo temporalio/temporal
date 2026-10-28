@@ -80,8 +80,9 @@ func getMinTaskKey(
 		}
 	}
 	for _, readerState := range queueState.ReaderStates {
-		for _, scope := range readerState.Scopes {
-			consider(scope.Range.InclusiveMin)
+		// Only the first scope: replication readers hold per-priority scopes and lag follows the first.
+		if len(readerState.Scopes) > 0 {
+			consider(readerState.Scopes[0].Range.InclusiveMin)
 		}
 		for _, group := range readerState.PredicateGroups {
 			for _, taskRange := range group.Ranges {
