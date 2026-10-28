@@ -356,7 +356,7 @@ func (tm *priTaskMatcher) forwardPolls(
 		// closes, so use AfterFunc to join them.
 		callCtx, cancel := context.WithCancel(poller.forwardCtx)
 		stop := context.AfterFunc(ctx, cancel)
-		task, err := ForwardPollWithTarget(callCtx, meta, tm.client, tm.partition, target)
+		task, err := ForwardPollWithTarget(callCtx, meta, tm.client, tm.partition.RpcName(), target)
 		cancel()
 		_ = stop()
 		if err == nil {

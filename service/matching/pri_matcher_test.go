@@ -915,7 +915,7 @@ func (s *PriMatcherSuite) TestSingleSessionStickyPollSkipsPriorityForwarder() {
 	s.Require().Same(local, task)
 }
 
-func (s *PriMatcherSuite) TestSingleSessionAcquisitionUsesStickyForwarding() {
+func (s *PriMatcherSuite) TestStickyForwardingWithSessionMetadata() {
 	for _, tc := range []struct {
 		name       string
 		noBacklog  bool

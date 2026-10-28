@@ -410,7 +410,7 @@ func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bo
 // to be dispatched from this task queue to pollers
 func (c *physicalTaskQueueManagerImpl) PollTask(
 	ctx context.Context,
-	pollMetadata *pollMetadata,
+	metadata *pollMetadata,
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
@@ -426,18 +426,34 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
-		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
+		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, metadata); err != nil {
 			return nil, err
 		}
 	}
 
 	//nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(ctx, pollMetadata)
+		return c.matcher.PollForQuery(ctx, metadata)
+	}
+
+	poll := c.matcher.Poll
+	if c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && metadata.isSingleSessionAcquisition() {
+		callCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(c.tqCtx, cancel)
+		defer stop()
+		if err := c.tqCtx.Err(); err != nil {
+			return nil, err
+		}
+		ctx = callCtx
+		poll = func(ctx context.Context, metadata *pollMetadata) (*internalTask, error) {
+			// An empty source lets the Matching client select a normal read partition.
+			return ForwardPollWithTarget(ctx, metadata, c.matchingClient, "", c.partitionMgr.partition.TaskQueue().RootPartition())
+		}
 	}
 
 	for {
-		task, err := c.matcher.Poll(ctx, pollMetadata)
+		task, err := poll(ctx, metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +473,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogCountHint
 
-		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
+		if metadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			pri := priorityKey(task.getPriority().GetPriorityKey())
 			c.incTaskTracker(c.tasksDispatched, pri, 1)
 			// Mirror the !task.isForwarded() guard on tasksAdded in TrySyncMatch. A task forwarded

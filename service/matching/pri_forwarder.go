@@ -210,7 +210,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		return nil, err
 	}
 
-	return ForwardPollWithTarget(ctx, pollMetadata, f.client, f.partition, target)
+	return ForwardPollWithTarget(ctx, pollMetadata, f.client, f.partition.RpcName(), target)
 }
 
 // ForwardPollWithTarget forwards a poll request to another partition
@@ -218,7 +218,7 @@ func ForwardPollWithTarget(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 	client matchingservice.MatchingServiceClient,
-	source tqid.Partition,
+	forwardedSource string,
 	target *tqid.NormalPartition,
 ) (*internalTask, error) {
 	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
@@ -242,7 +242,7 @@ func ForwardPollWithTarget(
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
 				SessionOptions:            pollMetadata.sessionOptions,
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
@@ -268,7 +268,7 @@ func ForwardPollWithTarget(
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
 				SessionOptions:            pollMetadata.sessionOptions,
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
@@ -292,7 +292,7 @@ func ForwardPollWithTarget(
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
-			ForwardedSource: source.RpcName(),
+			ForwardedSource: forwardedSource,
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {

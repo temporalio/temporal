@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -325,72 +325,141 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSingleSessionAcquisitionUsesAdvertisedBacklog(t *testing.T) {
+func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name           string
+		readPartition  int
 		writePartition int
+		pinned         bool
 	}{
-		{name: "root backlog", writePartition: 0},
-		{name: "non-root backlog", writePartition: 2},
+		{name: "root", readPartition: 0, writePartition: 0},
+		{name: "non-root", readPartition: 2, writePartition: 2},
+		{name: "pinned non-root", readPartition: 2, writePartition: 2, pinned: true},
+		{name: "pinned parent forwarding", readPartition: 2, writePartition: 0, pinned: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			env := testcore.NewEnv(t,
+			env := newVersioning3TestEnv(t,
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0),
-				testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, 20*time.Millisecond),
-				testcore.WithDynamicConfig(dynamicconfig.MatchingEphemeralDataUpdateInterval, 20*time.Millisecond),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingPriorityBacklogForwarding, false),
 			)
+			env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, tc.readPartition))
 			env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, tc.writePartition))
 			tv := env.Tv()
-			stickyQueue := tv.StickyTaskQueue()
-			// Sticky queues see backlog advertisements from their hashed subscription partition and its parents.
-			for int(farm.Fingerprint32([]byte(stickyQueue.GetName())))%3 != tc.writePartition {
-				stickyQueue.Name += "s"
-			}
 			client := env.FrontendClient()
-			poller := taskpoller.New(t, client, env.Namespace().String()).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+			matching := env.GetTestCluster().MatchingClient()
+			stickyQueue := tv.StickyTaskQueue()
+			startRequest := &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+			}
+			pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: stickyQueue, Identity: tv.WorkerIdentity(),
 				SessionOptions: &sessionpb.WorkerSessionOptions{
 					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stickyQueue.GetName()},
 					},
 				},
-			})
+			}
+			versionKey := ""
+			if tc.pinned {
+				startRequest.VersioningOverride = tv.VersioningOverridePinned()
+				pollRequest.DeploymentOptions = tv.WorkerDeploymentOptions(true)
+				versionKey = tv.DeploymentVersionStringV32()
+				_, err := matching.SyncDeploymentUserData(t.Context(), &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId: env.NamespaceID().String(), TaskQueue: tv.TaskQueue().GetName(),
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+					DeploymentName: tv.DeploymentSeries(),
+					UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+					},
+				})
+				require.NoError(t, err)
+				_, err = client.StartWorkflowExecution(t.Context(), startRequest)
+				require.NoError(t, err)
+				await.Require(t.Context(), t, func(t *await.T) {
+					response, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: env.NamespaceID().String(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+							PartitionId: &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(tc.writePartition)},
+						},
+						Versions:    &taskqueuepb.TaskQueueVersionSelection{Unversioned: true, AllActive: true},
+						ReportStats: true, ReportPollers: true, OnlyIfLoaded: true,
+					})
+					require.NoError(t, err)
+					versions := response.GetVersionsInfoInternal()
+					require.Zero(t, versions[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats().GetApproximateBacklogCount())
+					require.Positive(t, versions[versionKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats().GetApproximateBacklogCount())
+					for _, version := range versions {
+						require.Empty(t, version.GetPhysicalTaskQueueInfo().GetPollers())
+					}
+				}, 10*time.Second, 20*time.Millisecond)
+			}
+
+			poller := taskpoller.New(t, client, env.Namespace().String()).PollWorkflowTask(pollRequest)
+			acquired := make(chan *workflowservice.PollWorkflowTaskQueueResponse, 2)
+			handle := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				acquired <- task
+				response := &workflowservice.RespondWorkflowTaskCompletedRequest{}
+				if tc.pinned {
+					response.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+					response.DeploymentOptions = tv.WorkerDeploymentOptions(true)
+				}
+				return response, nil
+			}
 			completed := make(chan error, 1)
 			go func() {
-				_, err := poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-				}, taskpoller.WithContext(t.Context()))
+				_, err := poller.HandleTask(tv, handle, taskpoller.WithContext(t.Context()))
 				completed <- err
 			}()
 
-			partition := &taskqueuespb.TaskQueuePartition{
-				TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyQueue.GetName()},
-			}
+			// Only the sticky poll is started; its acquisition reaches the normal read partition without advertisements.
 			await.Require(t.Context(), t, func(t *await.T) {
-				response, err := env.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
-					NamespaceId: env.NamespaceID().String(), TaskQueuePartition: partition,
-					Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+				response, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+					NamespaceId: env.NamespaceID().String(),
+					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+						TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						PartitionId: &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(tc.readPartition)},
+					},
+					Versions:      &taskqueuepb.TaskQueueVersionSelection{Unversioned: true, AllActive: true},
 					ReportPollers: true, OnlyIfLoaded: true,
 				})
 				require.NoError(t, err)
-				pollers := response.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetPollers()
+				pollers := response.GetVersionsInfoInternal()[versionKey].GetPhysicalTaskQueueInfo().GetPollers()
 				require.NotEmpty(t, pollers)
 				require.Equal(t, tv.WorkerIdentity(), pollers[0].GetIdentity())
 			}, 10*time.Second, 20*time.Millisecond)
+			if !tc.pinned {
+				_, err := client.StartWorkflowExecution(t.Context(), startRequest)
+				require.NoError(t, err)
+			}
+			require.NoError(t, await.Rcv(t, completed))
+			require.Equal(t, tv.WorkflowID(), await.Rcv(t, acquired).GetWorkflowExecution().GetWorkflowId())
 
-			// No normal poller is started; the sticky poll must discover this default-priority backlog.
-			_, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
-				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
-				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+			sticky, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+				NamespaceId: env.NamespaceID().String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyQueue.GetName()},
+				},
+				Versions: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true, AllActive: true},
 			})
 			require.NoError(t, err)
-			require.NoError(t, await.Rcv(t, completed))
+			require.Len(t, sticky.GetVersionsInfoInternal(), 1)
+			require.Contains(t, sticky.GetVersionsInfoInternal(), "", "S has no versioned physical queues")
+
+			_, err = client.SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), WorkflowExecution: tv.WorkflowExecution(), SignalName: tv.SignalName(),
+			})
+			require.NoError(t, err)
+			_, err = poller.HandleTask(tv, handle, taskpoller.WithContext(t.Context()))
+			require.NoError(t, err)
+			require.Equal(t, tv.WorkflowID(), await.Rcv(t, acquired).GetWorkflowExecution().GetWorkflowId())
 		})
 	}
 }
