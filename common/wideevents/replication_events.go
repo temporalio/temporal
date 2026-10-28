@@ -9,7 +9,7 @@ import (
 )
 
 // ReplicationLifecycleEventName is the stable event name for the ReplicationLifecycle wide event,
-// which traces a replication task through sent, executing, applied, skipped, and error phases.
+// which traces replication tasks and related parent-child repairs.
 const ReplicationLifecycleEventName = "replication_lifecycle"
 
 type ReplicationPhase string
@@ -30,7 +30,8 @@ type ReplicationApplyArtifactSource string
 const (
 	ReplicationSent      ReplicationPhase = "sent"
 	ReplicationExecuting ReplicationPhase = "executing"
-	ReplicationApplied   ReplicationPhase = "applied"
+	// ReplicationApplied also records committed parent-child repairs on the active cluster.
+	ReplicationApplied ReplicationPhase = "applied"
 	// ReplicationSkipped is a terminal source-side phase: the sender could not build ("convert")
 	// the task after exhausting retries and skipped it (advanced the watermark past it) instead of
 	// wedging the stream. Such a task never reaches executing/applied, so this is where its trace
@@ -109,9 +110,10 @@ const (
 const (
 	ParentChildLifecycleEventType = "parent_child_lifecycle"
 
-	ParentChildPhaseVerifyChildCompletion = "verify_child_completion"
-	ParentChildPhaseParentResend          = "parent_resend"
-	ParentChildPhaseChildResend           = "child_resend"
+	ParentChildPhaseVerifyChildCompletion    = "verify_child_completion"
+	ParentChildPhaseParentResend             = "parent_resend"
+	ParentChildPhaseChildResend              = "child_resend"
+	ParentChildPhaseOrphanedChildReplacement = "orphaned_child_replacement"
 
 	ParentChildOutcomeNotFound          = "not_found"
 	ParentChildOutcomeCompletionMissing = "completion_missing"
@@ -124,6 +126,7 @@ const (
 	ParentChildOutcomeDeduplicated      = "deduplicated"
 	ParentChildOutcomeLimited           = "limited"
 	ParentChildOutcomeFailed            = "failed"
+	ParentChildOutcomeReplaced          = "replaced"
 )
 
 // EmitReplicationError normalizes the common error envelope and emits it into the existing
@@ -154,13 +157,14 @@ func EmitReplicationError(
 type ReplicationLifecyclePayload struct {
 	// Phase is sent, executing, applied, skipped or error.
 	Phase ReplicationPhase
-	// TaskType is which replication task this is.
+	// TaskType identifies the replication task or the task that triggered a parent-child repair.
 	TaskType string
-	// Shard is the SENDING shard on sent, and the TARGET shard on executing and applied.
+	// Shard is the sending shard on sent, the target shard on executing and applied,
+	// or the active shard committing a parent-child repair.
 	Shard int32
 	// Namespace is the namespace name, resolved best-effort.
 	Namespace string
-	// NamespaceID/WorkflowID/RunID identify the execution being replicated.
+	// NamespaceID/WorkflowID/RunID identify the execution being replicated or repaired.
 	NamespaceID string
 	WorkflowID  string
 	RunID       string
@@ -182,10 +186,12 @@ type ReplicationLifecyclePayload struct {
 	SourceShard   int32
 	SourceTaskID  int64
 
+	// NewRunID is the successor run a verify task targets, whose event 1 a sync task also shipped,
+	// or the replacement run for a parent-child repair.
+	NewRunID string
+
 	// sent-only
 
-	// NewRunID is the successor run a verify task targets, or whose event 1 a sync task also shipped.
-	NewRunID string
 	// IsFirstSync marks the first sync of a newly created run.
 	IsFirstSync bool
 	// FirstEventID/NextEventID are the task's own event range, not what the artifact carried.
@@ -239,7 +245,8 @@ type ReplicationLifecyclePayload struct {
 	// LastEventID/LastEventVersion are the last event on the target's current branch after applying.
 	LastEventID      int64
 	LastEventVersion int64
-	// Outcome is applied, verified, resend_needed or error. Failed applies emit no event at all.
+	// Outcome is applied, verified, resend_needed, replaced, or error.
+	// Failed applies emit no event at all.
 	Outcome string
 	// Error is the failure message when Outcome is error.
 	Error string
@@ -284,9 +291,7 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 			log.Int64("transition_count", p.TransitionCount),
 		)
 	}
-	// parent fields are phase-independent: emitted on any phase that populated them (sent +
-	// applied). Guards keep them absent when not applicable (e.g. executing, or a workflow that is
-	// not a child).
+	// Parent fields are emitted on every phase that populated them.
 	if p.ParentWorkflowID != "" {
 		attrs = append(attrs,
 			log.String("parent_workflow_id", p.ParentWorkflowID),
