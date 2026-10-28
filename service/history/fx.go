@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -28,7 +29,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
@@ -130,6 +131,7 @@ var Module = fx.Options(
 	activity.HistoryModule,
 	scheduler.Module,
 	callback.Module,
+	namespacereplication.Module,
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
@@ -429,8 +431,8 @@ func RateLimitInterceptorProvider(
 
 func ESProcessorConfigProvider(
 	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
+) *esconfig.ProcessorConfig {
+	return &esconfig.ProcessorConfig{
 		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -479,7 +481,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func VisibilityManagerConfigProvider(
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+	esProcessorConfig *esconfig.ProcessorConfig,
 	serviceConfig *configs.Config,
 ) *visibility.ManagerConfig {
 	return &visibility.ManagerConfig{

@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -32,7 +32,7 @@ type VisibilityStoreFactory interface {
 }
 
 type ManagerConfig struct {
-	EsProcessorConfig *elasticsearch.ProcessorConfig
+	EsProcessorConfig *esconfig.ProcessorConfig
 
 	MaxReadQPS                     dynamicconfig.IntPropertyFn
 	MaxWriteQPS                    dynamicconfig.IntPropertyFn
@@ -191,18 +191,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			params.Serializer,
 		)
 	} else if dsConfig.Elasticsearch != nil {
-		visStore, err = elasticsearch.NewVisibilityStore(
-			dsConfig.Elasticsearch,
-			managerConfig.EsProcessorConfig,
-			params.SearchAttributesProvider,
-			params.SearchAttributesMapperProvider,
-			params.NamespaceRegistry,
-			params.ChasmRegistry,
-			managerConfig.DisableOrderByClause,
-			managerConfig.EnableManualPagination,
-			params.MetricsHandler,
-			params.Logger,
-		)
+		visStore, err = newElasticsearchVisibilityStore(dsConfig.Elasticsearch, params, managerConfig)
 	} else if dsConfig.CustomDataStoreConfig != nil {
 		customFactory := params.CustomVisibilityStoreFactory
 		if customFactory == nil {
