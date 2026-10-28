@@ -15,6 +15,7 @@ const (
 	dropReasonDataLoss
 	dropReasonExpiredRead
 	dropReasonExpiredMemory
+	dropReasonStickyWorkerUnavailable
 	dropReasonInvalid
 )
 
@@ -31,6 +32,8 @@ func (r dropReason) tag() metrics.Tag {
 		return metrics.ReasonTag(metrics.DroppedTaskReasonExpiredRead)
 	case dropReasonExpiredMemory:
 		return metrics.ReasonTag(metrics.DroppedTaskReasonExpiredMemory)
+	case dropReasonStickyWorkerUnavailable:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonStickyWorkerUnavailable)
 	default:
 		return metrics.ReasonTag(metrics.DroppedTaskReasonInvalid)
 	}

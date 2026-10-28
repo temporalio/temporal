@@ -311,19 +311,21 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 		return
 	}
 
-	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(nil)
-	} else if retry {
-		// This should only be due to persistence problems. Retry in a new goroutine
-		// to not block other tasks, up to some concurrency limit.
-		if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
-			return
-		}
-		go tr.retryAddAfterError(task)
+	if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+		task.finish(dropReason)
+		return
 	}
+	// This should only be due to persistence problems. Retry in a new goroutine
+	// to not block other tasks, up to some concurrency limit.
+	if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
+		return
+	}
+	go tr.retryAddAfterError(task)
 }
 
-func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
+// addErrorBehavior takes an error from addSpooledTask and returns either:
+// dropReasonUnspecified to retry the add (in a while), or another dropReason to drop the task.
+func (tr *priTaskReader) addErrorBehavior(err error) dropReason {
 	// addSpooledTask can only fail due to:
 	// - the task queue is closed (errTaskQueueClosed or context.Canceled)
 	// - ValidateDeployment failed (InvalidArgument)
@@ -333,20 +335,22 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
 		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
 		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
-		return false, true
+		return dropReasonUnspecified // retry
 	}
 	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
-		return true, false // drop the task
+		return dropReasonStickyWorkerUnavailable // drop the task
 	}
-	var invalid *serviceerror.InvalidArgument
-	var internal *serviceerror.Internal
-	if errors.As(err, &invalid) || errors.As(err, &internal) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
-		return true, false // drop the task
+		return dropReasonInvalid // drop the task
+	}
+	if _, ok := errors.AsType[*serviceerror.Internal](err); ok {
+		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
+		return dropReasonInternalError // drop the task
 	}
 	// For any other error (this should be very rare), we can retry.
 	tr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
-	return false, true
+	return dropReasonUnspecified // retry
 }
 
 func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
@@ -360,17 +364,19 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(nil)
+				task.finish(dropReasonExpiredMemory)
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
-			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil)
-			} else if retry {
-				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
-				return err
+			if err == nil {
+				return nil
 			}
-			return nil
+			if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+				task.finish(dropReason)
+				return nil
+			}
+			metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
+			return err
 		},
 		addErrorRetryPolicy,
 		nil,
