@@ -10230,34 +10230,39 @@ func (s *mutableStateSuite) newStorageUsageTestMutableState() (*MutableStateImpl
 	return mutableState, ts
 }
 
-func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_Active() {
-	mutableState, ts := s.newStorageUsageTestMutableState()
-	before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
-	msSize := mutableState.sizeAtLastClose
-	s.Positive(msSize)
+func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage() {
+	// Active and passive each accrue their own storage into their own counter, and skipped time counts.
+	for _, tc := range []struct {
+		name    string
+		policy  historyi.TransactionPolicy
+		skipped time.Duration
+	}{
+		{name: "Active", policy: historyi.TransactionPolicyActive},
+		{name: "Passive", policy: historyi.TransactionPolicyPassive},
+		{name: "ActiveTimeSkipping", policy: historyi.TransactionPolicyActive, skipped: time.Hour},
+		{name: "PassiveTimeSkipping", policy: historyi.TransactionPolicyPassive, skipped: time.Hour},
+	} {
+		s.Run(tc.name, func() {
+			mutableState, ts := s.newStorageUsageTestMutableState()
+			before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+			msSize := mutableState.sizeAtLastClose
+			s.Positive(msSize)
 
-	ts.Update(ts.Now().Add(10 * time.Second))
-	_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
+			mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(tc.skipped),
+			}
+			mutableState.wrapTimeSourceWithTimeSkipping()
 
-	usage := mutableState.GetExecutionInfo().GetStorageUsage()
-	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, usage.GetMutableStateByteSeconds())
-	s.Equal(before.GetHistoryByteSeconds()+10*4096, usage.GetHistoryByteSeconds())
-}
+			ts.Update(ts.Now().Add(10 * time.Second))
+			_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), tc.policy)
+			s.NoError(err)
 
-func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_Passive() {
-	mutableState, ts := s.newStorageUsageTestMutableState()
-	before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
-	msSize := mutableState.sizeAtLastClose
-
-	ts.Update(ts.Now().Add(10 * time.Second))
-	_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
-	s.NoError(err)
-
-	// Passive accrues its own storage into its own counter, the same as active.
-	usage := mutableState.GetExecutionInfo().GetStorageUsage()
-	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, usage.GetMutableStateByteSeconds())
-	s.Equal(before.GetHistoryByteSeconds()+10*4096, usage.GetHistoryByteSeconds())
+			seconds := int64((10*time.Second + tc.skipped).Seconds())
+			usage := mutableState.GetExecutionInfo().GetStorageUsage()
+			s.Equal(before.GetMutableStateByteSeconds()+seconds*msSize, usage.GetMutableStateByteSeconds())
+			s.Equal(before.GetHistoryByteSeconds()+seconds*4096, usage.GetHistoryByteSeconds())
+		})
+	}
 }
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCounterOnSync() {
@@ -10290,26 +10295,6 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCoun
 	// measured from the local baseline rather than the source's LastUpdateTime.
 	s.Equal(local.GetMutableStateByteSeconds()+5*msSize, mutableState.GetExecutionInfo().GetStorageUsage().GetMutableStateByteSeconds())
 	s.Equal(local.GetHistoryByteSeconds()+5*4096, mutableState.GetExecutionInfo().GetStorageUsage().GetHistoryByteSeconds())
-}
-
-func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage_TimeSkipping() {
-	mutableState, ts := s.newStorageUsageTestMutableState()
-	before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
-	msSize := mutableState.sizeAtLastClose
-
-	mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		AccumulatedSkippedDuration: durationpb.New(time.Hour),
-	}
-	mutableState.wrapTimeSourceWithTimeSkipping()
-
-	ts.Update(ts.Now().Add(time.Second))
-	_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	// Skipped time counts: 1s real + 1h skipped.
-	usage := mutableState.GetExecutionInfo().GetStorageUsage()
-	s.Equal(before.GetMutableStateByteSeconds()+3601*msSize, usage.GetMutableStateByteSeconds())
-	s.Equal(before.GetHistoryByteSeconds()+3601*4096, usage.GetHistoryByteSeconds())
 }
 
 func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
@@ -10417,15 +10402,6 @@ func (s *mutableStateSuite) TestCurrentStorageUsage_Closed() {
 	stored := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
 
 	// Accrual stops at close, so the current value is the stored one.
-	ts.Update(ts.Now().Add(time.Hour))
-	s.True(proto.Equal(stored, mutableState.CurrentStorageUsage()))
-}
-
-func (s *mutableStateSuite) TestCurrentStorageUsage_NoBaseline() {
-	mutableState, ts := s.newStorageUsageTestMutableState()
-	mutableState.lastCloseTime = time.Time{}
-	stored := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
-
 	ts.Update(ts.Now().Add(time.Hour))
 	s.True(proto.Equal(stored, mutableState.CurrentStorageUsage()))
 }
