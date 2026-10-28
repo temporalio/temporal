@@ -34,8 +34,7 @@ type ConcurrencyState struct {
 	// task queue config, this is the user data version. For limits set from API, this is its own
 	// independent version.
 	ConfigVersion int64 `protobuf:"varint,2,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
-	// Slots reserved or committed. Entries should be unique by slot_id. Length is bounded by
-	// config.ConcurrentTasks.
+	// Slots reserved or committed. Entries should be unique by slot_id.
 	Slots []*ConcurrencyState_Slot `protobuf:"bytes,3,rep,name=slots,proto3" json:"slots,omitempty"`
 	// Generation is used to ensure Wait is monotonic. See comment in Wait for details.
 	Generation int64 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`

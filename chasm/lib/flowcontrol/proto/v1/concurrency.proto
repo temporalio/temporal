@@ -17,8 +17,7 @@ message ConcurrencyState {
   // independent version.
   int64 config_version = 2;
 
-  // Slots reserved or committed. Entries should be unique by slot_id. Length is bounded by
-  // config.ConcurrentTasks.
+  // Slots reserved or committed. Entries should be unique by slot_id.
   repeated Slot slots = 3;
 
   // Generation is used to ensure Wait is monotonic. See comment in Wait for details.
