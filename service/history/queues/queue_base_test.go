@@ -459,6 +459,78 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
 
+func (s *queueBaseSuite) TestNewQueueBase_RecordsPredicateResolutionLossOnRead() {
+	scopeWith := func(predicate *persistencespb.Predicate, minTaskID, maxTaskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: minTaskID},
+				ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: maxTaskID},
+			},
+			Predicate: predicate,
+		}
+	}
+	unresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{NamespaceIdIndexes: []int32{5}})
+	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{NamespaceIds: []string{uuid.NewString()}})
+
+	testCases := []struct {
+		name       string
+		scopes     []*persistencespb.QueueSliceScope
+		wantLosses int64
+	}{
+		{
+			name:       "no scope lost resolution",
+			scopes:     []*persistencespb.QueueSliceScope{scopeWith(resolvable, 1000, 2000)},
+			wantLosses: 0,
+		},
+		{
+			name: "one of two scopes lost resolution",
+			scopes: []*persistencespb.QueueSliceScope{
+				scopeWith(resolvable, 1000, 2000),
+				scopeWith(unresolvable, 2000, 3000),
+			},
+			wantLosses: 1,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			mockShard := shard.NewTestContext(
+				s.controller,
+				&persistencespb.ShardInfo{
+					ShardId: 0,
+					RangeId: 10,
+					QueueStates: map[int32]*persistencespb.QueueState{
+						int32(tasks.CategoryIDTransfer): {
+							ReaderStates: map[int64]*persistencespb.QueueReaderState{
+								DefaultReaderId: {Scopes: tc.scopes},
+							},
+							ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 4000},
+						},
+					},
+				},
+				s.config,
+			)
+
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+			s.metricsHandler = captureHandler
+			// the test logger panics on DPanic, which the lossy case triggers on purpose
+			s.logger = log.NewNoopLogger()
+
+			s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
+
+			recordings := capture.Snapshot()[metrics.QueuePredicateResolutionLoss.Name()]
+			if tc.wantLosses == 0 {
+				s.Empty(recordings)
+				return
+			}
+			s.Require().Len(recordings, 1)
+			s.Equal(tc.wantLosses, recordings[0].Value)
+			s.Equal(string(predicateResolutionLossUnresolvedNamespaceIndex), recordings[0].Tags["reason"])
+		})
+	}
+}
+
 func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountWithTaskCategoryTag() {
 	numSlices := 3
 	scopes := NewRandomScopes(numSlices)

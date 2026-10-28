@@ -37,11 +37,16 @@ func FromPersistenceQueueState(
 	state *persistencespb.QueueState,
 ) *queueState {
 	table := newNamespaceIDTable(state.NamespaceIdTable)
+	lostResolutionOnReadCount := 0
 	readerScopes := make(map[int64][]Scope, len(state.ReaderStates))
 	for id, persistenceReaderState := range state.ReaderStates {
 		scopes := make([]Scope, 0, len(persistenceReaderState.Scopes))
 		for _, persistenceScope := range persistenceReaderState.Scopes {
-			scopes = append(scopes, FromPersistenceScope(persistenceScope, table))
+			scope, lostResolutionOnRead := FromPersistenceScope(persistenceScope, table)
+			if lostResolutionOnRead {
+				lostResolutionOnReadCount++
+			}
+			scopes = append(scopes, scope)
 		}
 		readerScopes[id] = scopes
 	}
@@ -49,6 +54,7 @@ func FromPersistenceQueueState(
 	return &queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: FromPersistenceTaskKey(state.ExclusiveReaderHighWatermark),
+		lostResolutionOnReadCount:    lostResolutionOnReadCount,
 	}
 }
 
@@ -64,11 +70,13 @@ func ToPersistenceScope(
 func FromPersistenceScope(
 	scope *persistencespb.QueueSliceScope,
 	table *namespaceIDTable,
-) Scope {
-	return NewScope(
-		FromPersistenceRange(scope.Range),
-		FromPersistencePredicate(scope.Predicate, table),
-	)
+) (Scope, bool) {
+	unresolvedBefore := table.unresolvedIndexCount()
+	predicate := FromPersistencePredicate(scope.Predicate, table)
+	if table.unresolvedIndexCount() != unresolvedBefore {
+		return NewScope(FromPersistenceRange(scope.Range), predicates.Universal[tasks.Task]()), true
+	}
+	return NewScope(FromPersistenceRange(scope.Range), predicate), false
 }
 
 func ToPersistenceRange(
@@ -300,19 +308,32 @@ func FromPersistenceNamespaceIDPredicate(
 }
 
 type namespaceIDTable struct {
-	entries [][]byte
+	entries           [][]byte
+	unresolvedIndexes int
 }
 
 func newNamespaceIDTable(entries [][]byte) *namespaceIDTable {
 	return &namespaceIDTable{entries: entries}
 }
 
+func (t *namespaceIDTable) unresolvedIndexCount() int {
+	if t == nil {
+		return 0
+	}
+	return t.unresolvedIndexes
+}
+
 func (t *namespaceIDTable) resolve(index int32) (string, bool) {
-	if t == nil || index < 0 || int(index) >= len(t.entries) {
+	if t == nil {
+		return "", false
+	}
+	if index < 0 || int(index) >= len(t.entries) {
+		t.unresolvedIndexes++
 		return "", false
 	}
 	id, err := uuid.FromBytes(t.entries[index])
 	if err != nil {
+		t.unresolvedIndexes++
 		return "", false
 	}
 	return id.String(), true

@@ -50,6 +50,8 @@ type (
 	queueState struct {
 		readerScopes                 map[int64][]Scope
 		exclusiveReaderHighWatermark tasks.Key
+		// Counts scopes, not failed lookups: one scope with several bad indexes counts once.
+		lostResolutionOnReadCount int
 	}
 
 	queueBase struct {
@@ -120,6 +122,17 @@ func newQueueBase(
 	var exclusiveReaderHighWatermark tasks.Key
 	if persistenceState, ok := shard.GetQueueState(category); ok {
 		queueState := FromPersistenceQueueState(persistenceState)
+		if queueState.lostResolutionOnReadCount > 0 {
+			logger.DPanic(
+				"Queue state lost predicate resolution on read",
+				tag.Counter(queueState.lostResolutionOnReadCount),
+				tag.ShardID(shard.GetShardID()),
+			)
+			metrics.QueuePredicateResolutionLoss.With(metricsHandler).Record(
+				int64(queueState.lostResolutionOnReadCount),
+				metrics.ReasonTag(predicateResolutionLossUnresolvedNamespaceIndex),
+			)
+		}
 
 		readerScopes = queueState.readerScopes
 		exclusiveReaderHighWatermark = queueState.exclusiveReaderHighWatermark
