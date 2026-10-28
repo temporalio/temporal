@@ -123,6 +123,10 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockMapper := searchattribute.NewMockMapper(s.controller)
 	mockMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(alias string, _ string) (string, error) {
+			// One mapped alias, as SQL visibility and Cloud use for custom search attributes.
+			if alias == "CustomerId" {
+				return "Keyword01", nil
+			}
 			return alias, nil
 		},
 	).AnyTimes()
@@ -1106,8 +1110,10 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
 
 	relocatedMemo := map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoValue")}
+	// Visibility returns aliases; the write must use field names.
 	relocatedSearchAttributes := map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("keep me"),
+		"CustomerId":         payload.EncodeString("customer"),
 		// Not backed by LastBranchTime on this run, so it must not be re-published.
 		sadefs.TemporalLastBranchTime: sadefs.MustEncodeValue(time.Now(), enumspb.INDEXED_VALUE_TYPE_DATETIME),
 	}
@@ -1125,7 +1131,39 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_RelocatedAt
 		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
 			s.True(proto.Equal(relocatedMemo["memoKey"], request.Memo.GetFields()["memoKey"]))
 			s.True(proto.Equal(relocatedSearchAttributes["CustomKeywordField"], request.SearchAttributes.GetIndexedFields()["CustomKeywordField"]))
+			s.True(proto.Equal(relocatedSearchAttributes["CustomerId"], request.SearchAttributes.GetIndexedFields()["Keyword01"]))
+			s.NotContains(request.SearchAttributes.GetIndexedFields(), "CustomerId")
 			s.NotContains(request.SearchAttributes.GetIndexedFields(), sadefs.TemporalLastBranchTime)
+			return nil
+		},
+	)
+
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution_ReplicatedAttributesSupersedeRelocated() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState, event := s.closedMutableStateForTest(execution, "some random task queue")
+	// Cleanup ran here, then state-based replication switched the run to another cluster's branch
+	// and brought that branch's attributes. The local record holds the losing branch's.
+	mutableState.GetExecutionInfo().RelocatableAttributesRemoved = true
+	winningMemo := map[string]*commonpb.Payload{"memoKey": payload.EncodeString("winning")}
+	winningSearchAttributes := map[string]*commonpb.Payload{"CustomKeywordField": payload.EncodeString("winning")}
+	mutableState.GetExecutionInfo().Memo = winningMemo
+	mutableState.GetExecutionInfo().SearchAttributes = winningSearchAttributes
+	visibilityTask := s.closeVisibilityTaskForTest(execution)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// No read of the local record.
+	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
+			s.True(proto.Equal(winningMemo["memoKey"], request.Memo.GetFields()["memoKey"]))
+			s.True(proto.Equal(winningSearchAttributes["CustomKeywordField"], request.SearchAttributes.GetIndexedFields()["CustomKeywordField"]))
 			return nil
 		},
 	)

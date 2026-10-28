@@ -194,7 +194,12 @@ func recordSupersede(winner Workflow, loser Workflow, loserWasRunning bool) erro
 	if !loserWasRunning {
 		return nil
 	}
-	return winner.GetMutableState().RecordRunSuperseded(loser.GetMutableState().GetExecutionState().GetRunId())
+	loserRunID := loser.GetMutableState().GetExecutionState().GetRunId()
+	// The successor can already be the winner, e.g. when a resend created it first.
+	if loserRunID == winner.GetMutableState().GetExecutionState().GetRunId() {
+		return nil
+	}
+	return winner.GetMutableState().RecordRunSuperseded(loserRunID)
 }
 
 // persistLocalState writes a cluster-local change to a workflow that is not otherwise part of the

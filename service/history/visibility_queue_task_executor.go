@@ -283,7 +283,9 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 
 	memo := mutableState.GetExecutionInfo().Memo
 	searchAttributes := mutableState.GetExecutionInfo().SearchAttributes
-	if mutableState.GetExecutionInfo().GetRelocatableAttributesRemoved() {
+	// Attributes present despite the flag were replicated in after cleanup, e.g. by state-based
+	// replication switching to another branch, and supersede the local record.
+	if mutableState.GetExecutionInfo().GetRelocatableAttributesRemoved() && len(memo) == 0 && len(searchAttributes) == 0 {
 		// The close record was already written and cleanup moved memo and search attributes into
 		// it. Re-recording from mutable state would wipe them, so read them back from visibility.
 		if t.disableFetchRelocatableFromVisibility(namespaceEntry.Name().String()) {
@@ -302,8 +304,17 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		} else if err != nil {
 			return err
 		} else {
+			// Visibility returns aliases, but writes take field names.
+			unaliased, err := searchattribute.UnaliasFields(
+				t.shardContext.GetSearchAttributesMapperProvider(),
+				relocated.SearchAttributes,
+				namespaceEntry.Name().String(),
+			)
+			if err != nil {
+				return err
+			}
 			memo = relocated.Memo.GetFields()
-			searchAttributes = relocated.SearchAttributes.GetIndexedFields()
+			searchAttributes = unaliased.GetIndexedFields()
 		}
 	}
 

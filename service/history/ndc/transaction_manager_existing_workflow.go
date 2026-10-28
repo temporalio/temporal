@@ -367,7 +367,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			return err
 		}
 		if newWorkflowExists {
-			// new workflow already exists, do not create again
+			// new workflow already exists, do not create again; nor is it suppressed here
+			newWasRunning = false
 			newContext = nil
 			newMutableState = nil
 			newTransactionPolicy = nil
@@ -565,7 +566,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 			return err
 		}
 		if newWorkflowExists {
-			// new workflow already exists, do not create again
+			// new workflow already exists, do not create again; nor is it suppressed here
+			newWasRunning = false
 			newContext = nil
 			newMutableState = nil
 		} else {

@@ -385,3 +385,38 @@ func TestHasOrphanedChildren(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordSupersede(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		loserRunID      string
+		loserWasRunning bool
+		expectRecorded  bool
+	}{
+		{name: "running loser", loserRunID: "loser", loserWasRunning: true, expectRecorded: true},
+		{name: "loser already closed", loserRunID: "loser"},
+		// E.g. a successor that a resend already made current.
+		{name: "loser is the winner", loserRunID: "winner", loserWasRunning: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			winnerMutableState := historyi.NewMockMutableState(controller)
+			winnerMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "winner"}).AnyTimes()
+			loserMutableState := historyi.NewMockMutableState(controller)
+			loserMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: tc.loserRunID}).AnyTimes()
+			winner := NewMockWorkflow(controller)
+			winner.EXPECT().GetMutableState().Return(winnerMutableState).AnyTimes()
+			loser := NewMockWorkflow(controller)
+			loser.EXPECT().GetMutableState().Return(loserMutableState).AnyTimes()
+			if tc.expectRecorded {
+				winnerMutableState.EXPECT().RecordRunSuperseded(tc.loserRunID).Return(nil)
+			}
+
+			require.NoError(t, recordSupersede(winner, loser, tc.loserWasRunning))
+		})
+	}
+}

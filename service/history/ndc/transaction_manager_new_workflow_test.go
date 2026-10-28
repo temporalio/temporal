@@ -841,6 +841,7 @@ func (s *transactionMgrForNewWorkflowSuite) expectCurrentSupersedes(currentWorkf
 	currentMutableState := historyi.NewMockMutableState(s.controller)
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "current run ID"}).AnyTimes()
 	currentMutableState.EXPECT().RecordRunSuperseded(targetRunID).Return(nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	currentContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
