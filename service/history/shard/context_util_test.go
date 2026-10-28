@@ -61,6 +61,22 @@ func TestGetMinTaskKey(t *testing.T) {
 			want: tasks.NewImmediateKey(3000),
 		},
 		{
+			// Replication readers hold one scope per priority, each with its own ack level; only the
+			// first (default priority) feeds the lag figure.
+			name: "first scope is used when later scopes are lower",
+			state: &persistencespb.QueueState{
+				ExclusiveReaderHighWatermark: key(9000),
+				ReaderStates: map[int64]*persistencespb.QueueReaderState{
+					0: {Scopes: []*persistencespb.QueueSliceScope{
+						scopeFrom(5000, 9000),
+						scopeFrom(3000, 9000),
+						scopeFrom(4000, 9000),
+					}},
+				},
+			},
+			want: tasks.NewImmediateKey(5000),
+		},
+		{
 			name: "groups only",
 			state: &persistencespb.QueueState{
 				ExclusiveReaderHighWatermark: key(9000),
