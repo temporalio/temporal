@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	NamespaceReplicationTransportModeLegacy = "legacy"
+	NamespaceReplicationTransportModeShadow = "shadow"
+)
+
 var (
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
@@ -78,6 +83,12 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
+	)
+	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
+		"system.namespaceReplicationTransportMode",
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		NamespaceReplicationTransportModeLegacy,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -161,8 +172,9 @@ errors. When false (the default), these calls follow the standard 2-attempt cap.
 true, they ignore the attempt cap and keep retrying for up to the policy's expiration
 interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
 	)
-	ClusterMetadataRefreshInterval = NewGlobalPositiveDurationSetting(
+	ClusterMetadataRefreshInterval = NewGlobalTypedSettingWithConverter(
 		"system.clusterMetadataRefreshInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		time.Minute,
 		`ClusterMetadataRefreshInterval is config to manage cluster metadata table refresh interval`,
 	)
@@ -258,8 +270,9 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		false,
 		`EnableWorkflowEagerDispatchCheck controls whether history asks matching for a grant before eagerly starting a workflow.`,
 	)
-	NamespaceCacheRefreshInterval = NewGlobalPositiveDurationSetting(
+	NamespaceCacheRefreshInterval = NewGlobalTypedSettingWithConverter(
 		"system.namespaceCacheRefreshInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
@@ -794,6 +807,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		2,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
+	)
+	FrontendResourceExhaustedRetryDelayFloor = NewNamespaceDurationSetting(
+		"frontend.resourceExhaustedRetryDelayFloor",
+		0,
+		`Minimum retry delay duration on ResourceExhausted errors from the frontend namespace RPS and
+concurrency limiters. 0 disables the feature.`,
 	)
 	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
@@ -1348,8 +1367,9 @@ See DynamicRateLimitingParams comments for more details.`,
 		primitives.GetHistoryMaxPageSize,
 		`MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests`,
 	)
-	MatchingUpdateAckInterval = NewTaskQueuePositiveDurationSettingWithConstrainedDefault(
+	MatchingUpdateAckInterval = NewTaskQueueTypedSettingWithConstrainedDefault(
 		"matching.updateAckInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		[]TypedConstrainedValue[time.Duration]{
 			// Use a longer default interval for the per-namespace internal worker queues.
 			{
@@ -1476,8 +1496,9 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
-	MatchingGetUserDataRefresh = NewGlobalPositiveDurationSetting(
+	MatchingGetUserDataRefresh = NewGlobalTypedSettingWithConverter(
 		"matching.getUserDataRefresh",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		5*time.Minute,
 		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
 	)
@@ -1486,6 +1507,16 @@ This can help reduce effects of task queue movement.`,
 		5*time.Second,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingDeploymentVersionMonitorGracePeriod = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorGracePeriod",
+		5*time.Minute,
+		`Grace period after a deployment version is registered before the monitor starts checking whether it appeared in task queue user data. If the version is still missing after this period, a counter is emitted every MatchingDeploymentVersionMonitorInterval.`,
+	)
+	MatchingDeploymentVersionMonitorInterval = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorInterval",
+		time.Minute,
+		`How often to check and emit deployment_version_missing_from_user_data after the grace period has elapsed.`,
 	)
 	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
 		"matching.backlogMetricsEmitInterval",
@@ -1532,8 +1563,9 @@ like partition and worker-version) instead of being emitted at the matcher level
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
 	)
-	MatchingNexusEndpointsRefreshInterval = NewGlobalPositiveDurationSetting(
+	MatchingNexusEndpointsRefreshInterval = NewGlobalTypedSettingWithConverter(
 		"matching.nexusEndpointsRefreshInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		10*time.Second,
 		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
@@ -2269,8 +2301,9 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		nil, // actual default is in service/history/configs package
 		`TimerProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by timer task scheduler for standby namespaces`,
 	)
-	TimerProcessorUpdateAckInterval = NewGlobalPositiveDurationSetting(
+	TimerProcessorUpdateAckInterval = NewGlobalTypedSettingWithConverter(
 		"history.timerProcessorUpdateAckInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		30*time.Second,
 		`TimerProcessorUpdateAckInterval is update interval for timer processor`,
 	)
@@ -2289,8 +2322,9 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 		0,
 		`TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host`,
 	)
-	TimerProcessorMaxPollInterval = NewGlobalPositiveDurationSetting(
+	TimerProcessorMaxPollInterval = NewGlobalTypedSettingWithConverter(
 		"history.timerProcessorMaxPollInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		5*time.Minute,
 		`TimerProcessorMaxPollInterval is max poll interval for timer processor`,
 	)
@@ -2613,8 +2647,9 @@ When enabled, the archival store must allow reading object metadata in addition 
 		`ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
 archivalQueueProcessor`,
 	)
-	ArchivalProcessorMaxPollInterval = NewGlobalPositiveDurationSetting(
+	ArchivalProcessorMaxPollInterval = NewGlobalTypedSettingWithConverter(
 		"history.archivalProcessorMaxPollInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		5*time.Minute,
 		`ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor`,
 	)
@@ -2623,8 +2658,9 @@ archivalQueueProcessor`,
 		0.15,
 		`ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient`,
 	)
-	ArchivalProcessorUpdateAckInterval = NewGlobalPositiveDurationSetting(
+	ArchivalProcessorUpdateAckInterval = NewGlobalTypedSettingWithConverter(
 		"history.archivalProcessorUpdateAckInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		30*time.Second,
 		`ArchivalProcessorUpdateAckInterval is update interval for archivalQueueProcessor`,
 	)
@@ -2743,8 +2779,9 @@ execution for UpdateComponent idempotency; the oldest are swept beyond this limi
 		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
 UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
 	)
-	ShardUpdateMinInterval = NewGlobalPositiveDurationSetting(
+	ShardUpdateMinInterval = NewGlobalTypedSettingWithConverter(
 		"history.shardUpdateMinInterval",
+		WithValidation(convertDuration, Positive[time.Duration]),
 		5*time.Minute,
 		`ShardUpdateMinInterval is the minimal time interval which the shard info can be updated`,
 	)
@@ -3210,10 +3247,13 @@ pinned open indefinitely by endless replication streams. 0 disables the max life
 ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
 time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
 	)
-	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
+	HistoryReplicationRateLimiter = NewNamespaceTypedSettingWithConverter(
 		"history.EnableHistoryReplicationRateLimiter",
-		false,
-		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
+		convertHistoryReplicationRateLimiterSettings,
+		HistoryReplicationRateLimiterSettings{},
+		`HistoryReplicationRateLimiter controls the rate limiter on history events appended by replication. Enabled turns it
+on and Scope, which is required, selects the appends it applies to: "all" or "openForceReplication". A bool value is
+also accepted and applies to all appends. An invalid value disables the rate limiter.`,
 	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",
