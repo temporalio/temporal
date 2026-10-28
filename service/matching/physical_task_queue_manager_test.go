@@ -281,7 +281,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 			queue.matchingClient = client
 			metadata := &pollMetadata{
 				singleSessionAcquisition: true,
-				sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
 				}},
 				deploymentOptions:      tv.WorkerDeploymentOptions(true),

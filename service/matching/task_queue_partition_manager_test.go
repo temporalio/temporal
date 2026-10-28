@@ -2998,7 +2998,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 			queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
 			metadata := &pollMetadata{}
 			if !tc.ordinary {
-				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 				}}
 			}
@@ -3070,7 +3070,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 				var assigned atomic.Bool
 				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
 				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 					},
 				}}
@@ -3146,7 +3146,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 				otherQueue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
 				task, _, err = other.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: other.partition.RpcName()},
 					},
 				}})
@@ -3202,7 +3202,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
 				var assigned atomic.Bool
 				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
 				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 					},
 				}}

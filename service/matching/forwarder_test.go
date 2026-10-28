@@ -271,7 +271,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 		},
 	).Return(resp, nil)
 
-	sessionOptions := &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+	sessionOptions := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 	}}
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
@@ -334,7 +334,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKe
 		},
 	).Return(resp, nil)
 
-	sessionOptions := &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+	sessionOptions := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 	}}
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{

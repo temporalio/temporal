@@ -245,7 +245,7 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: testTaskQueueName},
 			Identity:  "worker",
-			SessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+			SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 				SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session-identity"},
 			}},
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{

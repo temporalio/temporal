@@ -653,7 +653,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 			}
 			if tc.singleSession {
 				pollRequest.SessionOptions = &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"},
 					},
 				}
@@ -913,7 +913,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			var sessionOptions *sessionpb.WorkerSessionOptions
 			if singleSessionBound {
-				sessionOptions = &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"}}}
+				sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"}}}
 			}
 			request := &historyservice.RecordWorkflowTaskStartedRequest{
 				NamespaceId:       namespaceID.String(),

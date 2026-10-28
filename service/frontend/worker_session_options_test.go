@@ -34,7 +34,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 			options := tc.options
 			if tc.singleSession {
 				options = &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
 				}
 			}
 			err := validateWorkerSessionOptions(options, &taskqueuepb.TaskQueue{Name: "queue", Kind: tc.kind})

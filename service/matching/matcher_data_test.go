@@ -1168,7 +1168,7 @@ func (s *MatcherDataSuite) TestSingleSessionAcquisitionSkipsQuery() {
 	query := s.newQueryTask("query")
 	s.md.tasks.Add(query)
 	metadata := &pollMetadata{
-		sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+		sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 		}},
 		singleSessionAcquisition: true,

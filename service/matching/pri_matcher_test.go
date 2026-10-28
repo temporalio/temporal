@@ -899,7 +899,7 @@ func (s *PriMatcherSuite) TestSingleSessionStickyPollSkipsPriorityForwarder() {
 	forwarder := newPollForwarderTask(1, priorityBacklogPollForwarder)
 	tm.data.tasks.Add(forwarder)
 	metadata := &pollMetadata{
-		sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+		sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 		}},
 		conditions: &matchingservice.PollConditions{NoWait: true},
@@ -938,7 +938,7 @@ func (s *PriMatcherSuite) TestStickyForwardingWithSessionMetadata() {
 				tm.partition = testMatcherTaskQueue.StickyPartition("session")
 				defer tm.Stop()
 				metadata := &pollMetadata{
-					sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 					}},
 					singleSessionAcquisition: true,
@@ -1023,7 +1023,7 @@ func (s *PriMatcherSuite) TestSingleSessionNoWaitSkipsForwarder() {
 			}
 			tm.data.tasks.Add(newPollForwarderTask(1, forwarder))
 			task, err := tm.Poll(ctx, &pollMetadata{
-				sessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 				}},
 				singleSessionAcquisition: true,

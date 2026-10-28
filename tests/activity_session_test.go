@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
@@ -39,16 +40,18 @@ func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		var commands []*commandpb.Command
 		for _, useSession := range []bool{false, true} {
+			sessionOptions := &sessionpb.ActivitySessionOptions{}
 			id := "regular-activity"
 			if useSession {
 				id = "session-activity"
+				sessionOptions.Placement = &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}
 			}
 			commands = append(commands, &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId: id, ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
 					StartToCloseTimeout: durationpb.New(time.Second),
-					SessionOptions:      &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: useSession}},
+					SessionOptions:      sessionOptions,
 				}},
 			})
 		}
@@ -88,9 +91,11 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		var commands []*commandpb.Command
 		for _, useSession := range []bool{false, true} {
+			sessionOptions := &sessionpb.ActivitySessionOptions{}
 			id := "regular-activity"
 			if useSession {
 				id = "session-activity"
+				sessionOptions.Placement = &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}
 			}
 			commands = append(commands, &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -99,7 +104,7 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 					ScheduleToCloseTimeout: durationpb.New(time.Minute), ScheduleToStartTimeout: durationpb.New(time.Minute),
 					StartToCloseTimeout: durationpb.New(30 * time.Second), RequestEagerExecution: false,
 					RetryPolicy:    &commonpb.RetryPolicy{InitialInterval: durationpb.New(10 * time.Millisecond), BackoffCoefficient: 1, MaximumAttempts: 2},
-					SessionOptions: &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: useSession}},
+					SessionOptions: sessionOptions,
 				}},
 			})
 		}
@@ -191,7 +196,7 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 	poller, _ := env.pollWftAndHandle(s, tv, false, nil, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		response := env.respondWftWithActivities(tv, tv, true, behavior, "session-activity")
 		response.Commands[0].GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{
-			Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true},
+			Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
 		}
 		return response, nil
 	})

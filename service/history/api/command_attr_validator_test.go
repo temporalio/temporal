@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -939,7 +940,9 @@ func TestValidateActivitySessionOptions(t *testing.T) {
 				ActivityId: "activity", ActivityType: &commonpb.ActivityType{Name: "activity"},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: tc.activityQueue},
 				StartToCloseTimeout: durationpb.New(time.Second),
-				SessionOptions:      &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: tc.useSession}},
+			}
+			if tc.useSession {
+				attr.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
 			cause, err := validator.ValidateActivityScheduleAttributes(tests.NamespaceID, attr, nil, "workflow-queue")
 			if tc.wantError != "" {

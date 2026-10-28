@@ -147,7 +147,7 @@ func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 			}, func(req *historyservice.RecordWorkflowTaskStartedRequest) {
 				if tc.singleSession {
 					req.PollRequest.SessionOptions = &sessionpb.WorkerSessionOptions{
-						Isolation: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
+						Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
 					}
 				}
 			})()

@@ -7165,7 +7165,7 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
 			require.NoError(t, err)
 			task, _, err := pm.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-				Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 				},
 			}})
@@ -7217,7 +7217,7 @@ func (s *matchingEngineSuite) TestSingleSessionAcquisitionStartError() {
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.TaskQueue(), Identity: tv.WorkerIdentity(),
 			SessionOptions: &sessionpb.WorkerSessionOptions{
-				Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 				},
 			},

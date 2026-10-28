@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
@@ -32,7 +33,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	namespace := env.Namespace().String()
 	client := env.FrontendClient()
 	poller := taskpoller.New(t, client, namespace)
-	session := &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 	}}
 	_, err := client.StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -54,7 +55,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 				ActivityId: tv.ActivityID(), ActivityType: tv.ActivityType(), TaskQueue: tv.TaskQueue(),
 				StartToCloseTimeout: durationpb.New(10 * time.Second),
-				SessionOptions:      &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}},
+				SessionOptions:      &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
 			}},
 		}}}, nil
 	}, taskpoller.WithContext(t.Context()))
@@ -130,7 +131,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	// to show that the worker identity is different from the original one, and is also able to acquire the new workflow's task)
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: freshQueue,
-		SessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: freshQueue.GetName()},
 		}},
 	}).HandleTask(other, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -174,7 +175,7 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 		require.GreaterOrEqual(t, response.GetStats().GetApproximateBacklogCount(), int64(2))
 	}, 10*time.Second, 10*time.Millisecond)
 
-	session := &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 	}}
 	type pollResult struct {
@@ -223,7 +224,7 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 	freshQueue.Name = freshQueue.GetName() + "-2"
 	_, err = taskpoller.New(t, client, env.Namespace().String()).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(), TaskQueue: freshQueue, Identity: tv.WorkerIdentity(),
-		SessionOptions: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+		SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: freshQueue.GetName()},
 		}},
 	}).HandleTask(tv.WithWorkflowID(expectedOther), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -248,7 +249,7 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 	})
 	require.NoError(t, err)
-	session := &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 	}}
 	poller := taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
@@ -360,7 +361,7 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 			pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: stickyQueue, Identity: tv.WorkerIdentity(),
 				SessionOptions: &sessionpb.WorkerSessionOptions{
-					Isolation: &sessionpb.WorkerSessionOptions_SingleSession{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stickyQueue.GetName()},
 					},
 				},
