@@ -32,6 +32,7 @@ type Config struct {
 	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
+	EnableHistoryNodeTransactionIDValidation    dynamicconfig.BoolPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -524,6 +525,8 @@ func NewConfig(
 		EnableOrphanedChildWorkflowReplacement: dynamicconfig.EnableOrphanedChildWorkflowReplacement.Get(dc),
 		MaxAutoResetPoints:                     dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:             dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+
+		EnableHistoryNodeTransactionIDValidation: dynamicconfig.EnableHistoryNodeTransactionIDValidation.Get(dc),
 
 		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
 
