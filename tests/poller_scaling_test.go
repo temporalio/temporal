@@ -507,15 +507,15 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 
 	// Wait for the limit to be in effect before building the backlog. Otherwise the activities
 	// could be dispatched unthrottled and the queue would never report rate limiting.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PollerScalingIntegSuite) {
 		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			ReportConfig:  true,
 		})
-		require.NoError(t, err)
-		require.Equal(t, float32(1), res.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond())
+		s.NoError(err)
+		s.InDelta(1, res.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond(), 1e-6)
 	}, 20*time.Second, 100*time.Millisecond)
 
 	// Build an activity backlog by scheduling activities from a single workflow task.
@@ -548,8 +548,8 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 	// Dispatch is capped at 1 RPS, so polls block on the rate limiter and the queue reports rate limiting
 	// as active. A backlog that adding pollers can't drain any faster must not produce a scale-up.
 	// The rate-limited tracker is a sliding window, so assert on the metric rather than per-poll timing.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Bound each poll so an empty queue can't block past the Eventually timeout.
+	s.Await(func(s *PollerScalingIntegSuite) {
+		// Bound each poll so an empty queue can't block past the Await timeout.
 		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
 		defer cancel()
 		resp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -557,9 +557,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test",
 		})
-		require.NoError(t, err)
-		require.NotEmpty(t, resp.GetTaskToken())
-		require.Positive(t, pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited))
+		s.NoError(err)
+		s.NotEmpty(resp.GetTaskToken())
+		s.Positive(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited))
 	}, 20*time.Second, 10*time.Millisecond)
 }
 
@@ -608,9 +608,10 @@ func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV
 	// Schedule a batch of Nexus operations with no Nexus poller present. Retry because the new
 	// endpoint isn't visible to history immediately.
 	const numOperations = 10
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	input := testcore.MustToPayload(s.T(), "input")
+	s.Await(func(s *PollerScalingIntegSuite) {
 		resp := s.pollWorkflowTask(env, tq)
-		require.NotEmpty(t, resp.GetTaskToken())
+		s.NotEmpty(resp.GetTaskToken())
 		commands := make([]*commandpb.Command, 0, numOperations)
 		for range numOperations {
 			commands = append(commands, &commandpb.Command{
@@ -620,7 +621,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     testcore.MustToPayload(s.T(), "input"),
+						Input:     input,
 					},
 				},
 			})
@@ -630,12 +631,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV
 			TaskToken: resp.TaskToken,
 			Commands:  commands,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	// Operations are added faster than this single poller takes them, so the ratio signal fires.
 	// Poll until a decision comes back, since the operations reach matching asynchronously.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PollerScalingIntegSuite) {
 		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
 		defer cancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
@@ -643,10 +644,10 @@ func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test",
 		})
-		require.NoError(t, err)
-		require.NotEmpty(t, resp.GetTaskToken())
-		require.NotNil(t, resp.GetPollerScalingDecision())
-		require.Equal(t, int32(1), resp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
+		s.NoError(err)
+		s.NotEmpty(resp.GetTaskToken())
+		s.NotNil(resp.GetPollerScalingDecision())
+		s.Equal(int32(1), resp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
 	}, 30*time.Second, 100*time.Millisecond)
 
 	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio), 1)
@@ -661,15 +662,15 @@ func (s *PollerScalingIntegSuite) startBacklog(env *testcore.TestEnv, tq string,
 			s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PollerScalingIntegSuite) {
 		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			ReportStats:   true,
 		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, res.GetStats().GetApproximateBacklogCount(), int64(n))
+		s.NoError(err)
+		s.GreaterOrEqual(res.GetStats().GetApproximateBacklogCount(), int64(n))
 	}, 20*time.Second, 100*time.Millisecond)
 }
 
@@ -703,18 +704,18 @@ func (s *PollerScalingIntegSuite) startWorkflowAfterPollerWait(env *testcore.Tes
 		resCh <- pollResult{resp: resp, err: err}
 	}()
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PollerScalingIntegSuite) {
 		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 		found := false
 		for _, p := range res.GetPollers() {
 			found = found || p.GetIdentity() == identity
 		}
-		require.True(t, found)
+		s.True(found)
 	}, 10*time.Second, 50*time.Millisecond)
 	time.Sleep(wait) //nolint:forbidigo // the poll has to wait past PollerScalingWaitTime to look idle
 
