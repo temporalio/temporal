@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -43,13 +45,15 @@ import (
 
 // invocationTaskTestEnv holds the test infrastructure for invocation task handler tests.
 type invocationTaskTestEnv struct {
-	t          *testing.T
-	ctrl       *gomock.Controller
-	handler    *operationInvocationTaskHandler
-	op         *Operation
-	mockEngine *chasm.MockEngine
-	timeSource *clock.EventTimeSource
-	nsRegistry *namespace.MockRegistry
+	t           *testing.T
+	ctrl        *gomock.Controller
+	handler     *operationInvocationTaskHandler
+	op          *Operation
+	mockEngine  *chasm.MockEngine
+	timeSource  *clock.EventTimeSource
+	nsRegistry  *namespace.MockRegistry
+	taskTimeout time.Duration
+	saveCtxErr  error
 }
 
 func newInvocationTaskTestEnv(
@@ -59,7 +63,7 @@ func newInvocationTaskTestEnv(
 	endpointReg nexustest.FakeEndpointRegistry,
 	clientProvider ClientProvider,
 	metricsHandler metrics.Handler,
-	requestTimeout time.Duration,
+	taskTimeout time.Duration,
 ) *invocationTaskTestEnv {
 	t.Helper()
 
@@ -78,12 +82,12 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(requestTimeout),
-				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-				CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				StateAccessBuffer:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
+				MaxOperationTokenLength:   dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+				MinOutboundRequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+				PayloadSizeLimit:          dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+				CallbackURLTemplate:       dynamicconfig.GetTypedPropertyFn(callbackTmpl),
+				UseNewFailureWireFormat:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
@@ -127,13 +131,14 @@ func newInvocationTaskTestEnv(
 	mockEngine := chasm.NewMockEngine(ctrl)
 
 	return &invocationTaskTestEnv{
-		t:          t,
-		ctrl:       ctrl,
-		handler:    handler,
-		op:         op,
-		mockEngine: mockEngine,
-		timeSource: timeSource,
-		nsRegistry: nsRegistry,
+		t:           t,
+		ctrl:        ctrl,
+		handler:     handler,
+		op:          op,
+		mockEngine:  mockEngine,
+		timeSource:  timeSource,
+		nsRegistry:  nsRegistry,
+		taskTimeout: taskTimeout,
 	}
 }
 
@@ -171,7 +176,8 @@ func (e *invocationTaskTestEnv) setupUpdateComponent() {
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+	).DoAndReturn(func(ctx context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+		e.saveCtxErr = ctx.Err()
 		mockCtx := &chasm.MockMutableContext{
 			MockContext: chasm.MockContext{
 				HandleNow: func(_ chasm.Component) time.Time {
@@ -203,7 +209,9 @@ func (e *invocationTaskTestEnv) execute(task *nexusoperationpb.InvocationTask) e
 		BusinessID:  "wf-id",
 		RunID:       "run-id",
 	})
-	engineCtx := chasm.NewEngineContext(context.Background(), e.mockEngine)
+	ctx, cancel := context.WithTimeout(context.Background(), e.taskTimeout)
+	defer cancel()
+	engineCtx := chasm.NewEngineContext(ctx, e.mockEngine)
 	return e.handler.Execute(engineCtx, ref, chasm.TaskAttributes{Destination: "endpoint"}, task)
 }
 
@@ -226,7 +234,8 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
-		requestTimeout        time.Duration
+		stateAccessBuffer     time.Duration
+		taskTimeout           time.Duration
 		schedToCloseTimeout   time.Duration
 		startToCloseTimeout   time.Duration
 		schedToStartTimeout   time.Duration
@@ -384,8 +393,25 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "invocation timeout by request timeout",
-			requestTimeout:        2 * time.Millisecond,
+			name:                  "invocation timeout leaves state access buffer",
+			taskTimeout:           300 * time.Millisecond,
+			stateAccessBuffer:     200 * time.Millisecond,
+			schedToCloseTimeout:   time.Hour,
+			destinationDown:       true,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				time.Sleep(time.Millisecond * 300) //nolint:forbidigo
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
+			},
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "invocation timeout by task deadline",
+			taskTimeout:           50 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
@@ -393,6 +419,18 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "task deadline less than MinOutboundRequestTimeout",
+			taskTimeout:           time.Nanosecond,
+			schedToCloseTimeout:   time.Hour,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation:      nil, // Should not be called.
 			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
@@ -451,7 +489,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 		{
-			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
+			name:                  "ScheduleToCloseTimeout less than MinOutboundRequestTimeout",
 			schedToCloseTimeout:   time.Microsecond,
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // Should not be called.
@@ -551,7 +589,8 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 					Header:     tc.header,
 					NexusLinks: []nexus.Link{callerLink},
 				},
-				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
+				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			env.handler.config.StateAccessBuffer = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.stateAccessBuffer)
 
 			env.setupReadComponent()
 			env.setupUpdateComponent()
@@ -564,6 +603,9 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				require.NoError(t, err)
 			}
 			tc.checkOutcome(t, op)
+			if tc.stateAccessBuffer > 0 {
+				require.NoError(t, env.saveCtxErr, "the result must be saved before the task deadline")
+			}
 
 			if tc.expectedMetricOutcome != "" {
 				snap := capture.Snapshot()
@@ -991,7 +1033,41 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 		input                 *commonpb.Payload
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op *Operation)
+		// taskTimeout, if set, runs the task with this deadline and the default StateAccessBuffer and
+		// MinOutboundRequestTimeout.
+		taskTimeout time.Duration
 	}{
+		{
+			// The 3s transfer task deadline after 600ms of setup leaves 1.4s for the request after the default 1s
+			// StateAccessBuffer, which is less than the default MinOutboundRequestTimeout.
+			name:        "request is made below MinOutboundRequestTimeout",
+			taskTimeout: 2400 * time.Millisecond,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					&historyservice.StartNexusOperationResponse{
+						Response: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+								AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "system-op-token"},
+							},
+						},
+					}, nil)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "pending",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
+				require.Equal(t, "system-op-token", op.OperationToken)
+			},
+		},
 		{
 			name: "async start",
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
@@ -1138,6 +1214,30 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			},
 		},
 		{
+			// The system endpoint runs on the transfer queue, which doesn't unwrap DestinationDownError.
+			name: "history service error - retryable handler error",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"),
+				)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "handler-error:INTERNAL",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+			},
+		},
+		{
 			name: "chasm processor error",
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
 				// Should not be called if processor fails.
@@ -1202,7 +1302,11 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 
 			env := newInvocationTaskTestEnv(t, op,
 				InvocationData{Input: input, NexusLinks: []nexus.Link{callerLink}},
-				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
+				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, cmp.Or(tc.taskTimeout, time.Hour))
+			if tc.taskTimeout > 0 {
+				env.handler.config.StateAccessBuffer = StateAccessBuffer.Get(dynamicconfig.NewNoopCollection())
+				env.handler.config.MinOutboundRequestTimeout = MinOutboundRequestTimeout.Get(dynamicconfig.NewNoopCollection())
+			}
 
 			// Set up system endpoint dependencies.
 			historyClient := tc.setupHistoryClient(env.ctrl)
@@ -1233,6 +1337,32 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			timerRecordings := snap[OutboundRequestLatency.Name()]
 			require.Len(t, timerRecordings, 1)
 			require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
+		})
+	}
+}
+
+// tasks.Tags can't import this package, so it repeats TaskGroupName as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
+	t.Parallel()
+
+	registry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, registry.Register(NewNilLibrary()))
+
+	for _, taskType := range []string{
+		"nexusoperation.invocation",
+		"nexusoperation.cancellation",
+	} {
+		t.Run(taskType, func(t *testing.T) {
+			t.Parallel()
+
+			registered, ok := registry.TaskByID(chasm.GenerateTypeID(taskType))
+			require.True(t, ok)
+			require.Equal(t, TaskGroupName, registered.TaskGroup())
+
+			task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+			task.SetOutboundTaskGroup(registered.TaskGroup())
+			require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound)
 		})
 	}
 }

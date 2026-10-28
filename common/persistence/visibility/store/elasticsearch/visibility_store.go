@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -36,7 +37,10 @@ import (
 )
 
 const (
-	PersistenceName = "elasticsearch"
+	// PersistenceName is an alias of esconfig.PersistenceName.
+	//
+	// Deprecated: use esconfig.PersistenceName.
+	PersistenceName = esconfig.PersistenceName
 
 	delimiter = "~"
 
@@ -129,8 +133,8 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	cfg *client.Config,
-	processorConfig *ProcessorConfig,
+	cfg *esconfig.Config,
+	processorConfig *esconfig.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
@@ -177,7 +181,7 @@ func (s *VisibilityStore) Close() {
 }
 
 func (s *VisibilityStore) GetName() string {
-	return PersistenceName
+	return esconfig.PersistenceName
 }
 
 func (s *VisibilityStore) GetIndexName() string {

@@ -121,7 +121,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+TEST_DIRS       			  := $(filter-out ./common/testx/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
@@ -137,10 +137,10 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
 
-# Packages with a file constrained by temporal_minimal.
-MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
-# The unit test packages among MINIMAL_DIRS.
-MINIMAL_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
+# Packages with a file built only with temporal_minimal.
+MINIMAL_VARIANT_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep --untracked -l '^//go:build.*[^!]temporal_minimal' -- '*.go'))))
+# The unit test packages among MINIMAL_VARIANT_DIRS.
+MINIMAL_VARIANT_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_VARIANT_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 PINNED_DEPENDENCIES := \
@@ -424,6 +424,7 @@ lint-code-fast:
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
 	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | grep -v "^\./common/testx/" \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
 		printf $(COLOR) "No changed Go packages to lint."; \
@@ -448,7 +449,7 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
-	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_DIRS))
+	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
@@ -541,7 +542,8 @@ comma := ,
 
 # Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
 # end of the variable name is set. Each temporal_with_* tag needs one.
-EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
+EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
+EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
@@ -645,10 +647,10 @@ unit-test-coverage: prepare-coverage-test
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
-# Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
+# Runs the unit tests of MINIMAL_VARIANT_UNIT_TEST_DIRS with temporal_minimal.
 unit-test-build-tags:
-	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
-	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
+	$(if $(MINIMAL_VARIANT_UNIT_TEST_DIRS),,$(error No package has a temporal_minimal variant))
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_VARIANT_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
