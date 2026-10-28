@@ -4210,6 +4210,102 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_RoutingConfigRevisionGa
 	s.Equal("rev2", gotRC.GetCurrentDeploymentVersion().GetBuildId())
 }
 
+func (s *matchingEngineSuite) TestSyncDeploymentUserDataDeleteAfterDelayedReplication() {
+	for _, tc := range []struct {
+		name      string
+		oldFormat bool
+	}{
+		{name: "ForgetVersion", oldFormat: true},
+		{name: "ForgetVersions"},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			ctx := t.Context()
+			deploymentName := tv.DeploymentSeries()
+			buildID := "old-build"
+			taskTypes := []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
+			req := &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:    s.ns.ID().String(),
+				TaskQueue:      tv.TaskQueue().GetName(),
+				DeploymentName: deploymentName,
+				TaskQueueTypes: taskTypes,
+			}
+			if tc.oldFormat {
+				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+					//nolint:staticcheck // Cover the legacy deletion request used by existing workflows.
+					ForgetVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+				}
+			} else {
+				req.ForgetVersions = []string{buildID}
+			}
+
+			for range 2 {
+				resp, err := s.matchingEngine.SyncDeploymentUserData(ctx, req)
+				require.Nil(t, resp)
+				var notFound *serviceerror.NotFound
+				require.ErrorAs(t, err, &notFound)
+			}
+			getReq := &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   req.NamespaceId,
+				TaskQueue:     req.TaskQueue,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			}
+			before, err := s.matchingEngine.GetTaskQueueUserData(ctx, getReq)
+			require.NoError(t, err)
+			require.Zero(t, before.GetUserData().GetVersion())
+			require.Nil(t, before.GetUserData().GetData())
+
+			routingConfig := &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "current-build"},
+				RevisionNumber:           1,
+			}
+			currentVersion := &deploymentspb.WorkerDeploymentVersionData{RevisionNumber: 1}
+			incoming := &persistencespb.TaskQueueUserData{
+				Clock:   &clockspb.HybridLogicalClock{WallClock: 1},
+				PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData),
+			}
+			for _, taskType := range taskTypes {
+				incoming.PerType[int32(taskType)] = &persistencespb.TaskQueueTypeUserData{
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: routingConfig,
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									buildID:         {RevisionNumber: 1},
+									"current-build": currentVersion,
+								},
+							},
+						},
+					},
+				}
+			}
+			_, err = s.matchingEngine.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+				NamespaceId: req.NamespaceId,
+				TaskQueue:   req.TaskQueue,
+				UserData:    incoming,
+			})
+			require.NoError(t, err)
+
+			resp, err := s.matchingEngine.SyncDeploymentUserData(ctx, req)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &matchingservice.SyncDeploymentUserDataResponse{Version: 2}, resp)
+			after, err := s.matchingEngine.GetTaskQueueUserData(ctx, getReq)
+			require.NoError(t, err)
+			for _, taskType := range taskTypes {
+				deploymentData := after.GetUserData().GetData().GetPerType()[int32(taskType)].GetDeploymentData().GetDeploymentsData()[deploymentName]
+				protorequire.ProtoEqual(t, &persistencespb.WorkerDeploymentData{
+					RoutingConfig: routingConfig,
+					Versions:      map[string]*deploymentspb.WorkerDeploymentVersionData{"current-build": currentVersion},
+				}, deploymentData)
+			}
+			repeated, err := s.matchingEngine.SyncDeploymentUserData(ctx, req)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, resp, repeated)
+		})
+	}
+}
+
 func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions_WithoutRoutingConfig() {
 	tv := testvars.New(s.T())
 	namespaceID := tv.NamespaceID().String()

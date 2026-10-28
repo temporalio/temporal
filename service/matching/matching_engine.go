@@ -2528,6 +2528,10 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
+	if version == 0 {
+		// Propagation requires a positive version. Missing user data may still be replicating.
+		return nil, serviceerror.NewNotFound("task queue user data not found")
+	}
 	return &matchingservice.SyncDeploymentUserDataResponse{Version: version, RoutingConfigChanged: applyUpdatesToRoutingConfig}, nil
 }
 
