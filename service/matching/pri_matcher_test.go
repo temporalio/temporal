@@ -626,11 +626,12 @@ func (s *PriMatcherSuite) TestOfferDispatchMetrics() {
 				tm, capture := s.newCapturingMatcher(ctx)
 				defer tm.Stop()
 
-				polledC := make(chan *internalTask, 1)
+				var polled *internalTask
+				var pollErr error
+				pollDone := make(chan struct{})
 				go func() {
-					polled, err := tm.Poll(ctx, &pollMetadata{})
-					require.NoError(t, err)
-					polledC <- polled
+					polled, pollErr = tm.Poll(ctx, &pollMetadata{})
+					close(pollDone)
 				}()
 				synctest.Wait() // poller is waiting, so the offer matches immediately
 
@@ -639,18 +640,22 @@ func (s *PriMatcherSuite) TestOfferDispatchMetrics() {
 					TaskSource:      tc.source,
 				}
 				task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{CreateTime: timestamppb.Now()}, forwardInfo, 0, nil)
-				offerDone := make(chan syncMatchOutcome, 1)
+				var outcome syncMatchOutcome
+				var offerErr error
+				offerDone := make(chan struct{})
 				go func() {
-					outcome, _, err := tm.Offer(ctx, task)
-					require.NoError(t, err)
-					offerDone <- outcome
+					outcome, _, offerErr = tm.Offer(ctx, task)
+					close(offerDone)
 				}()
-				polled := <-polledC
+				<-pollDone
+				require.NoError(t, pollErr)
 				n, _ := pollSuccessCounts(capture)
 				require.Zero(t, n, "poll_success recorded before the dispatch finished")
 
 				polled.finish(taskFinishResult{consumedToken: tc.drop == dropReasonUnspecified, dropReason: tc.drop})
-				require.Equal(t, syncMatchSuccess, <-offerDone)
+				<-offerDone
+				require.NoError(t, offerErr)
+				require.Equal(t, syncMatchSuccess, outcome)
 				n, nSync := pollSuccessCounts(capture)
 				dropped := capture.Snapshot()[metrics.DroppedTasksCounter.Name()]
 				if tc.drop == dropReasonUnspecified {
