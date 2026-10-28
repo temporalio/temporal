@@ -14,6 +14,9 @@ const (
 	// tag on metrics.QueuePredicateResolutionLoss.
 	predicateResolutionLossMaxPendingKeys metrics.ReasonString = "max_pending_keys"
 	predicateResolutionLossPredicateSize  metrics.ReasonString = "predicate_size"
+
+	// Emitted when a persisted queue state is read on shard acquisition, not by a running slice.
+	predicateResolutionLossUnresolvedNamespaceIndex metrics.ReasonString = "unresolved_namespace_index"
 )
 
 type (
