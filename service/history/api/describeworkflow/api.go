@@ -19,7 +19,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -341,16 +340,7 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		outboundCB := func(endpoint string) bool {
-			cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-				TaskGroup:   nexusoperation.TaskGroupName,
-				NamespaceID: namespaceID.String(),
-				Destination: endpoint,
-			})
-			return cb.State() != gobreaker.StateClosed
-		}
-
-		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx, outboundCB)
+		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to build Nexus operation info while building describe response",
