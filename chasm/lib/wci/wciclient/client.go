@@ -126,24 +126,20 @@ func (c *Client) DescribeWorkerControllerInstance(ctx context.Context, ns *names
 	}, resp.GetConflictToken(), nil
 }
 
-// ListWorkerControllerInstances lists running CHASM WCIs; closed (migrated or deleted) ones are skipped.
+// ListWorkerControllerInstances lists running CHASM WCIs.
 func (c *Client) ListWorkerControllerInstances(ctx context.Context, ns *namespace.Namespace, pageSize int, nextPageToken []byte) ([]*wciclient.WorkerControllerInstanceSummary, []byte, error) {
 	if c.visibility == nil {
 		return nil, nil, serviceerror.NewUnimplemented("listing CHASM worker controller instances needs a visibility manager in this service")
 	}
 	resp, err := chasm.ListExecutions[*wci.WorkerControllerInstance, *wcipb.WorkerControllerInstanceMemo](
 		chasm.NewVisibilityManagerContext(ctx, c.visibility),
-		&chasm.ListExecutionsRequest{NamespaceName: ns.Name().String(), PageSize: pageSize, NextPageToken: nextPageToken},
+		&chasm.ListExecutionsRequest{NamespaceName: ns.Name().String(), Query: wci.RunningListQuery, PageSize: pageSize, NextPageToken: nextPageToken},
 	)
 	if err != nil {
 		return nil, nil, err
 	}
 	var out []*wciclient.WorkerControllerInstanceSummary
 	for _, ex := range resp.Executions {
-		// An unset close time decodes as the epoch.
-		if ex.CloseTime.Unix() > 0 {
-			continue
-		}
 		out = append(out, &wciclient.WorkerControllerInstanceSummary{
 			DeploymentName: ex.ChasmMemo.GetDeploymentName(),
 			BuildId:        ex.ChasmMemo.GetBuildId(),

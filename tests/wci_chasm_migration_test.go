@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -117,6 +118,20 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	s.AwaitTruef(onCHASM, 30*time.Second, 200*time.Millisecond, "WCI created on CHASM")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, workflowStatus(), "no workflow-backed WCI")
 
+	// The running-only list query, scoped to this version through its search attribute.
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
+	s.NoError(err)
+	listedRunning := func() bool {
+		resp, err := chasm.ListExecutions[*wci.WorkerControllerInstance, *wcipb.WorkerControllerInstanceMemo](chasmCtx, &chasm.ListExecutionsRequest{
+			NamespaceName: ns,
+			PageSize:      10,
+			Query:         wci.RunningListQuery + " AND WorkerDeploymentVersion = '" + deploymentName + ":" + buildID + "'",
+		})
+		s.NoError(err)
+		return len(resp.Executions) == 1 && resp.Executions[0].ChasmMemo.GetBuildId() == buildID
+	}
+	s.AwaitTruef(listedRunning, testcore.WaitForESToSettle, 200*time.Millisecond, "listed as running")
+
 	// Register the task queue against the version, then drop the poller so a backlog can form.
 	w := worker.New(sdk, taskQueue, worker.Options{DeploymentOptions: worker.DeploymentOptions{
 		UseVersioning:             true,
@@ -170,6 +185,7 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	s.NoError(migrate(adminservice.MigrateWorkerControllerInstanceRequest_TARGET_UNSPECIFIED))
 	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING }, 30*time.Second, 200*time.Millisecond, "workflow started")
 	s.AwaitTruef(func() bool { return !onCHASM() }, 30*time.Second, 200*time.Millisecond, "CHASM closed after the hand-off")
+	s.AwaitTruef(func() bool { return !listedRunning() }, testcore.WaitForESToSettle, 200*time.Millisecond, "migrated CHASM run no longer listed")
 	_, err = chasmClient.RecordTaskAdd(ctx, &wcipb.RecordTaskAddRequest{
 		NamespaceId: env.NamespaceID().String(), InstanceId: instanceID,
 		Event: &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},

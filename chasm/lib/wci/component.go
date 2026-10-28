@@ -3,13 +3,17 @@ package wci
 
 import (
 	"bytes"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
+	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -30,9 +34,42 @@ var (
 )
 
 var (
-	_ chasm.RootComponent                 = (*WorkerControllerInstance)(nil)
-	_ chasm.StateMachine[wcipb.WciStatus] = (*WorkerControllerInstance)(nil)
-	_ chasm.VisibilityMemoProvider        = (*WorkerControllerInstance)(nil)
+	_ chasm.RootComponent                      = (*WorkerControllerInstance)(nil)
+	_ chasm.StateMachine[wcipb.WciStatus]      = (*WorkerControllerInstance)(nil)
+	_ chasm.VisibilityMemoProvider             = (*WorkerControllerInstance)(nil)
+	_ chasm.VisibilitySearchAttributesProvider = (*WorkerControllerInstance)(nil)
+)
+
+const (
+	statusSearchAttributeName = "WorkerControllerInstanceStatus"
+	statusRunning             = "Running"
+	// RunningListQuery lists only live instances. A migrating one is left out: its pending workflow
+	// run is already listed by the workflow backend.
+	RunningListQuery = statusSearchAttributeName + " = '" + statusRunning + "'"
+)
+
+// Search attributes change only on transitions, validation and spec updates; per-poll state stays
+// out, since every change is a visibility write.
+var (
+	StatusSearchAttribute           = chasm.NewSearchAttributeKeyword(statusSearchAttributeName, chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	ValidationStatusSearchAttribute = chasm.NewSearchAttributeKeyword("WCIValidationStatus", chasm.SearchAttributeFieldKeyword01)
+	ComputeProvidersSearchAttribute = chasm.NewSearchAttributeKeywordList("WCIComputeProviders", chasm.SearchAttributeFieldKeywordList01)
+	// Not the predefined TemporalWorkerDeployment*: CHASM components may not register reserved aliases.
+	DeploymentNameSearchAttribute    = chasm.NewSearchAttributeKeyword("WorkerDeploymentName", chasm.SearchAttributeFieldKeyword02)
+	DeploymentVersionSearchAttribute = chasm.NewSearchAttributeKeyword("WorkerDeploymentVersion", chasm.SearchAttributeFieldKeyword03)
+
+	statusNames = map[wcipb.WciStatus]string{
+		wcipb.WCI_STATUS_RUNNING:               statusRunning,
+		wcipb.WCI_STATUS_PENDING_ACTIVATION:    "PendingActivation",
+		wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW: "MigratingToWorkflow",
+		wcipb.WCI_STATUS_MIGRATED:              "Migrated",
+		wcipb.WCI_STATUS_DELETED:               "Deleted",
+		wcipb.WCI_STATUS_MIGRATION_ABORTED:     "MigrationAborted",
+	}
+	validationNames = map[wcipb.ValidationResult]string{
+		wcipb.VALIDATION_RESULT_SUCCESS: string(iface.ValidationResultSuccess),
+		wcipb.VALIDATION_RESULT_FAILED:  string(iface.ValidationResultFailed),
+	}
 )
 
 // WorkerControllerInstance is the root component; the spec lives here, group runtime state on children.
@@ -147,6 +184,29 @@ func (w *WorkerControllerInstance) Memo(_ chasm.Context) proto.Message {
 		BuildId:        w.BuildId,
 		CreateTime:     w.CreateTime,
 	}
+}
+
+func (w *WorkerControllerInstance) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	version := &deploymentpb.WorkerDeploymentVersion{DeploymentName: w.DeploymentName, BuildId: w.BuildId}
+	out := []chasm.SearchAttributeKeyValue{
+		StatusSearchAttribute.Value(statusNames[w.Status]),
+		DeploymentNameSearchAttribute.Value(w.DeploymentName),
+		DeploymentVersionSearchAttribute.Value(worker_versioning.ExternalWorkerDeploymentVersionToString(version)),
+	}
+	if result, ok := validationNames[w.GetValidationStatus().GetResult()]; ok {
+		out = append(out, ValidationStatusSearchAttribute.Value(result))
+	}
+	var providers []string
+	for _, group := range w.ScalingGroupSpecs {
+		if p := group.GetCompute().GetProviderType(); p != "" && !slices.Contains(providers, p) {
+			providers = append(providers, p)
+		}
+	}
+	if len(providers) > 0 {
+		slices.Sort(providers)
+		out = append(out, ComputeProvidersSearchAttribute.Value(providers))
+	}
+	return out
 }
 
 func (w *WorkerControllerInstance) StateMachineState() wcipb.WciStatus {

@@ -62,7 +62,17 @@ func (l *Library) Name() string {
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*WorkerControllerInstance](InstanceComponent, chasm.WithBusinessIDAlias("WorkerControllerInstanceId")),
+		chasm.NewRegistrableComponent[*WorkerControllerInstance](
+			InstanceComponent,
+			chasm.WithBusinessIDAlias("WorkerControllerInstanceId"),
+			chasm.WithSearchAttributes(
+				StatusSearchAttribute,
+				DeploymentNameSearchAttribute,
+				DeploymentVersionSearchAttribute,
+				ValidationStatusSearchAttribute,
+				ComputeProvidersSearchAttribute,
+			),
+		),
 		chasm.NewRegistrableComponent[*ScalingGroup]("scaling_group"),
 	}
 }
