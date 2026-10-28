@@ -2,6 +2,7 @@ package wciclient
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -11,10 +12,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 
@@ -180,4 +186,25 @@ func TestListNeedsVisibility(t *testing.T) {
 	_, _, err := New(Params{Service: &fakeService{}}).ListWorkerControllerInstances(t.Context(), testNS, 10, nil)
 	var unimplemented *serviceerror.Unimplemented
 	require.ErrorAs(t, err, &unimplemented)
+}
+
+// List filters on the server: only running instances come back, so pending targets and closed runs are not listed.
+func TestListQueriesRunning(t *testing.T) {
+	memo, err := payload.Encode(&wcipb.WorkerControllerInstanceMemo{DeploymentName: "dep", BuildId: "b1"})
+	require.NoError(t, err)
+	visibility := chasm.NewMockVisibilityManager(gomock.NewController(t))
+	visibility.EXPECT().ListExecutions(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ reflect.Type, req *chasm.ListExecutionsRequest) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			require.Equal(t, wci.RunningListQuery, req.Query)
+			return &visibilityservice.ListChasmExecutionsResponse{
+				Executions:    []*chasmspb.VisibilityExecutionInfo{{BusinessId: "id", ChasmMemo: memo}},
+				NextPageToken: []byte("next"),
+			}, nil
+		})
+
+	items, next, err := New(Params{Service: &fakeService{}, Visibility: visibility}).ListWorkerControllerInstances(t.Context(), testNS, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "dep", items[0].DeploymentName)
+	require.Equal(t, []byte("next"), next)
 }
