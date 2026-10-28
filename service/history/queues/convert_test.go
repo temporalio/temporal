@@ -594,6 +594,128 @@ func TestFromPersistenceQueueState_GroupWithUnresolvableIndexCountsEachScope(t *
 	require.Equal(t, 2, got.lostResolutionOnReadCount)
 }
 
+func TestFromPersistenceQueueState_ReadsEveryFormat(t *testing.T) {
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	inline := uuid.NewString()
+	r0 := NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(200))
+	r1 := NewRange(tasks.NewImmediateKey(200), tasks.NewImmediateKey(300))
+	r2 := NewRange(tasks.NewImmediateKey(300), tasks.NewImmediateKey(400))
+	r4 := NewRange(tasks.NewImmediateKey(500), tasks.NewImmediateKey(600))
+	watermark := tasks.NewImmediateKey(1000)
+
+	tests := []struct {
+		name  string
+		state *persistencespb.QueueState
+		want  map[int64][]Scope
+	}{
+		{
+			// Hand-built, so it keeps checking the format every existing shard holds after the
+			// writer changes.
+			name: "plain format with no table and no groups is read unchanged",
+			state: &persistencespb.QueueState{
+				ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+				ReaderStates: map[int64]*persistencespb.QueueReaderState{
+					0: {Scopes: []*persistencespb.QueueSliceScope{
+						{
+							Range: ToPersistenceRange(r0),
+							Predicate: &persistencespb.Predicate{
+								PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+								Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+							},
+						},
+						{
+							Range: ToPersistenceRange(r1),
+							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+								NamespaceIds: []string{inline},
+							}),
+						},
+					}},
+					1: {Scopes: []*persistencespb.QueueSliceScope{
+						{
+							Range: ToPersistenceRange(r2),
+							Predicate: &persistencespb.Predicate{
+								PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK,
+								Attributes: &persistencespb.Predicate_OutboundTaskPredicateAttributes{
+									OutboundTaskPredicateAttributes: &persistencespb.OutboundTaskPredicateAttributes{
+										Groups: []*persistencespb.OutboundTaskPredicateAttributes_Group{
+											{TaskGroup: "g1", NamespaceId: "n1", Destination: "d1"},
+										},
+									},
+								},
+							},
+						},
+					}},
+				},
+			},
+			want: map[int64][]Scope{
+				0: {
+					NewScope(r0, predicates.Universal[tasks.Task]()),
+					NewScope(r1, tasks.NewNamespacePredicate([]string{inline})),
+				},
+				1: {
+					NewScope(r2, tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+						{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+					})),
+				},
+			},
+		},
+		{
+			name: "table and groups together in one state",
+			state: &persistencespb.QueueState{
+				NamespaceIdTable:             [][]byte{a[:], b[:], c[:]},
+				ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+				ReaderStates: map[int64]*persistencespb.QueueReaderState{
+					0: {
+						Scopes: []*persistencespb.QueueSliceScope{
+							{
+								Range: ToPersistenceRange(r2),
+								Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+									NamespaceIds:       []string{inline},
+									NamespaceIdIndexes: []int32{2},
+								}),
+							},
+						},
+						PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+							{
+								Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+									NamespaceIdIndexes: []int32{0, 1},
+								}),
+								Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r4), ToPersistenceRange(r0)},
+							},
+						},
+					},
+					1: {PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+						{
+							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+								NamespaceIdIndexes: []int32{1},
+							}),
+							Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r1)},
+						},
+					}},
+				},
+			},
+			want: map[int64][]Scope{
+				0: {
+					NewScope(r0, tasks.NewNamespacePredicate([]string{a.String(), b.String()})),
+					NewScope(r2, tasks.NewNamespacePredicate([]string{inline, c.String()})),
+					NewScope(r4, tasks.NewNamespacePredicate([]string{a.String(), b.String()})),
+				},
+				1: {
+					NewScope(r1, tasks.NewNamespacePredicate([]string{b.String()})),
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FromPersistenceQueueState(tc.state)
+
+			require.Equal(t, tc.want, got.readerScopes)
+			require.Equal(t, 0, got.lostResolutionOnReadCount)
+		})
+	}
+}
+
 func (s *convertSuite) TestConvertQueueState() {
 	readerScopes := map[int64][]Scope{
 		0: {},
