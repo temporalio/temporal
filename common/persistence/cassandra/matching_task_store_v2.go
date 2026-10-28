@@ -247,7 +247,7 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 
 	// Tasks and task queue metadata are in the same partition, so we can make the delete
 	// conditional on the range id with a batch.
-	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCompleteTasksLessThanQuery_v2, args...)
 	batch.Query(switchTasksTable(templateCheckRangeIDQuery, matchingTaskVersion2),
 		request.ConditionRangeID,
@@ -259,7 +259,7 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 		request.ConditionRangeID,
 	)
 	previous := make(map[string]any)
-	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
+	applied, _, err := batch.MapExecCAS(ctx, previous)
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
 	}
