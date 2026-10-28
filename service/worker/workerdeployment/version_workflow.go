@@ -374,12 +374,17 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 					workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 		}
 
-		if d.asyncPropagationsInProgress != 0 &&
-			(d.deleteVersion || !d.forceCAN || !d.skipPendingPropagations) {
+		if d.deleteVersion {
+			return d.asyncPropagationsInProgress == 0
+		}
+
+		canSkipPropagations := d.forceCAN && d.skipPendingPropagations
+		if d.asyncPropagationsInProgress != 0 && !canSkipPropagations {
 			return false
 		}
-		return d.deleteVersion || (handlersFinished &&
-			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+
+		shouldContinueAsNew := d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()
+		return handlersFinished && shouldContinueAsNew
 	})
 	if err != nil {
 		return err

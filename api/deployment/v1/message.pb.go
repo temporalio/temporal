@@ -3833,9 +3833,11 @@ type ForceCANVersionSignalArgs struct {
 	// If provided, this state will be used instead of the current state
 	// when performing continue-as-new.
 	OverrideState *VersionLocalState `protobuf:"bytes,1,opt,name=override_state,json=overrideState,proto3" json:"override_state,omitempty"`
-	// Skip waiting for pending propagations before continuing as new. Defaults to
-	// false. Setting this to true can abandon propagation to recover a stuck workflow.
-	// Each force-CaN signal replaces this choice, including signals that omit this field.
+	// Skip waiting for pending propagations before continuing as new. Defaults to false.
+	// Set this to true only when recovering a permanently stuck workflow.
+	// Abandoning in-flight propagation can leave task queues with stale routing or version data.
+	// If multiple force-CaN signals arrive before the workflow continues as new,
+	// the last signal determines whether to skip pending propagations.
 	SkipPendingPropagations bool `protobuf:"varint,2,opt,name=skip_pending_propagations,json=skipPendingPropagations,proto3" json:"skip_pending_propagations,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
