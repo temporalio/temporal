@@ -526,15 +526,20 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	invoker *Invoker,
 	scheduler *Scheduler,
 ) (result processBufferResult) {
+	// Only runs with a RunId can be cancelled/terminated, but an unresolved start
+	// also occupies the overlap slot (V1 starts synchronously before deciding again).
 	runningWorkflows := invoker.runningWorkflowExecutions()
-	isRunning := len(runningWorkflows) > 0
+	isRunning := len(runningWorkflows) > 0 || invoker.hasUnresolvedStart()
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing ignores starts that are already executing or backing off. An existing
 	// deferred BUFFER_ONE start still participates so it can reject later starts.
+	// With nothing running, deferred starts have nothing left to wait on (e.g. state
+	// written by an older binary that didn't re-enable them), so reconsider them too.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0 ||
-			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
+			(start.Attempt == -1 && (!isRunning ||
+				scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE))
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
