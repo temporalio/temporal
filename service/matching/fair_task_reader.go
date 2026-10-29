@@ -331,7 +331,7 @@ func (tr *fairTaskReader) addTaskToMatcher(task *internalTask) {
 	}
 
 	if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
-		task.finish(taskFinishResult{dropReason: dropReason})
+		task.finish(dropReason)
 		return
 	}
 	// This should only be due to persistence problems. Retry in a new goroutine
@@ -357,7 +357,7 @@ func (tr *fairTaskReader) addErrorBehavior(err error) dropReason {
 		return dropReasonUnspecified // retry
 	}
 	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
-		return dropReasonInvalid // drop the task
+		return dropReasonStickyWorkerUnavailable // drop the task
 	}
 	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
@@ -383,7 +383,7 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(taskFinishResult{dropReason: dropReasonExpiredMemory})
+				task.finish(dropReasonExpiredMemory)
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
@@ -391,7 +391,7 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 				return nil
 			}
 			if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
-				task.finish(taskFinishResult{dropReason: dropReason})
+				task.finish(dropReason)
 				return nil
 			}
 			metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)

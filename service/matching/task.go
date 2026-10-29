@@ -109,17 +109,6 @@ type (
 		// reader.completeTask records it in tasks_dropped.
 		dropReason dropReason
 	}
-
-	// taskFinishResult describes how a task finished. It is passed to internalTask.finish.
-	taskFinishResult struct {
-		// err is the result of RecordTaskStarted (or forwarding); nil on success or drop.
-		err error
-		// consumedToken reports whether the task consumed its rate-limit token (see finish).
-		consumedToken bool
-		// dropReason, when set, indicates the task is being dropped rather than dispatched
-		// and is recorded in tasks_dropped.
-		dropReason dropReason
-	}
 )
 
 var (
@@ -365,37 +354,41 @@ func (task *internalTask) setEvicted() {
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
 //
-// If the task took a rate limit token and didn't "use" it by actually dispatching the task,
-// finish will be called with consumedToken=false and task.recycleToken=clockedRateLimiter.RecycleToken,
-// so finish will call the rate limiter's RecycleToken to give the unused token back to any process
-// that is waiting on the token, if one exists.
+// A non-nil error recycles the task's rate-limit token, if it took one.
 //
-// When a backlog task is being dropped rather than dispatched, set r.dropReason; it is
-// carried on the taskResponse and counted in tasks_dropped by the backlog completion
-// callback (reader.completeTask).
+// A non-nil error will generally cause a backlog task to be kept and attempted to match again,
+// but if the task should be dropped instead, pass a dropReason as err. The reason will be
+// recorded in metrics.
 //
-// A successful dispatch (no err and no dropReason) records poll_success, so each task leaves the
-// backlog exactly once across poll_success and tasks_dropped.
-func (task *internalTask) finish(r taskFinishResult) {
+// A successful dispatch (nil err) records poll_success, so each task leaves the backlog exactly
+// once across poll_success and tasks_dropped.
+func (task *internalTask) finish(err error) {
 	recordPollSuccess := task.recordPollSuccess
 	task.recordPollSuccess = nil // clear so it's only used once; a re-dispatch sets it again
-	if recordPollSuccess != nil && r.err == nil && r.dropReason == dropReasonUnspecified {
+	if recordPollSuccess != nil && err == nil {
 		recordPollSuccess()
 	}
-	task.finishInternal(taskResponse{
-		startErr:   r.err,
-		dropReason: r.dropReason,
-	}, r.consumedToken)
+	if dr, ok := err.(dropReason); ok {
+		task.finishInternal(taskResponse{dropReason: dr}, true)
+	} else {
+		task.finishInternal(taskResponse{startErr: err}, err != nil)
+	}
 }
 
 // finishForward must be called after forwarding a task.
-func (task *internalTask) finishForward(forwardRes any, forwardErr error, consumedToken bool) {
-	task.finishInternal(taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}, consumedToken)
+func (task *internalTask) finishForward(forwardRes any, forwardErr error) {
+	// Don't recycle for query or nexus since forwardErr isn't a remote "start" error for those
+	// (they don't have RecordTaskStarted calls), it's a query/nexus error. This doesn't really
+	// matter since we don't apply rate limits there anyway.
+	recycle := forwardErr != nil && !task.isQuery() && !task.isNexus()
+	task.finishInternal(taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}, recycle)
 }
 
-func (task *internalTask) finishInternal(res taskResponse, consumedToken bool) {
-	if !consumedToken && task.recycleToken != nil {
-		task.recycleToken(task)
+func (task *internalTask) finishInternal(res taskResponse, recycle bool) {
+	recycleToken := task.recycleToken
+	task.recycleToken = nil // clear recycleToken so it's only used once
+	if recycle && recycleToken != nil {
+		recycleToken(task)
 	}
 
 	switch {

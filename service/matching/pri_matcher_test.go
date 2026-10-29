@@ -507,7 +507,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			polled, err := tm.Poll(ctx, &pollMetadata{})
 			require.NoError(t, err)
 			require.Equal(t, task, polled)
-			polled.finish(taskFinishResult{consumedToken: true})
+			polled.finish(nil)
 			synctest.Wait()
 			require.True(t, offerDone.Load())
 			require.NoError(t, offerErr)
@@ -577,26 +577,26 @@ func (s *PriMatcherSuite) TestPollSuccessRecordedOnSuccessfulDispatch() {
 			}
 			done <- res
 		})
-		dispatch := func(r taskFinishResult) {
+		dispatch := func(finishErr error) {
 			task.resetMatcherState()
 			_ = tm.AddTask(task)
 			polled, err := tm.Poll(ctx, &pollMetadata{})
 			require.NoError(t, err)
-			polled.finish(r)
+			polled.finish(finishErr)
 			<-done
 		}
 
-		for _, r := range []taskFinishResult{
-			{dropReason: dropReasonNotFound},            // e.g. RecordTaskStarted: NotFound
-			{dropReason: dropReasonExpiredMemory},       // found expired after the poll
-			{err: serviceerror.NewUnavailable("retry")}, // transient start error
+		for _, err := range []error{
+			dropReasonNotFound,                   // e.g. RecordTaskStarted: NotFound
+			dropReasonExpiredMemory,              // found expired after the poll
+			serviceerror.NewUnavailable("retry"), // transient start error
 		} {
-			dispatch(r)
+			dispatch(err)
 			n, _ := pollSuccessCounts(capture)
-			require.Zero(t, n, "poll_success recorded for unsuccessful dispatch %+v", r)
+			require.Zero(t, n, "poll_success recorded for unsuccessful dispatch: %v", err)
 		}
 
-		dispatch(taskFinishResult{consumedToken: true})
+		dispatch(nil)
 		n, nSync := pollSuccessCounts(capture)
 		require.Equal(t, 1, n)
 		require.Zero(t, nSync)
@@ -652,7 +652,11 @@ func (s *PriMatcherSuite) TestOfferDispatchMetrics() {
 				n, _ := pollSuccessCounts(capture)
 				require.Zero(t, n, "poll_success recorded before the dispatch finished")
 
-				polled.finish(taskFinishResult{consumedToken: tc.drop == dropReasonUnspecified, dropReason: tc.drop})
+				if tc.drop == dropReasonUnspecified {
+					polled.finish(nil)
+				} else {
+					polled.finish(tc.drop)
+				}
 				<-offerDone
 				require.NoError(t, offerErr)
 				require.Equal(t, syncMatchSuccess, outcome)

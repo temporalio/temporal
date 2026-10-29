@@ -1023,7 +1023,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		}
 		// Finish the task because now it is copied to the other backlog. It should be considered
 		// invalid because a poller did not receive the task.
-		task.finish(taskFinishResult{})
+		task.finish(nil)
 		return nil
 	}
 	return syncMatchQueue.AddSpooledTaskToMatcher(task)

@@ -649,12 +649,13 @@ const (
 
 // Matching task dropped reason tag values
 const (
-	DroppedTaskReasonNotFound      = "not_found"
-	DroppedTaskReasonInternalError = "internal_error"
-	DroppedTaskReasonDataLoss      = "data_loss"
-	DroppedTaskReasonExpiredRead   = "expired_read"
-	DroppedTaskReasonExpiredMemory = "expired_memory"
-	DroppedTaskReasonInvalid       = "invalid"
+	DroppedTaskReasonNotFound                = "not_found"
+	DroppedTaskReasonInternalError           = "internal_error"
+	DroppedTaskReasonDataLoss                = "data_loss"
+	DroppedTaskReasonExpiredRead             = "expired_read"
+	DroppedTaskReasonExpiredMemory           = "expired_memory"
+	DroppedTaskReasonStickyWorkerUnavailable = "sticky_worker_unavailable"
+	DroppedTaskReasonInvalid                 = "invalid"
 )
 
 var (
@@ -1491,6 +1492,12 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand poller autoscaling adoption.
+	WorkerHeartbeatCount = NewCounterDef(
+		"worker_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats, per task type polled by the worker. poller_autoscaling_heartbeat_count is a subset of this. "+
+				"Dimensions: namespace, taskqueue, task_type"),
+	)
 	PollerAutoscalingHeartbeatCount = NewCounterDef(
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
@@ -1512,6 +1519,13 @@ var (
 	)
 
 	// Versioning and Reachability
+	DeploymentVersionMissingFromUserData = NewCounterDef(
+		"deployment_version_missing_from_user_data",
+		WithDescription(
+			"Emitted when a deployment version that was successfully registered is not found in its "+
+				"task queue's user data after a configurable grace period. Indicates broken or lagging "+
+				"user data replication, which prevents task dispatch to workers on this version."),
+	)
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 
 	// Worker
@@ -1768,6 +1782,7 @@ var (
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
+	WorkerDeploymentTaskQueueFamilyBloomFilterOutcome = NewCounterDef("worker_deployment_task_queue_family_bloom_filter_outcome")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

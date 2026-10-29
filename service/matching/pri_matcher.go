@@ -214,7 +214,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
 			// consider this task expired while processing.
-			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
+			task.finish(getDroppedTaskExpiryReason(task))
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -230,19 +230,19 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 
 	if task.isQuery() {
 		res, err := tm.fwdr.ForwardQueryTask(ctx, task)
-		task.finishForward(res, err, true)
+		task.finishForward(res, err)
 		return false, err
 	}
 
 	if task.isNexus() {
 		res, err := tm.fwdr.ForwardNexusTask(ctx, task)
-		task.finishForward(res, err, true)
+		task.finishForward(res, err)
 		return false, err
 	}
 
 	// normal wf/activity task
 	err := tm.fwdr.ForwardTask(ctx, task)
-	task.finishForward(nil, err, true)
+	task.finishForward(nil, err)
 
 	return false, err
 }
@@ -288,14 +288,14 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 				maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 				if !maybeValid {
 					// We found an invalid one, complete it and go back for another batch immediately.
-					task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
+					task.finish(getDroppedTaskExpiryReason(task))
 
 					// Stay alive as long as we're invalidating tasks
 					tm.markAlive()
 					anyInvalid.Store(true)
 				} else {
 					// Task was valid, put it back and slow down checking if the whole batch is valid.
-					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: false})
+					task.finish(errReprocessTask)
 				}
 			})
 		}
@@ -591,7 +591,7 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	// ReprocessTasks will have woken sync tasks, but for backlog we also need to call finish.
 	for _, task := range tasks {
 		if !task.isSyncMatchTask() {
-			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
+			task.finish(errReprocessTask)
 		}
 	}
 }
@@ -608,7 +608,7 @@ func (tm *priTaskMatcher) ReprocessRedirectedTasksAfterStop() {
 			for _, task := range tasks {
 				// these should all be from backlog (not sync-match) but check again to be sure
 				if !task.isSyncMatchTask() {
-					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
+					task.finish(errReprocessTask)
 				}
 			}
 		}()

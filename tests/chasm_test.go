@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -1086,6 +1087,104 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		require.NoError(t, err)
 		require.Empty(t, resp.Executions)
 	}, 20*time.Second*debug.TimeoutMultiplier, time.Second)
+}
+
+// TestArchetypeRetention verifies that a retention registered via chasm.WithRetention overrides the
+// namespace retention and is floored at the namespace min retention. It asserts on the scheduled
+// DeleteHistoryEventTask instead of waiting for the retention period to elapse.
+func (s *ChasmSuite) TestArchetypeRetention() {
+	const (
+		namespaceRetention = 24 * time.Hour
+		minRetention       = 2 * time.Hour
+	)
+
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionGlobal, minRetention),
+		testcore.WithDynamicConfig(dynamicconfig.NamespaceMinRetentionLocal, minRetention),
+		testcore.WithDynamicConfig(dynamicconfig.RetentionTimerJitterDuration, time.Duration(0)),
+	)
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(s.Context())
+	s.NoError(err)
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	s.NotNil(recorder)
+
+	testCases := []struct {
+		name               string
+		archetypeRetention time.Duration
+		expectedRetention  time.Duration
+	}{
+		{
+			name:              "no archetype retention uses namespace retention",
+			expectedRetention: namespaceRetention,
+		},
+		{
+			name:               "archetype retention overrides with longer retention",
+			archetypeRetention: 30 * 24 * time.Hour,
+			expectedRetention:  30 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention overrides with shorter retention",
+			archetypeRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
+		},
+		{
+			name:               "archetype retention is floored at namespace min retention",
+			archetypeRetention: time.Minute,
+			expectedRetention:  minRetention,
+		},
+	}
+
+	for _, tc := range testCases {
+		// Sequential because the retention override applies to the whole dedicated cluster.
+		s.RunSequential(tc.name, func(s *ChasmSuite) {
+			tv := testvars.New(s.T())
+			ctx, cancel := context.WithTimeout(chasmCtx, chasmTestTimeout)
+			defer cancel()
+
+			defer env.OverrideDynamicConfig(tests.Retention, tc.archetypeRetention)()
+
+			storeID := tv.Any().String()
+			createResp, err := tests.NewPayloadStoreHandler(ctx, tests.NewPayloadStoreRequest{
+				NamespaceID: env.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+
+			beforeClose := time.Now()
+			_, err = tests.ClosePayloadStoreHandler(ctx, tests.ClosePayloadStoreRequest{
+				NamespaceID: env.NamespaceID(),
+				StoreID:     storeID,
+			})
+			s.NoError(err)
+			afterClose := time.Now()
+
+			var deleteTask *historytasks.DeleteHistoryEventTask
+			await.Require(s.Context(), s.T(), func(t *await.T) {
+				recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+					NamespaceID: env.NamespaceID().String(),
+					WorkflowID:  storeID,
+					RunID:       createResp.RunID,
+				})
+				for _, rec := range recorded {
+					if task, ok := rec.Task.(*historytasks.DeleteHistoryEventTask); ok {
+						deleteTask = task
+					}
+				}
+				require.NotNil(t, deleteTask, "expected a DeleteHistoryEventTask for retention")
+			}, 5*time.Second, 50*time.Millisecond)
+
+			s.Equal(tests.ArchetypeID, deleteTask.ArchetypeID)
+			// Persisted task timestamps are rounded to millisecond precision.
+			s.WithinRange(
+				deleteTask.VisibilityTimestamp,
+				beforeClose.Add(tc.expectedRetention).Add(-time.Millisecond),
+				afterClose.Add(tc.expectedRetention).Add(time.Millisecond),
+			)
+		})
+	}
 }
 
 // TODO: More tests here...
