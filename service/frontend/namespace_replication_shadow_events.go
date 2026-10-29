@@ -96,7 +96,8 @@ func (adh *AdminHandler) recordShadowReceiveComparison(request *adminservice.App
 	if adh.metricsHandler != nil {
 		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(1,
 			metrics.SourceClusterTag(request.GetSourceCluster()), metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
-			metrics.OperationTag(nsreplication.OperationMetricValue(metadataTask.GetNamespaceOperation())), metrics.OutcomeTag(outcome), metrics.StringTag("reason", reason))
+			metrics.OperationTag(nsreplication.OperationMetricValue(metadataTask.GetNamespaceOperation())), metrics.OutcomeTag(outcome), metrics.StringTag("reason", reason),
+			metrics.NamespaceTag(metadataTask.GetInfo().GetName()))
 	}
 	if adh.config == nil || adh.config.EmitNamespaceLifecycleEvents == nil || !adh.config.EmitNamespaceLifecycleEvents() {
 		return

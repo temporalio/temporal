@@ -133,6 +133,7 @@ func TestShadowReceiverObservability(t *testing.T) {
 			require.Equal(t, "cellA", values[0].Tags["source_cluster"])
 			require.Equal(t, "cellB", values[0].Tags["target_cluster"])
 			require.Equal(t, "update", values[0].Tags["operation"])
+			require.Equal(t, "payments", values[0].Tags["namespace"])
 			if tc.disableEvents {
 				require.Empty(t, logger.records)
 				return

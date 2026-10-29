@@ -147,8 +147,10 @@ func TestPeerApplyObservability(t *testing.T) {
 			}
 			outcomes := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
 			require.Len(t, outcomes, 1)
-			require.Equal(t, map[string]string{"source_cluster": "cellA", "target_cluster": "cellB", "operation": "update", "outcome": tc.outcome, "mode": "shadow", "apply_stage": "peer"}, outcomes[0].Tags)
-			require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyLatency.Name()), 1)
+			require.Equal(t, map[string]string{"source_cluster": "cellA", "target_cluster": "cellB", "operation": "update", "outcome": tc.outcome, "mode": "shadow", "apply_stage": "peer", "namespace": mutation.GetNamespaceDetail().GetInfo().GetName()}, outcomes[0].Tags)
+			latencies := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyLatency.Name())
+			require.Len(t, latencies, 1)
+			require.NotContains(t, latencies[0].Tags, "namespace")
 			require.Len(t, logger.records, tc.wantEvents)
 			completions := capture.SnapshotMetric(metrics.NamespaceReplicationShadowCompletionOutcomes.Name())
 			if !tc.saveFailure && !tc.staleOutcome && tc.outcome != "retryable_error" {
@@ -198,6 +200,7 @@ func TestPeerApplyObservability(t *testing.T) {
 				age := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name())
 				require.Len(t, age, 1)
 				require.Equal(t, tc.age, age[0].Value)
+				require.NotContains(t, age[0].Tags, "namespace")
 				threshold := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name())
 				if tc.age >= time.Minute {
 					require.Len(t, threshold, 1)
