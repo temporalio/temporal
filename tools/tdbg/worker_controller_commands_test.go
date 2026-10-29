@@ -3,6 +3,7 @@ package tdbg_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -30,6 +31,7 @@ func (c *wciAdminClient) ListWorkerControllerInstances(
 			ComputeProviders:  []string{"aws-lambda", "gcp-cloud-run"},
 			DeploymentVersion: "dep:b1",
 			StartTime:         timestamppb.Now(),
+			LastUpdateTime:    timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
 		}},
 	}, nil
 }
@@ -76,7 +78,7 @@ func TestListWorkerControllerInstances(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "my-ns", admin.listReq.GetNamespace())
 	require.Empty(t, admin.listReq.GetQuery(), "the server applies the running-only default")
-	for _, want := range []string{"wci-id", "Running", "Succeeded", "aws-lambda,gcp-cloud-run", "dep:b1"} {
+	for _, want := range []string{"wci-id", "Running", "Succeeded", "aws-lambda,gcp-cloud-run", "dep:b1", "LASTUPDATETIME", "2026-01-02 03:04:05"} {
 		require.Contains(t, stdout, want)
 	}
 

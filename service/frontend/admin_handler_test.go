@@ -2945,10 +2945,13 @@ func (s *adminHandlerSuite) TestMigrateWorkerControllerInstance() {
 func (s *adminHandlerSuite) TestListWorkerControllerInstances() {
 	visibility := chasm.NewMockVisibilityManager(s.controller)
 	ctx := chasm.NewVisibilityManagerContext(context.Background(), visibility)
-	memo, err := payload.Encode(&wcipb.WorkerControllerInstanceMemo{DeploymentName: "dep", BuildId: "build"})
+	start := time.Now().UTC().Truncate(time.Second)
+	lastUpdate := start.Add(time.Minute)
+	memo, err := payload.Encode(&wcipb.WorkerControllerInstanceMemo{
+		DeploymentName: "dep", BuildId: "build", CreateTime: timestamppb.New(start), LastUpdateTime: timestamppb.New(lastUpdate),
+	})
 	s.NoError(err)
 	keyword := func(v string) *commonpb.Payload { return sadefs.MustEncodeValue(v, enumspb.INDEXED_VALUE_TYPE_KEYWORD) }
-	start := time.Now().UTC().Truncate(time.Second)
 
 	var gotQuery string
 	visibility.EXPECT().ListExecutions(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2989,6 +2992,8 @@ func (s *adminHandlerSuite) TestListWorkerControllerInstances() {
 	s.Equal("dep:build", got.GetDeploymentVersion())
 	s.Equal(start, got.GetStartTime().AsTime())
 	s.Nil(got.GetCloseTime())
+	s.Equal(start, got.GetCreateTime().AsTime())
+	s.Equal(lastUpdate, got.GetLastUpdateTime().AsTime())
 
 	_, err = s.handler.ListWorkerControllerInstances(ctx, &adminservice.ListWorkerControllerInstancesRequest{
 		Namespace: s.namespace.String(), Query: "WorkerDeploymentName = 'dep'",

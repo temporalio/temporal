@@ -207,7 +207,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		}
 		w.applySpec(mctx, specsToCHASM(final), registrations)
 		w.LastModifierIdentity = req.GetIdentity()
-		w.mintConflictToken()
+		w.recordSpecChange(mctx)
 		return &wcipb.UpdateWorkerControllerInstanceResponse{ScalingGroupSpecs: w.ScalingGroupSpecs, ConflictToken: w.ConflictToken}, nil
 	}
 
@@ -253,7 +253,7 @@ func implicitDelete(ctx context.Context, req *wcipb.UpdateWorkerControllerInstan
 		if err := w.checkConflictToken(req.GetConflictToken()); err != nil {
 			return nil, err
 		}
-		w.mintConflictToken()
+		w.recordSpecChange(mctx)
 		return w.ConflictToken, TransitionDelete.Apply(w, mctx, EventDelete{Identity: req.GetIdentity()})
 	}, nil)
 	if err != nil {

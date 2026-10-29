@@ -6672,7 +6672,7 @@ func (x *ListQueuesResponse_QueueInfo) GetLastMessageId() int64 {
 	return 0
 }
 
-// A CHASM-backed instance as visibility indexed it; fields come from its search attributes.
+// A CHASM-backed instance as visibility indexed it, from its search attributes and memo.
 type ListWorkerControllerInstancesResponse_Instance struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	InstanceId           string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
@@ -6685,6 +6685,8 @@ type ListWorkerControllerInstancesResponse_Instance struct {
 	StartTime            *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	CloseTime            *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
 	StateTransitionCount int64                  `protobuf:"varint,10,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
+	CreateTime           *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	LastUpdateTime       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -6787,6 +6789,20 @@ func (x *ListWorkerControllerInstancesResponse_Instance) GetStateTransitionCount
 		return x.StateTransitionCount
 	}
 	return 0
+}
+
+func (x *ListWorkerControllerInstancesResponse_Instance) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *ListWorkerControllerInstancesResponse_Instance) GetLastUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUpdateTime
+	}
+	return nil
 }
 
 type CountExecutionsResponse_AggregationGroup struct {
@@ -7310,10 +7326,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12&\n" +
-	"\x0fnext_page_token\x18\x04 \x01(\fR\rnextPageToken\"\xfd\x04\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\fR\rnextPageToken\"\x80\x06\n" +
 	"%ListWorkerControllerInstancesResponse\x12q\n" +
 	"\tinstances\x18\x01 \x03(\v2S.temporal.server.api.adminservice.v1.ListWorkerControllerInstancesResponse.InstanceR\tinstances\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\x1a\xb8\x03\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\x1a\xbb\x04\n" +
 	"\bInstance\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x15\n" +
@@ -7328,7 +7344,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\n" +
 	"close_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x124\n" +
 	"\x16state_transition_count\x18\n" +
-	" \x01(\x03R\x14stateTransitionCount\"\x90\x01\n" +
+	" \x01(\x03R\x14stateTransitionCount\x12;\n" +
+	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12D\n" +
+	"\x10last_update_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\"\x90\x01\n" +
 	"\x15ListExecutionsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x1b\n" +
@@ -7639,12 +7658,14 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []
 	167, // 101: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
 	128, // 102: temporal.server.api.adminservice.v1.ListWorkerControllerInstancesResponse.Instance.start_time:type_name -> google.protobuf.Timestamp
 	128, // 103: temporal.server.api.adminservice.v1.ListWorkerControllerInstancesResponse.Instance.close_time:type_name -> google.protobuf.Timestamp
-	168, // 104: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
-	105, // [105:105] is the sub-list for method output_type
-	105, // [105:105] is the sub-list for method input_type
-	105, // [105:105] is the sub-list for extension type_name
-	105, // [105:105] is the sub-list for extension extendee
-	0,   // [0:105] is the sub-list for field type_name
+	128, // 104: temporal.server.api.adminservice.v1.ListWorkerControllerInstancesResponse.Instance.create_time:type_name -> google.protobuf.Timestamp
+	128, // 105: temporal.server.api.adminservice.v1.ListWorkerControllerInstancesResponse.Instance.last_update_time:type_name -> google.protobuf.Timestamp
+	168, // 106: temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
+	107, // [107:107] is the sub-list for method output_type
+	107, // [107:107] is the sub-list for method input_type
+	107, // [107:107] is the sub-list for extension type_name
+	107, // [107:107] is the sub-list for extension extendee
+	0,   // [0:107] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_adminservice_v1_request_response_proto_init() }

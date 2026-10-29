@@ -101,7 +101,7 @@ func NewWorkerControllerInstance(
 	}
 	now := ctx.Now(w)
 	w.CreateTime = timestamppb.New(now)
-	w.mintConflictToken()
+	w.recordSpecChange(ctx)
 	for id := range specs {
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, NewScalingGroup(id))
 	}
@@ -183,6 +183,7 @@ func (w *WorkerControllerInstance) Memo(_ chasm.Context) proto.Message {
 		DeploymentName: w.DeploymentName,
 		BuildId:        w.BuildId,
 		CreateTime:     w.CreateTime,
+		LastUpdateTime: w.LastUpdateTime,
 	}
 }
 
@@ -231,9 +232,10 @@ func (w *WorkerControllerInstance) CheckMutable() error {
 	}
 }
 
-// mintConflictToken is random so tokens from a deleted run never match its successor; CHASM mutations aren't replayed.
-func (w *WorkerControllerInstance) mintConflictToken() {
+// recordSpecChange mints a random token so tokens from a deleted run never match its successor; CHASM mutations aren't replayed.
+func (w *WorkerControllerInstance) recordSpecChange(ctx chasm.Context) {
 	w.ConflictToken = []byte(uuid.NewString())
+	w.LastUpdateTime = timestamppb.New(ctx.Now(w))
 }
 
 // checkConflictToken under the lock: two updates holding the same token can both pass the pre-read check.

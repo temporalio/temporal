@@ -30,6 +30,8 @@ message WorkerControllerInstanceState {
   google.protobuf.Timestamp pending_expire_time = 12;
   // Token that activated this instance; never overwritten, so a retried activation stays accepted.
   string activated_migration_token = 13;
+  // Last spec change: create, update, delete, or migration activation.
+  google.protobuf.Timestamp last_update_time = 14;
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -106,6 +108,7 @@ message WorkerControllerInstanceMemo {
   string deployment_name = 1;
   string build_id = 2;
   google.protobuf.Timestamp create_time = 3;
+  google.protobuf.Timestamp last_update_time = 4;
 }
 
 // A batched task-add from matching's hook.

@@ -2456,6 +2456,8 @@ func (adh *AdminHandler) ListWorkerControllerInstances(
 			DeploymentVersion:    deploymentVersion,
 			StartTime:            timestamppb.New(ex.StartTime),
 			StateTransitionCount: ex.StateTransitionCount,
+			CreateTime:           ex.ChasmMemo.GetCreateTime(),
+			LastUpdateTime:       ex.ChasmMemo.GetLastUpdateTime(),
 		}
 		// chasm.ListExecutions turns a missing close time into the Unix epoch.
 		if !ex.CloseTime.IsZero() && ex.CloseTime.Unix() != 0 {

@@ -756,7 +756,7 @@ message ListWorkerControllerInstancesRequest {
 }
 
 message ListWorkerControllerInstancesResponse {
-  // A CHASM-backed instance as visibility indexed it; fields come from its search attributes.
+  // A CHASM-backed instance as visibility indexed it, from its search attributes and memo.
   message Instance {
     string instance_id = 1;
     string run_id = 2;
@@ -768,6 +768,8 @@ message ListWorkerControllerInstancesResponse {
     google.protobuf.Timestamp start_time = 8;
     google.protobuf.Timestamp close_time = 9;
     int64 state_transition_count = 10;
+    google.protobuf.Timestamp create_time = 11;
+    google.protobuf.Timestamp last_update_time = 12;
   }
 
   repeated Instance instances = 1;
