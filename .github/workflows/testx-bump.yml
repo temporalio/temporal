@@ -73,30 +73,6 @@ jobs:
           fi
 
           title="Bump go.temporal.io/testx to ${{ steps.bump.outputs.sha }}"
-          open_prs=$(gh pr list \
-            --head ${{ env.BRANCH }} \
-            --author "app/${APP_SLUG}" \
-            --state open \
-            --json title,url)
-          pr_url=$(jq -r --arg title "${title}" '.[] | select(.title == $title) | .url' <<< "${open_prs}")
-
-          if [ -n "${pr_url}" ]; then
-            mergeable=$(gh pr view "${pr_url}" --json mergeable --jq .mergeable)
-            case "${mergeable}" in
-              MERGEABLE)
-                echo "An open PR already bumps to this commit; retrying auto-merge"
-                echo "pr_url=${pr_url}" >> "${GITHUB_OUTPUT}"
-                exit 0
-                ;;
-              CONFLICTING)
-                echo "Existing bump PR has merge conflicts; recreating it from main"
-                ;;
-              *)
-                echo "::error::Could not determine whether the existing bump PR has merge conflicts"
-                exit 1
-                ;;
-            esac
-          fi
 
           # Delete remote branch if it exists from a previous run.
           # This will also close a previous PR that bumps to an older commit.
@@ -117,7 +93,6 @@ jobs:
           echo "pr_url=${pr_url}" >> "${GITHUB_OUTPUT}"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          APP_SLUG: ${{ steps.generate-token.outputs.app-slug }}
 
       - name: Enable auto-merge
         if: steps.create-pr.outputs.pr_url != ''
