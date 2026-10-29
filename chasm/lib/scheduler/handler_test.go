@@ -2,13 +2,18 @@ package scheduler_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -192,4 +197,151 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
 	var unavailableErr *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailableErr)
+}
+
+// A retried PatchSchedule (same RequestId) must not enqueue another manual action.
+func TestHandler_PatchSchedule_RequestIDDedup(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 26, 22, 4, 0, 0, time.UTC)
+	trigger := &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		ScheduledTime: timestamppb.New(now),
+	}}
+	backfill := &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+		StartTime:     timestamppb.New(now.Add(-time.Minute)),
+		EndTime:       timestamppb.New(now.Add(-time.Minute)),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+	}}}
+
+	for _, tc := range []struct {
+		name       string
+		patch      *schedulepb.SchedulePatch
+		requestIDs []string
+		wantManual int
+	}{
+		{name: "trigger retried", patch: trigger, requestIDs: []string{"req-1", "req-1"}, wantManual: 1},
+		{name: "backfill retried", patch: backfill, requestIDs: []string{"req-1", "req-1"}, wantManual: 1},
+		{name: "trigger distinct request IDs", patch: trigger, requestIDs: []string{"req-1", "req-2"}, wantManual: 2},
+		{name: "backfill distinct request IDs", patch: backfill, requestIDs: []string{"req-1", "req-2"}, wantManual: 2},
+		{name: "trigger empty request ID", patch: trigger, requestIDs: []string{"", ""}, wantManual: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ts := clock.NewEventTimeSource()
+			ts.Update(now)
+			env := newSchedulerTestEngine(t, defaultSchedule(), withEngineTimeSource(ts))
+			h := scheduler.NewTestHandler(env.logger)
+
+			for _, requestID := range tc.requestIDs {
+				resp, err := h.PatchSchedule(env.engineCtx, &schedulerpb.PatchScheduleRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.PatchScheduleRequest{
+						Namespace:  namespace,
+						ScheduleId: scheduleID,
+						RequestId:  requestID,
+						Patch:      common.CloneProto(tc.patch),
+					},
+				})
+				require.NoError(t, err)
+				require.NotNil(t, resp.GetFrontendResponse())
+			}
+
+			require.NoError(t, env.readScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) error {
+				var manual int
+				for _, start := range s.Invoker.Get(ctx).BufferedStarts {
+					if start.Manual {
+						manual++
+					}
+				}
+				require.Equal(t, tc.wantManual, manual)
+				return nil
+			}))
+		})
+	}
+}
+
+// A retried UpdateSchedule (same RequestId) must succeed without reapplying, matching V1's
+// signal dedup: no conflict-token mismatch, and no clobbering of a later update.
+func TestHandler_UpdateSchedule_RequestIDDedup(t *testing.T) {
+	t.Parallel()
+	type call struct {
+		requestID     string
+		notes         string
+		initialToken  bool
+		wantTokenFail bool
+	}
+	for _, tc := range []struct {
+		name      string
+		calls     []call
+		wantNotes string
+	}{
+		{
+			name: "retry with stale conflict token succeeds",
+			calls: []call{
+				{requestID: "req-1", notes: "a", initialToken: true},
+				{requestID: "req-1", notes: "a", initialToken: true},
+			},
+			wantNotes: "a",
+		},
+		{
+			name: "late retry does not clobber a newer update",
+			calls: []call{
+				{requestID: "req-1", notes: "a"},
+				{requestID: "req-2", notes: "b"},
+				{requestID: "req-1", notes: "a"},
+			},
+			wantNotes: "b",
+		},
+		{
+			name: "empty request ID is not deduplicated",
+			calls: []call{
+				{notes: "a", initialToken: true},
+				{notes: "b", initialToken: true, wantTokenFail: true},
+				{notes: "c"},
+			},
+			wantNotes: "c",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newSchedulerTestEngine(t, defaultSchedule())
+			h := scheduler.NewTestHandler(env.logger)
+
+			desc, err := h.DescribeSchedule(env.engineCtx, &schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     namespaceID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: namespace, ScheduleId: scheduleID},
+			})
+			require.NoError(t, err)
+			initialToken := desc.GetFrontendResponse().GetConflictToken()
+			require.NotEmpty(t, initialToken)
+
+			for _, c := range tc.calls {
+				sched := defaultSchedule()
+				sched.State.Notes = c.notes
+				req := &workflowservice.UpdateScheduleRequest{
+					Namespace:  namespace,
+					ScheduleId: scheduleID,
+					RequestId:  c.requestID,
+					Schedule:   sched,
+				}
+				if c.initialToken {
+					req.ConflictToken = initialToken
+				}
+				_, err := h.UpdateSchedule(env.engineCtx, &schedulerpb.UpdateScheduleRequest{
+					NamespaceId:     namespaceID,
+					FrontendRequest: req,
+				})
+				if c.wantTokenFail {
+					require.ErrorIs(t, err, scheduler.ErrConflictTokenMismatch)
+				} else {
+					require.NoError(t, err)
+				}
+			}
+
+			require.NoError(t, env.readScheduler(func(s *scheduler.Scheduler, _ chasm.Context) error {
+				require.Equal(t, tc.wantNotes, s.Schedule.GetState().GetNotes())
+				return nil
+			}))
+		})
+	}
 }
