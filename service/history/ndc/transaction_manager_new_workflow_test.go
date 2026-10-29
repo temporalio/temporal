@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -401,6 +402,179 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 	s.Require().NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)
 	s.True(releaseCalled)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_SentByActiveCluster_SkipsReapply() {
+	s.testDispatchForNewWorkflowNoCurrentRecordReapply(cluster.TestCurrentClusterName, false)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_SentByStandbyCluster_Reapplies() {
+	s.testDispatchForNewWorkflowNoCurrentRecordReapply(cluster.TestAlternativeClusterName, true)
+}
+
+// testDispatchForNewWorkflowNoCurrentRecordReapply applies a completed run that has a successor and
+// reapply candidates, with no current record, sent by sourceClusterName. The namespace is active in
+// cluster.TestCurrentClusterName.
+func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentRecordReapply(
+	sourceClusterName string,
+	expectReapply bool,
+) {
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	ctx := s.newReplicationContext(namespaceID, sourceClusterName)
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) {}
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId: runID,
+		State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+	}
+	workflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: executionState,
+	}
+	workflowEventsSeq := []*persistence.WorkflowEvents{}
+	eventReapplyCandidates := []*historypb.HistoryEvent{{
+		EventId: common.FirstEventID + rand.Int63(),
+	}}
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:       namespaceID.String(),
+		WorkflowId:        workflowID,
+		NewExecutionRunId: "successor run ID",
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+	mutableState.EXPECT().GetReapplyCandidateEvents().Return(eventReapplyCandidates).AnyTimes()
+	mutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(
+		workflowSnapshot, workflowEventsSeq, nil,
+	)
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(
+		ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID,
+	).Return("", nil)
+
+	if expectReapply {
+		weContext.EXPECT().ReapplyEvents(ctx, s.mockShard, []*persistence.WorkflowEvents{{
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			Events:      eventReapplyCandidates,
+		}}).Return(nil)
+	} else {
+		weContext.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	}
+	weContext.EXPECT().CreateWorkflowExecution(
+		ctx,
+		s.mockShard,
+		persistence.CreateWorkflowModeBypassCurrent,
+		"",
+		int64(0),
+		mutableState,
+		workflowSnapshot,
+		workflowEventsSeq,
+		historyi.TransactionPolicyPassive,
+	).Return(nil)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionState.State)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_SentByActiveCluster_SkipsReapply() {
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	currentRunID := "other random runID"
+	ctx := s.newReplicationContext(namespaceID, cluster.TestCurrentClusterName)
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) {}
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMockWorkflow(s.controller)
+	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) {}
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+		},
+	}
+	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
+		Events: []*historypb.HistoryEvent{{
+			EventId: common.FirstEventID + rand.Int63(),
+		}},
+	}}
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(nil).AnyTimes()
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(
+		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
+	)
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(currentWorkflow, nil)
+
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	targetContext.EXPECT().CreateWorkflowExecution(
+		ctx,
+		s.mockShard,
+		persistence.CreateWorkflowModeBypassCurrent,
+		"",
+		int64(0),
+		targetMutableState,
+		targetWorkflowSnapshot,
+		targetWorkflowEventsSeq,
+		historyi.TransactionPolicyPassive,
+	).Return(nil)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
+	s.NoError(err)
+}
+
+// newReplicationContext returns a context for state sent by sourceClusterName, for a namespace that
+// is active in cluster.TestCurrentClusterName.
+func (s *transactionMgrForNewWorkflowSuite) newReplicationContext(
+	namespaceID namespace.ID,
+	sourceClusterName string,
+) context.Context {
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(
+		namespace.NewGlobalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID.String()},
+			nil,
+			&persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			1,
+		), nil,
+	).AnyTimes()
+	s.mockShard.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+	return withReplicationTaskInfo(context.Background(), replicationTaskInfo{
+		sourceClusterName: sourceClusterName,
+	})
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsCurrent() {

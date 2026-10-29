@@ -88,6 +88,8 @@ type (
 	replicationTaskInfo struct {
 		isForceReplication bool
 		workflowStatus     enumspb.WorkflowExecutionStatus
+		// sourceClusterName is the cluster that sent the replicated state.
+		sourceClusterName string
 	}
 )
 
@@ -142,6 +144,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
 		isForceReplication: request.GetIsForceReplication(),
 		workflowStatus:     executionState.GetStatus(),
+		sourceClusterName:  request.GetRemoteCluster(),
 	})
 
 	// SyncWorkflowState is not used by new state-based replication stack,
@@ -309,6 +312,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
 		isForceReplication: versionedTransitionArtifact.GetIsForceReplication(),
 		workflowStatus:     executionState.GetStatus(),
+		sourceClusterName:  sourceClusterName,
 	})
 
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
