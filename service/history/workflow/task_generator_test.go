@@ -1453,7 +1453,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_StateMachineTimer
 		capturedTasks = append(capturedTasks, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 	require.Len(t, capturedTasks, 1)
 	require.Equal(t, &tasks.StateMachineTimerTask{

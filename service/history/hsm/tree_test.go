@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,8 +26,44 @@ var reg = hsm.NewRegistry()
 
 type backend struct{}
 
+type workflowTimeBackend struct {
+	backend
+	now time.Time
+}
+
+func (b *workflowTimeBackend) Now() time.Time {
+	return b.now
+}
+
 func (b *backend) GetCurrentVersion() int64 {
 	return 1
+}
+
+func TestNodeWorkflowTime(t *testing.T) {
+	expected := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
+	root, err := hsm.NewRoot(
+		reg,
+		def1.Type(),
+		hsmtest.NewData(hsmtest.State1),
+		make(map[string]*persistencespb.StateMachineMap),
+		&workflowTimeBackend{now: expected},
+	)
+	require.NoError(t, err)
+
+	actual, ok := root.WorkflowTime()
+	require.True(t, ok)
+	require.Equal(t, expected, actual)
+
+	root, err = hsm.NewRoot(
+		reg,
+		def1.Type(),
+		hsmtest.NewData(hsmtest.State1),
+		make(map[string]*persistencespb.StateMachineMap),
+		&backend{},
+	)
+	require.NoError(t, err)
+	_, ok = root.WorkflowTime()
+	require.False(t, ok)
 }
 
 func (b *backend) NextTransitionCount() int64 {

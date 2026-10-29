@@ -565,9 +565,13 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	if err != nil {
 		return err
 	}
+	attemptTime := env.Now()
+	if workflowTime, ok := node.WorkflowTime(); ok {
+		attemptTime = workflowTime
+	}
 	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-			Time:        env.Now(),
+			Time:        attemptTime,
 			Failure:     failure,
 			Node:        node,
 			RetryPolicy: e.Config.RetryPolicy(),

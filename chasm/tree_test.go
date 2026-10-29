@@ -6579,6 +6579,48 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 			"regeneration removes the old pure timer even when its old wall-clock time is later")
 	})
 
+	s.Run("RegeneratesOnPassiveNonDirtyClose", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:                    testSideEffectTaskTypeID,
+								ScheduledTime:             timestamppb.New(baseTime.Add(2 * time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:              testPureTaskTypeID,
+								ScheduledTime:       timestamppb.New(baseTime.Add(time.Hour)),
+								VersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+								PhysicalTaskStatus:  physicalTaskStatusCreated,
+							}},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		s.False(root.IsDirty())
+
+		root.RequestTimerTaskRegenerationOnClose()
+		_, err = root.CloseTransaction(context.Background(), false)
+		s.NoError(err)
+		s.Equal(2, s.nodeBackend.NumTasksAdded(),
+			"passive close re-stamps persisted timers even when no CHASM component changed")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+	})
+
 	s.Run("RegeneratesSideEffectTimersAndEarliestPureTask", func() {
 		s.nodeBackend = &MockNodeBackend{}
 		s.nodeBackend.HandleNow = s.timeSource.Now

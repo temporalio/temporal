@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -192,6 +193,17 @@ type Node struct {
 	definition  StateMachineDefinition
 	backend     NodeBackend
 	opLog       OperationLog
+}
+
+// WorkflowTime returns the workflow's virtual current time when the node backend exposes it.
+// Not every HSM backend has a workflow clock, so callers must fall back to their wall clock when
+// ok is false.
+func (n *Node) WorkflowTime() (workflowTime time.Time, ok bool) {
+	timeSource, ok := n.backend.(interface{ Now() time.Time })
+	if !ok {
+		return time.Time{}, false
+	}
+	return timeSource.Now(), true
 }
 
 // NewRoot creates a new root [Node].

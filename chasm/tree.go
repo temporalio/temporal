@@ -4275,15 +4275,34 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 // execution changes its virtual-time offset at the end of transaction close.
 func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 	archetypeID := n.ArchetypeID()
-	sideEffectTasks, firstPureTask, firstPureTaskNode := n.timerTasksForTimeSkipping()
+	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
+	var firstPureTaskNode *Node
 
-	for _, timerTask := range sideEffectTasks {
-		timerTask.task.PhysicalTaskStatus = physicalTaskStatusNone
-		timerTask.node.closeTransactionGeneratePhysicalSideEffectTask(
-			timerTask.task,
-			timerTask.nodePath,
-			archetypeID,
-		)
+	for nodePath, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
+			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
+				continue
+			}
+			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
+			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
+		}
+
+		// Find the earliest pure task in the entire tree. Pure tasks are sorted
+		// by scheduled time, so pureTasks[0] is the earliest for this component.
+		pureTasks := componentAttr.GetPureTasks()
+		if len(pureTasks) == 0 {
+			continue
+		}
+
+		if firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0 {
+			firstPureTask = pureTasks[0]
+			firstPureTaskNode = node
+		}
 	}
 
 	if firstPureTask != nil {
@@ -4307,43 +4326,6 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 // have completed, so each surviving logical timer produces exactly one physical task.
 func (n *Node) RequestTimerTaskRegenerationOnClose() {
 	n.regenerateTimerTasksOnClose = true
-}
-
-type timerSideEffectTaskForTimeSkipping struct {
-	nodePath []string
-	node     *Node
-	task     *persistencespb.ChasmComponentAttributes_Task
-}
-
-func (n *Node) timerTasksForTimeSkipping() (
-	sideEffectTasks []timerSideEffectTaskForTimeSkipping,
-	firstPureTask *persistencespb.ChasmComponentAttributes_Task,
-	firstPureTaskNode *Node,
-) {
-	for nodePath, node := range n.andAllChildren() {
-		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
-		if componentAttr == nil {
-			continue
-		}
-		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
-			if taskCategory(sideEffectTask) == tasks.CategoryTimer {
-				sideEffectTasks = append(sideEffectTasks, timerSideEffectTaskForTimeSkipping{
-					nodePath: nodePath,
-					node:     node,
-					task:     sideEffectTask,
-				})
-			}
-		}
-
-		// Pure tasks are sorted by scheduled time, so the first entry is the
-		// component's candidate for the earliest task across the execution.
-		pureTasks := componentAttr.GetPureTasks()
-		if len(pureTasks) > 0 && (firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0) {
-			firstPureTask = pureTasks[0]
-			firstPureTaskNode = node
-		}
-	}
-	return sideEffectTasks, firstPureTask, firstPureTaskNode
 }
 
 // defaultFindNextTargetTime finds the earliest timer task from both pure and side-effect tasks

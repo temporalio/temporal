@@ -1058,8 +1058,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 // Sequence:
 //
 //	WT1 → schedule nexus operation + start a 1h timer. Close tx: nexus op pending → no skip.
-//	Nexus attempt 1 → retryable handler error → operation parks in BACKING_OFF → skip to retry.
-//	Nexus attempt 2 → sync success → NexusOperationCompleted → WT2.
+//	Nexus attempts 1 and 2 → retryable errors → skip each retry backoff.
+//	Nexus attempt 3 → sync success → NexusOperationCompleted → WT2.
 //	WT2 → drain. Close tx: no pending nexus op, only the 1h timer → skip fires.
 //	WT3 → timer fired via skip → complete workflow.
 //
@@ -1081,7 +1081,8 @@ func (s *TimeSkippingTestSuite) runTimeSkippingNexusOperationRetryBackoffScenari
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
-	// Attempt 1 fails retryably so the operation parks in BACKING_OFF. Attempt 2 succeeds.
+	// Two retryable failures exercise a retry deadline created after virtual time has already
+	// advanced. Attempt 3 succeeds.
 	var attempts atomic.Int32
 	handler := nexustest.Handler{
 		OnStartOperation: func(
@@ -1090,7 +1091,7 @@ func (s *TimeSkippingTestSuite) runTimeSkippingNexusOperationRetryBackoffScenari
 			if service != "service" {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `expected service to equal "service"`)
 			}
-			if attempts.Add(1) == 1 {
+			if attempts.Add(1) <= 2 {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional retryable error")
 			}
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
@@ -1145,7 +1146,7 @@ func (s *TimeSkippingTestSuite) runTimeSkippingNexusOperationRetryBackoffScenari
 	})
 
 	// The operation really did fail once and retry while the workflow was otherwise idle.
-	s.GreaterOrEqual(int(attempts.Load()), 2, "nexus operation must have been retried at least once")
+	s.GreaterOrEqual(int(attempts.Load()), 3, "nexus operation must have been retried twice")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED), "nexus operation must complete")
 
 	nexusScheduledIdx := indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
@@ -1158,8 +1159,8 @@ func (s *TimeSkippingTestSuite) runTimeSkippingNexusOperationRetryBackoffScenari
 	s.Less(transitionIdx, nexusCompletedIdx,
 		"the retry backoff must be skipped before NEXUS_OPERATION_COMPLETED: transition index %d, completed index %d",
 		transitionIdx, nexusCompletedIdx)
-	s.GreaterOrEqual(len(timeSkippingTransitions(history)), 2,
-		"expected one skip for the Nexus retry and another for the user timer")
+	s.GreaterOrEqual(len(timeSkippingTransitions(history)), 3,
+		"expected two Nexus retry skips and another for the user timer")
 
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED), "timer must fire via the post-nexus skip")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
