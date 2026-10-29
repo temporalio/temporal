@@ -129,6 +129,139 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 	assert.Equal(t, 1, taskTypeCounts[enumspb.TASK_QUEUE_TYPE_NEXUS.String()], "nexus should have 1 increment")
 }
 
+func TestWorkerHeartbeatCountMetrics(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	emitter := &workerMetricsEmitter{
+		handler: captureHandler,
+		config: WorkerMetricsConfig{
+			EnablePollerAutoscalingMetrics: dynamicconfig.GetBoolPropertyFn(true),
+		},
+	}
+
+	// Worker 1: autoscaling workflow poller only.
+	worker1 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey:  "worker_1",
+		TaskQueue:          "test-task-queue",
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{IsAutoscaling: true},
+	}
+	// Worker 2: non-autoscaling workflow and activity pollers.
+	worker2 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey:  "worker_2",
+		TaskQueue:          "test-task-queue",
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{},
+		ActivityPollerInfo: &workerpb.WorkerPollerInfo{},
+	}
+	// Worker 3: autoscaling activity poller, non-autoscaling nexus poller, no workflow poller.
+	worker3 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey:  "worker_3",
+		TaskQueue:          "test-task-queue",
+		ActivityPollerInfo: &workerpb.WorkerPollerInfo{IsAutoscaling: true},
+		NexusPollerInfo:    &workerpb.WorkerPollerInfo{},
+	}
+	// Worker 4: not polling anything.
+	worker4 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "worker_4",
+		TaskQueue:         "test-task-queue",
+	}
+
+	emitter.emit(namespace.ID("test-namespace-id"), namespace.Name("test-namespace"),
+		[]*workerpb.WorkerHeartbeat{worker1, worker2, worker3, worker4})
+
+	snapshot := capture.Snapshot()
+	countByTaskType := func(name string) map[string]int {
+		counts := make(map[string]int)
+		for _, m := range snapshot[name] {
+			require.Equal(t, "test-namespace", m.Tags["namespace"])
+			require.Equal(t, "__omitted__", m.Tags["taskqueue"])
+			counts[m.Tags[metrics.TaskTypeTagName]]++
+		}
+		return counts
+	}
+
+	require.Equal(t, map[string]int{
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(): 2,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(): 2,
+		enumspb.TASK_QUEUE_TYPE_NEXUS.String():    1,
+	}, countByTaskType(metrics.WorkerHeartbeatCount.Name()))
+	require.Equal(t, map[string]int{
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(): 1,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(): 1,
+	}, countByTaskType(metrics.PollerAutoscalingHeartbeatCount.Name()))
+}
+
+// The total heartbeat count is not gated by EnablePollerAutoscalingMetrics; only the autoscaling count is.
+func TestWorkerHeartbeatCountMetricsAutoscalingMetricsDisabled(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	emitter := &workerMetricsEmitter{
+		handler: captureHandler,
+		config: WorkerMetricsConfig{
+			EnablePollerAutoscalingMetrics: dynamicconfig.GetBoolPropertyFn(false),
+		},
+	}
+
+	emitter.emit(namespace.ID("test-namespace-id"), namespace.Name("test-namespace"), []*workerpb.WorkerHeartbeat{
+		{
+			WorkerInstanceKey:  "worker_1",
+			TaskQueue:          "test-task-queue",
+			WorkflowPollerInfo: &workerpb.WorkerPollerInfo{IsAutoscaling: true},
+		},
+		// No autoscaling pollers at all.
+		{
+			WorkerInstanceKey:  "worker_2",
+			TaskQueue:          "test-task-queue",
+			ActivityPollerInfo: &workerpb.WorkerPollerInfo{},
+		},
+	})
+
+	snapshot := capture.Snapshot()
+	totals := snapshot[metrics.WorkerHeartbeatCount.Name()]
+	require.Len(t, totals, 2)
+	taskTypes := make(map[string]int)
+	for _, m := range totals {
+		require.Equal(t, "test-namespace", m.Tags["namespace"])
+		require.Equal(t, "__omitted__", m.Tags["taskqueue"])
+		require.Equal(t, int64(1), m.Value)
+		taskTypes[m.Tags[metrics.TaskTypeTagName]]++
+	}
+	require.Equal(t, map[string]int{
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(): 1,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(): 1,
+	}, taskTypes)
+	require.Empty(t, snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()])
+}
+
+func TestWorkerHeartbeatCountMetricsBreakdownByTaskQueue(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	emitter := &workerMetricsEmitter{
+		handler: captureHandler,
+		config: WorkerMetricsConfig{
+			EnablePollerAutoscalingMetrics: dynamicconfig.GetBoolPropertyFn(false),
+			BreakdownMetricsByTaskQueue: func(_ string, _ string, _ enumspb.TaskQueueType) bool {
+				return true
+			},
+		},
+	}
+
+	emitter.emit(namespace.ID("test-namespace-id"), namespace.Name("test-namespace"), []*workerpb.WorkerHeartbeat{{
+		WorkerInstanceKey:  "worker_1",
+		TaskQueue:          "test-task-queue",
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{},
+	}})
+
+	totals := capture.Snapshot()[metrics.WorkerHeartbeatCount.Name()]
+	require.Len(t, totals, 1)
+	require.Equal(t, "test-task-queue", totals[0].Tags["taskqueue"])
+}
+
 func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()

@@ -216,6 +216,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+				BadBinaries:                  task.Config.GetBadBinaries(),
 				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
