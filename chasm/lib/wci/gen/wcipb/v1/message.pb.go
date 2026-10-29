@@ -253,8 +253,10 @@ type WorkerControllerInstanceState struct {
 	PendingExpireTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=pending_expire_time,json=pendingExpireTime,proto3" json:"pending_expire_time,omitempty"`
 	// Token that activated this instance; never overwritten, so a retried activation stays accepted.
 	ActivatedMigrationToken string `protobuf:"bytes,13,opt,name=activated_migration_token,json=activatedMigrationToken,proto3" json:"activated_migration_token,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Last spec change: create, update, delete, or migration activation.
+	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkerControllerInstanceState) Reset() {
@@ -376,6 +378,13 @@ func (x *WorkerControllerInstanceState) GetActivatedMigrationToken() string {
 		return x.ActivatedMigrationToken
 	}
 	return ""
+}
+
+func (x *WorkerControllerInstanceState) GetLastUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUpdateTime
+	}
+	return nil
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -962,6 +971,7 @@ type WorkerControllerInstanceMemo struct {
 	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1013,6 +1023,13 @@ func (x *WorkerControllerInstanceMemo) GetBuildId() string {
 func (x *WorkerControllerInstanceMemo) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *WorkerControllerInstanceMemo) GetLastUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUpdateTime
 	}
 	return nil
 }
@@ -1098,7 +1115,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_message_proto protoreflect.FileD
 
 const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xff\a\n" +
+	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xc5\b\n" +
 	"\x1dWorkerControllerInstanceState\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12I\n" +
@@ -1114,7 +1131,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\x12nextValidationTime\x12'\n" +
 	"\x0fmigration_token\x18\v \x01(\tR\x0emigrationToken\x12J\n" +
 	"\x13pending_expire_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x11pendingExpireTime\x12:\n" +
-	"\x19activated_migration_token\x18\r \x01(\tR\x17activatedMigrationToken\x1a~\n" +
+	"\x19activated_migration_token\x18\r \x01(\tR\x17activatedMigrationToken\x12D\n" +
+	"\x10last_update_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
 	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xa2\x05\n" +
@@ -1166,12 +1184,13 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\x14last_validation_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x12lastValidationTime\x12P\n" +
 	"\x06result\x18\x02 \x01(\x0e28.temporal.server.chasm.lib.wci.proto.v1.ValidationResultR\x06result\x12\x1f\n" +
 	"\verr_message\x18\x03 \x01(\tR\n" +
-	"errMessage\"\x9f\x01\n" +
+	"errMessage\"\xe5\x01\n" +
 	"\x1cWorkerControllerInstanceMemo\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12;\n" +
 	"\vcreate_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xb1\x02\n" +
+	"createTime\x12D\n" +
+	"\x10last_update_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\"\xb1\x02\n" +
 	"\fTaskAddEvent\x12&\n" +
 	"\x0ftask_queue_name\x18\x01 \x01(\tR\rtaskQueueName\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\"\n" +
@@ -1240,33 +1259,35 @@ var file_temporal_server_chasm_lib_wci_proto_v1_message_proto_depIdxs = []int32{
 	15, // 4: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.next_poll_time:type_name -> google.protobuf.Timestamp
 	15, // 5: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.next_validation_time:type_name -> google.protobuf.Timestamp
 	15, // 6: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.pending_expire_time:type_name -> google.protobuf.Timestamp
-	16, // 7: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.algorithm_status:type_name -> temporal.api.common.v1.Payload
-	1,  // 8: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupStatus
-	17, // 9: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.last_failure:type_name -> temporal.api.failure.v1.Failure
-	15, // 10: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.next_attempt_time:type_name -> google.protobuf.Timestamp
-	5,  // 11: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.observations:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
-	15, // 12: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.polled_at:type_name -> google.protobuf.Timestamp
-	6,  // 13: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.task_queues:type_name -> temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue
-	13, // 14: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.last_task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	15, // 15: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.last_task_add_time:type_name -> google.protobuf.Timestamp
-	18, // 16: temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	19, // 17: temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue.backlog_age:type_name -> google.protobuf.Duration
-	18, // 18: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.task_types:type_name -> temporal.api.enums.v1.TaskQueueType
-	8,  // 19: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.compute:type_name -> temporal.server.chasm.lib.wci.proto.v1.ComputeProviderSpec
-	9,  // 20: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.scaling:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpec
-	16, // 21: temporal.server.chasm.lib.wci.proto.v1.ComputeProviderSpec.config:type_name -> temporal.api.common.v1.Payload
-	16, // 22: temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpec.config:type_name -> temporal.api.common.v1.Payload
-	7,  // 23: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate.spec:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	15, // 24: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus.last_validation_time:type_name -> google.protobuf.Timestamp
-	2,  // 25: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus.result:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationResult
-	15, // 26: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceMemo.create_time:type_name -> google.protobuf.Timestamp
-	18, // 27: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	7,  // 28: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	15, // 7: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.last_update_time:type_name -> google.protobuf.Timestamp
+	16, // 8: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.algorithm_status:type_name -> temporal.api.common.v1.Payload
+	1,  // 9: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupStatus
+	17, // 10: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.last_failure:type_name -> temporal.api.failure.v1.Failure
+	15, // 11: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.next_attempt_time:type_name -> google.protobuf.Timestamp
+	5,  // 12: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState.observations:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
+	15, // 13: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.polled_at:type_name -> google.protobuf.Timestamp
+	6,  // 14: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.task_queues:type_name -> temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue
+	13, // 15: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.last_task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	15, // 16: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations.last_task_add_time:type_name -> google.protobuf.Timestamp
+	18, // 17: temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	19, // 18: temporal.server.chasm.lib.wci.proto.v1.ObservedTaskQueue.backlog_age:type_name -> google.protobuf.Duration
+	18, // 19: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.task_types:type_name -> temporal.api.enums.v1.TaskQueueType
+	8,  // 20: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.compute:type_name -> temporal.server.chasm.lib.wci.proto.v1.ComputeProviderSpec
+	9,  // 21: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec.scaling:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpec
+	16, // 22: temporal.server.chasm.lib.wci.proto.v1.ComputeProviderSpec.config:type_name -> temporal.api.common.v1.Payload
+	16, // 23: temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpec.config:type_name -> temporal.api.common.v1.Payload
+	7,  // 24: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate.spec:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	15, // 25: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus.last_validation_time:type_name -> google.protobuf.Timestamp
+	2,  // 26: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus.result:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationResult
+	15, // 27: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceMemo.create_time:type_name -> google.protobuf.Timestamp
+	15, // 28: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceMemo.last_update_time:type_name -> google.protobuf.Timestamp
+	18, // 29: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	7,  // 30: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_wci_proto_v1_message_proto_init() }

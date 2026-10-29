@@ -64,6 +64,7 @@ type compactWCIInfo struct {
 	Validation        string
 	Providers         string
 	DeploymentVersion string
+	LastUpdateTime    *time.Time
 	StartTime         time.Time
 	CloseTime         *time.Time
 }
@@ -105,6 +106,7 @@ func AdminListWorkerControllerInstances(c *cli.Context, clientFactory ClientFact
 				Validation:        wci.GetValidationStatus(),
 				Providers:         strings.Join(wci.GetComputeProviders(), ","),
 				DeploymentVersion: wci.GetDeploymentVersion(),
+				LastUpdateTime:    timestamp.TimeValuePtr(wci.GetLastUpdateTime()),
 				StartTime:         wci.GetStartTime().AsTime(),
 				CloseTime:         timestamp.TimeValuePtr(wci.GetCloseTime()),
 			})
