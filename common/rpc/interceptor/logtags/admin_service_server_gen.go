@@ -166,6 +166,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.ListQueuesResponse:
 		return nil
+	case *adminservice.ListWorkerControllerInstancesRequest:
+		return nil
+	case *adminservice.ListWorkerControllerInstancesResponse:
+		return nil
 	case *adminservice.MergeDLQMessagesRequest:
 		return nil
 	case *adminservice.MergeDLQMessagesResponse:

@@ -485,6 +485,20 @@ func (c *metricClient) ListQueues(
 	return c.client.ListQueues(ctx, request, opts...)
 }
 
+func (c *metricClient) ListWorkerControllerInstances(
+	ctx context.Context,
+	request *adminservice.ListWorkerControllerInstancesRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ListWorkerControllerInstancesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientListWorkerControllerInstances")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkerControllerInstances(ctx, request, opts...)
+}
+
 func (c *metricClient) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,

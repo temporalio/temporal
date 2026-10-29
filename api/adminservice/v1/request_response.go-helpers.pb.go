@@ -3668,6 +3668,80 @@ func (this *MigrateWorkerControllerInstanceResponse) Equal(that interface{}) boo
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ListWorkerControllerInstancesRequest to the protobuf v3 wire format
+func (val *ListWorkerControllerInstancesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListWorkerControllerInstancesRequest from the protobuf v3 wire format
+func (val *ListWorkerControllerInstancesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListWorkerControllerInstancesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListWorkerControllerInstancesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListWorkerControllerInstancesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListWorkerControllerInstancesRequest
+	switch t := that.(type) {
+	case *ListWorkerControllerInstancesRequest:
+		that1 = t
+	case ListWorkerControllerInstancesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListWorkerControllerInstancesResponse to the protobuf v3 wire format
+func (val *ListWorkerControllerInstancesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListWorkerControllerInstancesResponse from the protobuf v3 wire format
+func (val *ListWorkerControllerInstancesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListWorkerControllerInstancesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListWorkerControllerInstancesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListWorkerControllerInstancesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListWorkerControllerInstancesResponse
+	switch t := that.(type) {
+	case *ListWorkerControllerInstancesResponse:
+		that1 = t
+	case ListWorkerControllerInstancesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ListExecutionsRequest to the protobuf v3 wire format
 func (val *ListExecutionsRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
