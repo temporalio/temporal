@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -137,6 +138,7 @@ type e2e struct {
 	lib      *Library
 	history  *fakeHistory
 	metrics  *metricstest.CaptureHandler
+	clock    *clock.EventTimeSource
 }
 
 func newE2E(t *testing.T, script fakeAlgo) *e2e {
@@ -167,8 +169,10 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, chasmRegistry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, chasmRegistry.Register(lib))
-	engine := chasmtest.NewEngine(t, chasmRegistry, chasmtest.WithMetricsHandler(metricsHandler))
-	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history, metrics: metricsHandler}
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	engine := chasmtest.NewEngine(t, chasmRegistry, chasmtest.WithMetricsHandler(metricsHandler), chasmtest.WithTimeSource(ts))
+	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history, metrics: metricsHandler, clock: ts}
 }
 
 func groupUpsert(provider string) map[string]*wcipb.ScalingGroupSpecUpdate {
@@ -498,6 +502,29 @@ func TestE2E_ConflictTokenRotates(t *testing.T) {
 	// Second holder of the same token loses.
 	_, err = e.updateWithToken(untokened.GetConflictToken(), groupUpsert("test-invoke"))
 	require.ErrorIs(t, err, errConflictTokenMismatch)
+}
+
+// Spec changes stamp LastUpdateTime (state and memo); other transactions don't.
+func TestE2E_LastUpdateTime(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	created := e.clock.Now()
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	w, _ := e.live(t)
+	require.Equal(t, created, w.LastUpdateTime.AsTime())
+
+	e.clock.Advance(time.Minute)
+	require.NoError(t, e.recordTaskAdd())
+	w, _ = e.live(t)
+	require.Equal(t, created, w.LastUpdateTime.AsTime(), "task-adds aren't spec changes")
+
+	e.clock.Advance(time.Minute)
+	updated := e.clock.Now()
+	_, err = e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	w, _ = e.live(t)
+	require.Equal(t, updated, w.LastUpdateTime.AsTime())
+	require.Equal(t, updated, w.Memo(nil).(*wcipb.WorkerControllerInstanceMemo).GetLastUpdateTime().AsTime())
 }
 
 func TestE2E_ConflictTokenOnImplicitDelete(t *testing.T) {

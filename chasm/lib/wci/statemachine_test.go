@@ -213,9 +213,22 @@ func TestNewWorkerControllerInstance(t *testing.T) {
 	require.Equal(t, now, w.CreateTime.AsTime())
 	require.Len(t, w.ScalingGroups, 2)
 	require.Equal(t, chasm.LifecycleStateRunning, w.LifecycleState(ctx))
+	require.Equal(t, now, w.LastUpdateTime.AsTime())
 	memo := w.Memo(ctx).(*wcipb.WorkerControllerInstanceMemo)
 	require.Equal(t, "dep", memo.GetDeploymentName())
 	require.Equal(t, "build", memo.GetBuildId())
+	require.Equal(t, now, memo.GetLastUpdateTime().AsTime())
+}
+
+func TestMigrationActivatedStampsLastUpdateTime(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return now }}}
+	w := rootAt(wcipb.WCI_STATUS_PENDING_ACTIVATION)
+	w.ConflictToken = []byte("from-workflow")
+
+	require.NoError(t, TransitionMigrationActivated.Apply(w, ctx, EventMigrationActivated{}))
+	require.Equal(t, now, w.LastUpdateTime.AsTime())
+	require.Equal(t, []byte("from-workflow"), w.ConflictToken, "in-flight updates keep matching")
 }
 
 func TestLifecycleAndMutability(t *testing.T) {

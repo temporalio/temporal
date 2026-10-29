@@ -58,6 +58,8 @@ var TransitionMigrationActivated = chasm.NewTransition(
 	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventMigrationActivated) error {
 		w.PendingExpireTime = nil
 		w.ActivatedMigrationToken = w.MigrationToken
+		// Keeps the workflow's conflict token, so in-flight updates still match.
+		w.LastUpdateTime = timestamppb.New(ctx.Now(w))
 		w.armTimersFromState(ctx)
 		wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
 		return nil
