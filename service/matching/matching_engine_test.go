@@ -6033,6 +6033,13 @@ func defaultTestConfig() *Config {
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 	// Always update metadata on append in tests so backlog count assertions are exact.
 	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+	// Pin the original poller scaling settings (v1 signals, 1.2 ratio, 1s wait, no decision
+	// metrics). Most poller scaling tests were written against these; tests of v2 signals and
+	// decision metrics opt in explicitly.
+	config.UseSignalsV2ForPollerScaling = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.PollerScalingTaskAddToDispatchRatio = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(1.2)
+	config.PollerScalingWaitTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Second)
+	config.EnablePollerScalingDecisionMetrics = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	return config
 }
 

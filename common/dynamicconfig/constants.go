@@ -1631,7 +1631,7 @@ will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
-		1*time.Second,
+		5*time.Second,
 		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
 	)
@@ -1643,21 +1643,21 @@ second per poller by one physical queue manager`,
 	)
 	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
 		"matching.pollerScalingTaskAddToDispatchRatio",
-		1.2,
+		1.05,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
-		false,
+		true,
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
-metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
-scoped by namespace and/or task queue.`,
+metric describing why pollers are scaled up, down, or held for a physical task queue. Enabled by default; can be
+disabled or scoped by namespace and/or task queue.`,
 	)
 	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
 		"matching.useSignalsV2ForPollerScaling",
-		false,
+		true,
 		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,

@@ -435,8 +435,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispa
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpUsesDefaultRatioThreshold() {
-	// The default add-to-dispatch ratio threshold is 1.2, so a ratio just below it should not
-	// scale up while a ratio just above it should.
+	// defaultTestConfig pins the add-to-dispatch ratio threshold to 1.2 (the server default is
+	// 1.05), so a ratio just below it should not scale up while a ratio just above it should.
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -458,14 +458,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpRatioThresholdIsCon
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	// 100/10 = 10, which would scale up under the default 1.2 threshold. Raising the threshold
+	// 100/10 = 10, which would scale up under the test config's 1.2 threshold. Raising the threshold
 	// above the actual ratio should suppress the scale-up.
 	highRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 20 }
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return highRatio })
 	s.Nil(decision)
 
-	// 110/100 = 1.1, which would not scale up under the default 1.2 threshold. Lowering the
+	// 110/100 = 1.1, which would not scale up under the test config's 1.2 threshold. Lowering the
 	// threshold below the actual ratio should trigger a scale-up.
 	lowRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 1.0 }
