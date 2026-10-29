@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package temporal.server.chasm.lib.tquserdata.proto.v1;
+package temporal.server.chasm.lib.taskqueue.proto.v1;
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+option go_package = "go.temporal.io/server/chasm/lib/taskqueue/gen/taskqueuepb;taskqueuepb";
 
 message UpsertTaskQueueUserDataRequest {
   // Namespace containing the task queue family.
@@ -16,7 +16,7 @@ message UpsertTaskQueueUserDataRequest {
   // Each non-empty payload replaces that type's data. Nil, empty, and omitted types are ignored.
   map<int32, temporal.server.api.persistence.v1.TaskQueueTypeUserData> per_type = 3;
   // Expected CHASM CAS version, independent of the DB version.
-  // Zero starts a new execution if none is running; positive values require an exact version match.
+  // Zero creates user data if absent; positive values require an exact version match.
   // Negative values are invalid.
   int64 expected_version = 4;
   // Incoming user data HLC, preserved unchanged and persisted in component state.

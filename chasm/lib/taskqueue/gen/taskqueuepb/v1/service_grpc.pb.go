@@ -2,9 +2,9 @@
 // plugins:
 // - protoc-gen-go-grpc
 // - protoc
-// source: temporal/server/chasm/lib/tquserdata/proto/v1/service.proto
+// source: temporal/server/chasm/lib/taskqueue/proto/v1/service.proto
 
-package tquserdatapb
+package taskqueuepb
 
 import (
 	context "context"
@@ -20,8 +20,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName    = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/GetTaskQueueUserData"
-	TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpsertTaskQueueUserData"
+	TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName    = "/temporal.server.chasm.lib.taskqueue.proto.v1.TaskQueueUserDataService/GetTaskQueueUserData"
+	TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName = "/temporal.server.chasm.lib.taskqueue.proto.v1.TaskQueueUserDataService/UpsertTaskQueueUserData"
 )
 
 // TaskQueueUserDataServiceClient is the client API for TaskQueueUserDataService service.
@@ -131,7 +131,7 @@ func _TaskQueueUserDataService_UpsertTaskQueueUserData_Handler(srv interface{}, 
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var TaskQueueUserDataService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService",
+	ServiceName: "temporal.server.chasm.lib.taskqueue.proto.v1.TaskQueueUserDataService",
 	HandlerType: (*TaskQueueUserDataServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -144,5 +144,5 @@ var TaskQueueUserDataService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "temporal/server/chasm/lib/tquserdata/proto/v1/service.proto",
+	Metadata: "temporal/server/chasm/lib/taskqueue/proto/v1/service.proto",
 }

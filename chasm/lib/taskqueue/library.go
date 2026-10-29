@@ -1,14 +1,15 @@
-package tquserdata
+package taskqueue
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
+	"go.temporal.io/server/chasm/lib/taskqueue/gen/taskqueuepb/v1"
 	"google.golang.org/grpc"
 )
 
 const (
-	libraryName   = "taskQueueUserData"
-	componentName = "taskQueueUserData"
+	libraryName           = "taskQueue"
+	componentName         = "taskQueue"
+	userDataComponentName = "userData"
 )
 
 var (
@@ -36,10 +37,11 @@ func (*library) Name() string {
 
 func (*library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*TaskQueueUserData](componentName),
+		chasm.NewRegistrableComponent[*TaskQueue](componentName),
+		chasm.NewRegistrableComponent[*UserData](userDataComponentName),
 	}
 }
 
 func (l *library) RegisterServices(server *grpc.Server) {
-	tquserdatapb.RegisterTaskQueueUserDataServiceServer(server, l.handler)
+	taskqueuepb.RegisterTaskQueueUserDataServiceServer(server, l.handler)
 }
