@@ -372,6 +372,7 @@ type WorkflowExecutionInfo struct {
 	MutableStateRebuildTime *timestamppb.Timestamp `protobuf:"bytes,116,opt,name=mutable_state_rebuild_time,json=mutableStateRebuildTime,proto3" json:"mutable_state_rebuild_time,omitempty"`
 	// Nexus operation context retained across runs so workers can select payload serialization.
 	PropagatedNexusSerializationContext *v18.PropagatedSerializationContext `protobuf:"bytes,117,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
+	PersistenceMetadata                 []byte                              `protobuf:"bytes,118,opt,name=persistence_metadata,json=persistenceMetadata,proto3" json:"persistence_metadata,omitempty"`
 	unknownFields                       protoimpl.UnknownFields
 	sizeCache                           protoimpl.SizeCache
 }
@@ -1155,6 +1156,13 @@ func (x *WorkflowExecutionInfo) GetMutableStateRebuildTime() *timestamppb.Timest
 func (x *WorkflowExecutionInfo) GetPropagatedNexusSerializationContext() *v18.PropagatedSerializationContext {
 	if x != nil {
 		return x.PropagatedNexusSerializationContext
+	}
+	return nil
+}
+
+func (x *WorkflowExecutionInfo) GetPersistenceMetadata() []byte {
+	if x != nil {
+		return x.PersistenceMetadata
 	}
 	return nil
 }
@@ -5004,7 +5012,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xb9D\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xecD\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5118,7 +5126,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x1fdeclined_target_version_upgrade\x18r \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12b\n" +
 	"\x12time_skipping_info\x18s \x01(\v24.temporal.server.api.persistence.v1.TimeSkippingInfoR\x10timeSkippingInfo\x12W\n" +
 	"\x1amutable_state_rebuild_time\x18t \x01(\v2\x1a.google.protobuf.TimestampR\x17mutableStateRebuildTime\x12\x8a\x01\n" +
-	"&propagated_nexus_serialization_context\x18u \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\x1ad\n" +
+	"&propagated_nexus_serialization_context\x18u \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\x121\n" +
+	"\x14persistence_metadata\x18v \x01(\fR\x13persistenceMetadata\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +
