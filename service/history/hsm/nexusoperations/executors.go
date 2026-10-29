@@ -124,7 +124,6 @@ type taskExecutor struct {
 }
 
 func buildCallbackURL(
-	useSystemCallback bool,
 	callbackTemplate string,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
@@ -133,9 +132,6 @@ func buildCallbackURL(
 		return commonnexus.SystemCallbackURL, nil
 	}
 	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !useSystemCallback {
-		return buildCallbackFromTemplate(callbackTemplate, ns)
-	}
 	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		return commonnexus.SystemCallbackURL, nil
@@ -198,7 +194,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 	}
 
-	callbackURL, err := buildCallbackURL(e.Config.UseSystemCallbackURL(), e.Config.CallbackURLTemplate(), ns, endpoint)
+	callbackURL, err := buildCallbackURL(e.Config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}
@@ -1058,12 +1054,11 @@ func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr er
 		return
 	}
 	tags := append(traceCtx.tags(), tag.Error(callErr))
-	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
 	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
 	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		e.Logger.Debug(msg, tags...)
+		e.Logger.Debug("Nexus request failed", tags...)
 	} else {
-		e.Logger.Error(msg, tags...)
+		e.Logger.Error("Nexus request failed", tags...)
 	}
 }
 

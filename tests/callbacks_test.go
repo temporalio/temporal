@@ -1,7 +1,13 @@
 package tests
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,10 +26,12 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -34,7 +42,9 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuiteHSM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{})
+	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false),
+	})
 }
 
 func TestCallbacksSuiteCHASM(t *testing.T) {
@@ -51,6 +61,72 @@ func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestE
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 	return env
+}
+
+func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterResponseFault(opts []testcore.TestOption) {
+	testOpts := append([]testcore.TestOption{}, opts...)
+	testOpts = append(testOpts, testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 50*time.Millisecond))
+	env := s.newTestEnv(testOpts...)
+	ctx := s.Context()
+
+	workflowID := env.Tv().WorkflowID()
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
+	)
+
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
+
+	var attempts atomic.Int32
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, _ *http.Response, _ error) *httpfaults.Outcome {
+		if !strings.HasSuffix(req.URL.Path, "/cb1") {
+			return nil
+		}
+		if attempts.Add(1) == 1 {
+			return &httpfaults.Outcome{
+				Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
+			}
+		}
+		return nil
+	})
+
+	cb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"},
+		},
+	}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		Identity:            s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{cb},
+	}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	s.Rcv(ch.requestCh)
+	s.Snd(ch.requestCompleteCh, nil)
+	s.Rcv(ch.requestCh)
+	s.Snd(ch.requestCompleteCh, nil)
+
+	sdkClient := env.SdkClient()
+	s.Await(func(s *CallbacksSuite) {
+		description, err := sdkClient.DescribeWorkflowExecution(s.Context(), workflowID, "")
+		s.NoError(err)
+		s.Len(description.Callbacks, 1)
+		callbackInfo := description.Callbacks[0]
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+		s.Nil(callbackInfo.LastAttemptFailure)
+		s.GreaterOrEqual(callbackInfo.Attempt, int32(2))
+		protorequire.ProtoEqual(s.T(), cb, callbackInfo.Callback)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	s.GreaterOrEqual(attempts.Load(), int32(2))
 }
 
 func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
@@ -242,9 +318,37 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
-			s.Equal(tc.message, err.Error())
+			s.ErrorContains(err, tc.message)
 		})
 	}
+}
+
+// The aggregate size of a start request's callbacks is only known to the history service, which
+// enforces it for callbacks attached to the CHASM tree.
+func (s *CallbacksSuite) TestWorkflowCallbacks_TotalSizeExceeded(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	env.OverrideDynamicConfig(callback.TotalMaxSizePerExecution, 123)
+
+	cbs := make([]*commonpb.Callback, 3)
+	for idx := range cbs {
+		url := fmt.Sprintf("https://example.com/completion-callback/%d", idx)
+		cbs[idx] = nexusCompletionCallback(url)
+	}
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          testcore.RandomizeStr(s.T().Name()),
+		WorkflowType:        &commonpb.WorkflowType{Name: "test"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(s.T().Name()), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		Identity:            s.T().Name(),
+		CompletionCallbacks: cbs,
+	})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "cannot attach more than 123 bytes of callbacks to an execution")
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.TestOption) {
@@ -751,4 +855,47 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 		Identity: env.Tv().WorkerIdentity(),
 	})
 	s.NoError(err)
+}
+
+// An invalid system callback token fails routing; the routing log carries the callback's namespace and stage.
+func (s *CallbacksSuite) TestSystemCallbackRoutingErrorIsTagged(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+	logCapture := env.StartNamespaceLogCapture()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
+	)
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.NewString(),
+		Namespace:          env.Namespace().String(),
+		WorkflowId:         env.Tv().WorkflowID(),
+		WorkflowType:       env.Tv().WorkflowType(),
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
+		Identity:           s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{
+				Url:    commonnexus.SystemCallbackURL,
+				Header: map[string]string{commonnexus.CallbackTokenHeader: "not-valid-json"}, // INVALID
+			}},
+		}},
+	})
+	s.NoError(err)
+
+	const routingError = "failed to decode callback token"
+	s.AwaitTrue(func() bool {
+		return slices.ContainsFunc(logCapture.Snapshot(), func(record testlogger.CapturedLog) bool {
+			return record.Message == routingError
+		})
+	}, 10*time.Second, 100*time.Millisecond)
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: routingError,
+		Tags: map[string]any{
+			"nexus-stage":     "handler-outbound",
+			"wf-namespace-id": env.NamespaceID().String(),
+		},
+	})
 }

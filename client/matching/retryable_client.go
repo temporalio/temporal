@@ -1,14 +1,20 @@
 package matching
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/tqid"
+	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*retryableClient)(nil)
+
+const eagerDispatchTimeout = time.Second * debug.TimeoutMultiplier
 
 type retryableClient struct {
 	client      matchingservice.MatchingServiceClient
@@ -41,4 +47,15 @@ func (c *retryableClient) Route(p tqid.Partition) (string, error) {
 		return "", errors.New("not routing client")
 	}
 	return rc.Route(p)
+}
+
+func (c *retryableClient) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	// The grant is best-effort and callers may hold the workflow lock while waiting.
+	ctx, cancel := context.WithTimeout(ctx, eagerDispatchTimeout)
+	defer cancel()
+	return c.client.GrantEagerDispatch(ctx, request, opts...)
 }

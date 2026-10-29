@@ -4,10 +4,13 @@ package client
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/auth"
 )
 
 const (
@@ -60,3 +63,40 @@ type (
 		SearchAfter []any
 	}
 )
+
+func NewEsHTTPClient(cfg *Config) (*http.Client, error) {
+	if httpClient := cfg.GetHttpClient(); httpClient != nil {
+		return httpClient, nil
+	}
+
+	httpClient, err := NewAwsHttpClient(cfg.AWSRequestSigning)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+	}
+	if httpClient != nil {
+		return httpClient, nil
+	}
+
+	if cfg.TLS != nil && cfg.TLS.Enabled {
+		httpClient, err := buildTLSHTTPClient(cfg.TLS)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
+		}
+		return httpClient, nil
+	}
+
+	return http.DefaultClient, nil
+}
+
+// Build Http Client with TLS
+func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
+	tlsConfig, err := auth.NewTLSConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	tlsClient := &http.Client{Transport: transport}
+
+	return tlsClient, nil
+}

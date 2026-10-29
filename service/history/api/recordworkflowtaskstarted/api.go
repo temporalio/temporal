@@ -178,11 +178,14 @@ func Invoke(
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				updateAction.Noop = true
+				// A speculative workflow task can remain in memory only if starting it did not
+				// produce changes that need to be persisted. Otherwise, closing the transaction
+				// converts it to a normal workflow task and persists all of the changes.
+				updateAction.Noop = !mutableState.IsDirty()
 			} else {
-				// If the wft is speculative MS changes are not persisted, so the possibly started
-				// transition by the StartDeploymentTransition call above won't be persisted. This is OK
-				// because once the speculative task completes the transition will be applied
+				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
+				// even when dirty mutable state causes the start to be persisted, the transition can
+				// wait because once the speculative task completes it will be applied
 				// automatically based on wft completion info. If the speculative task fails or times
 				// out, future wft will be redirected by matching again and the transition will
 				// eventually happen. If an activity starts while the speculative is also started on the

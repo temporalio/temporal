@@ -22,6 +22,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -38,6 +39,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -343,6 +345,7 @@ func NewWorkflowHandler(
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 	validator *workflow.RequestValidator,
+	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -369,6 +372,7 @@ func NewWorkflowHandler(
 			archiverProvider,
 			timeSource,
 			config,
+			chasmNsReplClient,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
@@ -660,7 +664,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if err := validateRequestId(&request.RequestId, maxIDLength); err != nil {
+		return nil, err
+	}
+	if err := validatePropagatedNexusSerializationContext(request.GetPropagatedNexusSerializationContext(), maxIDLength); err != nil {
 		return nil, err
 	}
 
@@ -690,7 +698,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}
@@ -706,7 +717,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+	if err := validateTimeSkippingStatePropagation(ctx, request.GetTimeSkippingStatePropagation()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 	return request, nil
@@ -716,32 +730,59 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
-	if tsc == nil {
+	return workflow.ValidateAndPopulateTimeSkippingConfig(
+		tsc,
+		ns.String(),
+		wh.config.TimeSkippingMaxSkipPerSession,
+		wh.config.TimeSkippingMaxAccumulatedDuration,
+	)
+}
+
+func (wh *WorkflowHandler) validateAndPopulateWorkflowTimeSkippingConfig(
+	tsc *commonpb.TimeSkippingConfig,
+	ns namespace.Name,
+) error {
+	return workflow.ValidateAndPopulateWorkflowTimeSkippingConfig(
+		tsc,
+		ns.String(),
+		wh.config.WorkflowTimeSkippingEnabled,
+		wh.config.TimeSkippingMaxSkipPerSession,
+		wh.config.TimeSkippingMaxAccumulatedDuration,
+	)
+}
+
+func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
+	patch *schedulepb.SchedulePatch,
+	ns namespace.Name,
+	useChasm bool,
+) error {
+	config := patch.GetTimeSkippingConfig()
+	if config == nil {
 		return nil
 	}
-	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
-		return errWorkflowTimeSkippingNotEnabled
-	}
-	if tsc.GetMaxSessionSkipCount() <= 0 {
-		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
-		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
-	}
-
-	if ff := tsc.GetFastForwardConfig(); ff != nil {
-		if ff.GetDuration().AsDuration() <= 0 {
-			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
-		}
-		if strings.TrimSpace(ff.GetId()) == "" {
-			return errTimeSkippingFastForwardIDNotSet
-		}
+	if !useChasm {
+		wh.logger.Warn(
+			"rejecting time skipping configuration for workflow-backed schedule",
+			tag.WorkflowNamespace(ns.String()),
+		)
+		return errScheduleTimeSkippingNotEnabled
 	}
 
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
+	// a separate per-ns feature flag for time skipping of schedules
+	if !wh.config.CHASMSchedulerTimeSkippingEnabled(ns.String()) {
+		return errScheduleTimeSkippingNotEnabled
+	}
+
+	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
+		return err
+	}
+	if !config.GetEnabled() {
 		return nil
+	}
+	fastForward := config.GetFastForwardConfig()
+	if fastForward == nil {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward_config is required when enabled")
 	}
 	return nil
 }
@@ -1415,26 +1456,27 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                   matchingResponse.TaskToken,
-		WorkflowExecution:           matchingResponse.WorkflowExecution,
-		ActivityId:                  matchingResponse.ActivityId,
-		ActivityType:                matchingResponse.ActivityType,
-		ActivityRunId:               matchingResponse.ActivityRunId,
-		Input:                       matchingResponse.Input,
-		ScheduledTime:               matchingResponse.ScheduledTime,
-		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
-		StartedTime:                 matchingResponse.StartedTime,
-		StartToCloseTimeout:         matchingResponse.StartToCloseTimeout,
-		HeartbeatTimeout:            matchingResponse.HeartbeatTimeout,
-		Attempt:                     matchingResponse.Attempt,
-		CurrentAttemptScheduledTime: matchingResponse.CurrentAttemptScheduledTime,
-		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
-		WorkflowType:                matchingResponse.WorkflowType,
-		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
-		Header:                      matchingResponse.Header,
-		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
-		Priority:                    matchingResponse.Priority,
-		RetryPolicy:                 matchingResponse.RetryPolicy,
+		TaskToken:                           matchingResponse.TaskToken,
+		WorkflowExecution:                   matchingResponse.WorkflowExecution,
+		ActivityId:                          matchingResponse.ActivityId,
+		ActivityType:                        matchingResponse.ActivityType,
+		ActivityRunId:                       matchingResponse.ActivityRunId,
+		Input:                               matchingResponse.Input,
+		ScheduledTime:                       matchingResponse.ScheduledTime,
+		ScheduleToCloseTimeout:              matchingResponse.ScheduleToCloseTimeout,
+		StartedTime:                         matchingResponse.StartedTime,
+		StartToCloseTimeout:                 matchingResponse.StartToCloseTimeout,
+		HeartbeatTimeout:                    matchingResponse.HeartbeatTimeout,
+		Attempt:                             matchingResponse.Attempt,
+		CurrentAttemptScheduledTime:         matchingResponse.CurrentAttemptScheduledTime,
+		HeartbeatDetails:                    matchingResponse.HeartbeatDetails,
+		WorkflowType:                        matchingResponse.WorkflowType,
+		WorkflowNamespace:                   matchingResponse.WorkflowNamespace,
+		Header:                              matchingResponse.Header,
+		PollerScalingDecision:               matchingResponse.PollerScalingDecision,
+		Priority:                            matchingResponse.Priority,
+		RetryPolicy:                         matchingResponse.RetryPolicy,
+		PropagatedNexusSerializationContext: matchingResponse.PropagatedNexusSerializationContext,
 	}, nil
 }
 
@@ -2387,10 +2429,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
-		return nil, err
-	}
-
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
@@ -2439,7 +2477,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 
 	for _, postOp := range request.GetPostResetOperations() {
 		if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
-			if err := wh.validateAndPopulateTimeSkippingConfig(
+			if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 				updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 				namespace.Name(request.GetNamespace()),
 			); err != nil {
@@ -3914,6 +3952,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.InitialPatch, namespaceName, useChasmScheduler); err != nil {
+		return nil, err
+	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
@@ -4761,7 +4802,6 @@ func (wh *WorkflowHandler) UpdateSchedule(
 			return nil, err
 		}
 	}
-
 	// Reject memo updates for V1 schedules.
 	if request.GetMemo() != nil {
 		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
@@ -4880,6 +4920,10 @@ func (wh *WorkflowHandler) PatchSchedule(
 	if err := wh.validateSchedulePatchTimestamps(request.Patch, request.Namespace); err != nil {
 		return nil, err
 	}
+	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), useChasmScheduler); err != nil {
+		return nil, err
+	}
 
 	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
 		trigger.ScheduledTime = timestamppb.Now()
@@ -4914,7 +4958,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+	if useChasmScheduler {
 		res, err := wh.patchScheduleCHASM(ctx, request)
 		if err == nil {
 			return res, nil
@@ -4922,6 +4966,9 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
+	}
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), false); err != nil {
+		return nil, err
 	}
 
 	return wh.patchScheduleWorkflow(ctx, request, inputPayloads)
@@ -5252,7 +5299,6 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			saNameType,
 			wh.saMapperProvider,
 			chasmMapper,
-			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 			metricsHandler,
 			wh.logger,
@@ -5526,8 +5572,14 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		return errUpdateMetaNotSet
 	}
 
-	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if len(request.GetRequest().GetMeta().GetUpdateId()) > maxIDLength {
 		return errUpdateIDTooLong
+	}
+
+	nexusContext := request.GetRequest().GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusContext, maxIDLength); err != nil {
+		return err
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {
@@ -5562,7 +5614,10 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if cbs := request.GetRequest().GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return err
 		}
 	}
@@ -5931,7 +5986,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.ResetOperation.GetIdentity()
 		for _, postOp := range op.ResetOperation.GetPostResetOperations() {
 			if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
-				if err := wh.validateAndPopulateTimeSkippingConfig(
+				if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 					updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 					namespace.Name(request.GetNamespace()),
 				); err != nil {
@@ -5942,7 +5997,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		if err := wh.validateAndPopulateTimeSkippingConfig(
+		if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 			namespace.Name(request.GetNamespace()),
 		); err != nil {
@@ -6163,19 +6218,66 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	// Check that the target job ID is a batcher workflow.
+	jobResp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
+	if err != nil {
+		return nil, err
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: request.GetJobId(),
-		},
-		Reason:   request.GetReason(),
-		Identity: request.GetIdentity(),
+		// Use the validated execution from above, so that a run of the same workflow ID
+		// started in between is not terminated in its place.
+		WorkflowExecution: jobResp.GetWorkflowExecutionInfo().GetExecution(),
+		Reason:            request.GetReason(),
+		Identity:          request.GetIdentity(),
 	}
-	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err = wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
 	return &workflowservice.StopBatchOperationResponse{}, nil
+}
+
+// describeBatchJob describes a batch job by ID, verifies that the ID is in fact
+// a batcher workflow started by StartBatchOperation or StartAdminBatchOperation,
+// that use a known workflow type, and hide behind a batcher namespace division.
+// This is used to prevent batch APIs on non-batch workflows/jobs.
+func (wh *WorkflowHandler) describeBatchJob(
+	ctx context.Context,
+	nsName string,
+	jobID string,
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executionInfo := resp.GetWorkflowExecutionInfo()
+	switch executionInfo.GetType().GetName() {
+	case batcher.BatchWFTypeName, batcher.BatchWFTypeProtobufName:
+	default:
+		return nil, errBatchJobIDNotValid
+	}
+
+	if resp.GetExecutionConfig().GetTaskQueue().GetName() != primitives.PerNSWorkerTaskQueue {
+		return nil, errBatchJobIDNotValid
+	}
+
+	var division string
+	if divisionPayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+		if err := payload.Decode(divisionPayload, &division); err != nil {
+			return nil, err
+		}
+	}
+	if division != batcher.NamespaceDivision && division != batcher.AdminNamespaceDivision {
+		return nil, errBatchJobIDNotValid
+	}
+
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) DescribeBatchOperation(
@@ -6203,14 +6305,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.GetJobId(),
-		RunId:      "",
-	}
-	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: request.GetNamespace(),
-		Execution: execution,
-	})
+	resp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
 	}
@@ -6420,7 +6515,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
 		}()
@@ -6859,10 +6954,16 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
+	var serializationContext *nexuspb.PropagatedSerializationContext
+	// A nil request token starts at the workflow's first event, which carries this context.
+	if request.GetNextPageToken() == nil && len(history.Events) > 0 {
+		serializationContext = history.Events[0].GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext()
+	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		NextPageToken: resp.NextPageToken,
-		Archived:      true,
+		History:                             history,
+		NextPageToken:                       resp.NextPageToken,
+		Archived:                            true,
+		PropagatedNexusSerializationContext: serializationContext,
 	}, nil
 }
 
@@ -7320,7 +7421,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
 		return nil, err
 	}
-	if err := wh.validateAndPopulateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
+	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 

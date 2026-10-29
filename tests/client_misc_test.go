@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -838,7 +837,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 
 	err = workflowRun.Get(s.Context(), nil)
 	s.NoError(err)
-	s.NoError(await.Rcv(s.T(), describeErrCh)) // assert on test goroutine after workflow completes
+	s.NoError(s.Rcv(describeErrCh)) // assert on test goroutine after workflow completes
 }
 
 func (s *ClientMiscTestSuite) assertHistory(env *testcore.TestEnv, wid, rid string, expected []enumspb.EventType) {

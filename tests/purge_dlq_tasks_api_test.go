@@ -68,16 +68,16 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			name: "DeleteTasksUnavailableError",
 			envOptions: []testcore.TestOption{
 				testcore.WithWorkerService("purge DLQ workflow"),
-				testcore.WithPersistenceFaultInjection(&config.FaultInjection{
-					Injector: func(target config.FaultInjectionTarget) error {
-						if target.Store == config.QueueV2Name &&
-							target.Method == "RangeDeleteMessages" &&
-							deleteTasksFaultCount.CompareAndSwap(0, 1) {
+				testcore.InjectPersistenceFault(
+					func(config.FaultInjectionTarget) error {
+						if deleteTasksFaultCount.CompareAndSwap(0, 1) {
 							return serviceerror.NewUnavailable("DLQ unavailable")
 						}
 						return nil
 					},
-				}),
+					testcore.WithStore(config.QueueV2Name),
+					testcore.WithMethod("RangeDeleteMessages"),
+				),
 			},
 			faultCount: &deleteTasksFaultCount,
 		},

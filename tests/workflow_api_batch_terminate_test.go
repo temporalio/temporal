@@ -16,6 +16,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -191,11 +192,13 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 
 			// Terminate all three workflows with a single batch operation.
 			jobID := uuid.NewString()
+			details := payloads.EncodeString("terminated-by-batch")
 			req := &workflowservice.StartBatchOperationRequest{
 				Namespace: env.Namespace().String(),
 				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 					TerminationOperation: &batchpb.BatchOperationTermination{
 						Identity: "batch-terminator",
+						Details:  details,
 					},
 				},
 				JobId:  jobID,
@@ -219,6 +222,25 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 					})
 					return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 				}, 5*time.Second, 100*time.Millisecond)
+			}
+
+			// The termination must be recorded with the batch's reason and the
+			// requester's identity and details, rather than the batcher worker's
+			// own process identity and no details.
+			for _, e := range executions {
+				history, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Namespace: env.Namespace().String(),
+					Execution: e,
+				})
+				s.NoError(err)
+				events := history.GetHistory().GetEvents()
+				s.Require().NotEmpty(events)
+				lastEvent := events[len(events)-1]
+				s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+				attrs := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
+				s.Equal("test", attrs.GetReason())
+				s.Equal("batch-terminator", attrs.GetIdentity())
+				protorequire.ProtoEqual(t, details, attrs.GetDetails())
 			}
 		})
 	}

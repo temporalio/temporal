@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -56,7 +57,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/stream_batcher"
+	"go.temporal.io/server/common/streambatcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
@@ -96,6 +97,8 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+
+	taskQueueUserDataConflictLogMessage = "found conflicting user data with same revision number during replication"
 )
 
 type (
@@ -168,6 +171,7 @@ type (
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
+		namespaceStateUnloads         sync.WaitGroup
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
 		partitionScalerFactory        PartitionScalerFactory
@@ -199,7 +203,7 @@ type (
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
 		// Serialize and batch user data updates by namespace.
-		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
+		userDataUpdateBatcher *streambatcher.KeyedBatcher[namespace.ID, *userDataUpdate, error]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
@@ -252,11 +256,12 @@ var (
 	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
 
 	// Options for batching user data updates.
-	userDataBatcherOptions = stream_batcher.BatcherOptions{
-		MaxItems: 100,
-		MinDelay: 100 * time.Millisecond,
-		MaxDelay: 500 * time.Millisecond,
-		IdleTime: time.Minute,
+	userDataBatcherOptions = streambatcher.BatcherOptions{
+		MaxItems:      100,
+		MinDelay:      100 * time.Millisecond,
+		MaxDelay:      500 * time.Millisecond,
+		IdleTime:      time.Minute,
+		ClearInterval: 0, // overlapping batchers would violate per-namespace serialization
 	}
 )
 
@@ -328,11 +333,15 @@ func NewEngine(
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		shutdownWorkers:           cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
 		partitionScalerFactory:    partitionScalerFactory,
 	}
+	e.userDataUpdateBatcher = streambatcher.NewKeyedBatcher(
+		e.applyUserDataUpdateBatch,
+		userDataBatcherOptions,
+		e.timeSource,
+	)
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -353,6 +362,7 @@ func (e *matchingEngineImpl) Start() {
 
 	go e.watchMembership()
 	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
+	e.namespaceRegistry.RegisterStateChangeCallback(e, e.onNamespaceStateChange)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -364,6 +374,7 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	e.namespaceRegistry.UnregisterStateChangeCallback(e)
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
@@ -372,6 +383,48 @@ func (e *matchingEngineImpl) Stop() {
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}
+	e.namespaceStateUnloads.Wait()
+}
+
+// onNamespaceStateChange unloads a namespace's partitions when it fails over to or away from this
+// cluster, or is deleted from the DB, since their namespace_state metric tag is fixed at load time.
+// Removal and the status check happen under partitionsLock, so each partition is stopped exactly once.
+func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
+	// Callbacks can still arrive after UnregisterStateChangeCallback returns.
+	if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
+		return
+	}
+	var unloaded []taskQueuePartitionManager
+	for key, pm := range e.partitions {
+		if pm.Namespace().ID() != ns.ID() {
+			continue
+		}
+		stateChanged := e.namespaceStateTagValue(pm.Namespace()) != e.namespaceStateTagValue(ns)
+		if deletedFromDB || stateChanged {
+			delete(e.partitions, key)
+			unloaded = append(unloaded, pm)
+		}
+	}
+	// Stopping a partition waits on persistence, so it runs in the background.
+	const batchSize = 100
+	for i := 0; i < len(unloaded); i += batchSize {
+		batch := unloaded[i:min(len(unloaded), i+batchSize)]
+		e.namespaceStateUnloads.Go(func() {
+			for _, pm := range batch {
+				pm.Stop(unloadCauseNamespaceStateChange)
+			}
+		})
+	}
+}
+
+func (e *matchingEngineImpl) namespaceStateTagValue(ns *namespace.Namespace) string {
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
+	if ns.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		return metrics.ActiveNamespaceStateTagValue
+	}
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func (e *matchingEngineImpl) listenerKey() string {
@@ -472,6 +525,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		if retErr != nil || retPM == nil {
 			return
 		}
+		// Runs after the deferred partitionsLock.Unlock below, so Start is outside the lock.
+		if retCreated {
+			retPM.Start()
+		}
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
 		}
@@ -489,11 +546,44 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, nil
 	}
 
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
-	if err != nil {
+	// Outside the lock because this may read through to persistence. It also makes the cache-only
+	// read below succeed, since a readthrough populates the cache.
+	namespaceID := namespace.ID(partition.NamespaceId())
+	if _, err := e.namespaceRegistry.GetNamespaceByID(namespaceID); err != nil {
 		return nil, false, err
 	}
 
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
+	pm, ok = e.partitions[key]
+	if ok {
+		return pm, false, nil
+	}
+
+	// Building under the lock is cheap, and reading the namespace here sees any failover or deletion
+	// whose onNamespaceStateChange scan already ran, since the registry updates its cache before it
+	// invokes callbacks (see TestCallbackSeesUpdatedCache in nsregistry).
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
+		namespaceID,
+		namespace.GetNamespaceOptions{DisableReadthrough: true},
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
+	if err != nil {
+		return nil, false, err
+	}
+	e.partitions[key] = newPM
+	return newPM, true, nil
+}
+
+func (e *matchingEngineImpl) buildTaskQueuePartitionManager(
+	namespaceEntry *namespace.Namespace,
+	partition tqid.Partition,
+	loadCause loadCause,
+) (*taskQueuePartitionManagerImpl, error) {
 	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
@@ -512,7 +602,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		logger,
 		e.namespaceRegistry,
 	)
-	newPM, err = newTaskQueuePartitionManager(
+	newPM, err := newTaskQueuePartitionManager(
 		e,
 		namespaceEntry,
 		partition,
@@ -522,26 +612,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		metricsHandler,
 		userDataManager,
 	)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// If it gets here, write lock and check again in case a task queue is created between the two locks
-	e.partitionsLock.Lock()
-	pm, ok = e.partitions[key]
-	if ok {
-		e.partitionsLock.Unlock()
-		// Lost the race with a concurrent load of the same partition. The unstarted
-		// newPM holds no external references (subscriptions etc. are only registered
-		// in Start), so it can simply be dropped and garbage collected.
-		return pm, false, nil
-	}
-
-	e.partitions[key] = newPM
-	e.partitionsLock.Unlock()
-
-	newPM.Start()
-	return newPM, true, nil
+	return newPM, err
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
@@ -550,13 +621,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
-	var nsState string
-	//nolint:forbidigo // metric tag for namespace state, not per-workflow
-	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
-		nsState = metrics.ActiveNamespaceStateTagValue
-	} else {
-		nsState = metrics.PassiveNamespaceStateTagValue
-	}
+	nsState := e.namespaceStateTagValue(nsEntry)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
@@ -693,6 +758,26 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	if _, ok := partition.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := pm.GrantEagerDispatch(ctx, request.GetItems())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GrantEagerDispatchResponse{Items: items}, nil
+}
+
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
 func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
@@ -749,7 +834,7 @@ pollLoop:
 		}
 
 		if task.isQuery() {
-			task.finish(taskFinishResult{consumedToken: true}) // this only means query task sync match succeed.
+			task.finish(nil) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
@@ -811,11 +896,11 @@ pollLoop:
 			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+				task.finish(dropReasonInternalError)
 			case *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
+				task.finish(dropReasonDataLoss)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -827,10 +912,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
+				task.finish(dropReasonNotFound)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
@@ -842,7 +927,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -861,17 +946,17 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(taskFinishResult{err: err})
+				task.finish(err)
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(taskFinishResult{err: err})
+				task.finish(err)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -882,7 +967,7 @@ pollLoop:
 			continue pollLoop
 		}
 
-		task.finish(taskFinishResult{consumedToken: true})
+		task.finish(nil)
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -1038,11 +1123,11 @@ pollLoop:
 			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+				task.finish(dropReasonInternalError)
 			case *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
+				task.finish(dropReasonDataLoss)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -1054,10 +1139,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
+				task.finish(dropReasonNotFound)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
@@ -1069,7 +1154,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -1088,7 +1173,7 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerrors.ActivityStartDuringTransition:
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
@@ -1105,17 +1190,17 @@ pollLoop:
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
-				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
+				task.finish(dropReasonInvalid)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(taskFinishResult{err: err})
+				task.finish(err)
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(taskFinishResult{err: err})
+				task.finish(err)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -1125,7 +1210,7 @@ pollLoop:
 
 			continue pollLoop
 		}
-		task.finish(taskFinishResult{consumedToken: true})
+		task.finish(nil)
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -1303,9 +1388,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		)
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
-	cfg := rootPM.GetConfig()
-	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
-	numPartitions := cfg.NumReadPartitions()
+	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
+	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
+	if numPartitions <= 0 {
+		numPartitions = rootPM.GetConfig().NumReadPartitions()
+	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
@@ -2467,10 +2554,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		Source:                   "ApplyTaskQueueUserDataReplicationEvent",
 	}
 	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		mergedUserData := common.CloneProto(current)
+		incoming := req.GetUserData()
 		currentVersioningData := current.GetVersioningData()
-		newVersioningData := req.GetUserData().GetVersioningData()
-		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, newVersioningData)
+		incomingVersioningData := incoming.GetVersioningData()
+		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, incomingVersioningData)
 		var buildIdsToRevive []string
 		for _, buildId := range buildIdsRemoved {
 			// We accept that the user data is locked for updates while running these visibility queries.
@@ -2484,34 +2571,38 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		// merge v1 sets
-		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
+		// Merge logic: Task queue user data has an overall clock. Deployment routing configs and
+		// individual versions within it have their own revision numbers. To merge the two user data values:
+		// 1. Select the base user data using the overall clock.
+		// 2. Merge the routing configs and versions from the other user data into the base.
+		baseUserData, otherUserData, selectionReason := selectTaskQueueUserData(current, incoming)
+		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
-		// take last writer for V2 rules and V3 data
-		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
-			}
-			mergedUserData.PerType = current.GetPerType()
-		} else {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
-			}
-			mergedUserData.PerType = req.GetUserData().GetPerType()
+		// Merge V1 sets.
+		mergedVersioningData := MergeVersioningData(currentVersioningData, incomingVersioningData)
+		if mergedVersioningData != nil {
+			baseVersioningData := baseUserData.GetVersioningData()
+			// v2 rules
+			mergedVersioningData.AssignmentRules = baseVersioningData.GetAssignmentRules()
+			mergedVersioningData.RedirectRules = baseVersioningData.GetRedirectRules()
 		}
+		e.recordTaskQueueUserDataMergeConflicts(
+			ns,
+			req,
+			mergeConflicts,
+			selectionReason,
+			current.GetClock(),
+			incoming.GetClock(),
+		)
 
 		for _, buildId := range buildIdsToRevive {
-			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
+			setIdx, buildIDIdx := worker_versioning.FindBuildId(mergedVersioningData, buildId)
 			if setIdx == -1 {
 				continue
 			}
-			set := mergedData.VersionSets[setIdx]
-			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
-			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIdIdx].StateUpdateTimestamp)
+			set := mergedVersioningData.VersionSets[setIdx]
+			set.BuildIds[buildIDIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIDIdx])
+			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIDIdx].StateUpdateTimestamp)
 
 			setDefault := set.BuildIds[len(set.BuildIds)-1]
 			if setDefault.State == persistencespb.STATE_DELETED {
@@ -2523,13 +2614,53 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 		}
 
-		if mergedData != nil {
+		if mergedVersioningData != nil {
 			// No need to keep the v1 tombstones around after replication.
-			mergedUserData.VersioningData = ClearTombstones(mergedData)
+			mergedUserData.VersioningData = ClearTombstones(mergedVersioningData)
 		}
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
+}
+
+func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
+	ns *namespace.Namespace,
+	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	conflicts []taskQueueUserDataMergeConflict,
+	selectionReason taskQueueUserDataSelectionReason,
+	currentClock *clockspb.HybridLogicalClock,
+	incomingClock *clockspb.HybridLogicalClock,
+) {
+	selectedUserDataSource := selectionReason.selectedUserDataSource()
+	resolution := string(selectionReason)
+	for _, conflict := range conflicts {
+		taskQueueType := enumspb.TaskQueueType(conflict.taskQueueType)
+		conflictType := string(conflict.conflictType)
+		metrics.TaskQueueUserDataReplicationEqualRevisionConflicts.With(e.metricsHandler).Record(1,
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.TaskQueueTypeTag(taskQueueType),
+			metrics.StringTag("conflict_type", conflictType),
+			metrics.StringTag("resolution", resolution),
+		)
+
+		logTags := []tag.Tag{
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.WorkflowNamespaceID(req.GetNamespaceId()),
+			tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+			tag.WorkflowTaskQueueType(taskQueueType),
+			tag.Deployment(conflict.deploymentName),
+			tag.NewStringTag("conflict-type", conflictType),
+			tag.NewInt64("revision", conflict.revisionNumber),
+			tag.NewStringTag("selected-side", selectedUserDataSource),
+			tag.NewStringTag("resolution", resolution),
+			tag.NewAnyTag("current-clock", currentClock),
+			tag.NewAnyTag("incoming-clock", incomingClock),
+		}
+		if conflict.buildID != "" {
+			logTags = append(logTags, tag.BuildId(conflict.buildID))
+		}
+		e.logger.Warn(taskQueueUserDataConflictLogMessage, logTags...)
+	}
 }
 
 func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
@@ -2586,7 +2717,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	namespaceId := namespace.ID(request.NamespaceId)
 	var applied, conflicting bool
-	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
+	persistenceErr, ctxErr := e.userDataUpdateBatcher.Add(ctx, namespaceId, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
 			UserData:        request.UserData,
@@ -2803,7 +2934,7 @@ pollLoop:
 			return task.pollNexusTaskQueueResponse(), nil
 		}
 
-		task.finish(taskFinishResult{err: err, consumedToken: true})
+		task.finish(err)
 		if err != nil {
 			continue pollLoop
 		}
@@ -2979,20 +3110,6 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 		close(e.nexusEndpointsOwnershipLostCh.Swap(make(chan struct{})).(chan struct{})) //nolint:revive // type is always chan struct{}
 	}
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
-}
-
-func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *stream_batcher.Batcher[*userDataUpdate, error] {
-	// Note that values are never removed from this map. The batcher's goroutine will exit
-	// after the idle time, though, which gets most of the desired resource savings.
-	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
-		return batcher
-	}
-	fn := func(batch []*userDataUpdate) error {
-		return e.applyUserDataUpdateBatch(namespaceId, batch)
-	}
-	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
-	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
-	return batcher
 }
 
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
@@ -3456,26 +3573,27 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 
 	return &matchingservice.PollActivityTaskQueueResponse{
-		ActivityId:                  attributes.ActivityId,
-		ActivityType:                attributes.ActivityType,
-		ActivityRunId:               historyResponse.GetActivityRunId(),
-		Header:                      attributes.Header,
-		Input:                       attributes.Input,
-		WorkflowExecution:           task.workflowExecution(),
-		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
-		ScheduledTime:               scheduledEvent.EventTime,
-		ScheduleToCloseTimeout:      scheduleToCloseTimeout,
-		StartedTime:                 historyResponse.StartedTime,
-		StartToCloseTimeout:         attributes.StartToCloseTimeout,
-		HeartbeatTimeout:            attributes.HeartbeatTimeout,
-		TaskToken:                   serializedToken,
-		Attempt:                     taskToken.Attempt,
-		HeartbeatDetails:            historyResponse.HeartbeatDetails,
-		WorkflowType:                historyResponse.WorkflowType,
-		WorkflowNamespace:           historyResponse.WorkflowNamespace,
-		PollerScalingDecision:       task.pollerScalingDecision,
-		Priority:                    historyResponse.Priority,
-		RetryPolicy:                 historyResponse.RetryPolicy,
+		ActivityId:                          attributes.ActivityId,
+		ActivityType:                        attributes.ActivityType,
+		ActivityRunId:                       historyResponse.GetActivityRunId(),
+		Header:                              attributes.Header,
+		Input:                               attributes.Input,
+		WorkflowExecution:                   task.workflowExecution(),
+		CurrentAttemptScheduledTime:         historyResponse.CurrentAttemptScheduledTime,
+		ScheduledTime:                       scheduledEvent.EventTime,
+		ScheduleToCloseTimeout:              scheduleToCloseTimeout,
+		StartedTime:                         historyResponse.StartedTime,
+		StartToCloseTimeout:                 attributes.StartToCloseTimeout,
+		HeartbeatTimeout:                    attributes.HeartbeatTimeout,
+		TaskToken:                           serializedToken,
+		Attempt:                             taskToken.Attempt,
+		HeartbeatDetails:                    historyResponse.HeartbeatDetails,
+		WorkflowType:                        historyResponse.WorkflowType,
+		WorkflowNamespace:                   historyResponse.WorkflowNamespace,
+		PropagatedNexusSerializationContext: historyResponse.GetNexusSerializationContext(),
+		PollerScalingDecision:               task.pollerScalingDecision,
+		Priority:                            historyResponse.Priority,
+		RetryPolicy:                         historyResponse.RetryPolicy,
 	}
 }
 
@@ -3812,46 +3930,6 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
-}
-
-func (e *matchingEngineImpl) UpdateFairnessState(
-	ctx context.Context,
-	req *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
-	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
-	if err != nil {
-		return nil, err
-	}
-
-	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		data := old
-		if data != nil {
-			data = common.CloneProto(old)
-		} else {
-			data = &persistencespb.TaskQueueUserData{}
-		}
-		if data.PerType == nil {
-			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
-		}
-		typ := int32(req.GetTaskQueueType())
-		perType := data.PerType[typ]
-		if perType == nil {
-			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
-			perType = data.PerType[typ]
-		}
-		perType.FairnessState = req.FairnessState
-		return data, true, nil
-	}
-	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
-	if err != nil {
-		return nil, err
-	}
-	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {

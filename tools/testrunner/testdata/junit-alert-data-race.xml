@@ -3,12 +3,12 @@
         <testcase name="DATA RACE: Data race detected in TestFoo">
             <failure message="DATA RACE" type="DATA RACE"><![CDATA[WARNING: DATA RACE
 Write at 0x00c000123456 by goroutine 7:
-  main.TestFoo()
-      /path/to/foo_test.go:42 +0x123
+  go.temporal.io/server/service/worker/scheduler.(*scheduler).updateTweakables.func1()
+      /path/to/workflow.go:1442 +0x123
 
 Previous read at 0x00c000123456 by goroutine 8:
-  main.TestFoo()
-      /path/to/foo_test.go:43 +0x456]]></failure>
+  go.temporal.io/server/service/worker/scheduler.(*scheduler).run()
+      /path/to/workflow.go:466 +0x456]]></failure>
         </testcase>
     </testsuite>
 </testsuites>

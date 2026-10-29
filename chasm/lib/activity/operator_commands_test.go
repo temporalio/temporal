@@ -60,8 +60,8 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 				RequestId: "new-request-id",
 			},
 		})
-		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-		require.EqualError(t, err, "activity is in terminal state Canceled")
+		require.ErrorAs(t, err, new(*serviceerror.NotFound))
+		require.EqualError(t, err, "no running activity execution: it closed with status Canceled")
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
 	})
 
@@ -101,8 +101,24 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
 			RequestID: "new-request-id",
 		})
-		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-		require.EqualError(t, err, "already terminated with request ID "+requestID)
+		require.ErrorAs(t, err, new(*serviceerror.NotFound))
+		require.EqualError(t, err, "no running activity execution: it closed with status Terminated")
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	// A request that carries no request id cannot be recognized as a retry of the one that
+	// terminated the activity, however the activity was terminated.
+	t.Run("TerminationWithoutRequestIDAfterTerminated", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:         activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				TerminateState: &activitypb.ActivityTerminateState{},
+			},
+		}
+
+		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.ErrorAs(t, err, new(*serviceerror.NotFound))
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	})
 
@@ -144,8 +160,8 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 				RequestId: "new-request-id",
 			},
 		})
-		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-		require.EqualError(t, err, "activity is in non-pausable state Terminated")
+		require.ErrorAs(t, err, new(*serviceerror.NotFound))
+		require.EqualError(t, err, "no running activity execution: it closed with status Terminated")
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	})
 }

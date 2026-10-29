@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -62,6 +63,7 @@ type (
 		dataMerger                   NamespaceDataMerger
 		admitter                     NamespaceReplicationAdmitter
 		logger                       log.Logger
+		metricsHandler               metrics.Handler
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 		testHooks                    testhooks.TestHooks
@@ -90,6 +92,13 @@ func NewTaskExecutor(
 		option(executor)
 	}
 	return executor
+}
+
+// WithNamespaceReplicationMetrics configures namespace replication outcome metrics.
+func WithNamespaceReplicationMetrics(metricsHandler metrics.Handler) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.metricsHandler = metricsHandler
+	}
 }
 
 // WithNamespaceReplicationLifecycleEvents configures processed lifecycle event emission.
@@ -129,6 +138,7 @@ func (h *taskExecutorImpl) executeValidatedTask(
 ) error {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
 		if !shouldProcess && err == nil {
+			h.recordOutcome(ctx, task, metricsOutcomeNotAdmitted)
 			h.emitNamespaceReplicationProcessed(
 				ctx,
 				wideevents.NamespaceReplicationOutcomeNotAdmitted,
@@ -164,6 +174,15 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 				tag.String("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
+		if !resp.IsGlobalNamespace {
+			h.logger.Warn(
+				"Namespace replication task skipped because namespace is local",
+				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.WorkflowNamespace(resp.Namespace.Info.Name),
+				tag.String("namespace-operation", task.GetNamespaceOperation().String()),
+			)
+			return false, nil
+		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
@@ -197,6 +216,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+				BadBinaries:                  task.Config.GetBadBinaries(),
 				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
@@ -271,6 +291,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 
 		if recordExists {
 			// name -> id & id -> name check pass, this is duplication request
+			h.recordOutcome(ctx, task, metricsOutcomeNoChange)
 			h.emitNamespaceReplicationProcessed(
 				ctx,
 				wideevents.NamespaceReplicationOutcomeDuplicate,
@@ -283,6 +304,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		return err
 	}
 
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
 	h.emitNamespaceReplicationProcessed(
 		ctx,
 		wideevents.NamespaceReplicationOutcomeCreated,
@@ -333,7 +355,12 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	mergedData, dataMerged := h.dataMerger.MergeData(
+		resp.Namespace.Info.Data,
+		task.Info.Data,
+		resp.Namespace.ConfigVersion,
+		task.GetConfigVersion(),
+	)
 	if dataMerged {
 		recordUpdated = true
 		request.Namespace.Info.Data = mergedData
@@ -370,6 +397,10 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
+		// Source-local ramps must not survive an active-cluster change.
+		if resp.Namespace.ReplicationConfig.GetActiveClusterName() != task.ReplicationConfig.GetActiveClusterName() {
+			request.Namespace.ReplicationConfig.ClusterReplicationRamps = nil
+		}
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
@@ -378,6 +409,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
+		h.recordOutcome(ctx, task, metricsOutcomeNoChange)
 		if localNamespacePreMutation != nil {
 			h.emitNamespaceReplicationProcessed(
 				ctx,
@@ -393,6 +425,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
 		return err
 	}
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
 	if localNamespacePreMutation != nil {
 		h.emitNamespaceReplicationProcessed(
 			ctx,
@@ -403,6 +436,14 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		)
 	}
 	return nil
+}
+
+func (h *taskExecutorImpl) recordOutcome(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+	outcome string,
+) {
+	recordOutcome(ctx, h.metricsHandler, task, outcome)
 }
 
 func (h *taskExecutorImpl) cloneLocalNamespaceForReplicationEvent(

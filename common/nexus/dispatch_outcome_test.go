@@ -365,23 +365,6 @@ func TestClassifyOperationDispatch(t *testing.T) {
 			},
 		},
 
-		// DispatchOutcomeWorkerFailure
-		{
-			Name:     "worker error",
-			Response: taskFailureResponse(applicationFailure("worker exploded", "ErrTypeStr")),
-			Want: DispatchResult{
-				Outcome: DispatchOutcomeWorkerFailure,
-				Failure: &failurepb.Failure{
-					Message: "worker exploded",
-					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-							Type: "ErrTypeStr",
-						},
-					},
-				},
-			},
-		},
-
 		// DispatchOutcomeUnrecognized
 		{
 			Name:     "unrecognized (no outcome)",
@@ -590,10 +573,10 @@ func TestBoundHandlerErrorType(t *testing.T) {
 		"CONFLICT", "RESOURCE_EXHAUSTED", "INTERNAL", "NOT_IMPLEMENTED", "UNAVAILABLE",
 		"UPSTREAM_TIMEOUT",
 	} {
-		require.Equal(t, spec, boundHandlerErrorType(spec), "spec types pass through verbatim")
+		require.Equal(t, spec, BoundHandlerErrorType(spec), "spec types pass through verbatim")
 	}
 	// A worker picks this string, so it must not be able to mint new time series.
-	require.Equal(t, "UNKNOWN", boundHandlerErrorType("whatever-the-worker-said"))
-	require.Equal(t, "UNKNOWN", boundHandlerErrorType(""))
-	require.Equal(t, "UNKNOWN", boundHandlerErrorType("bad_request"), "matching is case sensitive")
+	require.Equal(t, "UNKNOWN", BoundHandlerErrorType("whatever-the-worker-said"))
+	require.Equal(t, "UNKNOWN", BoundHandlerErrorType(""))
+	require.Equal(t, "UNKNOWN", BoundHandlerErrorType("bad_request"), "matching is case sensitive")
 }

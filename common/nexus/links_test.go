@@ -14,7 +14,7 @@ import (
 )
 
 // TestConvertNexusLinksToProtoLinks verifies that the converter handles the
-// Workflow, WorkflowEvent, and Activity link variants, drops unsupported types,
+// Workflow, WorkflowEvent, Activity, and NexusOperation link variants, drops unsupported types,
 // and skips malformed entries.
 func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 	logger := log.NewTestLogger()
@@ -40,6 +40,13 @@ func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 			Path:   "/namespaces/ns/workflows/wf-id/run-id",
 		},
 		Type: "temporal.api.common.v1.Link.Workflow",
+	}
+	nexusOperation := nexus.Link{
+		URL: &url.URL{
+			Scheme: "temporal",
+			Path:   "/namespaces/ns/nexus-operations/op-id/run-id/details",
+		},
+		Type: "temporal.api.common.v1.Link.NexusOperation",
 	}
 	unsupported := nexus.Link{
 		URL:  &url.URL{Scheme: "temporal", Path: "/foo"},
@@ -67,11 +74,11 @@ func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 			Type: "temporal.api.common.v1.Link.Workflow",
 		},
 	}
-	nexusLinks := []nexus.Link{workflowEvent, activity, workflow, unsupported, malformedActivity}
+	nexusLinks := []nexus.Link{workflowEvent, activity, workflow, nexusOperation, unsupported, malformedActivity}
 	nexusLinks = append(nexusLinks, malformedWorkflows...)
 
 	out := commonnexus.ConvertNexusLinksToProtoLinks(nexusLinks, logger)
-	require.Len(t, out, 3, "workflow, workflow-event, and activity links must round-trip; unsupported and malformed entries must be dropped")
+	require.Len(t, out, 4, "workflow, workflow-event, activity, and Nexus-operation links must round-trip; unsupported and malformed entries must be dropped")
 
 	expected := []*commonpb.Link{
 		{
@@ -107,6 +114,58 @@ func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 				},
 			},
 		},
+		{
+			Variant: &commonpb.Link_NexusOperation_{
+				NexusOperation: &commonpb.Link_NexusOperation{
+					Namespace:   "ns",
+					OperationId: "op-id",
+					RunId:       "run-id",
+				},
+			},
+		},
 	}
 	protorequire.ProtoSliceEqual(t, expected, out)
+}
+
+// A Callback link is one of the variants a Nexus handler can hand back, so the batch converter has
+// to recognize it.
+func TestConvertNexusLinksToProtoLinks_CallbackAndNilURL(t *testing.T) {
+	logger := log.NewTestLogger()
+
+	callbackLink := nexus.Link{
+		URL: &url.URL{
+			Scheme:   "temporal",
+			Path:     "/namespaces/ns/nexus-operations/op-id/run-id/callbacks/request-id",
+			RawQuery: "componentPath=c-path1&componentPath=c-path2",
+		},
+		Type: "temporal.api.common.v1.Link.Callback",
+	}
+	malformedCallback := nexus.Link{
+		URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/nexus-operations/op-id/run-id/callbacks"},
+		Type: "temporal.api.common.v1.Link.Callback",
+	}
+	noURL := nexus.Link{Type: "temporal.api.common.v1.Link.Callback"}
+
+	out := commonnexus.ConvertNexusLinksToProtoLinks(
+		[]nexus.Link{callbackLink, malformedCallback, noURL},
+		logger,
+	)
+
+	// The malformed and missing-URL links are dropped with a warning.
+	protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_Callback_{
+				Callback: &commonpb.Link_Callback{
+					Namespace: "ns",
+					Execution: &commonpb.Execution{
+						Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+						BusinessId: "op-id",
+						RunId:      "run-id",
+					},
+					ComponentPath: []string{"c-path1", "c-path2"},
+					RequestId:     "request-id",
+				},
+			},
+		},
+	}, out)
 }

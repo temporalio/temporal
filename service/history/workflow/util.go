@@ -11,9 +11,11 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
@@ -124,6 +126,41 @@ func TerminateWorkflow(
 	return err
 }
 
+func ForceTerminateWorkflow(
+	mutableState historyi.MutableState,
+	terminateReason string,
+	terminateDetails *commonpb.Payloads,
+	terminateIdentity string,
+	deleteAfterTerminate bool,
+	links []*commonpb.Link,
+	metricsHandler metrics.Handler,
+	forceTerminationReason metrics.ReasonString,
+) error {
+	if err := TerminateWorkflow(
+		mutableState,
+		terminateReason,
+		terminateDetails,
+		terminateIdentity,
+		deleteAfterTerminate,
+		links,
+	); err != nil {
+		return err
+	}
+
+	namespaceName := ""
+	if namespaceEntry := mutableState.GetNamespaceEntry(); namespaceEntry != nil {
+		namespaceName = namespaceEntry.Name().String()
+	}
+
+	metrics.ExecutionForceTerminations.With(metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.ArchetypeTag(chasm.WorkflowArchetype),
+		metrics.ReasonTag(forceTerminationReason),
+	)
+	return nil
+}
+
 // FindAutoResetPoint returns the auto reset point
 func FindAutoResetPoint(
 	timeSource clock.TimeSource,
@@ -224,8 +261,8 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 	return versioningInfo.GetBehavior()
 }
 
-// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
-func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+// ShouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func ShouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
 	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
@@ -234,9 +271,14 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		return true
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:
+		// command events are never cherry-picked; user logic reschedules the command instead
+		return false
 	}
 
 	// events registered in the hsm framework that are potentially cherry-pickable
+	// CONSIDER: also check the CHASM workflow registry once HSM nexus events are removed.
 	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
 		return true
 	}

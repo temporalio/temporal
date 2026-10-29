@@ -180,7 +180,7 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	settings := sm.settings()
-	shadowMode := settings.ShadowModeLogInterval > 0
+	shadowMode := !settings.Enabled
 
 	// Entering shadow mode on top of a previously-applied managed target releases
 	// control back to the dynamic-config baseline: zero the managed target once so
@@ -203,9 +203,15 @@ func (sm *scaleManager) callScaler() {
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
+	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
+		(len(sm.scaleState.GetBacklogState()) > 0 ||
+			len(sm.scaleState.GetBacklogCounts()) > 0 ||
+			sm.scaleState.GetBacklogCap() != 0 ||
+			sm.scaleState.GetPrivateScalerState() != nil)
 	if decision.NoChange ||
 		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
-			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) {
+			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) &&
+			!disabledStateNeedsCleanup {
 		return
 	}
 
@@ -221,9 +227,20 @@ func (sm *scaleManager) callScaler() {
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
+	var prevRead, prevWrite int32
+	if target == 0 {
+		// Disabling managed scaling is a clean break to dynamic config; any backlog
+		// outside its read range remains unpolled until it times out.
+		prevInfo := scaleStateToInfo(sm.scaleState, settings)
+		prevRead, prevWrite = prevInfo.Read, prevInfo.Write
+		newState.BacklogState = nil
+		newState.BacklogCounts = nil
+		newState.BacklogCap = 0
+		newState.PrivateScalerState = nil
+	}
 
 	mayHaveBacklog := target
-	if prevTarget == 0 {
+	if prevTarget == 0 && target > 0 {
 		// Turning on managed partition scaling: consider all partitions from dynamic
 		// config as having backlog also.
 		mayHaveBacklog = max(mayHaveBacklog, int32(sm.getWritePartitions()))
@@ -233,7 +250,8 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	if shadowMode {
-		if sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
+		if settings.ShadowModeLogInterval <= 0 || // no logging
+			sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
 			sm.prevShadowTarget == target || // only log new changes
 			target <= 0 { // only log if scaler is enabled
 			// emit scale event metric as a heartbeat even if no shadow log
@@ -258,11 +276,17 @@ func (sm *scaleManager) callScaler() {
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
-	sm.logger.Info("new target",
-		tag.Int32("target", target),
-		tag.Int32("prev-target", prevTarget),
-		tag.Int32("max-target", newState.MaxTarget),
-		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	if target == 0 {
+		sm.logger.Info("disabled managed scaling",
+			tag.Int32("prev-read", prevRead),
+			tag.Int32("prev-write", prevWrite))
+	} else {
+		sm.logger.Info("new target",
+			tag.Int32("target", target),
+			tag.Int32("prev-target", prevTarget),
+			tag.Int32("max-target", newState.MaxTarget),
+			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
@@ -389,6 +413,11 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 }
 
 func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
+	if !sm.settings().Enabled {
+		// if we're not enabled, we don't have to do any of this
+		return
+	}
+
 	scaleState := sm.scaleState
 	read := scaleStateToReadCount(scaleState)
 	if read == 0 {
@@ -441,14 +470,6 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	}
 
 	if !backlogChanged && len(toClear) == 0 {
-		return
-	}
-
-	// Reachable only in the brief window after shadow mode is enabled but before
-	// releaseManagedState has zeroed a leftover target>0 (callScaler is still in
-	// cooldown). Shadow mode must not persist drain completion or mutate read
-	// partitions, so bail before applying toClear.
-	if settings.ShadowModeLogInterval > 0 {
 		return
 	}
 

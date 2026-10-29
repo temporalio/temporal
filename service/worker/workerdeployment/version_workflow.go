@@ -52,6 +52,7 @@ type (
 		signalHandler                *SignalHandler
 		drainageStatusSyncInProgress bool
 		forceCAN                     bool
+		skipPendingPropagations      bool
 		// Optional override state for force-CaN
 		overrideState *deploymentspb.VersionLocalState
 		// Track if async propagations are in progress (prevents CaN)
@@ -111,6 +112,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		var args *deploymentspb.ForceCANVersionSignalArgs
 		c.Receive(ctx, &args)
 		d.forceCAN = true
+		d.skipPendingPropagations = args.GetSkipPendingPropagations()
 
 		// Apply override state if provided
 		if args.GetOverrideState() != nil {
@@ -354,14 +356,35 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
-	// there are no pending updates/signals and the state has changed.
+	// Preserve historical CaN decisions when replay reaches this point without a version marker.
+	// Those runs keep the legacy rules until their next CaN.
+	canLogicVersion := workflow.GetVersion(
+		ctx, "wait-for-pending-propagations", workflow.DefaultVersion, 1,
+	)
+	// Automatic CaN must preserve pending propagation. Force-CaN can bypass it to recover a stuck workflow.
 	err := workflow.Await(ctx, func() bool {
-		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
-			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change or history got too large
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+		handlersFinished := !d.signalHandler.signalSelector.HasPending() &&
+			d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx)
+
+		if canLogicVersion == workflow.DefaultVersion {
+			// Use the old set of conditions only when the workflow code is running on a version before
+			// the changes introduced by "wait-for-pending-propagations" version marker.
+			return (d.deleteVersion && d.asyncPropagationsInProgress == 0) ||
+				(handlersFinished && (d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) ||
+					workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+		}
+
+		if d.deleteVersion {
+			return d.asyncPropagationsInProgress == 0
+		}
+
+		canSkipPropagations := d.forceCAN && d.skipPendingPropagations
+		if d.asyncPropagationsInProgress != 0 && !canSkipPropagations {
+			return false
+		}
+
+		shouldContinueAsNew := d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()
+		return handlersFinished && shouldContinueAsNew
 	})
 	if err != nil {
 		return err
@@ -461,8 +484,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		RemoveScalingGroups: args.GetRemoveScalingGroups(),
 	}).Get(ctx, &computeConfigSummary)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+		if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 			return nil, appErr
 		}
 		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
@@ -714,6 +736,9 @@ func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.Regis
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
+			&deploymentspb.MaxTaskQueuesInVersionFailureDetails{
+				TaskQueueFamilySummary: buildTaskQueueFamilySummary(d.VersionState.TaskQueueFamilies),
+			},
 		)
 	}
 	return nil

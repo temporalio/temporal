@@ -22,10 +22,14 @@ import (
 // invocableOutbound is an invocable that delivers the Nexus operation completion data to an external destination for
 // cross-namespace or cross-cell callbacks.
 type invocableOutbound struct {
-	callback          *callbackspb.Callback_Nexus
-	completion        nexusrpc.CompleteOperationOptions
-	workflowID, runID string
-	attempt           int32
+	callback   *callbackspb.Callback_Nexus
+	completion nexusrpc.CompleteOperationOptions
+	// completionSourceTag is the fully qualified name of the CHASM component that produced this
+	// completion, e.g. "workflow.workflow" or "activity.activity".
+	completionSourceTag string
+	businessID, runID   string
+	requestID           string
+	attempt             int32
 }
 
 func (n invocableOutbound) WrapError(result invocationResult, err error) error {
@@ -42,16 +46,19 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	callbackLogger := log.With(h.logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Operation("CompleteNexusOperation"),
+		tag.Destination(taskAttr.Destination),
+		tag.WorkflowID(n.businessID),
+		tag.WorkflowRunID(n.runID),
+		tag.NexusCompletionSource(n.completionSourceTag),
+		tag.Attempt(n.attempt),
+		tag.RequestID(n.requestID),
+	)
 	if h.httpTraceProvider != nil {
-		traceLogger := log.With(h.logger,
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Operation("CompleteNexusOperation"),
-			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.workflowID),
-			tag.WorkflowRunID(n.runID),
-			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-		)
+		// nolint:forbidigo // Wall-clock RPC timestamp, not component state; Invoke has no chasm.Context.
+		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
@@ -64,21 +71,31 @@ func (n invocableOutbound) Invoke(
 		}),
 		Serializer: commonnexus.PayloadSerializer,
 	})
-	// Make the call and record metrics.
+
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
 
+	// Make the call.
 	n.completion.Header = n.callback.Header
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(taskAttr.Destination)
-	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	// Record metrics.
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(taskAttr.Destination),
+		metrics.OutcomeTag(string(outboundOutcome(ctx, err))),
+		metrics.NexusCompletionSourceTag(n.completionSourceTag),
+	}
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, tags...)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), tags...)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		callbackLogger.Error(
+			"Callback request failed",
+			tag.Error(err),
+			tag.Bool("retryable", retryable),
+		)
 		if retryable {
 			return invocationResultRetry{err}
 		}
@@ -94,15 +111,15 @@ func isRetryableCallError(err error) bool {
 	return true
 }
 
-func outcomeTag(callCtx context.Context, callErr error) string {
+func outboundOutcome(callCtx context.Context, callErr error) outcomeTag {
 	if callErr != nil {
 		if callCtx.Err() != nil {
-			return "request-timeout"
+			return outcomeRequestTimeout
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
-			return "handler-error:" + string(handlerErr.Type)
+			return handlerErrorOutcome(handlerErr)
 		}
-		return "unknown-error"
+		return outcomeUnknownError
 	}
-	return "success"
+	return outcomeSuccess
 }

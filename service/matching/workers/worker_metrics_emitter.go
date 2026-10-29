@@ -1,12 +1,16 @@
 package workers
 
 import (
+	"strings"
+
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 )
 
 // WorkerMetricsConfig contains dynamic config flags for worker-related metrics.
@@ -19,8 +23,10 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler metrics.Handler
-	config  WorkerMetricsConfig
+	handler                   metrics.Handler
+	config                    WorkerMetricsConfig
+	eventLogger               otellog.Logger
+	enableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -32,6 +38,7 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
+	enableWorkerMetricsEvents := e.enableWorkerMetricsEvents != nil && e.enableWorkerMetricsEvents(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
 	recordedDrivers := make(map[string]bool)
@@ -55,10 +62,9 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 			}
 		}
 
-		// Poller autoscaling metrics (if enabled)
-		if enablePollerAutoscalingMetrics {
-			e.emitPollerAutoscaling(nsID, nsName, hb)
-		}
+		// Per-task-queue heartbeat metrics. The total heartbeat count is always emitted; the poller autoscaling
+		// heartbeat count is only emitted if enabled.
+		e.emitPollerHeartbeat(nsID, nsName, hb, enablePollerAutoscalingMetrics)
 
 		// Storage driver metrics (if external payloads enabled)
 		if enableStorageDriverMetrics {
@@ -72,30 +78,217 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 				}
 			}
 		}
+
+		if enableWorkerMetricsEvents {
+			e.emitWorkerMetricsEvent(nsName, hb)
+		}
 	}
 }
 
-func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+// emitPollerHeartbeat records the total heartbeat count for each task type the worker is polling. If
+// enableAutoscalingMetrics is set, it additionally records the autoscaling heartbeat count for each poller that has
+// autoscaling enabled, so the autoscaling count is a subset of the total.
+func (e *workerMetricsEmitter) emitPollerHeartbeat(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	hb *workerpb.WorkerHeartbeat,
+	enableAutoscalingMetrics bool,
+) {
 	family, err := tqid.NewTaskQueueFamily(nsID.String(), hb.GetTaskQueue())
 	if err != nil {
 		return
 	}
 
-	recordAutoscaling := func(taskType enumspb.TaskQueueType) {
+	record := func(taskType enumspb.TaskQueueType, pollerInfo *workerpb.WorkerPollerInfo) {
+		if pollerInfo == nil {
+			return // worker is not polling this task type
+		}
 		tq := family.TaskQueue(taskType)
 		breakdownByTQ := e.config.BreakdownMetricsByTaskQueue != nil &&
 			e.config.BreakdownMetricsByTaskQueue(nsName.String(), hb.GetTaskQueue(), taskType)
 		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, breakdownByTQ)
-		metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		metrics.WorkerHeartbeatCount.With(handler).Record(1)
+		if enableAutoscalingMetrics && pollerInfo.GetIsAutoscaling() {
+			metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		}
 	}
 
-	if hb.WorkflowPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	record(enumspb.TASK_QUEUE_TYPE_WORKFLOW, hb.WorkflowPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_ACTIVITY, hb.ActivityPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_NEXUS, hb.NexusPollerInfo)
+}
+
+func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	runtimes := make(map[string]string)
+	for _, rt := range hb.GetEnvironment().GetRuntimes() {
+		runtimes[runtimeTypeName(rt.GetType())] = rt.GetVersion()
 	}
-	if hb.ActivityPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	hostingEnvs := make(map[string]string)
+	for _, he := range hb.GetEnvironment().GetHostingEnvironments() {
+		hostingEnvs[hostingEnvironmentTypeName(he.GetType())] = he.GetVersion()
 	}
-	if hb.NexusPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	plugins := make(map[string]string)
+	for _, p := range hb.GetPlugins() {
+		plugins[p.GetName()] = p.GetVersion()
+	}
+	var drivers []string
+	for _, d := range hb.GetDrivers() {
+		drivers = append(drivers, d.GetType())
+	}
+	var startTime string
+	if st := hb.GetStartTime(); st != nil {
+		startTime = st.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	osTag, osVersion, archTag, libc := platformInfo(hb.GetEnvironment().GetPlatform())
+	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
+		Namespace:                 nsName.String(),
+		TaskQueue:                 hb.GetTaskQueue(),
+		WorkerInstanceKey:         hb.GetWorkerInstanceKey(),
+		WorkerIdentity:            hb.GetWorkerIdentity(),
+		StartTime:                 startTime,
+		SdkName:                   hb.GetSdkName(),
+		SdkVersion:                hb.GetSdkVersion(),
+		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
+		BuildID:                   hb.GetDeploymentVersion().GetBuildId(),
+		Runtimes:                  runtimes,
+		HostingEnvironments:       hostingEnvs,
+		OS:                        osTag,
+		OSVersion:                 osVersion,
+		Architecture:              archTag,
+		Libc:                      libc,
+		Plugins:                   plugins,
+		Drivers:                   drivers,
+		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
+		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
+		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
+	})
+}
+
+func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	type taskEntry struct {
+		taskType   string
+		slots      *workerpb.WorkerSlotsInfo
+		pollerInfo *workerpb.WorkerPollerInfo
+		stickyInfo *workerpb.WorkerPollerInfo
+	}
+	entries := []taskEntry{
+		{"workflow", hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()},
+		{"activity", hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil},
+		{"nexus", hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil},
+		{"local_activity", hb.GetLocalActivitySlotsInfo(), nil, nil}, // local activities run in-process, no pollers
+	}
+
+	stats := make(map[string]wideevents.WorkerTaskTypeStats)
+	for _, te := range entries {
+		// Only include task types that have at least one source message present.
+		if te.slots == nil && te.pollerInfo == nil && te.stickyInfo == nil {
+			continue
+		}
+		s := wideevents.WorkerTaskTypeStats{}
+		if te.pollerInfo != nil {
+			s.CurrentPollers = new(te.pollerInfo.GetCurrentPollers())
+		}
+		if te.stickyInfo != nil {
+			s.CurrentStickyPollers = new(te.stickyInfo.GetCurrentPollers())
+		}
+		if te.slots != nil {
+			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
+			if te.slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
+				totalSlots = -1
+			}
+			s.TotalSlots = new(totalSlots)
+			s.UsedSlots = new(te.slots.GetCurrentUsedSlots())
+			s.TotalProcessedTasks = new(te.slots.GetTotalProcessedTasks())
+			s.TotalFailedTasks = new(te.slots.GetTotalFailedTasks())
+			s.LastIntervalProcessedTasks = new(te.slots.GetLastIntervalProcessedTasks())
+			s.LastIntervalFailureTasks = new(te.slots.GetLastIntervalFailureTasks())
+		}
+		stats[te.taskType] = s
+	}
+
+	wideevents.Emit(e.eventLogger, wideevents.WorkerMetricsPayload{
+		Namespace:         nsName.String(),
+		TaskQueue:         hb.GetTaskQueue(),
+		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
+		TaskTypeStats:     stats,
+		Details: map[string]any{
+			"sticky_cache_size": hb.GetCurrentStickyCacheSize(),
+			"sticky_cache_hit":  hb.GetTotalStickyCacheHit(),
+			"sticky_cache_miss": hb.GetTotalStickyCacheMiss(),
+		},
+	})
+}
+
+// runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
+func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
+	if rt == workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := rt.Descriptor().Values().ByNumber(rt.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "RUNTIME_TYPE_"))
+}
+
+func hostingEnvironmentTypeName(t workerpb.EnvironmentInfo_HostingEnvironment_HostingEnvironmentType) string {
+	if t == workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := t.Descriptor().Values().ByNumber(t.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "HOSTING_ENVIRONMENT_TYPE_"))
+}
+
+func libcName(l workerpb.EnvironmentInfo_LinuxPlatform_Libc) string {
+	if l == workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED {
+		return ""
+	}
+	v := l.Descriptor().Values().ByNumber(l.Number())
+	if v == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "LIBC_"))
+}
+
+func crtName(c workerpb.EnvironmentInfo_WindowsPlatform_Crt) string {
+	if c == workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED {
+		return ""
+	}
+	v := c.Descriptor().Values().ByNumber(c.Number())
+	if v == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "CRT_"))
+}
+
+func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
+	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := a.Descriptor().Values().ByNumber(a.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "ARCHITECTURE_"))
+}
+
+// platformInfo extracts OS, version, architecture, and libc/crt from the platform oneof.
+// The libc field is used for Linux (glibc/musl) and Windows (ucrt/msvcrt/etc).
+func platformInfo(p *workerpb.EnvironmentInfo_Platform) (os, version, arch, libc string) {
+	if p == nil {
+		return "unknown", "", "unknown", ""
+	}
+	switch v := p.GetVariant().(type) {
+	case *workerpb.EnvironmentInfo_Platform_Linux:
+		return "linux", v.Linux.GetVersion(), architectureName(v.Linux.GetArchitecture()), libcName(v.Linux.GetLibc())
+	case *workerpb.EnvironmentInfo_Platform_Macos:
+		return "macos", v.Macos.GetVersion(), architectureName(v.Macos.GetArchitecture()), ""
+	case *workerpb.EnvironmentInfo_Platform_Windows:
+		return "windows", v.Windows.GetVersion(), architectureName(v.Windows.GetArchitecture()), crtName(v.Windows.GetCrt())
+	default:
+		return "unknown", "", "unknown", ""
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -89,6 +90,7 @@ type (
 		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
+		AppendRawHistoryEvents(ctx context.Context, request *persistence.AppendRawHistoryNodesRequest) (*persistence.AppendHistoryNodesResponse, error)
 
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
@@ -121,6 +123,10 @@ type (
 
 		StateMachineRegistry() *hsm.Registry
 		GetFinalizer() *finalizer.Finalizer
+
+		// CallbackValidator returns the validator used to bound completion callbacks attached
+		// to executions owned by this shard.
+		CallbackValidator() callbacks.Validator
 
 		ChasmRegistry() *chasm.Registry
 		// ChasmWorkflowRegistry returns the CHASM workflow library's event/command registry.

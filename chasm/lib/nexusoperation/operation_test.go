@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -396,6 +398,105 @@ func TestHandleNexusCompletion(t *testing.T) {
 	})
 }
 
+func TestDescribeCircuitBreaker(t *testing.T) {
+	t.Parallel()
+
+	for _, endpoint := range []string{"test-endpoint", commonnexus.SystemEndpoint} {
+		for _, status := range protoutils.EnumValues[nexusoperationpb.OperationStatus]() {
+			for _, cancellationStatus := range protoutils.EnumValues[nexusoperationpb.CancellationStatus]() {
+				for _, breaker := range []string{"closed", "open"} {
+					t.Run(endpoint+"/"+status.String()+"/"+cancellationStatus.String()+"/"+breaker, func(t *testing.T) {
+						t.Parallel()
+
+						// System endpoint tasks run on the transfer queue, which has no circuit breaker.
+						checksBreaker := endpoint != commonnexus.SystemEndpoint
+						blocked := checksBreaker && breaker == "open"
+
+						ctx := newCallbackTestContext()
+						calls := 0
+						ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+							DestinationBlocked: func(namespaceID, destination string) bool {
+								calls++
+								require.Equal(t, "ns-id", namespaceID)
+								require.Equal(t, endpoint, destination)
+								return breaker == "open"
+							},
+						})
+						op := newTestOperation()
+						op.Endpoint = endpoint
+						op.Status = status
+						op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+						op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+						if cancellationStatus != nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
+							op.Cancellation = chasm.NewComponentField(ctx, newCancellation(&nexusoperationpb.CancellationState{
+								Status: cancellationStatus,
+							}))
+						}
+
+						resp, err := op.buildDescribeResponse(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+							FrontendRequest: &workflowservice.DescribeNexusOperationExecutionRequest{},
+						})
+						require.NoError(t, err)
+						info := resp.GetFrontendResponse().GetInfo()
+						state, reason := PendingOperationState(status), ""
+						if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED && blocked {
+							state, reason = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, "The circuit breaker is open."
+						}
+						require.Equal(t, state, info.GetState())
+						require.Equal(t, reason, info.GetBlockedReason())
+						require.Equal(t, operationExecutionStatus(status), info.GetStatus())
+						cancelState, cancelReason := CancellationAPIState(cancellationStatus), ""
+						if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED && blocked {
+							cancelState, cancelReason = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, "The circuit breaker is open."
+						}
+						require.Equal(t, cancelState, info.GetCancellationInfo().GetState())
+						require.Equal(t, cancelReason, info.GetCancellationInfo().GetBlockedReason())
+						expectedCalls := 0
+						if checksBreaker {
+							if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+								expectedCalls++
+							}
+							if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
+								expectedCalls++
+							}
+						}
+						require.Equal(t, expectedCalls, calls)
+						require.Equal(t, status, op.Status)
+						if cancellation, ok := op.Cancellation.TryGet(ctx); ok {
+							require.Equal(t, cancellationStatus, cancellation.Status)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestDestinationBlocked_Panics(t *testing.T) {
+	t.Parallel()
+
+	for _, endpoint := range []string{"test-endpoint", commonnexus.SystemEndpoint} {
+		t.Run(endpoint+"/missing OperationContext", func(t *testing.T) {
+			t.Parallel()
+
+			ctx := newCallbackTestContext()
+			ctx.GoCtx = context.Background()
+			op := newTestOperation()
+			op.Endpoint = endpoint
+			require.Panics(t, func() { op.DestinationBlocked(ctx) })
+		})
+	}
+
+	t.Run("unset DestinationBlocked", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := newCallbackTestContext()
+		ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{})
+		op := newTestOperation()
+		require.Panics(t, func() { op.DestinationBlocked(ctx) })
+	})
+}
+
 func TestDescribeOutcome(t *testing.T) {
 	t.Parallel()
 
@@ -493,18 +594,20 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 			return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
 		},
 	}
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 
 	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+	visibility, err := chasm.NewVisibilityWithData(
 		ctx,
 		map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")},
 		nil,
-	))
+	)
+	require.NoError(t, err)
+	op.Visibility = chasm.NewComponentField(ctx, visibility)
 	require.NoError(t, root.SetRootComponent(op))
-	_, err := root.CloseTransaction()
+	_, err = root.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)

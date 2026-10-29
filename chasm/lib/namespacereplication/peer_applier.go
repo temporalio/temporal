@@ -1,0 +1,155 @@
+package namespacereplication
+
+import (
+	"context"
+	"fmt"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	serverclient "go.temporal.io/server/client"
+	"go.temporal.io/server/common/namespace/nsreplication"
+)
+
+// PeerApplyRequest carries the independently built namespace snapshot and the
+// original legacy reference used only for shadow validation.
+type PeerApplyRequest struct {
+	TargetCluster           string
+	Operation               enumsspb.NamespaceOperation
+	Detail                  *persistencespb.NamespaceDetail
+	Shadow                  bool
+	ShadowLegacyTaskPayload []byte
+}
+
+// PeerApplyResult is the transport-neutral terminal, non-error outcome of
+// processing a namespace mutation at a peer cell. Failures are returned as
+// errors and classified by the task handler (see classifyPeerErr), not modeled
+// here.
+type PeerApplyResult int
+
+const (
+	// PeerApplyResultUnspecified is invalid and must never be treated as a
+	// successful peer apply.
+	PeerApplyResultUnspecified PeerApplyResult = iota
+	// PeerApplyResultApplied means the peer accepted the mutation as new state
+	// (created or updated). Collapses the admin RPC's Applied / Created / Duplicate.
+	PeerApplyResultApplied
+	// PeerApplyResultShadowMatch means the peer processed a shadow request without
+	// writing receiver state and the payload matched the original legacy reference.
+	PeerApplyResultShadowMatch
+	// PeerApplyResultShadowMismatch means the peer processed a shadow request
+	// without writing receiver state and the payload differed from the original
+	// legacy reference.
+	PeerApplyResultShadowMismatch
+	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
+	// (apply-if-higher no-op). A success, not a failure.
+	PeerApplyResultNoOpStale
+	// PeerApplyResultNotAdmitted means the peer's admission policy declined the
+	// namespace (receiver returned OUTCOME_NOT_ADMITTED). Terminal and not a
+	// failure — the peer chose not to hold this namespace, so there is nothing to
+	// retry. Kept distinct from Applied so we never record a phantom write.
+	PeerApplyResultNotAdmitted
+)
+
+// PeerApplier applies a committed namespace mutation to a single peer cell and
+// reports the outcome. It is the transport seam of the peer fan-out: the retry,
+// gating, state-machine, and observability policy all live in applyPeerTaskHandler,
+// which calls Apply once per attempt and classifies any returned error.
+//
+// The default OSS implementation (adminClientPeerApplier) uses the cross-cluster
+// ApplyNamespaceMutation admin RPC. A deployment that needs a different peer
+// transport (e.g. calling UpdateNamespace directly on the peer host) can provide
+// an alternative PeerApplier via fx.Decorate in the history service options —
+// without touching any policy in this package.
+type PeerApplier interface {
+	Apply(
+		ctx context.Context,
+		request PeerApplyRequest,
+	) (PeerApplyResult, error)
+}
+
+// adminClientPeerApplier is the default PeerApplier: it sends the full namespace
+// snapshot to the peer cell's ApplyNamespaceMutation admin RPC, reusing the same
+// NamespaceTaskAttributes wire shape and apply-if-higher receiver logic as the
+// legacy queue transport.
+type adminClientPeerApplier struct {
+	clientBean serverclient.Bean
+}
+
+func newAdminClientPeerApplier(clientBean serverclient.Bean) PeerApplier {
+	return &adminClientPeerApplier{clientBean: clientBean}
+}
+
+func (a *adminClientPeerApplier) Apply(
+	ctx context.Context,
+	request PeerApplyRequest,
+) (PeerApplyResult, error) {
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(request.Operation, request.Detail)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	if err != nil {
+		return PeerApplyResultUnspecified, serviceerror.NewInvalidArgument(
+			fmt.Sprintf("marshal namespace mutation: %v", err),
+		)
+	}
+	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
+	if err != nil {
+		return PeerApplyResultUnspecified, err
+	}
+	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:           namespaceTask,
+		Shadow:                  request.Shadow,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: request.ShadowLegacyTaskPayload,
+	})
+	if err != nil {
+		return PeerApplyResultUnspecified, err
+	}
+	return peerApplyResultFromOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
+}
+
+func peerApplyResultFromOutcome(
+	targetCell string,
+	shadow bool,
+	outcome adminservice.ApplyNamespaceMutationResponse_Outcome,
+) (PeerApplyResult, error) {
+	// Map the receiver's wire outcome to a transport-neutral result. Exhaustive on
+	// purpose: adding a wire outcome must force a decision here rather than being
+	// silently absorbed into Applied. Shadow requests accept only validation
+	// outcomes because they must not write receiver state.
+	if shadow {
+		switch outcome {
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
+			return PeerApplyResultShadowMatch, nil
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
+			return PeerApplyResultShadowMismatch, nil
+		default:
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, outcome)
+		}
+	}
+
+	// Applied / Created / Duplicate all mean the peer now holds our state. A
+	// success response we can't classify is a protocol violation and is surfaced
+	// as an error rather than recorded as a phantom write.
+	switch outcome {
+	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE:
+		return PeerApplyResultApplied, nil
+	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE:
+		return PeerApplyResultNoOpStale, nil
+	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED:
+		return PeerApplyResultNotAdmitted, nil
+	default:
+		return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, outcome)
+	}
+}
+
+func unexpectedPeerOutcome(
+	targetCell string,
+	shadow bool,
+	outcome adminservice.ApplyNamespaceMutationResponse_Outcome,
+) error {
+	return serviceerror.NewInternal(
+		fmt.Sprintf("peer %s returned unexpected outcome %v for shadow=%t", targetCell, outcome, shadow))
+}

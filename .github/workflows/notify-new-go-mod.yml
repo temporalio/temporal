@@ -1,0 +1,38 @@
+name: Notify on new Go module
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  notify-new-go-mod:
+    name: Notify RelEng of new Go modules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Full history so the push range can be diffed.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect new go.mod files
+        id: detect
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: .github/scripts/notify-new-go-mod.sh
+
+      - name: Notify Slack
+        if: steps.detect.outputs.found == 'true'
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+        with:
+          webhook: ${{ secrets.SLACK_RELENG_WEBHOOK }}
+          webhook-type: incoming-webhook
+          # The action returns success on a Slack-side error unless asked not to.
+          errors: true
+          payload: |
+            {"text": ${{ toJSON(steps.detect.outputs.message) }}}

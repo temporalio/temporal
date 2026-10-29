@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -49,6 +50,10 @@ var (
 	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
 	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
 	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
+	HTTPRequestFaultGeneratorByNamespaceID    = newKey[httpfaults.RequestCallback, namespace.ID]()
+	HTTPRequestFaultGeneratorByNamespaceName  = newKey[httpfaults.RequestCallback, namespace.Name]()
+	HTTPResponseFaultGeneratorByNamespaceID   = newKey[httpfaults.ResponseCallback, namespace.ID]()
+	HTTPResponseFaultGeneratorByNamespaceName = newKey[httpfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

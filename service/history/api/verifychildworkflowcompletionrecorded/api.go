@@ -71,10 +71,9 @@ func verifyChildExecution(
 	}
 
 	if !onCurrentBranch {
-		// due to conflict resolution, the initiated event may on a different branch of the workflow.
-		// we don't have to do anything and can simply return not found error. Standby logic
-		// after seeing this error will give up verification.
-		return nil, nil, parentWorkflowState, consts.ErrChildExecutionNotFound
+		// Due to conflict resolution, the initiated event may be on a different branch of the workflow.
+		// The child is not associated with the current branch, so verification is complete.
+		return nil, nil, parentWorkflowState, nil
 	}
 
 	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
@@ -120,7 +119,7 @@ func Invoke(
 	metricsHandler := shardContext.GetMetricsHandler()
 	emitLifecycle := shardContext.GetConfig().EmitReplicationLifecycleEvents()
 
-	resend := func(ctx context.Context) error {
+	resend := func(ctx context.Context, onSourceNotFound func(sourceCluster string)) error {
 		metrics.ParentWorkflowResendAttempts.With(metricsHandler).Record(1)
 		startTime := time.Now().UTC()
 		err := resendParentAndVerify(
@@ -134,6 +133,7 @@ func Invoke(
 			errVerify,
 			parentWorkflowState,
 			emitLifecycle,
+			onSourceNotFound,
 		)
 		metrics.ParentWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
 		if err != nil && !isExpectedResendError(err) {
@@ -144,7 +144,7 @@ func Invoke(
 	}
 
 	if resendScheduler == nil || !shardContext.GetConfig().EnableAsyncParentWorkflowResend() {
-		if err := resend(ctx); err != nil {
+		if err := resend(ctx, nil); err != nil {
 			return nil, err
 		}
 		return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
@@ -155,6 +155,11 @@ func Invoke(
 	//
 	// The host scheduler deduplicates by workflow and applies an aggregate limit across shards.
 	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	notFoundCache, cachesNotFound := resendScheduler.(workflowresend.SourceNotFoundCache)
+	if cachesNotFound && workflowresend.MissingOnSource(shardContext, notFoundCache, parentKey) {
+		return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+	}
 
 	// The context is detached from the request, which gRPC cancels when this handler returns, and
 	// rooted at the shard lifecycle so the work stops with the shard.
@@ -174,7 +179,11 @@ func Invoke(
 					parentResendEventDetails(errVerify),
 				)
 			}
-			_ = resend(ctx)
+			_ = resend(ctx, func(sourceCluster string) {
+				if cachesNotFound {
+					notFoundCache.MarkSourceNotFound(parentKey, sourceCluster)
+				}
+			})
 		},
 	)
 	switch submitResult {
@@ -256,6 +265,7 @@ func resendParentAndVerify(
 	errVerify error,
 	parentWorkflowState string,
 	emitLifecycle bool,
+	onSourceNotFound func(sourceCluster string),
 ) error {
 	activeClusterName := ""
 	emitResult := func(outcome string, eventErr error, stage string) {
@@ -289,7 +299,9 @@ func resendParentAndVerify(
 	}
 	switch result {
 	case workflowresend.SyncWorkflowStateResultSourceNotFound:
-		// TODO: add parent workflow to workflowNotFoundCache
+		if onSourceNotFound != nil {
+			onSourceNotFound(activeClusterName)
+		}
 		emitResult(
 			wideevents.ParentChildOutcomeSourceNotFound,
 			serviceerror.NewNotFound("parent workflow not found on source cluster"),

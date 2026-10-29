@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm/lib/workflow"
 )
 
 var (
@@ -44,6 +45,7 @@ var (
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
+	errBatchJobIDNotValid                                 = serviceerror.NewInvalidArgument("JobId does not refer to a batch operation.")
 	errScheduleIDNotSet                                   = serviceerror.NewInvalidArgument("ScheduleId is not set on request.")
 	errSchedulePatchNotSet                                = serviceerror.NewInvalidArgument("Patch is not set on request.")
 	errIdentityNotSet                                     = serviceerror.NewInvalidArgument("Identity is not set on request.")
@@ -115,6 +117,8 @@ var (
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 
-	errWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("The Time-Skipping feature is not enabled for namespace.")
-	errTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
+	errWorkflowTimeSkippingNotEnabled          = workflow.ErrWorkflowTimeSkippingNotEnabled
+	errScheduleTimeSkippingNotEnabled          = serviceerror.NewPermissionDenied("schedule time skipping is not enabled for the namespace", "")
+	errTimeSkippingStatePropagationNotInternal = serviceerror.NewPermissionDenied("Time skipping state propagation is reserved for internal Temporal services.", "")
+	errTimeSkippingFastForwardIDNotSet         = workflow.ErrTimeSkippingFastForwardIDNotSet
 )

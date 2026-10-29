@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -17,7 +18,7 @@ var NoopChasmTree = &noopChasmTree{}
 
 type noopChasmTree struct{}
 
-func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction(context.Context, bool) (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 
@@ -45,6 +46,8 @@ func (*noopChasmTree) RefreshTasks() error {
 	return nil
 }
 
+func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
+
 func (*noopChasmTree) IsStateDirty() bool {
 	return false
 }
@@ -53,7 +56,7 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
-func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error {
 	return nil
 }
 

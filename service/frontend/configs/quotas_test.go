@@ -67,6 +67,21 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 	}
 }
 
+func (s *quotasSuite) TestPodOnlyAPIToPriorityMapping() {
+	for _, priority := range PodOnlyAPIToPriority {
+		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+// temporary test while DescribeMutableState API rate limiting is rolled out.
+func (s *quotasSuite) TestDescribeMutableStateAPIToPriorityMapping() {
+	for _, priority := range DescribeMutableStateAPIToPriority {
+		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
 		s.Less(ExecutionAPIPrioritiesOrdered[idx], ExecutionAPIPrioritiesOrdered[idx+1])

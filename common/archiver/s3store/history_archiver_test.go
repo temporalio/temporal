@@ -84,15 +84,29 @@ func (s *historyArchiverSuite) SetupTest() {
 	s.setupHistoryDirectory()
 }
 
-func setupFsEmulation(s3cli *mocks.MockS3API) {
-	fs := make(map[string][]byte)
+type s3EmulatedObject struct {
+	data     []byte
+	metadata map[string]string
+}
+
+type s3FsEmulation struct {
+	objects  map[string]s3EmulatedObject
+	putCount int
+}
+
+func setupFsEmulation(s3cli *mocks.MockS3API) *s3FsEmulation {
+	fs := &s3FsEmulation{objects: make(map[string]s3EmulatedObject)}
 
 	putObjectFn := func(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 		buf := new(bytes.Buffer)
 		if _, err := buf.ReadFrom(input.Body); err != nil {
 			return nil, err
 		}
-		fs[*input.Bucket+*input.Key] = buf.Bytes()
+		fs.objects[*input.Bucket+*input.Key] = s3EmulatedObject{
+			data:     buf.Bytes(),
+			metadata: input.Metadata,
+		}
+		fs.putCount++
 		return &s3.PutObjectOutput{}, nil
 	}
 
@@ -100,7 +114,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 		func(_ context.Context, input *s3.ListObjectsV2Input, opts ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 			objects := make([]types.Object, 0)
 			commonPrefixMap := map[string]bool{}
-			for k := range fs {
+			for k := range fs.objects {
 				if strings.HasPrefix(k, *input.Bucket+*input.Prefix) {
 					key := k[len(*input.Bucket):]
 					keyWithoutPrefix := key[len(*input.Prefix):]
@@ -178,25 +192,27 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 
 	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *s3.HeadObjectInput, options ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
-			_, ok := fs[*input.Bucket+*input.Key]
+			object, ok := fs.objects[*input.Bucket+*input.Key]
 			if !ok {
 				return nil, &smithy.GenericAPIError{Code: "NotFound", Message: ""}
 			}
 
-			return &s3.HeadObjectOutput{}, nil
+			return &s3.HeadObjectOutput{Metadata: object.metadata}, nil
 		}).AnyTimes()
 
 	s3cli.EXPECT().GetObject(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-			_, ok := fs[*input.Bucket+*input.Key]
+			object, ok := fs.objects[*input.Bucket+*input.Key]
 			if !ok {
 				return nil, &types.NoSuchKey{}
 			}
 
 			return &s3.GetObjectOutput{
-				Body: io.NopCloser(bytes.NewReader(fs[*input.Bucket+*input.Key])),
+				Body: io.NopCloser(bytes.NewReader(object.data)),
 			}, nil
 		}).AnyTimes()
+
+	return fs
 }
 
 func (s *historyArchiverSuite) TestValidateURI() {

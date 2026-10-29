@@ -83,23 +83,7 @@ func (b *nexusTaskHandlerBase) buildCallbackURL(
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
-	// endpoint is nil for system-internal operations where endpoint lookup is skipped.
-	// These always use the system callback URL since the callback is handled internally.
-	if endpoint == nil {
-		return commonnexus.SystemCallbackURL, nil
-	}
-	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !b.config.UseSystemCallbackURL() {
-		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
-	}
-	switch target.(type) {
-	case *persistencespb.NexusEndpointTarget_Worker_:
-		return commonnexus.SystemCallbackURL, nil
-	case *persistencespb.NexusEndpointTarget_External_:
-		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
-	default:
-		return "", fmt.Errorf("unknown endpoint target type: %T", target)
-	}
+	return buildCallbackURL(b.config.CallbackURLTemplate(), ns, endpoint)
 }
 
 func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespace.Namespace) (string, error) {
@@ -118,22 +102,32 @@ func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespac
 }
 
 // newInvocation creates an invocation for the given endpoint, selecting the appropriate implementation
-// based on the call timeout and endpoint type.
+// based on the endpoint type and, for external endpoints, the time available for the request.
+//
+// ctx must be the call context returned by setupCallContext. remainingOpTimeout is the remaining operation timeout of
+// type timeoutType, or maxDuration if the operation has no timeout.
 func (b *nexusTaskHandlerBase) newInvocation(
 	ctx context.Context,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 	endpointName string,
 	service string,
-	callTimeout time.Duration,
+	remainingOpTimeout time.Duration,
 	timeoutType enumspb.TimeoutType,
 	traceCtx invocationTraceContext,
 ) (invocation, error) {
-	if callTimeout < b.config.MinRequestTimeout(ns.Name().String()) {
-		return &invocationTimeout{timeoutType}, nil
-	}
+	// The system endpoint is served in-process and has no minimum request timeout: it makes the request with whatever
+	// time is left.
 	if endpointName == commonnexus.SystemEndpoint {
 		return b.newInvocationSystem(ns), nil
+	}
+	minRequestTimeout := b.config.MinOutboundRequestTimeout(ns.Name().String())
+	if remainingOpTimeout < minRequestTimeout {
+		return &invocationTimeout{timeoutType}, nil
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < minRequestTimeout {
+		// The operation has enough time left but the task doesn't. Fail this attempt only and let it be retried.
+		return invocationRequestDeadline{}, nil
 	}
 	return b.newInvocationHTTP(ctx, ns, endpoint, service, traceCtx)
 }
@@ -159,9 +153,27 @@ func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID n
 	return entry, nil
 }
 
-// setupCallContext creates a context with a timeout and attaches the failure source tracking value.
-func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
+// setupCallContext creates the context for a single start or cancel request and attaches the failure source tracking
+// value.
+//
+// The task executor sets a deadline on ctx that covers loading the component, the request, and saving the result. The
+// request gets the time left until that deadline minus StateAccessBuffer, further capped by remainingOpTimeout.
+func (b *nexusTaskHandlerBase) setupCallContext(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	remainingOpTimeout time.Duration,
+) (context.Context, context.CancelFunc) {
+	timeout := remainingOpTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = min(timeout, time.Until(deadline)-b.config.StateAccessBuffer(ns.Name().String()))
+	}
+	var callCtx context.Context
+	var cancel context.CancelFunc
+	if timeout == maxDuration {
+		callCtx, cancel = context.WithCancel(ctx)
+	} else {
+		callCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 	return callCtx, cancel
 }
@@ -197,11 +209,10 @@ func (b *nexusTaskHandlerBase) logCallFailure(traceCtx invocationTraceContext, c
 		return
 	}
 	tags := append(traceCtx.tags(), tag.Error(callErr))
-	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
 	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
 	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		b.logger.Debug(msg, tags...)
+		b.logger.Debug("Nexus request failed", tags...)
 	} else {
-		b.logger.Error(msg, tags...)
+		b.logger.Error("Nexus request failed", tags...)
 	}
 }

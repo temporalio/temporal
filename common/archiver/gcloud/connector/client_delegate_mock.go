@@ -242,6 +242,18 @@ func (mr *MockWriterWrapperMockRecorder) CloseWithError(err any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockWriterWrapper)(nil).CloseWithError), err)
 }
 
+// SetMetadata mocks base method.
+func (m *MockWriterWrapper) SetMetadata(metadata map[string]string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMetadata", metadata)
+}
+
+// SetMetadata indicates an expected call of SetMetadata.
+func (mr *MockWriterWrapperMockRecorder) SetMetadata(metadata any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMetadata", reflect.TypeOf((*MockWriterWrapper)(nil).SetMetadata), metadata)
+}
+
 // Write mocks base method.
 func (m *MockWriterWrapper) Write(p []byte) (int, error) {
 	m.ctrl.T.Helper()

@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
@@ -119,7 +118,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.NoError(err)
 	s.NoError(env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
-	headers := await.Rcv(s.T(), requestHeaders)
+	headers := s.Rcv(requestHeaders)
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
@@ -184,7 +183,7 @@ func (s *NexusOTELSuite) TestOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	nexusRequestID := await.Rcv(s.T(), requestIDs)
+	nexusRequestID := s.Rcv(requestIDs)
 
 	pollResponse, err := callerEnv.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
@@ -291,7 +290,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	})
 	s.NoError(err)
 
-	request := await.Rcv(s.T(), requests)
+	request := s.Rcv(requests)
 	operationURLPath := "/nexus/endpoints/" + endpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -379,7 +378,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	})
 	var handlerErr *nexus.HandlerError
 	s.Require().ErrorAs(err, &handlerErr)
-	s.NoError(await.Rcv(s.T(), pollerErrCh))
+	s.NoError(s.Rcv(pollerErrCh))
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
