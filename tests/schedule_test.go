@@ -6552,6 +6552,182 @@ func (suite *ScheduleSuite) TestBackfill(chasmEnabled bool) {
 	})
 }
 
+// TestRequestIDDedup pins that a retried PatchSchedule/UpdateSchedule (same
+// RequestId) applies once. V1 gets this from signal dedup; V2 must match.
+func (suite *ScheduleSuite) TestRequestIDDedup(chasmEnabled bool) {
+	newContext := contextFactoryFor(chasmEnabled)
+
+	for _, tc := range []struct {
+		name     string
+		patch    func() *schedulepb.SchedulePatch
+		retry    bool
+		wantRuns int32
+	}{
+		{name: "TriggerRetry", patch: func() *schedulepb.SchedulePatch {
+			return triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL)
+		}, retry: true, wantRuns: 1},
+		{name: "TriggerDistinct", patch: func() *schedulepb.SchedulePatch {
+			return triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL)
+		}, retry: false, wantRuns: 2},
+		{name: "BackfillRetry", patch: onTheHourBackfillPatch, retry: true, wantRuns: 1},
+		{name: "BackfillDistinct", patch: onTheHourBackfillPatch, retry: false, wantRuns: 2},
+	} {
+		suite.Run(tc.name, func(suite *ScheduleSuite) {
+			testPatchRequestIDDedup(newContext(suite.Context()), suite.T(), tc.patch, tc.retry, tc.wantRuns)
+		})
+	}
+	suite.Run("UpdateRetry", func(suite *ScheduleSuite) {
+		testUpdateRequestIDDedup(newContext(suite.Context()), suite.T())
+	})
+}
+
+// onTheHourBackfillPatch covers exactly one noOpInterval tick, in the past.
+func onTheHourBackfillPatch() *schedulepb.SchedulePatch {
+	tick := time.Now().UTC().Truncate(time.Hour).Add(-time.Hour)
+	return backfillPatch(tick.Add(-5*time.Second), tick.Add(5*time.Second), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL)
+}
+
+func testPatchRequestIDDedup(
+	ctx context.Context,
+	t *testing.T,
+	patch func() *schedulepb.SchedulePatch,
+	retry bool,
+	wantRuns int32,
+) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-reqid-patch")
+	wid := testcore.RandomizeStr("sched-reqid-patch-wf")
+	wt := testcore.RandomizeStr("sched-reqid-patch-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	// Paused: only manual actions fire.
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		State:  &schedulepb.ScheduleState{Paused: true},
+		Action: startWorkflowAction(s, wid, wt),
+	})
+
+	describe := func(t require.TestingT) *workflowservice.DescribeScheduleResponse {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		return desc
+	}
+	awaitSettled := func(want int32) {
+		await.Requiref(ctx, t, func(t *await.T) {
+			require.Equal(t, want, runs.Load())
+			desc := describe(t)
+			require.Equal(t, int64(want), desc.GetInfo().GetActionCount())
+			require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+		}, awaitTimeout, pollInterval, "expected %d settled run(s)", want)
+	}
+
+	requestID := uuid.NewString()
+	send := func() {
+		_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch:      patch(),
+			Identity:   "test",
+			RequestId:  requestID,
+		})
+		require.NoError(t, err)
+	}
+
+	send()
+	awaitSettled(1)
+
+	// Workflow IDs carry second-precision nominal time; a duplicate trigger in
+	// the same second would collide on ID and mask a missing dedup.
+	time.Sleep(time.Second) //nolint:forbidigo
+	if !retry {
+		requestID = uuid.NewString()
+	}
+	send()
+
+	awaitSettled(wantRuns)
+	require.Never(t, func() bool { return runs.Load() > wantRuns },
+		neverWindow, pollInterval, "expected exactly %d run(s)", wantRuns)
+	require.Equal(t, int64(wantRuns), describe(t).GetInfo().GetActionCount())
+}
+
+// testUpdateRequestIDDedup: retries of an applied update succeed despite the
+// stale conflict token, and a late retry does not clobber a newer update.
+func testUpdateRequestIDDedup(ctx context.Context, t *testing.T) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-reqid-update")
+	wid := testcore.RandomizeStr("sched-reqid-update-wf")
+	wt := testcore.RandomizeStr("sched-reqid-update-wt")
+
+	schedWithNotes := func(notes string) *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true, Notes: notes},
+			Action: startWorkflowAction(s, wid, wt),
+		}
+	}
+	createSchedule(ctx, t, s, sid, schedWithNotes("initial"))
+
+	describe := func(t require.TestingT) *workflowservice.DescribeScheduleResponse {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		return desc
+	}
+	update := func(requestID string, token []byte, notes string) {
+		_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:     s.Namespace().String(),
+			ScheduleId:    sid,
+			Schedule:      schedWithNotes(notes),
+			ConflictToken: token,
+			Identity:      "test",
+			RequestId:     requestID,
+		})
+		require.NoError(t, err)
+	}
+	// V1 applies updates asynchronously.
+	awaitNotes := func(notes string) []byte {
+		var token []byte
+		await.Requiref(ctx, t, func(t *await.T) {
+			desc := describe(t)
+			require.Equal(t, notes, desc.GetSchedule().GetState().GetNotes())
+			token = desc.GetConflictToken()
+		}, awaitTimeout, pollInterval, "expected notes %q", notes)
+		return token
+	}
+
+	token0 := describe(t).GetConflictToken()
+	reqA := uuid.NewString()
+	update(reqA, token0, "A")
+	tokenA := awaitNotes("A")
+	require.NotEqual(t, token0, tokenA)
+
+	// Retry with the now-stale token must succeed as a no-op.
+	update(reqA, token0, "A")
+	require.Equal(t, tokenA, awaitNotes("A"))
+
+	update(uuid.NewString(), tokenA, "B")
+	awaitNotes("B")
+
+	// Late retry of A must not overwrite B.
+	update(reqA, token0, "A")
+	require.Never(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && desc.GetSchedule().GetState().GetNotes() != "B"
+	}, neverWindow, pollInterval, "late retry must not overwrite a newer update")
+}
+
 type ScheduleCHASMSuite struct {
 	parallelsuite.Suite[*ScheduleCHASMSuite]
 }
