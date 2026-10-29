@@ -92,7 +92,7 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 }
 
 func (tbl *mockTaskTable) generate(count int, expired bool) {
-	for i := 0; i < count; i++ {
+	for range count {
 		exp := time.Now().UTC().Add(time.Hour)
 		ti := &persistencespb.AllocatedTaskInfo{
 			Data: &persistencespb.TaskInfo{

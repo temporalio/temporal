@@ -25,7 +25,7 @@ func mkNewSet(id string, clock *clockspb.HybridLogicalClock) *persistencespb.Com
 
 func mkInitialData(numSets int, clock *clockspb.HybridLogicalClock) *persistencespb.VersioningData {
 	sets := make([]*persistencespb.CompatibleVersionSet, numSets)
-	for i := 0; i < numSets; i++ {
+	for i := range numSets {
 		sets[i] = mkNewSet(fmt.Sprintf("%v", i), clock)
 	}
 	return &persistencespb.VersioningData{

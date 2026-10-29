@@ -57,7 +57,7 @@ func testNexusEndpointsStoreSteadyState(t *testing.T, store persistence.NexusEnd
 		// List when table is empty
 		resp, err := store.ListNexusEndpoints(ctx, &persistence.ListNexusEndpointsRequest{PageSize: 10})
 		require.NoError(t, err)
-		require.Len(t, resp.Endpoints, 0)
+		require.Empty(t, resp.Endpoints)
 		require.Equal(t, tableVersion.Load(), resp.TableVersion)
 
 		// Create an endpoint
@@ -172,7 +172,7 @@ func testNexusEndpointsStoreSteadyState(t *testing.T, store persistence.NexusEnd
 			LastKnownTableVersion: tableVersion.Load(),
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.Endpoints, 0)
+		require.Empty(t, resp.Endpoints)
 	})
 }
 

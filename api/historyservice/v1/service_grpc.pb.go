@@ -78,6 +78,7 @@ const (
 	HistoryService_GetWorkflowExecutionRawHistoryV2_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistoryV2"
 	HistoryService_GetWorkflowExecutionRawHistory_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory"
 	HistoryService_ForceDeleteWorkflowExecution_FullMethodName           = "/temporal.server.api.historyservice.v1.HistoryService/ForceDeleteWorkflowExecution"
+	HistoryService_DeleteExecution_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeleteExecution"
 	HistoryService_GetDLQTasks_FullMethodName                            = "/temporal.server.api.historyservice.v1.HistoryService/GetDLQTasks"
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
@@ -94,6 +95,9 @@ const (
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
 	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
+	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
+	HistoryService_CancelNexusOperation_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/CancelNexusOperation"
+	HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName      = "/temporal.server.api.historyservice.v1.HistoryService/PollWorkflowExecutionTimeSkipping"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -162,15 +166,13 @@ type HistoryServiceClient interface {
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(ctx context.Context, in *RespondActivityTaskCanceledRequest, opts ...grpc.CallOption) (*RespondActivityTaskCanceledResponse, error)
-	// IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+	// IsActivityTaskValid is called by matching service checking whether the activity task is valid.
 	IsActivityTaskValid(ctx context.Context, in *IsActivityTaskValidRequest, opts ...grpc.CallOption) (*IsActivityTaskValidResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(ctx context.Context, in *SignalWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "With" is needed here. --)
-	//
+	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
@@ -257,9 +259,7 @@ type HistoryServiceClient interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -280,12 +280,10 @@ type HistoryServiceClient interface {
 	// visibility manager doesn't support write operations
 	DeleteWorkflowVisibilityRecord(ctx context.Context, in *DeleteWorkflowVisibilityRecordRequest, opts ...grpc.CallOption) (*DeleteWorkflowVisibilityRecordResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	UpdateWorkflowExecution(ctx context.Context, in *UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	PollWorkflowExecutionUpdate(ctx context.Context, in *PollWorkflowExecutionUpdateRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionUpdateResponse, error)
 	StreamWorkflowReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (HistoryService_StreamWorkflowReplicationMessagesClient, error)
 	GetWorkflowExecutionHistory(ctx context.Context, in *GetWorkflowExecutionHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionHistoryResponse, error)
@@ -293,6 +291,7 @@ type HistoryServiceClient interface {
 	GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(ctx context.Context, in *ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(ctx context.Context, in *DeleteDLQTasksRequest, opts ...grpc.CallOption) (*DeleteDLQTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
@@ -326,14 +325,13 @@ type HistoryServiceClient interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
-	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpause.
-	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and finishes successfully, the activity will be completed.
-	//   - If the activity is running and finishes with failure:
-	//   - if there is no retry left - the activity will be completed.
-	//   - if there are more retries left - the activity will be paused.
-	//
+	// - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//   it will not be rescheduled until it is unpause.
+	// - If the activity is already paused, calling this method will have no effect.
+	// - If the activity is running and finishes successfully, the activity will be completed.
+	// - If the activity is running and finishes with failure:
+	//   * if there is no retry left - the activity will be completed.
+	//   * if there are more retries left - the activity will be paused.
 	// For long-running activities:
 	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -361,10 +359,10 @@ type HistoryServiceClient interface {
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
-	//   - number of attempts will be reset to 0.
-	//   - activity timeouts will be reset.
-	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
-	//     it will be scheduled immediately (* see 'jitter' flag),
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be reset.
+	// * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//    it will be scheduled immediately (* see 'jitter' flag),
 	//
 	// Flags:
 	//
@@ -381,6 +379,11 @@ type HistoryServiceClient interface {
 	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
 	UnpauseWorkflowExecution(ctx context.Context, in *UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnpauseWorkflowExecutionResponse, error)
+	// StartNexusOperation starts a Nexus operation on the __temporal_system endpoint.
+	StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error)
+	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
+	CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error)
+	PollWorkflowExecutionTimeSkipping(ctx context.Context, in *PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionTimeSkippingResponse, error)
 }
 
 type historyServiceClient struct {
@@ -935,6 +938,15 @@ func (c *historyServiceClient) ForceDeleteWorkflowExecution(ctx context.Context,
 	return out, nil
 }
 
+func (c *historyServiceClient) DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error) {
+	out := new(DeleteExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DeleteExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error) {
 	out := new(GetDLQTasksResponse)
 	err := c.cc.Invoke(ctx, HistoryService_GetDLQTasks_FullMethodName, in, out, opts...)
@@ -1079,6 +1091,33 @@ func (c *historyServiceClient) UnpauseWorkflowExecution(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *historyServiceClient) StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error) {
+	out := new(StartNexusOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_StartNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error) {
+	out := new(CancelNexusOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_CancelNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PollWorkflowExecutionTimeSkipping(ctx context.Context, in *PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionTimeSkippingResponse, error) {
+	out := new(PollWorkflowExecutionTimeSkippingResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1145,15 +1184,13 @@ type HistoryServiceServer interface {
 	// PollActivityTaskQueue API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 	// anymore due to activity timeout.
 	RespondActivityTaskCanceled(context.Context, *RespondActivityTaskCanceledRequest) (*RespondActivityTaskCanceledResponse, error)
-	// IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+	// IsActivityTaskValid is called by matching service checking whether the activity task is valid.
 	IsActivityTaskValid(context.Context, *IsActivityTaskValidRequest) (*IsActivityTaskValidResponse, error)
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(context.Context, *SignalWorkflowExecutionRequest) (*SignalWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "With" is needed here. --)
-	//
+	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
@@ -1240,9 +1277,7 @@ type HistoryServiceServer interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -1263,12 +1298,10 @@ type HistoryServiceServer interface {
 	// visibility manager doesn't support write operations
 	DeleteWorkflowVisibilityRecord(context.Context, *DeleteWorkflowVisibilityRecordRequest) (*DeleteWorkflowVisibilityRecordResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	UpdateWorkflowExecution(context.Context, *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	PollWorkflowExecutionUpdate(context.Context, *PollWorkflowExecutionUpdateRequest) (*PollWorkflowExecutionUpdateResponse, error)
 	StreamWorkflowReplicationMessages(HistoryService_StreamWorkflowReplicationMessagesServer) error
 	GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)
@@ -1276,6 +1309,7 @@ type HistoryServiceServer interface {
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(context.Context, *DeleteDLQTasksRequest) (*DeleteDLQTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
@@ -1309,14 +1343,13 @@ type HistoryServiceServer interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
-	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpause.
-	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and finishes successfully, the activity will be completed.
-	//   - If the activity is running and finishes with failure:
-	//   - if there is no retry left - the activity will be completed.
-	//   - if there are more retries left - the activity will be paused.
-	//
+	// - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//   it will not be rescheduled until it is unpause.
+	// - If the activity is already paused, calling this method will have no effect.
+	// - If the activity is running and finishes successfully, the activity will be completed.
+	// - If the activity is running and finishes with failure:
+	//   * if there is no retry left - the activity will be completed.
+	//   * if there are more retries left - the activity will be paused.
 	// For long-running activities:
 	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -1344,10 +1377,10 @@ type HistoryServiceServer interface {
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
-	//   - number of attempts will be reset to 0.
-	//   - activity timeouts will be reset.
-	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
-	//     it will be scheduled immediately (* see 'jitter' flag),
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be reset.
+	// * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//    it will be scheduled immediately (* see 'jitter' flag),
 	//
 	// Flags:
 	//
@@ -1364,6 +1397,11 @@ type HistoryServiceServer interface {
 	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
 	UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error)
+	// StartNexusOperation starts a Nexus operation on the __temporal_system endpoint.
+	StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error)
+	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
+	CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error)
+	PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1545,6 +1583,9 @@ func (UnimplementedHistoryServiceServer) GetWorkflowExecutionRawHistory(context.
 func (UnimplementedHistoryServiceServer) ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceDeleteWorkflowExecution not implemented")
 }
+func (UnimplementedHistoryServiceServer) DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteExecution not implemented")
+}
 func (UnimplementedHistoryServiceServer) GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQTasks not implemented")
 }
@@ -1592,6 +1633,15 @@ func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context,
 }
 func (UnimplementedHistoryServiceServer) UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnpauseWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowExecutionTimeSkipping not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2658,6 +2708,24 @@ func _HistoryService_ForceDeleteWorkflowExecution_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_DeleteExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DeleteExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, req.(*DeleteExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_GetDLQTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQTasksRequest)
 	if err := dec(in); err != nil {
@@ -2946,6 +3014,60 @@ func _HistoryService_UnpauseWorkflowExecution_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_StartNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).StartNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_StartNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).StartNexusOperation(ctx, req.(*StartNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_CancelNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).CancelNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_CancelNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).CancelNexusOperation(ctx, req.(*CancelNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_PollWorkflowExecutionTimeSkipping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollWorkflowExecutionTimeSkippingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PollWorkflowExecutionTimeSkipping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PollWorkflowExecutionTimeSkipping(ctx, req.(*PollWorkflowExecutionTimeSkippingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3182,6 +3304,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_ForceDeleteWorkflowExecution_Handler,
 		},
 		{
+			MethodName: "DeleteExecution",
+			Handler:    _HistoryService_DeleteExecution_Handler,
+		},
+		{
 			MethodName: "GetDLQTasks",
 			Handler:    _HistoryService_GetDLQTasks_Handler,
 		},
@@ -3244,6 +3370,18 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnpauseWorkflowExecution",
 			Handler:    _HistoryService_UnpauseWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "StartNexusOperation",
+			Handler:    _HistoryService_StartNexusOperation_Handler,
+		},
+		{
+			MethodName: "CancelNexusOperation",
+			Handler:    _HistoryService_CancelNexusOperation_Handler,
+		},
+		{
+			MethodName: "PollWorkflowExecutionTimeSkipping",
+			Handler:    _HistoryService_PollWorkflowExecutionTimeSkipping_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

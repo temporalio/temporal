@@ -1,11 +1,12 @@
 package scheduler
 
 import (
-	"fmt"
+	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -52,6 +53,10 @@ type (
 		NextWakeupTime time.Time
 		LastActionTime time.Time
 		BufferedStarts []*schedulespb.BufferedStart
+		// DroppedCount is the number of actions that would have been buffered but
+		// were dropped due to the limit being reached. Only populated when a limit
+		// is provided.
+		DroppedCount int64
 	}
 )
 
@@ -79,13 +84,14 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.config.Tweakables(scheduler.Namespace)
+	metricsHandler := newTaggedMetricsHandler(s.metricsHandler, scheduler)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
-		tag.NewTimeTag("start", start),
-		tag.NewTimeTag("end", end),
-		tag.NewAnyTag("overlap-policy", overlapPolicy),
-		tag.NewBoolTag("manual", manual))
+		tag.Time("start", start),
+		tag.Time("end", end),
+		tag.Any("overlap-policy", overlapPolicy),
+		tag.Bool("manual", manual))
 
 	// Peek at paused/remaining actions state and don't bother if we're not going to
 	// take an action now. (Don't count as missed catchup window either.)
@@ -95,12 +101,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.NextTime(scheduler, end)
+		wakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 		if err != nil {
 			return nil, err
 		}
 
 		return &ProcessedTimeRange{
-			NextWakeupTime: next.Next,
+			NextWakeupTime: wakeup,
 			LastActionTime: end,
 			BufferedStarts: nil,
 		}, nil
@@ -108,67 +115,139 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
 
-	// lastAction is used to set the high water mark for future ProcessTimeRange
-	// invocations. The code below will set a "last action" even when none is taken,
-	// simply to indicate that processing can permanently skip that period of time
-	// (e.g., it was prior to an update or past a catchup).
-	lastAction := end
+	// Preserve the high water mark until an action is processed. NextTime searches
+	// nominal times, so advancing to end could skip an action whose nominal time
+	// has passed but whose jittered fire time is still in the future. The loop also
+	// advances past actions intentionally skipped or dropped.
+	lastAction := start
+	if !manual && !tweakables.EnableGeneratorJitterFix {
+		lastAction = end
+	}
 
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
+	var droppedCount int64
+	recordedGenerateLatency := false
+	// Once the buffer fills, drop further automated actions (counted in
+	// droppedCount) instead of buffering. A non-manual limit already <= 0 means
+	// the buffer was full on entry, so the whole range drops. Manual (backfill)
+	// callers pass a positive limit and break to retry the remainder, never drop.
+	limitReached := limit != nil && !manual && *limit <= 0
+	computeLimitWarning := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
+		computeLimitWarning = computeLimitWarning || next.ComputeLimitWarning
 		lastAction = next.Next
 
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
+		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
-			s.logger.Warn("ProcessBuffer skipped an action due to update time",
-				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
-				tag.NewTimeTag("droppedActionTime", next.Next))
+			// Skip this check for manual (backfill) actions since they explicitly request
+			// past times.
+			s.logger.Info("ProcessBuffer skipped an action due to update time",
+				tag.Time("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.Time("droppedActionTime", next.Next))
 			continue
 		}
 
+		// Record generate latency only for the first action in the batch to
+		// avoid inflating the metric when catching up over a large time range.
+		if !manual && !recordedGenerateLatency {
+			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
+				Record(end.Sub(next.Next))
+			recordedGenerateLatency = true
+		}
+
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window",
-				tag.NewTimeTag("now", end),
-				tag.NewTimeTag("time", next.Next))
-			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			s.logger.Info("Schedule missed catchup window",
+				tag.Time("now", end),
+				tag.Time("time", next.Next))
+			// Action's nominal time was already past the catchup window when
+			// the generator processed the time range. It was never buffered.
+			metricsHandler.WithTags(
+				metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonNotBuffered),
+			).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
 		}
 
-		nominalTimeSec := next.Nominal.Truncate(time.Second)
+		if limitReached {
+			droppedCount++
+			continue
+		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
+			WorkflowId:    schedulerinternal.GenerateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
-				break
+				// For manual (backfill) actions, break immediately so the caller
+				// can retry later. For automated actions, continue to count dropped.
+				if manual {
+					break
+				}
+				limitReached = true
 			}
 		}
 	}
 
+	// Fold any warning seen mid-loop into the terminal result so it isn't lost.
+	next.ComputeLimitWarning = next.ComputeLimitWarning || computeLimitWarning
+	nextWakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ProcessedTimeRange{
-		NextWakeupTime: next.Next,
+		NextWakeupTime: nextWakeup,
 		LastActionTime: lastAction,
 		BufferedStarts: bufferedStarts,
+		DroppedCount:   droppedCount,
 	}, nil
+}
+
+// checkNextScheduleResult resolves a NextTime result/error into a next-wakeup time.
+// and handles error cases
+func (s *SpecProcessorImpl) checkNextScheduleResult(
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	next legacyscheduler.GetNextTimeResult,
+	err error,
+) (time.Time, error) {
+	if err == nil {
+		// Warn (non-fatal) case: the search went long but still resolved.
+		if next.ComputeLimitWarning {
+			metricsHandler.Counter(metrics.ScheduleComputeLimitWarning.Name()).Record(1)
+			newTaggedLogger(s.logger, scheduler).Warn(
+				"schedule spec next-time search crossed the warn threshold; continuing (spec may be over-excluded)")
+		}
+		return next.Next, nil
+	}
+
+	// special case: broken or pathological spec
+	// in this particular case, just swallow the error and log.
+	// The spec will just degrade to return nothing.
+	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
+		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
+		newTaggedLogger(s.logger, scheduler).Warn(
+			"schedule spec next-time search hit the compute limit; taking no further action until the spec is changed")
+		return time.Time{}, nil
+	}
+	return time.Time{}, err
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	cw := s.Schedule.GetPolicies().GetCatchupWindow()
-	if cw == nil {
+	// Only a positive value below the minimum is clamped up
+	if cw == nil || cw.AsDuration() <= 0 {
 		return tweakables.DefaultCatchupWindow
 	}
-
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 
@@ -180,5 +259,5 @@ func (s *SpecProcessorImpl) NextTime(scheduler *Scheduler, after time.Time) (leg
 		return legacyscheduler.GetNextTimeResult{}, err
 	}
 
-	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
+	return spec.GetNextTime(scheduler.jitterSeed(), after)
 }

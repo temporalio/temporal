@@ -1,11 +1,13 @@
 package main
 
 import (
+	"cmp"
 	_ "embed"
 	"flag"
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -21,9 +23,12 @@ type (
 	messageData struct {
 		Type string
 
-		WorkflowIdGetter string
-		RunIdGetter      string
-		TaskTokenGetter  string
+		WorkflowIDGetter  string
+		RunIDGetter       string
+		TaskTokenGetter   string
+		ActivityIDGetter  string
+		OperationIDGetter string
+		ChasmRunIDGetter  string
 	}
 
 	grpcServerData struct {
@@ -39,10 +44,10 @@ var (
 
 	// List of types for which Workflow tag getters are generated.
 	grpcServers = []reflect.Type{
-		reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*historyservice.HistoryServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*matchingservice.MatchingServiceServer)(nil)).Elem(),
+		reflect.TypeFor[workflowservice.WorkflowServiceServer](),
+		reflect.TypeFor[adminservice.AdminServiceServer](),
+		reflect.TypeFor[historyservice.HistoryServiceServer](),
+		reflect.TypeFor[matchingservice.MatchingServiceServer](),
 	}
 
 	// Only request fields that match the pattern are eligible for deeper inspection.
@@ -50,30 +55,28 @@ var (
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
 	excludeTaskTokenTypes = []reflect.Type{
-		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
+		reflect.TypeFor[*workflowservice.RespondQueryTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskFailedRequest](),
 	}
 
-	executionGetterT = reflect.TypeOf((*interface {
+	executionGetterT = reflect.TypeFor[interface {
 		GetExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	workflowExecutionGetterT = reflect.TypeOf((*interface {
+	workflowExecutionGetterT = reflect.TypeFor[interface {
 		GetWorkflowExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	taskTokenGetterT = reflect.TypeOf((*interface {
-		GetTaskToken() []byte
-	})(nil)).Elem()
+	taskTokenGetterT = reflect.TypeFor[interface{ GetTaskToken() []byte }]()
 
-	workflowIdGetterT = reflect.TypeOf((*interface {
-		GetWorkflowId() string
-	})(nil)).Elem()
+	workflowIDGetterT = reflect.TypeFor[interface{ GetWorkflowId() string }]()
 
-	runIdGetterT = reflect.TypeOf((*interface {
-		GetRunId() string
-	})(nil)).Elem()
+	runIDGetterT = reflect.TypeFor[interface{ GetRunId() string }]()
+
+	activityIDGetterT = reflect.TypeFor[interface{ GetActivityId() string }]()
+
+	operationIDGetterT = reflect.TypeFor[interface{ GetOperationId() string }]()
 )
 
 func main() {
@@ -91,8 +94,8 @@ func getGrpcServerData(grpcServerT reflect.Type) grpcServerData {
 		Imports: []string{grpcServerT.PkgPath()},
 	}
 
-	for i := 0; i < grpcServerT.NumMethod(); i++ {
-		rpcT := grpcServerT.Method(i).Type
+	for method := range grpcServerT.Methods() {
+		rpcT := method.Type
 		if rpcT.NumIn() < 2 {
 			continue
 		}
@@ -120,37 +123,36 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 
 	switch {
 	case messageType.AssignableTo(executionGetterT):
-		pd.WorkflowIdGetter = "GetExecution().GetWorkflowId()"
-		pd.RunIdGetter = "GetExecution().GetRunId()"
+		pd.WorkflowIDGetter = "GetExecution().GetWorkflowId()"
+		pd.RunIDGetter = "GetExecution().GetRunId()"
 	case messageType.AssignableTo(workflowExecutionGetterT):
-		pd.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
-		pd.RunIdGetter = "GetWorkflowExecution().GetRunId()"
+		pd.WorkflowIDGetter = "GetWorkflowExecution().GetWorkflowId()"
+		pd.RunIDGetter = "GetWorkflowExecution().GetRunId()"
 	case messageType.AssignableTo(taskTokenGetterT):
-		for _, ert := range excludeTaskTokenTypes {
-			if messageType.AssignableTo(ert) {
-				return pd
-			}
+		if slices.ContainsFunc(excludeTaskTokenTypes, messageType.AssignableTo) {
+			return pd
 		}
 		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
-		// Might be one of these, both, or neither.
-		if messageType.AssignableTo(workflowIdGetterT) {
-			pd.WorkflowIdGetter = "GetWorkflowId()"
+		// Might have any combination of these, or none.
+		if messageType.AssignableTo(workflowIDGetterT) {
+			pd.WorkflowIDGetter = "GetWorkflowId()"
 		}
-		if messageType.AssignableTo(runIdGetterT) {
-			pd.RunIdGetter = "GetRunId()"
+		if messageType.AssignableTo(runIDGetterT) {
+			pd.RunIDGetter = "GetRunId()"
+		}
+		if messageType.AssignableTo(activityIDGetterT) {
+			pd.ActivityIDGetter = "GetActivityId()"
+		}
+		if messageType.AssignableTo(operationIDGetterT) {
+			pd.OperationIDGetter = "GetOperationId()"
 		}
 	}
 
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
-	for fieldNum := 0; fieldNum < messageType.Elem().NumField(); fieldNum++ {
-		if (pd.WorkflowIdGetter != "" && pd.RunIdGetter != "") || pd.TaskTokenGetter != "" {
-			break
-		}
-
-		nestedRequest := messageType.Elem().Field(fieldNum)
-		if nestedRequest.Type.Kind() != reflect.Ptr {
+	for nestedRequest := range messageType.Elem().Fields() {
+		if nestedRequest.Type.Kind() != reflect.Pointer {
 			continue
 		}
 		if nestedRequest.Type.Elem().Kind() != reflect.Struct {
@@ -162,15 +164,32 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 
 		nestedRd := workflowTagGetters(nestedRequest.Type, depth+1)
 		// First match wins: if getter is already set, it won't be overwritten.
-		if pd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
-			pd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
+		if pd.WorkflowIDGetter == "" && nestedRd.WorkflowIDGetter != "" {
+			pd.WorkflowIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIDGetter)
 		}
-		if pd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
-			pd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
+		if pd.RunIDGetter == "" && nestedRd.RunIDGetter != "" {
+			pd.RunIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIDGetter)
 		}
 		if pd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
 			pd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
 		}
+		if pd.ActivityIDGetter == "" && nestedRd.ActivityIDGetter != "" {
+			pd.ActivityIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.ActivityIDGetter)
+		}
+		if pd.OperationIDGetter == "" && nestedRd.OperationIDGetter != "" {
+			pd.OperationIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.OperationIDGetter)
+		}
 	}
+
+	// When a business ID (activity or operation) is present without a workflow ID,
+	// the run_id is not a workflow run ID. Only apply at the top level.
+	if depth == 0 {
+		hasChasmBusinessID := pd.WorkflowIDGetter == "" && cmp.Or(pd.ActivityIDGetter, pd.OperationIDGetter) != ""
+		if hasChasmBusinessID && pd.RunIDGetter != "" {
+			pd.ChasmRunIDGetter = pd.RunIDGetter
+			pd.RunIDGetter = ""
+		}
+	}
+
 	return pd
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -20,6 +21,9 @@ const (
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
 
+	PrincipalTypeHeaderName = "temporal-principal-type"
+	PrincipalNameHeaderName = "temporal-principal-name"
+
 	ExperimentHeaderName = "temporal-experiment"
 )
 
@@ -33,6 +37,8 @@ var (
 		CallerNameHeaderName,
 		CallerTypeHeaderName,
 		CallOriginHeaderName,
+		PrincipalTypeHeaderName,
+		PrincipalNameHeaderName,
 	}
 )
 
@@ -114,4 +120,48 @@ func IsExperimentRequested(ctx context.Context, experiment string) bool {
 	}
 
 	return false
+}
+
+// StripPrincipal removes principal headers from incoming metadata to prevent
+// external callers from spoofing principal identity.
+func StripPrincipal(ctx context.Context) context.Context {
+	mdIncoming, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx
+	}
+	mdIncoming.Delete(PrincipalTypeHeaderName)
+	mdIncoming.Delete(PrincipalNameHeaderName)
+	return metadata.NewIncomingContext(ctx, mdIncoming)
+}
+
+// SetPrincipal sets the principal type and name headers in the incoming metadata.
+func SetPrincipal(ctx context.Context, principal *commonpb.Principal) context.Context {
+	return setIncomingMD(ctx, map[string]string{
+		PrincipalTypeHeaderName: principal.GetType(),
+		PrincipalNameHeaderName: principal.GetName(),
+	})
+}
+
+// GetPrincipal retrieves the principal from the context headers. Returns nil if principal is not set.
+func GetPrincipal(ctx context.Context) *commonpb.Principal {
+	values := GetValues(ctx, PrincipalTypeHeaderName, PrincipalNameHeaderName)
+	if values[0] == "" && values[1] == "" {
+		return nil
+	}
+	return &commonpb.Principal{Type: values[0], Name: values[1]}
+}
+
+// setIncomingMD sets the key-value pairs in the incoming metadata.
+// Empty values are ignored.
+func setIncomingMD(ctx context.Context, kv map[string]string) context.Context {
+	mdIncoming, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		mdIncoming = metadata.MD{}
+	}
+	for k, v := range kv {
+		if v != "" {
+			mdIncoming.Set(k, v)
+		}
+	}
+	return metadata.NewIncomingContext(ctx, mdIncoming)
 }

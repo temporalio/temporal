@@ -70,7 +70,7 @@ func (s *session) refresh() {
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
 		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
-			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
+			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
 		metrics.CassandraSessionRefreshFailures.With(handler).Record(1)
 		return
@@ -110,7 +110,7 @@ func initSession(
 
 func (s *session) Query(
 	stmt string,
-	values ...interface{},
+	values ...any,
 ) Query {
 	q := s.Value.Load().(*gocql.Session).Query(stmt, values...)
 	if q == nil {
@@ -146,7 +146,7 @@ func (s *session) ExecuteBatch(
 
 func (s *session) MapExecuteBatchCAS(
 	b *Batch,
-	previous map[string]interface{},
+	previous map[string]any,
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
 

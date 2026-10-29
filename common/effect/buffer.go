@@ -1,6 +1,9 @@
 package effect
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // Buffer holds a set of effect and rollback functions that can be invoked as a
 // batch with a defined order. Once either Apply or Cancel is called, all
@@ -43,8 +46,8 @@ func (b *Buffer) Apply(ctx context.Context) bool {
 func (b *Buffer) Cancel(ctx context.Context) bool {
 	canceled := false
 	b.effects = nil
-	for i := len(b.cancels) - 1; i >= 0; i-- {
-		b.cancels[i](ctx)
+	for _, cancel := range slices.Backward(b.cancels) {
+		cancel(ctx)
 		canceled = true
 	}
 	b.cancels = nil

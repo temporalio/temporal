@@ -3,12 +3,11 @@ package migration
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -36,10 +35,10 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
+		EventLogger               otellog.Logger
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
-		ChasmRegistry             *chasm.Registry
 	}
 
 	fxResult struct {
@@ -95,13 +94,13 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 
 func workflowVerifierProvider() WorkflowVerifier {
 	return func(
-		ctx context.Context,
-		request *verifyReplicationTasksRequest,
-		remoteAdminClient adminservice.AdminServiceClient,
-		localAdminClient adminservice.AdminServiceClient,
-		ns *namespace.Namespace,
-		execution *replicationspb.MigrationExecutionInfo,
-		mu *adminservice.DescribeMutableStateResponse,
+		_ context.Context,
+		_ *verifyReplicationTasksRequest,
+		_ adminservice.AdminServiceClient,
+		_ adminservice.AdminServiceClient,
+		_ *namespace.Namespace,
+		_ *ExecutionInfo,
+		_ *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error) {
 		return verifyResult{
 			status: verified,
@@ -111,21 +110,22 @@ func workflowVerifierProvider() WorkflowVerifier {
 
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
-		historyShardCount:                wc.PersistenceConfig.NumHistoryShards,
+		HistoryShardCount:                wc.PersistenceConfig.NumHistoryShards,
 		executionManager:                 wc.ExecutionManager,
-		namespaceRegistry:                wc.NamespaceRegistry,
-		historyClient:                    wc.HistoryClient,
+		NamespaceRegistry:                wc.NamespaceRegistry,
+		HistoryClient:                    wc.HistoryClient,
 		frontendClient:                   wc.FrontendClient,
 		clientFactory:                    wc.ClientFactory,
 		clientBean:                       wc.ClientBean,
 		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
 		taskManager:                      wc.TaskManager,
-		logger:                           wc.Logger,
-		metricsHandler:                   wc.MetricsHandler,
+		Logger:                           wc.Logger,
+		EventLogger:                      wc.EventLogger,
+		MetricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
-		chasmRegistry:                    wc.ChasmRegistry,
 	}
 }

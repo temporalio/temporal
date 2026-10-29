@@ -16,10 +16,11 @@ import (
 
 var (
 	errorPriority = map[reflect.Type]int{
-		reflect.TypeOf(&p.ShardOwnershipLostError{}):             0,
-		reflect.TypeOf(&p.CurrentWorkflowConditionFailedError{}): 1,
-		reflect.TypeOf(&p.WorkflowConditionFailedError{}):        2,
-		reflect.TypeOf(&p.ConditionFailedError{}):                3,
+		reflect.TypeFor[*p.ShardOwnershipLostError]():             0,
+		reflect.TypeFor[*p.WorkflowRunAlreadyExistsError]():       1,
+		reflect.TypeFor[*p.CurrentWorkflowConditionFailedError](): 2,
+		reflect.TypeFor[*p.WorkflowConditionFailedError]():        3,
+		reflect.TypeFor[*p.ConditionFailedError]():                4,
 	}
 
 	errorDefaultPriority = math.MaxInt64
@@ -27,9 +28,11 @@ var (
 
 type (
 	executionCASCondition struct {
-		runID       string
-		dbVersion   int64
-		nextEventID int64 // TODO deprecate this variable once DB version comparison is the default
+		runID string
+		// mustNotExist makes any existing row for runID fail the condition with WorkflowRunAlreadyExistsError.
+		mustNotExist bool
+		dbVersion    int64
+		nextEventID  int64 // TODO deprecate this variable once DB version comparison is the default
 	}
 )
 
@@ -38,25 +41,27 @@ type (
 // Resulting value will be converted to a pointer of underlying type (i.e. *int) and stored in the map.
 // We do it only for "type" field which is checked for `nil` value.
 // All other fields are created automatically by gocql with non-pointer types (i.e. int).
-func newConflictRecord() map[string]interface{} {
+func newConflictRecord() map[string]any {
 	t := new(int)
-	return map[string]interface{}{
+	return map[string]any{
 		"type": &t,
 	}
 }
 
 func convertErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	conflictIter gocql.Iter,
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
 	requestExecutionCASConditions []executionCASCondition,
 ) error {
 
-	conflictRecords := []map[string]interface{}{conflictRecord}
+	conflictRecords := []map[string]any{conflictRecord}
 	errors := extractErrors(
 		conflictRecord,
+		currentRecordRunID,
 		requestShardID,
 		requestRangeID,
 		requestCurrentRunID,
@@ -73,6 +78,7 @@ func convertErrors(
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
 			conflictRecord,
+			currentRecordRunID,
 			requestShardID,
 			requestRangeID,
 			requestCurrentRunID,
@@ -101,7 +107,8 @@ func convertErrors(
 }
 
 func extractErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
@@ -119,18 +126,25 @@ func extractErrors(
 
 	if err := extractCurrentWorkflowConflictError(
 		conflictRecord,
+		currentRecordRunID,
 		requestCurrentRunID,
 	); err != nil {
 		errors = append(errors, err)
 	}
 
 	for _, condition := range requestExecutionCASConditions {
-		if err := extractWorkflowConflictError(
-			conflictRecord,
-			condition.runID,
-			condition.dbVersion,
-			condition.nextEventID,
-		); err != nil {
+		var err error
+		if condition.mustNotExist {
+			err = extractWorkflowRunAlreadyExistsError(conflictRecord, condition.runID)
+		} else {
+			err = extractWorkflowConflictError(
+				conflictRecord,
+				condition.runID,
+				condition.dbVersion,
+				condition.nextEventID,
+			)
+		}
+		if err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -156,7 +170,7 @@ func sortErrors(
 }
 
 func extractShardOwnershipLostError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestShardID int32,
 	requestRangeID int64,
 ) error {
@@ -183,7 +197,8 @@ func extractShardOwnershipLostError(
 }
 
 func extractCurrentWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
+	currentRecordRunID string,
 	requestCurrentRunID string,
 ) error {
 	rowType, ok := conflictRecord["type"].(*int)
@@ -194,7 +209,7 @@ func extractCurrentWorkflowConflictError(
 	if *rowType != rowTypeExecution {
 		return nil
 	}
-	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != permanentRunID {
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != currentRecordRunID {
 		return nil
 	}
 
@@ -203,7 +218,7 @@ func extractCurrentWorkflowConflictError(
 		binary, _ := conflictRecord["execution_state"].([]byte)
 		encoding, _ := conflictRecord["execution_state_encoding"].(string)
 		executionState := &persistencespb.WorkflowExecutionState{}
-		if state, err := serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
+		if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
 			executionState = state
 		}
 		// if err != nil, this means execution state cannot be parsed, just use default values
@@ -217,19 +232,53 @@ func extractCurrentWorkflowConflictError(
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
-			RequestIDs:       executionState.RequestIds,
-			RunID:            executionState.RunId,
-			State:            executionState.State,
-			Status:           executionState.Status,
-			LastWriteVersion: lastWriteVersion,
-			StartTime:        timestamp.TimeValuePtr(executionState.StartTime),
+			RequestIDs:          executionState.RequestIds,
+			RunID:               executionState.RunId,
+			FirstExecutionRunID: executionState.FirstExecutionRunId,
+			State:               executionState.State,
+			Status:              executionState.Status,
+			LastWriteVersion:    lastWriteVersion,
+			StartTime:           timestamp.TimeValuePtr(executionState.StartTime),
 		}
 	}
 	return nil
 }
 
+func extractWorkflowRunAlreadyExistsError(
+	conflictRecord map[string]any,
+	requestRunID string,
+) error {
+	rowType, ok := conflictRecord["type"].(*int)
+	if !ok || rowType == nil {
+		// This can happen on ScyllaDB.
+		return nil
+	}
+	if *rowType != rowTypeExecution {
+		return nil
+	}
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != requestRunID {
+		return nil
+	}
+
+	executionState := &persistencespb.WorkflowExecutionState{}
+	binary, binaryOK := conflictRecord["execution_state"].([]byte)
+	encoding, encodingOK := conflictRecord["execution_state_encoding"].(string)
+	if binaryOK && encodingOK {
+		if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
+			executionState = state
+		}
+	}
+	// if execution state is missing or cannot be parsed, just use default values
+
+	return &p.WorkflowRunAlreadyExistsError{
+		Msg:    fmt.Sprintf("Encounter workflow run already exists, run ID: %v", requestRunID),
+		RunID:  requestRunID,
+		Status: executionState.Status,
+	}
+}
+
 func extractWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestRunID string,
 	requestDBVersion int64,
 	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
@@ -278,7 +327,7 @@ func extractWorkflowConflictError(
 }
 
 func printRecords(
-	records []map[string]interface{},
+	records []map[string]any,
 ) string {
 	binary, _ := json.MarshalIndent(records, "", "  ")
 	return string(binary)

@@ -1,6 +1,10 @@
 package chasm
 
 import (
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
@@ -19,7 +23,62 @@ func NewMSPointer(backend NodeBackend) MSPointer {
 	}
 }
 
+// LifecycleState derives the CHASM lifecycle state from the underlying mutable state's execution status.
+//
+// NOTE: Workflow pause is intentionally reported as Running. Reporting LifecycleStatePaused would cause
+// task validation to drop tasks for non-detached sub-components (e.g. Nexus operations) while paused.
+// Unknown statuses (including UNSPECIFIED) are also reported as Running so that tasks are not
+// invalidated based on a status we cannot interpret.
+func (m MSPointer) LifecycleState() LifecycleState {
+	switch m.backend.GetExecutionState().GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStateFailed
+	default:
+		return LifecycleStateRunning
+	}
+}
+
+// WorkflowRunTimeout returns the workflow run timeout duration. Returns 0 if no timeout is set.
+func (m MSPointer) WorkflowRunTimeout() time.Duration {
+	return m.backend.GetExecutionInfo().GetWorkflowRunTimeout().AsDuration()
+}
+
+// AddHistoryEvent adds a history event via the underlying mutable state.
+func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return m.backend.AddHistoryEvent(t, setAttributes)
+}
+
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	return m.backend.HasAnyBufferedEvent(filter)
+}
+
+func (m MSPointer) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	return m.backend.GenerateEventLoadToken(event)
+}
+
+// LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
+func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
+	return m.backend.LoadHistoryEvent(ctx.goContext(), token)
+}
+
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
-func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.OperationCompletion, error) {
-	return m.backend.GetNexusCompletion(ctx.getContext(), requestID)
+func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
+	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
+}
+
+// GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.
+func (m MSPointer) GetWorkflowTypeName() string {
+	return m.backend.GetExecutionInfo().GetWorkflowTypeName()
+}
+
+// GetNexusUpdateCompletion retrieves the Nexus operation completion data for the given update ID and request ID from the underlying mutable state.
+func (m MSPointer) GetNexusUpdateCompletion(ctx Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error) {
+	return m.backend.GetNexusUpdateCompletion(ctx.goContext(), updateID, requestID)
 }

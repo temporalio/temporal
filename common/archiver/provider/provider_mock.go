@@ -69,3 +69,81 @@ func (mr *MockArchiverProviderMockRecorder) GetVisibilityArchiver(scheme any) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityArchiver", reflect.TypeOf((*MockArchiverProvider)(nil).GetVisibilityArchiver), scheme)
 }
+
+// MockCustomHistoryArchiverFactory is a mock of CustomHistoryArchiverFactory interface.
+type MockCustomHistoryArchiverFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockCustomHistoryArchiverFactoryMockRecorder
+	isgomock struct{}
+}
+
+// MockCustomHistoryArchiverFactoryMockRecorder is the mock recorder for MockCustomHistoryArchiverFactory.
+type MockCustomHistoryArchiverFactoryMockRecorder struct {
+	mock *MockCustomHistoryArchiverFactory
+}
+
+// NewMockCustomHistoryArchiverFactory creates a new mock instance.
+func NewMockCustomHistoryArchiverFactory(ctrl *gomock.Controller) *MockCustomHistoryArchiverFactory {
+	mock := &MockCustomHistoryArchiverFactory{ctrl: ctrl}
+	mock.recorder = &MockCustomHistoryArchiverFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCustomHistoryArchiverFactory) EXPECT() *MockCustomHistoryArchiverFactoryMockRecorder {
+	return m.recorder
+}
+
+// NewCustomHistoryArchiver mocks base method.
+func (m *MockCustomHistoryArchiverFactory) NewCustomHistoryArchiver(arg0 NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewCustomHistoryArchiver", arg0)
+	ret0, _ := ret[0].(archiver.HistoryArchiver)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewCustomHistoryArchiver indicates an expected call of NewCustomHistoryArchiver.
+func (mr *MockCustomHistoryArchiverFactoryMockRecorder) NewCustomHistoryArchiver(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewCustomHistoryArchiver", reflect.TypeOf((*MockCustomHistoryArchiverFactory)(nil).NewCustomHistoryArchiver), arg0)
+}
+
+// MockCustomVisibilityArchiverFactory is a mock of CustomVisibilityArchiverFactory interface.
+type MockCustomVisibilityArchiverFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockCustomVisibilityArchiverFactoryMockRecorder
+	isgomock struct{}
+}
+
+// MockCustomVisibilityArchiverFactoryMockRecorder is the mock recorder for MockCustomVisibilityArchiverFactory.
+type MockCustomVisibilityArchiverFactoryMockRecorder struct {
+	mock *MockCustomVisibilityArchiverFactory
+}
+
+// NewMockCustomVisibilityArchiverFactory creates a new mock instance.
+func NewMockCustomVisibilityArchiverFactory(ctrl *gomock.Controller) *MockCustomVisibilityArchiverFactory {
+	mock := &MockCustomVisibilityArchiverFactory{ctrl: ctrl}
+	mock.recorder = &MockCustomVisibilityArchiverFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCustomVisibilityArchiverFactory) EXPECT() *MockCustomVisibilityArchiverFactoryMockRecorder {
+	return m.recorder
+}
+
+// NewCustomVisibilityArchiver mocks base method.
+func (m *MockCustomVisibilityArchiverFactory) NewCustomVisibilityArchiver(arg0 NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewCustomVisibilityArchiver", arg0)
+	ret0, _ := ret[0].(archiver.VisibilityArchiver)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewCustomVisibilityArchiver indicates an expected call of NewCustomVisibilityArchiver.
+func (mr *MockCustomVisibilityArchiverFactoryMockRecorder) NewCustomVisibilityArchiver(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewCustomVisibilityArchiver", reflect.TypeOf((*MockCustomVisibilityArchiverFactory)(nil).NewCustomVisibilityArchiver), arg0)
+}

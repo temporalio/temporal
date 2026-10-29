@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -26,16 +28,21 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -116,6 +123,123 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	s.NotNil(we.GetRunId())
 }
 
+// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters guards against
+// State being dropped on the wire for UPDATE replication tasks, which left the
+// non-receiving cluster stuck at UNSPECIFIED after a force-failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters() {
+	namespace := s.createGlobalNamespace()
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		for _, c := range s.clusters {
+			resp, err := c.FrontendClient().DescribeNamespace(t.Context(), &workflowservice.DescribeNamespaceRequest{
+				Namespace: namespace,
+			})
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				enumspb.REPLICATION_STATE_NORMAL,
+				resp.ReplicationConfig.State,
+				"cluster %s left ReplicationConfig.State = %s after failover",
+				c.ClusterName(),
+				resp.ReplicationConfig.State,
+			)
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_BacklogMetricsFollowNamespaceState guards against loaded task queue partitions
+// continuing to report backlog under the namespace_state tag they were loaded with after a failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollowNamespaceState() {
+	for _, c := range s.clusters {
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingBacklogMetricsEmitInterval, 500*time.Millisecond)
+		// Lets the standby cluster push the replicated workflow tasks to its matching service quickly,
+		// so it has a passive backlog loaded before the failover.
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.StandbyTaskMissingEventsDiscardDelay, time.Second)
+	}
+	namespace := s.createGlobalNamespace()
+	tq := testcore.RandomizeStr("backlog-metrics-failover-tq")
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		capture := captureHandler.StartCapture()
+		captures[i] = capture
+		s.T().Cleanup(func() { captureHandler.StopCapture(capture) })
+	}
+
+	const numWorkflows = 5
+	for i := range numWorkflows {
+		_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    namespace,
+			WorkflowId:   fmt.Sprintf("backlog-metrics-failover-%d", i),
+			WorkflowType: &commonpb.WorkflowType{Name: "backlog-metrics-failover-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		s.NoError(err)
+	}
+
+	// Sums the latest backlog gauge value of each partition in a cluster, per namespace_state tag.
+	backlogByState := func(clusterIdx int) map[string]float64 {
+		latest := make(map[[2]string]float64)
+		for _, r := range captures[clusterIdx].SnapshotMetric(metrics.ApproximateBacklogCount.Name()) {
+			if r.Tags["namespace"] != namespace || r.Tags["taskqueue"] != tq || r.Tags["task_type"] != "Workflow" {
+				continue
+			}
+			latest[[2]string{r.Tags["namespace_state"], r.Tags["partition"]}] = r.Value.(float64)
+		}
+		totals := make(map[string]float64)
+		for key, value := range latest {
+			totals[key[0]] += value
+		}
+		return totals
+	}
+	requireBacklog := func(t *await.T, clusterIdx int, active, passive float64) {
+		totals := backlogByState(clusterIdx)
+		require.InDelta(t, active, totals[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster %d active backlog", clusterIdx)
+		require.InDelta(t, passive, totals[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster %d passive backlog", clusterIdx)
+	}
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, numWorkflows, 0)
+		requireBacklog(t, 1, 0, numWorkflows)
+	}, 30*time.Second, 500*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	// The failover unloads the partitions on both clusters, which zeroes their old-tag backlog. The new
+	// active cluster may already be reloading some of them as history pushes tasks.
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		totals0, totals1 := backlogByState(0), backlogByState(1)
+		require.InDelta(t, 0, totals0[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster 0 active backlog")
+		require.InDelta(t, 0, totals1[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster 1 passive backlog")
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// Partitions reload with the new tag on their next access. Load each root partition directly, which
+	// also loads its child partitions.
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	for _, c := range s.clusters {
+		_, err := c.MatchingClient().ForceLoadTaskQueuePartition(testcore.NewContext(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			NamespaceId: nsResp.GetNamespaceInfo().GetId(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+		})
+		s.NoError(err)
+	}
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, 0, numWorkflows)
+		requireBacklog(t, 1, numWorkflows, 0)
+	}, 30*time.Second, 500*time.Millisecond)
+}
+
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	namespaceName := s.createGlobalNamespace()
 	client0 := s.clusters[0].FrontendClient() // active
@@ -154,7 +278,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -710,7 +834,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.logger.Info("PollAndProcessWorkflowTask 2", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
-	s.Equal(2, len(executions))
+	s.Len(executions, 2)
 	s.Equal(executions[1].GetRunId(), we.GetRunId())
 }
 
@@ -748,7 +872,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1064,7 +1188,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 			previousRunID = task.WorkflowExecution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -1111,7 +1235,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	// make some progress in cluster0 and did some continueAsNew
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := poller0.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -1120,7 +1244,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
 	// finish the rest in cluster1
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := poller1.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -1415,7 +1539,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err = poller0.PollAndProcessWorkflowTask()
 		if err != nil {
 			timerCreated = false
@@ -2062,22 +2186,21 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	worker0.Stop() // stop worker0 so cluster0 won't make any progress
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
-	s.waitForClusterSynced()
-
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
-	dweResponse, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
-	s.NoError(err)
-	pendingActivities := dweResponse.GetPendingActivities()
-	s.Equal(1, len(pendingActivities))
-	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
-	heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
-	var heartbeatValue int
-	s.NoError(payloads.Decode(heartbeatPayload, &heartbeatValue))
-	s.Equal(expectedHeartbeatValue, heartbeatValue)
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Equal("worker0", pendingActivities[0].GetLastWorkerIdentity())
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		dweResponse, err := client1.DescribeWorkflowExecution(t.Context(), workflowID, "")
+		require.NoError(t, err)
+		pendingActivities := dweResponse.GetPendingActivities()
+		require.Len(t, pendingActivities, 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
+		heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
+		var heartbeatValue int
+		require.NoError(t, payloads.Decode(heartbeatPayload, &heartbeatValue))
+		require.Equal(t, expectedHeartbeatValue, heartbeatValue)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// start worker1
 	worker1.RegisterWorkflow(testWorkflowFn)
@@ -2248,7 +2371,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	run6, err := client0.ExecuteWorkflow(testCtx, workflowOptions, wfWithBufferedEvents)
 	s.NoError(err)
 	s.NotNil(run6)
-	s.True(run6.GetRunID() != "")
+	s.NotEmpty(run6.GetRunID())
 
 	workflowOptions2 := sdkclient.StartWorkflowOptions{
 		ID:        workflowID7,
@@ -2261,7 +2384,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	run7, err := client0.ExecuteWorkflow(testCtx, workflowOptions2, wfWithBufferedEvents2)
 	s.NoError(err)
 	s.NotNil(run7)
-	s.True(run7.GetRunID() != "")
+	s.NotEmpty(run7.GetRunID())
 
 	// block until first workflow task started
 	select {
@@ -2337,6 +2460,9 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	err = run3.Get(testCtx, nil)
 	s.NoError(err)
 
+	// Wait for all 6 workflow runs (wf1, wf2, wf3, wf6, wf7, wf8) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 6)
+
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2349,8 +2475,10 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 
 	s.NoError(err)
@@ -2380,7 +2508,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	})
 	s.NoError(err)
 	s.True(nsResp2.IsGlobalNamespace)
-	s.Equal(2, len(nsResp2.ReplicationConfig.Clusters))
+	s.Len(nsResp2.ReplicationConfig.Clusters, 2)
 	s.Equal(s.clusters[1].ClusterName(), nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
@@ -2434,7 +2562,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 			},
 		)
 		s.NoError(err)
-		s.True(len(listWorkflowResp.GetExecutions()) > 0)
+		s.NotEmpty(listWorkflowResp.GetExecutions())
 	}
 	verify(workflowID, run1.GetRunID())
 	verify(workflowID2, run2.GetRunID())
@@ -2478,6 +2606,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for wf1 to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 1)
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2490,8 +2621,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
@@ -2500,10 +2633,14 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Verify all wf in ns is now available in cluster2
 	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	verify := func(wfID string, expectedRunID string) {
-		desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
-		s.NoError(err)
-		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+		s.Eventually(func() bool {
+			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
+			if err != nil {
+				return false
+			}
+			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
+				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
 	}
 	verify(workflowID, run1.GetRunID())
 
@@ -2530,9 +2667,13 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
+	s.Eventually(func() bool {
+		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
+		if err != nil {
+			return false
+		}
+		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
@@ -2585,6 +2726,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for both workflow runs (original + reset) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 2)
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2597,12 +2741,48 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
+
+	// Verify the force-replication workflow actually ran VerifyReplicationTasks activities
+	// and that they verified exactly the expected number of workflow runs.
+	var totalVerifiedCount int64
+	scheduledActivityTypes := make(map[int64]string) // scheduledEventId -> activity type name
+	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
+		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for histIter.HasNext() {
+		event, err := histIter.Next()
+		s.NoError(err)
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			scheduledActivityTypes[event.GetEventId()] = attrs.GetActivityType().GetName()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			attrs := event.GetActivityTaskCompletedEventAttributes()
+			activityType := scheduledActivityTypes[attrs.GetScheduledEventId()]
+			if activityType != "VerifyReplicationTasks" {
+				continue
+			}
+			result := attrs.GetResult()
+			if result != nil && len(result.GetPayloads()) > 0 {
+				var resp struct {
+					VerifiedWorkflowCount int64
+				}
+				s.NoError(payloads.Decode(result, &resp))
+				totalVerifiedCount += resp.VerifiedWorkflowCount
+			}
+		default:
+		}
+	}
+	// Expect exactly 2 verified workflow runs: original run + reset run
+	s.Equal(int64(2), totalVerifiedCount,
+		"force-replication should have verified exactly 2 workflow runs (original + reset run)")
 
 	s.waitForClusterSynced()
 
@@ -2687,11 +2867,7 @@ func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
 
 func (s *FunctionalClustersWithRedirectionTestSuite) SetupSuite() {
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
-			}),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}),
 	)
 }
 
@@ -2728,20 +2904,22 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 		case hb1Ch <- struct{}{}:
 		default:
 		}
-		// wait for failover
+		// wait for failover, first attempt will heartbeat timeout here
 		<-allowFailover
 
 		// After failover, verify we can still heartbeat and complete
-		if activity.HasHeartbeatDetails(ctx) {
-			var v int
-			_ = activity.GetHeartbeatDetails(ctx, &v)
-		}
 		activity.RecordHeartbeat(ctx, hb2Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb2Ch <- struct{}{}:
 		default:
 		}
 		activity.RecordHeartbeat(ctx, hb3Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb3Ch <- struct{}{}:
 		default:
@@ -2753,7 +2931,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	testWorkflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second * 120,
-			HeartbeatTimeout:    time.Second * 10,
+			HeartbeatTimeout:    time.Second * 3,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
@@ -2792,10 +2970,12 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	}, 10*time.Second, 200*time.Millisecond)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	// sleep to trigger heartbeat timeout for first attempt
 	// nolint:forbidigo
 	time.Sleep(time.Second * 4)
 
 	close(allowFailover)
+
 	// Wait for heartbeats from second attempt
 	<-hb2Ch
 	<-hb3Ch

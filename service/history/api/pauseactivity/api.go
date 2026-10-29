@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -20,6 +21,8 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseActivityResponse, retError error) {
+	var activityMetrics []workflow.ActivityMetricsInfo
+
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -31,6 +34,10 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
+
 			var activityIDs []string
 			switch a := frontendRequest.GetActivity().(type) {
 			case *workflowservice.PauseActivityRequest_Id:
@@ -56,12 +63,21 @@ func Invoke(
 						Reason:   frontendRequest.GetReason(),
 					},
 				},
+				RequestId: request.GetFrontendRequest().GetRequestId(),
 			}
 
 			for _, activityId := range activityIDs {
+				activityInfo, activityFound := mutableState.GetActivityByActivityID(activityId)
+				if !activityFound {
+					return nil, consts.ErrActivityNotFound
+				}
+				wasPaused := activityInfo.GetPaused()
 				err := workflow.PauseActivity(mutableState, activityId, pauseInfo)
 				if err != nil {
 					return nil, err
+				}
+				if !wasPaused {
+					activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, activityInfo))
 				}
 			}
 			return &api.UpdateWorkflowAction{
@@ -76,6 +92,10 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	for _, info := range activityMetrics {
+		metrics.ActivityPause.With(info.MetricsHandler(shardContext, metrics.ActivityPausedScope)).Record(1)
 	}
 
 	return &historyservice.PauseActivityResponse{}, nil

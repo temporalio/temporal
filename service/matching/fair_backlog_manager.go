@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/matching/counter"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -37,10 +38,12 @@ type (
 		subqueuesByPriority map[priorityKey]subqueueIndex
 		priorityBySubqueue  map[subqueueIndex]priorityKey
 
-		logger           log.Logger
-		throttledLogger  log.ThrottledLogger
-		matchingClient   matchingservice.MatchingServiceClient
-		metricsHandler   metrics.Handler
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
+		matchingClient  matchingservice.MatchingServiceClient
+		metricsHandler  metrics.Handler
+		counterFactory  func() counter.Counter
+
 		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
@@ -76,11 +79,12 @@ func newFairBacklogManager(
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
+		counterFactory:      counterFactory,
 		logger:              logger,
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.taskWriter = newFairTaskWriter(bmg, counterFactory)
+	bmg.taskWriter = newFairTaskWriter(bmg, bmg.newCounterForSubqueue)
 	return bmg
 }
 
@@ -92,8 +96,7 @@ func (c *fairBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -137,6 +140,12 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	// Pass scale info back to physical tq from unversioned (default) queue.
+	// This must be done before c.initializedError.Set().
+	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() && !c.isDraining {
+		c.pqMgr.StartScaleManager(state.scaleState)
 	}
 
 	if state.otherHasTasks {
@@ -210,11 +219,16 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
 			c.signalIfFatal(err)
+
+			if c.hasFinishedDraining() {
+				c.pqMgr.FinishedDraining()
+				return
+			}
 		}
 	}
 }
@@ -278,8 +292,8 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		// Note that there could be more than one subqueue for the same priority.
 		if _, ok := result[pk]; !ok {
 			result[pk] = &taskqueuepb.TaskQueueStats{
-				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-				// be more appropriate in the future.
+				// TODO(pri): returning 0 to match existing behavior, but maybe -1 (meaning empty)
+				// would be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
 			}
 		}
@@ -297,6 +311,23 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 	}
 	return result
+}
+
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
 }
 
 func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -340,9 +371,11 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
 			},
-			LoadedTasks:             int64(r.getLoadedTasks()),
-			FairMaxReadLevel:        maxReadLevel.toProto(),
-			ApproximateBacklogCount: count,
+			LoadedTasks:              int64(r.getLoadedTasks()),
+			FairMaxReadLevel:         maxReadLevel.toProto(),
+			ApproximateBacklogCount:  count,
+			BacklogDrained:           r.isDrained(),
+			FairnessKeyCountEstimate: c.taskWriter.getFairnessKeyCountEstimate(subqueueIndex(i)),
 		}
 	}
 	return status
@@ -386,10 +419,51 @@ func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
 }
 
+func (c *fairBacklogManagerImpl) newCounterForSubqueue(subqueue subqueueIndex) counter.Counter {
+	cntr := c.counterFactory()
+	// restore persisted keys
+	for _, entry := range c.db.getTopKFairnessKeys(subqueue) {
+		_ = cntr.GetPass(entry.Key, entry.Count, 0)
+	}
+	return cntr
+}
+
+// hasFinishedDraining returns true if this is a draining backlog manager and all tasks have
+// been fully drained (read and acked).
+func (c *fairBacklogManagerImpl) hasFinishedDraining() bool {
+	if !c.isDraining {
+		return false
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	for _, r := range c.subqueues {
+		if !r.isDrained() {
+			return false
+		}
+	}
+	return true
+}
+
+// FinalGC does a final gc pass on all subqueues.
+func (c *fairBacklogManagerImpl) FinalGC() {
+	if !softassert.That(c.logger, c.isDraining, "FinalGC called on non-draining backlog manager") {
+		return
+	}
+	c.subqueueLock.Lock()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for _, r := range subqueues {
+		r.finalGC()
+	}
+}
+
 func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {
 	c.config.setDefaultPriority(task)
 	if c.isDraining {
 		// draining goes before active backlog so we're guaranteed to finish migration
-		task.effectivePriority -= maxPriorityLevels
+		task.effectivePriority -= effectivePriorityFactor * maxPriorityLevels
 	}
 }

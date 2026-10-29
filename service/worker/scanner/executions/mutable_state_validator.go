@@ -53,18 +53,21 @@ func (v *mutableStateValidator) Validate(
 	mutableState *MutableState,
 ) ([]MutableStateValidationResult, error) {
 
+	var results []MutableStateValidationResult
+
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
 		mutableState.GetExecutionInfo().GetVersionHistories(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-	if err != nil {
-		return nil, err
-	}
 
-	var results []MutableStateValidationResult
+	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+		// CHASM executions have empty version history and remaining validations do not apply.
+		// TODO: CHASM executions should through retention validation below as well after
+		// handleFailures() logic is updated to be able to delete non-workflow executions as well.
+		return results, nil
+	}
 
 	// First， to check if the data is expired on retention time.
 	retentionResult, err := v.validateRetention(
@@ -78,6 +81,11 @@ func (v *mutableStateValidator) Validate(
 		// Skip all validation if the data is expired.
 		results = append(results, *retentionResult)
 		return results, nil
+	}
+
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return nil, err
 	}
 
 	results = append(results, v.validateActivity(

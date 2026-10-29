@@ -98,6 +98,7 @@ type (
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
+		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -132,7 +133,7 @@ func newQueueBase(
 		exclusiveReaderHighWatermark = ackLevel
 	}
 
-	monitor := newMonitor(category.Type(), shard.GetTimeSource(), &options.MonitorOptions)
+	monitor := newMonitor(category.Type(), shard.GetTimeSource(), logger, metricsHandler, &options.MonitorOptions)
 	readerRateLimiter := newShardReaderRateLimiter(
 		options.MaxPollRPS,
 		hostReaderRateLimiter,
@@ -144,14 +145,17 @@ func newQueueBase(
 			// non-default reader should not trigger task unloading
 			// otherwise those readers will keep loading, hit pending task count limit, unload, throttle, load, etc...
 			// use a limit lower than the critical pending task count instead
-
+			//
 			// Use lower maxPendingTaskCount for lower reader to guarantee that higher reader can
 			// always have some tasks loaded.
 			readerOptions.MaxPendingTasksCount = func() int {
-				return max(
-					minMaxPendingTaskCount,
-					int(float64(options.PendingTasksCriticalCount())*
-						math.Pow(maxPendingTaskMultiplier, float64(readerID))),
+				return min(
+					options.MaxPendingTasksCount(),
+					max(
+						minMaxPendingTaskCount,
+						int(float64(options.PendingTasksCriticalCount())*
+							math.Pow(maxPendingTaskMultiplier, float64(readerID))),
+					),
 				)
 			}
 		}
@@ -180,7 +184,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.ReaderOptions.MaxPredicateSize))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.MaxPredicateSize, options.ShrinkPredicateMaxPendingKeys, metricsHandler))
 		}
 		readerGroup.NewReader(readerID, slices...)
 
@@ -268,7 +272,9 @@ func (p *queueBase) processNewRange() {
 			p.monitor,
 			newReadScope,
 			p.grouper,
-			p.options.ReaderOptions.MaxPredicateSize,
+			p.options.MaxPredicateSize,
+			p.options.ShrinkPredicateMaxPendingKeys,
+			p.metricsHandler,
 		))
 	}
 
@@ -323,7 +329,12 @@ func (p *queueBase) checkpoint() {
 		}
 	}
 	metrics.QueueReaderCountHistogram.With(p.metricsHandler).Record(int64(len(readerScopes)))
-	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(int64(p.monitor.GetTotalSliceCount()))
+	sliceCount := int64(p.monitor.GetTotalSliceCount())
+	categoryTag := metrics.TaskCategoryTag(p.category.Name())
+	// The counter is a true accumulator; the histogram's _sum is not, since tally's Prometheus
+	// reporter replays each sample as its bucket's upper bound, not the recorded value.
+	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(sliceCount, categoryTag)
+	metrics.QueueSliceCountTotal.With(p.metricsHandler).Record(sliceCount, categoryTag)
 	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	// NOTE: Must range-complete task first.

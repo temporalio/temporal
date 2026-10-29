@@ -7,11 +7,13 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -22,12 +24,14 @@ type (
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
-		taskID  string
-		request *matchingservice.QueryWorkflowRequest
+		taskID     string
+		createTime *timestamppb.Timestamp
+		request    *matchingservice.QueryWorkflowRequest
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
 		taskID            string
+		createTime        *timestamppb.Timestamp
 		deadline          time.Time
 		operationDeadline time.Time
 		request           *matchingservice.DispatchNexusTaskRequest
@@ -57,25 +61,36 @@ type (
 		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
 		// partition instructed.
 		forwardInfo *taskqueuespb.TaskForwardInfo
-		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
-		// based on forwardInfo.
+		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks,
+		// this is populated based on forwardInfo (V2 versioning).
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		// redirectedFromBacklog is true if this task was redirectedFromBacklog from the backlog it was read from
+		// (V2 and V3 versioning).
+		redirectedFromBacklog bool
+		// queued is true while this task is in matcherData.tasks. It's a matcher field (see below)
+		// but lives here so it packs into the padding next to redirectedFromBacklog.
+		queued bool
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
 		removeFromMatcher     atomic.Pointer[func()]
+		// taskDispatchRevisionNumber represents the revision number used by the task and is
+		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
+		taskDispatchRevisionNumber    int64
+		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
 
-		// These fields are for use by matcherData:
+		// The following fields are for use by priMatcher/matcherData:
 		waitableMatchResult
 		forwardCtx context.Context // non-nil for sync match task only
 		// effectivePriority is initialized from an explicit task priority if present, or the
 		// default for the task queue. It can also be the special pollForwarderPriority (higher
 		// than normal priorities) to indicate the poll forwarder. In some other cases (e.g.
 		// migration) it may be adjusted from the explicit task priority.
+		// The scale of effectivePriority is 10× the normal scale to allow inserting forwards
+		// in between priority levels.
 		effectivePriority priorityKey
-		// taskDispatchRevisionNumber represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
-		taskDispatchRevisionNumber int64
+		pollForwarderType pollForwarderType
 	}
 
 	// taskResponse is used to report the result of either a match with a local poller,
@@ -87,6 +102,9 @@ type (
 		forwardRes any // note this may be a non-nil "any" containing a nil pointer
 		forwardErr error
 		startErr   error
+		// dropReason, when set, marks a dropped backlog task;
+		// reader.completeTask records it in tasks_dropped.
+		dropReason dropReason
 	}
 )
 
@@ -107,6 +125,7 @@ func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	taskDispatchRevisionNumber int64,
+	targetVersion *deploymentspb.WorkerDeploymentVersion,
 ) *internalTask {
 	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
 	// if this task is not forwarded, source can only be history
@@ -117,18 +136,21 @@ func newInternalTaskForSyncMatch(
 		redirectInfo = forwardInfo.GetRedirectInfo()
 	}
 	return &internalTask{
-		taskDispatchRevisionNumber: taskDispatchRevisionNumber,
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
 				Data:   info,
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:       forwardInfo,
-		source:            source,
-		redirectInfo:      redirectInfo,
-		responseC:         make(chan taskResponse, 1),
-		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
+		forwardInfo:  forwardInfo,
+		source:       source,
+		redirectInfo: redirectInfo,
+		responseC:    make(chan taskResponse, 1),
+
+		taskDispatchRevisionNumber:    taskDispatchRevisionNumber,
+		targetWorkerDeploymentVersion: targetVersion,
+
+		effectivePriority: effectivePriorityFactor * priorityKey(info.GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -142,7 +164,7 @@ func newInternalTaskFromBacklog(
 			completionFunc:    completionFunc,
 		},
 		source:            enumsspb.TASK_SOURCE_DB_BACKLOG,
-		effectivePriority: priorityKey(info.GetData().GetPriority().GetPriorityKey()),
+		effectivePriority: effectivePriorityFactor * priorityKey(info.GetData().GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -152,14 +174,22 @@ func newInternalQueryTask(
 ) *internalTask {
 	return &internalTask{
 		query: &queryTaskInfo{
-			taskID:  taskID,
-			request: request,
+			taskID:     taskID,
+			createTime: getCreateTime(request.GetForwardInfo()),
+			request:    request,
 		},
 		forwardInfo:       request.GetForwardInfo(),
 		responseC:         make(chan taskResponse, 1),
 		source:            enumsspb.TASK_SOURCE_HISTORY,
-		effectivePriority: priorityKey(request.GetPriority().GetPriorityKey()),
+		effectivePriority: effectivePriorityFactor * priorityKey(request.GetPriority().GetPriorityKey()),
 	}
+}
+
+func getCreateTime(f *taskqueuespb.TaskForwardInfo) *timestamppb.Timestamp {
+	if t := f.GetCreateTime(); t != nil {
+		return t
+	}
+	return timestamppb.Now()
 }
 
 func newInternalNexusTask(
@@ -171,6 +201,7 @@ func newInternalNexusTask(
 	return &internalTask{
 		nexus: &nexusTaskInfo{
 			taskID:            taskID,
+			createTime:        getCreateTime(request.GetForwardInfo()),
 			deadline:          deadline,
 			operationDeadline: operationDeadline,
 			request:           request,
@@ -185,12 +216,12 @@ func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
 }
 
-func newPollForwarderTask() *internalTask {
-	return &internalTask{effectivePriority: pollForwarderPriority}
+func newPollForwarderTask(p priorityKey, t pollForwarderType) *internalTask {
+	return &internalTask{effectivePriority: p, pollForwarderType: t}
 }
 
 func (task *internalTask) isPollForwarder() bool {
-	return task.effectivePriority == pollForwarderPriority
+	return task.pollForwarderType != notPollForwarder
 }
 
 // isQuery returns true if the underlying task is a query task
@@ -216,6 +247,20 @@ func (task *internalTask) isForwarded() bool {
 
 func (task *internalTask) isSyncMatchTask() bool {
 	return task.responseC != nil
+}
+
+func (task *internalTask) getCreateTime() *timestamppb.Timestamp {
+	if task.forwardInfo.GetCreateTime() != nil {
+		return task.forwardInfo.GetCreateTime()
+	} else if task.event != nil {
+		return task.event.Data.GetCreateTime()
+	} else if task.query != nil {
+		return task.query.createTime
+	} else if task.nexus != nil {
+		return task.nexus.createTime
+	}
+
+	return timestamppb.Now()
 }
 
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
@@ -306,24 +351,33 @@ func (task *internalTask) setEvicted() {
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
 //
-// If the task took a rate limit token and didn't "use" it by actually dispatching the task,
-// finish will be called with wasValid=false and task.recycleToken=clockedRateLimiter.RecycleToken,
-// so finish will call the rate limiter's RecycleToken to give the unused token back to any process
-// that is waiting on the token, if one exists.
-func (task *internalTask) finish(err error, wasValid bool) {
-	res := taskResponse{startErr: err}
-	task.finishInternal(res, wasValid)
+// A non-nil error recycles the task's rate-limit token, if it took one.
+//
+// A non-nil error will generally cause a backlog task to be kept and attempted to match again,
+// but if the task should be dropped instead, pass a dropReason as err. The reason will be
+// recorded in metrics.
+func (task *internalTask) finish(err error) {
+	if dr, ok := err.(dropReason); ok {
+		task.finishInternal(taskResponse{dropReason: dr}, true)
+	} else {
+		task.finishInternal(taskResponse{startErr: err}, err != nil)
+	}
 }
 
 // finishForward must be called after forwarding a task.
-func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
-	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
-	task.finishInternal(res, wasValid)
+func (task *internalTask) finishForward(forwardRes any, forwardErr error) {
+	// Don't recycle for query or nexus since forwardErr isn't a remote "start" error for those
+	// (they don't have RecordTaskStarted calls), it's a query/nexus error. This doesn't really
+	// matter since we don't apply rate limits there anyway.
+	recycle := forwardErr != nil && !task.isQuery() && !task.isNexus()
+	task.finishInternal(taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}, recycle)
 }
 
-func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
-	if !wasValid && task.recycleToken != nil {
-		task.recycleToken(task)
+func (task *internalTask) finishInternal(res taskResponse, recycle bool) {
+	recycleToken := task.recycleToken
+	task.recycleToken = nil // clear recycleToken so it's only used once
+	if recycle && recycleToken != nil {
+		recycleToken(task)
 	}
 
 	switch {

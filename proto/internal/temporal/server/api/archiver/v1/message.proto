@@ -2,47 +2,46 @@ syntax = "proto3";
 
 package temporal.server.api.archiver.v1;
 
-option go_package = "go.temporal.io/server/api/archiver/v1;archiver";
-
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/history/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/history/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/archiver/v1;archiver";
 
 message HistoryBlobHeader {
-    string namespace = 1;
-    string namespace_id = 2;
-    string workflow_id = 3;
-    string run_id = 4;
-    bool is_last = 5;
-    int64 first_failover_version = 6;
-    int64 last_failover_version = 7;
-    int64 first_event_id = 8;
-    int64 last_event_id = 9;
-    int64 event_count = 10;
+  string namespace = 1;
+  string namespace_id = 2;
+  string workflow_id = 3;
+  string run_id = 4;
+  bool is_last = 5;
+  int64 first_failover_version = 6;
+  int64 last_failover_version = 7;
+  int64 first_event_id = 8;
+  int64 last_event_id = 9;
+  int64 event_count = 10;
 }
 
-message HistoryBlob  {
-    HistoryBlobHeader header = 1;
-    repeated temporal.api.history.v1.History body = 2;
+message HistoryBlob {
+  HistoryBlobHeader header = 1;
+  repeated temporal.api.history.v1.History body = 2;
 }
 
 // VisibilityRecord is a single workflow visibility record in archive.
 message VisibilityRecord {
-    string namespace_id = 1;
-    string namespace = 2;
-    string workflow_id = 3;
-    string run_id = 4;
-    string workflow_type_name = 5;
-    google.protobuf.Timestamp start_time = 6;
-    google.protobuf.Timestamp execution_time = 7;
-    google.protobuf.Timestamp close_time = 8;
-    temporal.api.enums.v1.WorkflowExecutionStatus status = 9;
-    int64 history_length = 10;
-    temporal.api.common.v1.Memo memo = 11;
-    map<string, string> search_attributes = 12;
-    string history_archival_uri = 13;
-    google.protobuf.Duration execution_duration = 14;
+  string namespace_id = 1;
+  string namespace = 2;
+  string workflow_id = 3;
+  string run_id = 4;
+  string workflow_type_name = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp execution_time = 7;
+  google.protobuf.Timestamp close_time = 8;
+  temporal.api.enums.v1.WorkflowExecutionStatus status = 9;
+  int64 history_length = 10;
+  temporal.api.common.v1.Memo memo = 11;
+  map<string, string> search_attributes = 12;
+  string history_archival_uri = 13;
+  google.protobuf.Duration execution_duration = 14;
 }

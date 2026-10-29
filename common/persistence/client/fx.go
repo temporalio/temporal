@@ -57,6 +57,7 @@ type (
 		DynamicRateLimitingParams                   DynamicRateLimitingParams
 		EnableDataLossMetrics                       EnableDataLossMetrics
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
+		Serializer                                  serialization.Serializer
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -90,6 +91,7 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) persistence.XDCCache {
 	return persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
@@ -147,7 +149,7 @@ func FactoryProvider(
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
 		shardRequestRateLimiter,
-		serialization.NewSerializer(),
+		params.Serializer,
 		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,
@@ -159,18 +161,24 @@ func FactoryProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
 	logger log.ThrottledLogger,
 ) persistence.HealthSignalAggregator {
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return persistence.NewHealthSignalAggregator(
+		aggregator := persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
+			dynamicconfig.PersistenceHealthSignalPercentilesEnabled.Get(dynamicCollection),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
 			logger,
+			dynamicconfig.PersistenceHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
+			dynamicconfig.PersistenceHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 		)
+		lc.Append(fx.StopHook(aggregator.Stop))
+		return aggregator
 	}
 
 	return persistence.NoopHealthSignalAggregator
@@ -184,18 +192,19 @@ func DataStoreFactoryProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
+	serializer serialization.Serializer,
 ) persistence.DataStoreFactory {
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
 	case defaultStoreCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.CustomDataStoreConfig != nil:
-		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler, serializer)
 	default:
-		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
+		logger.Fatal("invalid config: one of cassandra, sql, or custom datastore params must be specified")
 	}
 
 	if defaultStoreCfg.FaultInjection != nil {
@@ -218,8 +227,7 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 	return func(f Factory, lc fx.Lifecycle) (T, error) {
 		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
 		if err != nil {
-			var unimpl *serviceerror.Unimplemented
-			if errors.As(err, &unimpl) {
+			if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 				// allow factories to return Unimplemented, and turn into nil so that fx init doesn't fail.
 				err = nil
 			}

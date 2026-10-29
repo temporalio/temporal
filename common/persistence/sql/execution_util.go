@@ -5,11 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -19,7 +21,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func applyWorkflowMutationTx(
+func (m *sqlExecutionStore) applyWorkflowMutationTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -40,25 +42,7 @@ func applyWorkflowMutationTx(
 		return serviceerror.NewInternalf("uuid parse failed. Error: %v", err)
 	}
 
-	// TODO Remove me if UPDATE holds the lock to the end of a transaction
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowMutation.Condition,
-		workflowMutation.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -68,8 +52,14 @@ func applyWorkflowMutationTx(
 		lastWriteVersion,
 		workflowMutation.DBRecordVersion,
 		shardID,
+		workflowMutation.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -189,13 +179,12 @@ func applyWorkflowMutationTx(
 	return nil
 }
 
-func applyWorkflowSnapshotTxAsReset(
+func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
-
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := workflowSnapshot.WorkflowID
 	namespaceID := workflowSnapshot.NamespaceID
@@ -209,25 +198,7 @@ func applyWorkflowSnapshotTxAsReset(
 		return err
 	}
 
-	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowSnapshot.Condition,
-		workflowSnapshot.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -237,8 +208,14 @@ func applyWorkflowSnapshotTxAsReset(
 		lastWriteVersion,
 		workflowSnapshot.DBRecordVersion,
 		shardID,
+		workflowSnapshot.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -578,9 +555,13 @@ func lockCurrentExecutionIfExists(
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	rows, err := tx.LockCurrentExecutionsJoinExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
-		ShardID: shardID, NamespaceID: namespaceID, WorkflowID: workflowID,
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -940,11 +921,14 @@ func assertNotCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
+	archetypeID chasm.ArchetypeID,
+	serializer serialization.Serializer,
 ) error {
 	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -953,7 +937,7 @@ func assertNotCurrentExecution(
 		}
 		return serviceerror.NewUnavailablef("assertCurrentExecution failed. Unable to load current record. Error: %v", err)
 	}
-	return assertRunIDMismatch(runID, currentRow)
+	return assertRunIDMismatch(runID, currentRow, serializer)
 }
 
 func assertRunIDAndUpdateCurrentExecution(
@@ -961,11 +945,13 @@ func assertRunIDAndUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	row sqlplugin.CurrentExecutionsRow,
 	previousRunID primitives.UUID,
+	serializer serialization.Serializer,
 ) error {
+	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
-			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
+			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
 			if err != nil {
 				return err
 			}
@@ -976,14 +962,16 @@ func assertRunIDAndUpdateCurrentExecution(
 					currentRow.RunID,
 					previousRunID,
 				),
-				RequestIDs:       executionState.RequestIds,
-				RunID:            currentRow.RunID.String(),
-				State:            currentRow.State,
-				Status:           currentRow.Status,
-				LastWriteVersion: currentRow.LastWriteVersion,
-				StartTime:        currentRow.StartTime,
+				RequestIDs:          executionState.RequestIds,
+				RunID:               currentRow.RunID.String(),
+				FirstExecutionRunID: executionState.FirstExecutionRunId,
+				State:               currentRow.State,
+				Status:              currentRow.Status,
+				LastWriteVersion:    currentRow.LastWriteVersion,
+				StartTime:           currentRow.StartTime,
 			}
 		}
+		shouldUpdate = !currentExecutionsEqual(currentRow, &row)
 		return nil
 	}
 	if err := assertCurrentExecution(ctx,
@@ -991,12 +979,34 @@ func assertRunIDAndUpdateCurrentExecution(
 		row.ShardID,
 		row.NamespaceID,
 		row.WorkflowID,
+		row.ArchetypeID,
 		assertFn,
 	); err != nil {
 		return err
 	}
+	if !shouldUpdate {
+		return nil
+	}
 
 	return updateCurrentExecution(ctx, tx, row)
+}
+
+func currentExecutionsEqual(a, b *sqlplugin.CurrentExecutionsRow) bool {
+	startTimesEqual := a.StartTime == nil && b.StartTime == nil ||
+		a.StartTime != nil && b.StartTime != nil &&
+			a.StartTime.Truncate(time.Microsecond).Equal(b.StartTime.Truncate(time.Microsecond))
+	return a.ShardID == b.ShardID &&
+		bytes.Equal(a.NamespaceID, b.NamespaceID) &&
+		a.WorkflowID == b.WorkflowID &&
+		bytes.Equal(a.RunID, b.RunID) &&
+		a.ArchetypeID == b.ArchetypeID &&
+		a.CreateRequestID == b.CreateRequestID &&
+		startTimesEqual &&
+		a.LastWriteVersion == b.LastWriteVersion &&
+		a.State == b.State &&
+		a.Status == b.Status &&
+		bytes.Equal(a.Data, b.Data) &&
+		a.DataEncoding == b.DataEncoding
 }
 
 func assertCurrentExecution(
@@ -1005,6 +1015,7 @@ func assertCurrentExecution(
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
 
@@ -1012,6 +1023,7 @@ func assertCurrentExecution(
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("assertCurrentExecution failed. Unable to load current record. Error: %v", err)
@@ -1019,20 +1031,30 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
-func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.CurrentExecutionsRow) error {
+func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.CurrentExecutionsRow, serializer serialization.Serializer) error {
 	// zombie workflow creation with existence of current record, this is a noop
 	if currentRow == nil {
 		return nil
 	}
 	if bytes.Equal(currentRow.RunID, requestRunID) {
-		return extractCurrentWorkflowConflictError(
-			currentRow,
-			fmt.Sprintf(
+		executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
+		if err != nil {
+			return err
+		}
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg: fmt.Sprintf(
 				"assertRunIDMismatch failed. request run ID: %v, current run ID: %v",
 				requestRunID,
 				currentRow.RunID.String(),
 			),
-		)
+			RequestIDs:          executionState.RequestIds,
+			RunID:               currentRow.RunID.String(),
+			FirstExecutionRunID: executionState.FirstExecutionRunId,
+			State:               currentRow.State,
+			Status:              currentRow.Status,
+			LastWriteVersion:    currentRow.LastWriteVersion,
+			StartTime:           currentRow.StartTime,
+		}
 	}
 	return nil
 }
@@ -1042,7 +1064,6 @@ func updateCurrentExecution(
 	tx sqlplugin.Tx,
 	row sqlplugin.CurrentExecutionsRow,
 ) error {
-
 	result, err := tx.UpdateCurrentExecutions(ctx, &row)
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateCurrentExecution failed. Error: %v", err)
@@ -1057,7 +1078,7 @@ func updateCurrentExecution(
 	return nil
 }
 
-func buildExecutionRow(
+func (m *sqlExecutionStore) buildExecutionRow(
 	namespaceID string,
 	workflowID string,
 	executionInfo *commonpb.DataBlob,
@@ -1069,7 +1090,7 @@ func buildExecutionRow(
 ) (row *sqlplugin.ExecutionsRow, err error) {
 	// TODO: double encoding execution state? executionState could've been passed to the function as
 	// *commonpb.DataBlob like executionInfo
-	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
+	stateBlob, err := m.serializer.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,7 +1133,7 @@ func (m *sqlExecutionStore) createExecution(
 	shardID int32,
 ) error {
 
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1147,7 +1168,7 @@ func (m *sqlExecutionStore) createExecution(
 	return nil
 }
 
-func updateExecution(
+func (m *sqlExecutionStore) updateExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	namespaceID string,
@@ -1158,8 +1179,9 @@ func updateExecution(
 	lastWriteVersion int64,
 	dbRecordVersion int64,
 	shardID int32,
+	condition int64,
 ) error {
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1172,7 +1194,29 @@ func updateExecution(
 	if err != nil {
 		return err
 	}
-	result, err := tx.UpdateExecutions(ctx, row)
+
+	var result sql.Result
+	conditionalUpdater, supportsConditionalUpdate := tx.(sqlplugin.HistoryExecutionConditionalUpdater)
+	if supportsConditionalUpdate {
+		result, err = conditionalUpdater.UpdateExecutionsWithCondition(ctx, &sqlplugin.ExecutionsUpdate{
+			ExecutionsRow: *row,
+			Condition:     condition,
+		})
+	} else {
+		if err := lockAndCheckExecution(
+			ctx,
+			tx,
+			shardID,
+			row.NamespaceID,
+			workflowID,
+			row.RunID,
+			condition,
+			dbRecordVersion,
+		); err != nil {
+			return err
+		}
+		result, err = tx.UpdateExecutions(ctx, row)
+	}
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateExecution failed. Erorr: %v", err)
 	}
@@ -1181,6 +1225,20 @@ func updateExecution(
 		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
 	}
 	if rowsAffected != 1 {
+		if rowsAffected == 0 && supportsConditionalUpdate {
+			if err := lockAndCheckExecution(
+				ctx,
+				tx,
+				shardID,
+				row.NamespaceID,
+				workflowID,
+				row.RunID,
+				condition,
+				dbRecordVersion,
+			); err != nil {
+				return err
+			}
+		}
 		return serviceerror.NewNotFoundf("updateExecution failed. Affected %v rows updated instead of 1.", rowsAffected)
 	}
 
@@ -1188,10 +1246,11 @@ func updateExecution(
 }
 
 func workflowExecutionStateFromCurrentExecutionsRow(
+	serializer serialization.Serializer,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
 	if len(row.Data) > 0 && row.DataEncoding != "" {
-		return serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
+		return serializer.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.

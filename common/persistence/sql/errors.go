@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func extractCurrentWorkflowConflictError(
+func (m *sqlExecutionStore) extractCurrentWorkflowConflictError(
 	currentRow *sqlplugin.CurrentExecutionsRow,
 	message string,
 ) error {
@@ -23,18 +23,19 @@ func extractCurrentWorkflowConflictError(
 		}
 	}
 
-	executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
+	executionState, err := workflowExecutionStateFromCurrentExecutionsRow(m.serializer, currentRow)
 	if err != nil {
 		return err
 	}
 
 	return &p.CurrentWorkflowConditionFailedError{
-		Msg:              message,
-		RequestIDs:       executionState.RequestIds,
-		RunID:            currentRow.RunID.String(),
-		State:            currentRow.State,
-		Status:           currentRow.Status,
-		LastWriteVersion: currentRow.LastWriteVersion,
-		StartTime:        currentRow.StartTime,
+		Msg:                 message,
+		RequestIDs:          executionState.RequestIds,
+		RunID:               currentRow.RunID.String(),
+		FirstExecutionRunID: executionState.FirstExecutionRunId,
+		State:               currentRow.State,
+		Status:              currentRow.Status,
+		LastWriteVersion:    currentRow.LastWriteVersion,
+		StartTime:           currentRow.StartTime,
 	}
 }

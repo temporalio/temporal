@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	mysqlschemaV8 "go.temporal.io/server/schema/mysql/v8"
@@ -34,6 +35,7 @@ type db struct {
 	handle    *sqlplugin.DatabaseHandle
 	tx        *sqlx.Tx
 	converter DataConverter
+	logger    log.Logger
 }
 
 var _ sqlplugin.AdminDB = (*db)(nil)
@@ -60,12 +62,14 @@ func newDB(
 	dbName string,
 	handle *sqlplugin.DatabaseHandle,
 	tx *sqlx.Tx,
+	logger log.Logger,
 ) *db {
 	mdb := &db{
 		dbKind: dbKind,
 		dbName: dbName,
 		handle: handle,
 		tx:     tx,
+		logger: logger,
 	}
 	mdb.converter = &converter{}
 	return mdb
@@ -88,7 +92,7 @@ func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, mdb.handle.ConvertError(err)
 	}
-	return newDB(mdb.dbKind, mdb.dbName, mdb.handle, xtx), nil
+	return newDB(mdb.dbKind, mdb.dbName, mdb.handle, xtx, mdb.logger), nil
 }
 
 // Commit commits a previously started transaction

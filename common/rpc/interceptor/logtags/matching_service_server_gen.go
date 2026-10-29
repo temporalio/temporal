@@ -31,6 +31,14 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.CancelOutstandingPollResponse:
 		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsRequest:
+		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsResponse:
+		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsPartitionRequest:
+		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsPartitionResponse:
+		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationRequest:
 		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationResponse:
@@ -38,6 +46,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 	case *matchingservice.CheckTaskQueueVersionMembershipRequest:
 		return nil
 	case *matchingservice.CheckTaskQueueVersionMembershipResponse:
+		return nil
+	case *matchingservice.CountWorkersRequest:
+		return nil
+	case *matchingservice.CountWorkersResponse:
 		return nil
 	case *matchingservice.CreateNexusEndpointRequest:
 		return nil
@@ -95,6 +107,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.GetWorkerVersioningRulesResponse:
 		return nil
+	case *matchingservice.GrantEagerDispatchRequest:
+		return nil
+	case *matchingservice.GrantEagerDispatchResponse:
+		return nil
 	case *matchingservice.ListNexusEndpointsRequest:
 		return nil
 	case *matchingservice.ListNexusEndpointsResponse:
@@ -120,7 +136,7 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.PollWorkflowTaskQueueRequest:
 		return nil
-	case *matchingservice.PollWorkflowTaskQueueResponse:
+	case *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
@@ -155,6 +171,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 	case *matchingservice.SyncDeploymentUserDataRequest:
 		return nil
 	case *matchingservice.SyncDeploymentUserDataResponse:
+		return nil
+	case *matchingservice.UpdateFairnessStateRequest:
+		return nil
+	case *matchingservice.UpdateFairnessStateResponse:
 		return nil
 	case *matchingservice.UpdateNexusEndpointRequest:
 		return nil

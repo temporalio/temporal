@@ -25,7 +25,7 @@ var (
 	// ErrDependencyTaskNotCompleted is the error returned when a task this task depends on is not completed yet
 	ErrDependencyTaskNotCompleted = errors.New("a task which this task depends on has not been completed yet")
 	// ErrDuplicate is exported temporarily for integration test
-	ErrDuplicate = errors.New("duplicate task, completing it")
+	ErrDuplicate = serviceerror.NewAlreadyExists("duplicate task, completing it")
 	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located
 	ErrLocateCurrentWorkflowExecution = serviceerror.NewUnavailable("unable to locate current workflow execution")
 	// ErrStaleReference is an indicator that a task or an API request cannot be executed because it contains a stale reference.
@@ -137,6 +137,12 @@ var (
 
 	// ErrResetRedirectLimitReached indicates a possible long chain (or a loop) of resets that cannot be handled.
 	ErrResetRedirectLimitReached = serviceerror.NewInternal("The chain of resets is too long to iterate.")
+	// ErrBusinessIDRateLimitExceeded is returned when the per-(namespace, businessID, archetype) start rate limit is exceeded.
+	ErrBusinessIDRateLimitExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "business ID reuse rate limit exceeded",
+	}
 )
 
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that

@@ -1,0 +1,173 @@
+package callback
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// logInternalError emits a log statement for internalMsg, tagged with both
+// internalErr and a reference-id. An opaque error containing the reference-id is
+// returned. Intended to be used to hide internal errors from end users.
+func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
+	referenceID := uuid.NewString()
+	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
+	return fmt.Errorf("internal error, reference-id: %v", referenceID)
+}
+
+// invocableInternal is an invocable that delivers the Nexus operation completion data to History for cross-shard
+// callbacks.
+type invocableInternal struct {
+	callback   *callbackspb.Callback_Nexus
+	attempt    int32
+	completion nexusrpc.CompleteOperationOptions
+	requestID  string
+}
+
+func (c invocableInternal) WrapError(result invocationResult, err error) error {
+	// Return the invocation result error if present
+	if resultErr := result.error(); resultErr != nil {
+		return resultErr
+	}
+
+	return err
+}
+
+func (c invocableInternal) Invoke(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	h *invocationTaskHandler,
+	task *callbackspb.InvocationTask,
+	taskAttr chasm.TaskAttributes,
+) invocationResult {
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	startTime := time.Now()
+	// Sentinel default: a return path that forgets to set outcome must not read as a success.
+	outcome := outcomeUnknown
+	defer func() {
+		namespaceTag := metrics.NamespaceTag(ns.Name().String())
+		destTag := metrics.DestinationTag(taskAttr.Destination)
+		outcomeMetricTag := metrics.OutcomeTag(string(outcome))
+		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeMetricTag)
+		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeMetricTag)
+	}()
+
+	header := nexus.Header(c.callback.GetHeader())
+	if header == nil {
+		header = nexus.Header{}
+	}
+
+	// Get back the component ref and (optional) request ID from the callback token in the header.
+	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedToken == "" {
+		outcome = outcomeMissingToken
+		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
+	}
+
+	decodedRef, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
+	if err != nil {
+		outcome = outcomeTokenDecodeError
+		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
+	}
+
+	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
+	if requestID == "" {
+		requestID = c.requestID
+	}
+
+	// Validate that the bytes are a valid ChasmComponentRef
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := proto.Unmarshal(decodedRef, ref); err != nil {
+		outcome = outcomeInvalidRef
+		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
+	}
+
+	request, err := c.getHistoryRequest(decodedRef, requestID)
+	if err != nil {
+		outcome = outcomeRequestBuildError
+		return invocationResultFail{logInternalError(h.logger, "failed to build history request", err)}
+	}
+
+	// RPC to History for cross-shard completion delivery.
+	_, err = h.historyClient.CompleteNexusOperationChasm(ctx, request)
+	if err != nil {
+		// Set the outcome tag based on the gRPC error received (if applicable).
+		outcome = grpcErrorOutcome(err)
+		if ctx.Err() != nil {
+			outcome = outcomeRequestTimeout
+		}
+		msg := logInternalError(h.logger, "failed to complete Nexus operation", err)
+		if common.IsRetryableRPCError(err) {
+			return invocationResultRetry{err: msg}
+		}
+		return invocationResultFail{msg}
+	}
+
+	outcome = outcomeSuccess
+	return invocationResultOK{}
+}
+
+func (c invocableInternal) getHistoryRequest(
+	refBytes []byte,
+	requestID string,
+) (*historyservice.CompleteNexusOperationChasmRequest, error) {
+	var req *historyservice.CompleteNexusOperationChasmRequest
+
+	completion := &tokenspb.NexusOperationCompletion{
+		ComponentRef: refBytes,
+		RequestId:    requestID,
+	}
+
+	if c.completion.Error == nil {
+		var payload *commonpb.Payload
+		if c.completion.Result != nil {
+			var ok bool
+			payload, ok = c.completion.Result.(*commonpb.Payload)
+			if !ok {
+				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", c.completion.Result)
+			}
+		}
+
+		req = &historyservice.CompleteNexusOperationChasmRequest{
+			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
+				Success: payload,
+			},
+			CloseTime:  timestamppb.New(c.completion.CloseTime),
+			Completion: completion,
+		}
+	} else {
+		// Convert the nexus.OperationError into a failurepb.Failure.
+		apiFailure, err := commonnexus.OperationErrorToTemporalFailure(c.completion.Error)
+		if err != nil {
+			return nil, err
+		}
+
+		req = &historyservice.CompleteNexusOperationChasmRequest{
+			Completion: completion,
+			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
+				Failure: apiFailure,
+			},
+			CloseTime: timestamppb.New(c.completion.CloseTime),
+		}
+	}
+
+	return req, nil
+}

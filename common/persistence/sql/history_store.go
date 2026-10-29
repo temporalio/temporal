@@ -83,7 +83,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		if err != nil {
 			return err
 		}
-		if !(rowsAffected == 1 || rowsAffected == 2) {
+		if rowsAffected != 1 && rowsAffected != 2 {
 			return fmt.Errorf("expected 1 or 2 row to be affected for node table, got %v", rowsAffected)
 		}
 
@@ -94,7 +94,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			if err != nil {
 				return err
 			}
-			if !(rowsAffected == 1 || rowsAffected == 2) {
+			if rowsAffected != 1 && rowsAffected != 2 {
 				return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
 			}
 			return nil
@@ -157,7 +157,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := m.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,8 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	var token *historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
 		if request.ReverseOrder {
-			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID, LastTxnID: MaxTxnID}
+			// The cursor is exclusive, so pair the node below the exclusive MaxNodeID with the largest sentinel.
+			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID - 1, LastTxnID: MaxTxnID}
 		} else {
 			token = &historyNodePaginationToken{LastNodeID: request.MinNodeID, LastTxnID: MinTxnID}
 		}
@@ -324,7 +325,7 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 	if err != nil {
 		return err
 	}
-	if !(rowsAffected == 1 || rowsAffected == 2) {
+	if rowsAffected != 1 && rowsAffected != 2 {
 		return fmt.Errorf("expected 1 or 2 row to be affected for tree table, got %v", rowsAffected)
 	}
 	return nil
@@ -449,7 +450,7 @@ func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
 	request *p.InternalGetHistoryTreeContainingBranchRequest,
 ) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := m.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}

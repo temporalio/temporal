@@ -5,9 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -15,6 +17,8 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	mockp "go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -62,9 +66,10 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 		},
 	)
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -86,9 +91,10 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	// No CompleteHistoryTask expected
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -121,9 +127,10 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		serviceerror.NewInternal("simulated deletion error"),
 	)
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -135,4 +142,210 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateWorkflowExecution should succeed even if task deletion fails, got error: %v", err)
 	}
+}
+
+func TestExecutionManager_TrimHistoryBranchSkipped_NonWorkflow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&p.ConditionFailedError{Msg: "conflict"})
+	// trimHistoryNode logic skipped for non-workflow archetype and should be no call to GetWorkflowExecution.
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Times(0)
+
+	serializer := serialization.NewSerializer()
+	em := p.NewExecutionManager(
+		store,
+		serializer,
+		nil,
+		// TrimHistoryBranch logic is best effort and only emits error log if failed.
+		// Capture error logs to verify no unexpected errors.
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	req := newTestUpdateRequest(nil)
+	req.ArchetypeID = chasm.WorkflowArchetypeID + 1 // Non-workflow archetype
+	_, err := em.UpdateWorkflowExecution(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected UpdateWorkflowExecution to return error")
+	}
+	if _, ok := err.(*p.ConditionFailedError); !ok {
+		t.Fatalf("expected ConditionFailedError, got %T", err)
+	}
+}
+
+func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(&p.ConditionFailedError{Msg: "conflict"})
+	store.EXPECT().GetHistoryBranchUtil().Times(0)
+
+	serializer := serialization.NewSerializer()
+	versionHistories := versionhistory.NewVersionHistories(&historyspb.VersionHistory{}) // Empty branch token
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      "ns",
+		WorkflowId:       "wid",
+		ExecutionStats:   &persistencespb.ExecutionStats{},
+		VersionHistories: versionHistories,
+	}
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  "rid",
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+	executionInfoBlob, err := serializer.WorkflowExecutionInfoToBlob(executionInfo)
+	if err != nil {
+		t.Fatalf("WorkflowExecutionInfoToBlob error: %v", err)
+	}
+	executionStateBlob, err := serializer.WorkflowExecutionStateToBlob(executionState)
+	if err != nil {
+		t.Fatalf("WorkflowExecutionStateToBlob error: %v", err)
+	}
+
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&p.InternalGetWorkflowExecutionResponse{
+			State: &p.InternalWorkflowMutableState{
+				ExecutionInfo:  executionInfoBlob,
+				ExecutionState: executionStateBlob,
+			},
+		},
+		nil,
+	)
+
+	em := p.NewExecutionManager(
+		store,
+		serializer,
+		nil,
+		// TrimHistoryBranch logic is best effort and only emits error log if failed.
+		// Capture error logs to verify no unexpected errors.
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	_, err = em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest(nil))
+	if err == nil {
+		t.Fatal("expected UpdateWorkflowExecution to return error")
+	}
+	if _, ok := err.(*p.ConditionFailedError); !ok {
+		t.Fatalf("expected ConditionFailedError, got %T", err)
+	}
+}
+
+// runAlreadyExistsCheckingStore is an ExecutionStore that checks CheckRunAlreadyExists itself.
+type runAlreadyExistsCheckingStore struct {
+	*mockp.MockExecutionStore
+}
+
+func (runAlreadyExistsCheckingStore) SupportsCheckRunAlreadyExists() bool {
+	return true
+}
+
+func newCheckRunAlreadyExistsCreateRequest() *p.CreateWorkflowExecutionRequest {
+	return &p.CreateWorkflowExecutionRequest{
+		ShardID:               1,
+		RangeID:               1,
+		Mode:                  p.CreateWorkflowModeBrandNew,
+		ArchetypeID:           chasm.WorkflowArchetypeID,
+		CheckRunAlreadyExists: true,
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+			NextEventID:    2,
+		},
+	}
+}
+
+func newCheckRunAlreadyExistsStore(t *testing.T) *mockp.MockExecutionStore {
+	store := mockp.NewMockExecutionStore(gomock.NewController(t))
+	store.EXPECT().GetName().Return("mock-store").AnyTimes()
+	return store
+}
+
+func newCheckRunAlreadyExistsManager(store p.ExecutionStore) p.ExecutionManager {
+	return p.NewExecutionManager(
+		store,
+		serialization.NewSerializer(),
+		nil,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+}
+
+func expectExistingRun(t *testing.T, store *mockp.MockExecutionStore, status enumspb.WorkflowExecutionStatus) {
+	stateBlob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(
+		&persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, Status: status},
+	)
+	require.NoError(t, err)
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.GetWorkflowExecutionRequest) (*p.InternalGetWorkflowExecutionResponse, error) {
+			require.Equal(t, "ns", req.NamespaceID)
+			require.Equal(t, "wid", req.WorkflowID)
+			require.Equal(t, "rid", req.RunID)
+			return &p.InternalGetWorkflowExecutionResponse{
+				State: &p.InternalWorkflowMutableState{ExecutionState: stateBlob},
+			}, nil
+		})
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_RunExists(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	expectExistingRun(t, store, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+
+	_, err := newCheckRunAlreadyExistsManager(store).CreateWorkflowExecution(context.Background(), newCheckRunAlreadyExistsCreateRequest())
+
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	require.ErrorAs(t, err, &existsErr)
+	require.Equal(t, "rid", existsErr.RunID)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, existsErr.Status)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_RunNotFound(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	store.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.InternalCreateWorkflowExecutionRequest) (*p.InternalCreateWorkflowExecutionResponse, error) {
+			require.False(t, req.CheckRunAlreadyExists)
+			return &p.InternalCreateWorkflowExecutionResponse{}, nil
+		})
+
+	_, err := newCheckRunAlreadyExistsManager(store).CreateWorkflowExecution(context.Background(), newCheckRunAlreadyExistsCreateRequest())
+	require.NoError(t, err)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_Create_StoreChecks(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	store.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.InternalCreateWorkflowExecutionRequest) (*p.InternalCreateWorkflowExecutionResponse, error) {
+			require.True(t, req.CheckRunAlreadyExists)
+			return &p.InternalCreateWorkflowExecutionResponse{}, nil
+		})
+
+	_, err := newCheckRunAlreadyExistsManager(runAlreadyExistsCheckingStore{store}).CreateWorkflowExecution(
+		context.Background(), newCheckRunAlreadyExistsCreateRequest())
+	require.NoError(t, err)
+}
+
+func TestExecutionManager_CheckRunAlreadyExists_UpdateWithNew_RunExists(t *testing.T) {
+	store := newCheckRunAlreadyExistsStore(t)
+	expectExistingRun(t, store, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+
+	request := newTestUpdateRequest(nil)
+	request.CheckRunAlreadyExists = true
+	newSnapshot := newCheckRunAlreadyExistsCreateRequest().NewWorkflowSnapshot
+	request.NewWorkflowSnapshot = &newSnapshot
+
+	_, err := newCheckRunAlreadyExistsManager(store).UpdateWorkflowExecution(context.Background(), request)
+
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	require.ErrorAs(t, err, &existsErr)
+	require.Equal(t, "rid", existsErr.RunID)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, existsErr.Status)
 }

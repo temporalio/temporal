@@ -71,6 +71,36 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
+func (c *retryableClient) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	var resp *matchingservice.CancelOutstandingWorkerPollsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	var resp *matchingservice.CancelOutstandingWorkerPollsPartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -95,6 +125,21 @@ func (c *retryableClient) CheckTaskQueueVersionMembership(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CountWorkersResponse, error) {
+	var resp *matchingservice.CountWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountWorkers(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -500,6 +545,21 @@ func (c *retryableClient) SyncDeploymentUserData(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.SyncDeploymentUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	var resp *matchingservice.UpdateFairnessStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateFairnessState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

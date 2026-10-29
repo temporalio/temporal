@@ -909,6 +909,20 @@ func (p *metadataRetryablePersistenceClient) InitializeSystemNamespaces(
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
 
+func (p *metadataRetryablePersistenceClient) WatchNamespaces(
+	ctx context.Context,
+) (<-chan *NamespaceWatchEvent, error) {
+	var watchCh <-chan *NamespaceWatchEvent
+	op := func(ctx context.Context) error {
+		var err error
+		watchCh, err = p.persistence.WatchNamespaces(ctx)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return watchCh, err
+}
+
 func (p *metadataRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }

@@ -75,12 +75,10 @@ func (s *namespaceSuite) TearDownTest() {
 }
 
 func (s *namespaceSuite) TestFrontendAPIMetrics() {
-	namespaceNameGetter := reflect.TypeOf((*NamespaceNameGetter)(nil)).Elem()
+	namespaceNameGetter := reflect.TypeFor[NamespaceNameGetter]()
 
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
+	for method := range t.Methods() {
 		methodName := method.Name
 		methodType := method.Type
 
@@ -100,12 +98,10 @@ func (s *namespaceSuite) TestFrontendAPIMetrics() {
 }
 
 func (s *namespaceSuite) TestMatchingAPIMetrics() {
-	namespaceIDGetter := reflect.TypeOf((*NamespaceIDGetter)(nil)).Elem()
+	namespaceIDGetter := reflect.TypeFor[NamespaceIDGetter]()
 
-	var service matchingservice.MatchingServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
+	t := reflect.TypeFor[matchingservice.MatchingServiceServer]()
+	for method := range t.Methods() {
 		methodName := method.Name
 		methodType := method.Type
 
@@ -125,12 +121,10 @@ func (s *namespaceSuite) TestMatchingAPIMetrics() {
 }
 
 func (s *namespaceSuite) TestHistoryAPIMetrics() {
-	namespaceIDGetter := reflect.TypeOf((*NamespaceIDGetter)(nil)).Elem()
+	namespaceIDGetter := reflect.TypeFor[NamespaceIDGetter]()
 
-	var service historyservice.HistoryServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
+	t := reflect.TypeFor[historyservice.HistoryServiceServer]()
+	for method := range t.Methods() {
 		methodName := method.Name
 		methodType := method.Type
 
@@ -156,7 +150,7 @@ func (s *namespaceSuite) TestGetNamespace() {
 	register.EXPECT().GetNamespaceName(namespace.ID("exist")).Return(namespace.Name("exist"), nil)
 	register.EXPECT().GetNamespaceName(namespace.ID("nonexist")).Return(namespace.EmptyName, errors.New("not found"))
 	testCases := []struct {
-		method        interface{}
+		method        any
 		namespaceName namespace.Name
 	}{
 		{

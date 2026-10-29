@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/sdk"
 )
 
 type payloadSerializer struct{}
@@ -98,6 +99,10 @@ func setUnknownNexusContent(nexusHeader nexus.Header, payloadMetadata map[string
 
 // Serialize implements nexus.Serializer.
 func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
+	if v == nil {
+		// Use same structure as the nil serializer from the Nexus Go SDK.
+		return &nexus.Content{Header: nexus.Header{}}, nil
+	}
 	payload, ok := v.(*commonpb.Payload)
 	if !ok {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)
@@ -135,6 +140,9 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		}
 		content.Header["type"] = fmt.Sprintf("application/x-protobuf; message-type=%q", messageType)
 	case "json/plain":
+		if len(payload.Metadata) != 1 {
+			return xTemporalPayload(payload)
+		}
 		content.Header["type"] = "application/json"
 	case "binary/null":
 		if len(payload.Metadata) != 1 {
@@ -162,6 +170,26 @@ func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
 		Header: nexus.Header{"type": "application/x-temporal-payload"},
 		Data:   data,
 	}, nil
+}
+
+// EncodeSystemPayload will marshal the supplied value into a commonpb.Payload, flagged
+// as a "system" payload. Meaning it is an envelope type that should bypass a decode
+// step on the client.
+func EncodeSystemPayload(value any) (*commonpb.Payload, error) {
+	encodedPayload, err := sdk.PreferProtoDataConverter.ToPayload(value)
+	if err != nil {
+		return nil, err
+	}
+
+	if encoding := string(encodedPayload.Metadata["encoding"]); encoding != "binary/protobuf" {
+		return nil, fmt.Errorf("system payload must be encoded as binary/protobuf but got %q", encoding)
+	}
+	if messageType := string(encodedPayload.Metadata["messageType"]); messageType == "" {
+		return nil, errors.New("system payload is missing messageType metadata")
+	}
+
+	encodedPayload.Metadata[SystemPayloadMetadataKey] = []byte("true")
+	return encodedPayload, nil
 }
 
 var PayloadSerializer nexus.Serializer = payloadSerializer{}

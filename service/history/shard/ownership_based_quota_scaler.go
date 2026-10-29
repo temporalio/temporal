@@ -74,9 +74,7 @@ func NewOwnershipBasedQuotaScaler(
 	}
 
 	scaler.shardCount.Store(shardCountNotSet)
-	scaler.shutdownWG.Add(1)
-	go func() {
-		defer scaler.shutdownWG.Done()
+	scaler.shutdownWG.Go(func() {
 
 		for count := range scaler.subscription.ShardCount() {
 			scaler.shardCount.Store(int64(count))
@@ -84,7 +82,7 @@ func NewOwnershipBasedQuotaScaler(
 				scaler.updateAppliedCallback <- struct{}{}
 			}
 		}
-	}()
+	})
 
 	return scaler, nil
 }

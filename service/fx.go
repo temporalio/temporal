@@ -13,8 +13,11 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
@@ -38,15 +41,19 @@ type (
 	GrpcServerOptionsParams struct {
 		fx.In
 
-		Logger                       log.Logger
-		RPCFactory                   common.RPCFactory
-		RetryableInterceptor         *interceptor.RetryableInterceptor
-		TelemetryInterceptor         *interceptor.TelemetryInterceptor
-		RateLimitInterceptor         *interceptor.RateLimitInterceptor
-		TracingStatsHandler          telemetry.ServerStatsHandler
-		MetricsStatsHandler          metrics.ServerStatsHandler
-		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
-		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
+		Logger                        log.Logger
+		RPCFactory                    common.RPCFactory
+		ServiceErrorInterceptor       *interceptor.ServiceErrorInterceptor
+		RetryableInterceptor          *interceptor.RetryableInterceptor
+		TelemetryInterceptor          *interceptor.TelemetryInterceptor
+		NamespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor `optional:"true"`
+		RateLimitInterceptor          *interceptor.RateLimitInterceptor
+		TracingStatsHandler           telemetry.ServerStatsHandler
+		MetricsStatsHandler           metrics.ServerStatsHandler
+		ContextMetadataInterceptor    *interceptor.ContextMetadataInterceptor `optional:"true"`
+		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
+		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
+		TestHooks                     testhooks.TestHooks
 	}
 )
 
@@ -155,7 +162,7 @@ func GrpcServerOptionsProvider(
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
-		interceptor.ServiceErrorInterceptor,
+		params.ServiceErrorInterceptor.Intercept,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
 		params.TelemetryInterceptor.UnaryIntercept,
@@ -163,8 +170,20 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 
 	interceptors = append(interceptors, params.AdditionalInterceptors...)
 
-	return append(
-		interceptors,
-		params.RateLimitInterceptor.Intercept,
-		params.RetryableInterceptor.Intercept)
+	if params.NamespaceRateLimitInterceptor != nil {
+		interceptors = append(interceptors, params.NamespaceRateLimitInterceptor.Intercept)
+	}
+
+	interceptors = append(interceptors, params.RateLimitInterceptor.Intercept)
+
+	if params.ContextMetadataInterceptor != nil {
+		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
+	}
+
+	faultGenerator := grpcfaultstest.NewGenerator(params.TestHooks)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+		interceptors = append(interceptors, faultInterceptor)
+	}
+
+	return append(interceptors, params.RetryableInterceptor.Intercept)
 }

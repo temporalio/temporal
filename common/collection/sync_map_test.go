@@ -17,35 +17,35 @@ func TestMap_MultiThreaded(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-barrier
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			m.Set(i, i)
 		}
 	}()
 	go func() {
 		<-barrier
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			m.Get(i)
 		}
 	}()
 	go func() {
 		<-barrier
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			m.GetOrSet(i, i)
 		}
 	}()
 	go func() {
 		<-barrier
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			m.Pop(i)
 		}
 	}()
 	go func() {
 		<-barrier
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			m.PopAll()
 		}
 	}()

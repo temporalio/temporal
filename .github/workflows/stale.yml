@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: label stale pull requests
-        uses: actions/stale@v9
+        uses: actions/stale@3a9db7e6a41a89f618792c92c0e97cc736e1b13f # v10.0.0
         with:
-          days-before-close: -1  # ie disabled
+          days-before-close: -1 # ie disabled
           days-before-stale: 120
-          days-before-issue-stale: -1  # ie disabled
+          days-before-issue-stale: -1 # ie disabled
           stale-pr-label: stale
           stale-pr-message: 'This PR was marked as stale. Please update or close it.'

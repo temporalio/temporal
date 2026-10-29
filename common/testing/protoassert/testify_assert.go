@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/temporalproto"
+	"go.temporal.io/server/common/testing/protodiff"
 )
 
 func formatListDiff(listA, listB any, extraA, extraB any) string {
@@ -30,7 +30,7 @@ func formatListDiff(listA, listB any, extraA, extraB any) string {
 	return msg.String()
 }
 
-func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
+func diffLists(listA, listB any) (extraA, extraB []any) {
 	aValue := reflect.ValueOf(listA)
 	bValue := reflect.ValueOf(listB)
 
@@ -39,14 +39,14 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 
 	// Mark indexes in bValue that we already used
 	visited := make([]bool, bLen)
-	for i := 0; i < aLen; i++ {
+	for i := range aLen {
 		element := aValue.Index(i).Interface()
 		found := false
-		for j := 0; j < bLen; j++ {
+		for j := range bLen {
 			if visited[j] {
 				continue
 			}
-			if temporalproto.DeepEqual(bValue.Index(j).Interface(), element) {
+			if protodiff.Equal(bValue.Index(j).Interface(), element) {
 				visited[j] = true
 				found = true
 				break
@@ -57,7 +57,7 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 		}
 	}
 
-	for j := 0; j < bLen; j++ {
+	for j := range bLen {
 		if visited[j] {
 			continue
 		}
@@ -67,7 +67,7 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 	return
 }
 
-func isEmpty(object interface{}) bool {
+func isEmpty(object any) bool {
 
 	// get nil case out of the way
 	if object == nil {
@@ -81,7 +81,7 @@ func isEmpty(object interface{}) bool {
 	case reflect.Chan, reflect.Map, reflect.Slice:
 		return objValue.Len() == 0
 	// pointers are empty if nil or if the value they point to is empty
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if objValue.IsNil() {
 			return true
 		}
@@ -96,7 +96,7 @@ func isEmpty(object interface{}) bool {
 }
 
 // isList checks that the provided value is array or slice.
-func isList(t assert.TestingT, list interface{}, msgAndArgs ...interface{}) (ok bool) {
+func isList(t assert.TestingT, list any, msgAndArgs ...any) (ok bool) {
 	kind := reflect.TypeOf(list).Kind()
 	if kind != reflect.Array && kind != reflect.Slice {
 		return assert.Fail(t, fmt.Sprintf("%q has an unsupported type %s, expecting array or slice", list, kind),

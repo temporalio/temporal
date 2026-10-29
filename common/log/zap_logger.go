@@ -1,6 +1,9 @@
 package log
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"slices"
@@ -17,23 +20,60 @@ const (
 	// we put a default message when it is empty so that the log can be searchable/filterable
 	defaultMsgForEmpty = "none"
 	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
-	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
-	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+
+	// Console output (testing.T.Log):
+	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // "console" (default) or "json"
+	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // min level written to console (default: debug)
+
+	// File output (written once per process to a shared file):
+	TestLogFileEnvVar       = "TEMPORAL_TEST_LOG_FILE"        // path to log file; empty disables file logging
+	TestLogFileFormatEnvVar = "TEMPORAL_TEST_LOG_FILE_FORMAT" // "json" (default) or "console"
+	TestLogFileLevelEnvVar  = "TEMPORAL_TEST_LOG_FILE_LEVEL"  // min level written to file (default: debug)
 )
 
 var DefaultZapEncoderConfig = zapcore.EncoderConfig{
-	TimeKey:        "ts",
-	LevelKey:       "level",
-	NameKey:        "logger",
-	CallerKey:      zapcore.OmitKey, // we use our own caller
-	FunctionKey:    zapcore.OmitKey,
-	MessageKey:     "msg",
-	StacktraceKey:  "stacktrace",
-	LineEnding:     zapcore.DefaultLineEnding,
-	EncodeLevel:    zapcore.LowercaseLevelEncoder,
-	EncodeTime:     zapcore.ISO8601TimeEncoder,
-	EncodeDuration: zapcore.SecondsDurationEncoder,
-	EncodeCaller:   zapcore.ShortCallerEncoder,
+	TimeKey:             "ts",
+	LevelKey:            "level",
+	NameKey:             "logger",
+	CallerKey:           zapcore.OmitKey, // we use our own caller
+	FunctionKey:         zapcore.OmitKey,
+	MessageKey:          "msg",
+	StacktraceKey:       "stacktrace",
+	LineEnding:          zapcore.DefaultLineEnding,
+	EncodeLevel:         zapcore.LowercaseLevelEncoder,
+	EncodeTime:          zapcore.ISO8601TimeEncoder,
+	EncodeDuration:      zapcore.SecondsDurationEncoder,
+	EncodeCaller:        zapcore.ShortCallerEncoder,
+	NewReflectedEncoder: newSafeReflectedEncoder,
+}
+
+// newSafeReflectedEncoder wraps the JSON encoder that zap uses to serialize reflected fields
+// (tag.Any/zap.Reflect of arbitrary types) so that a panic while serializing a single log field
+// degrades to an error placeholder instead of propagating. Without this, a buggy MarshalJSON or
+// similar could crash the process from an otherwise-harmless log line.
+//
+// NOTE: recover() only catches ordinary panics. It does NOT catch Go *fatal* errors such as
+// "concurrent map iteration and map write" (those call runtime.fatal and are unrecoverable), so
+// avoid logging values whose maps may be mutated concurrently. Because this encoder is JSON-based
+// it only serializes exported fields, which sidesteps the common case of racy unexported maps.
+func newSafeReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
+	enc := json.NewEncoder(w)
+	// For consistency with zap's default reflected encoder.
+	enc.SetEscapeHTML(false)
+	return &safeReflectedEncoder{enc: enc}
+}
+
+type safeReflectedEncoder struct {
+	enc zapcore.ReflectedEncoder
+}
+
+func (e *safeReflectedEncoder) Encode(v any) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic serializing log field: %v", r)
+		}
+	}()
+	return e.enc.Encode(v)
 }
 
 type (
@@ -179,8 +219,8 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 // With() handles the provided tags as "upserts", replacing any matching keys with new values.
 // Note that we distinguish between the following two seemingly identical lines:
 //
-//	logger.With(logger, tag.NewStringTag("foo", "bar")).Info("msg")
-//	logger.Info("msg", tag.NewStringTag("foo", "bar")
+//	logger.With(logger, tag.String("foo", "bar")).Info("msg")
+//	logger.Info("msg", tag.String("foo", "bar")
 //
 // by deduping "foo" against any existing "foo" tags *only in the former*
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
@@ -208,6 +248,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 		zl:     l.zl,
 		skip:   l.skip + extraSkip,
 		baseZl: l.baseZl,
+		tags:   l.tags,
 	}
 }
 

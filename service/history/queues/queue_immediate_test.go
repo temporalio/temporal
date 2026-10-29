@@ -64,6 +64,7 @@ func (s *immediateQueueSuite) SetupTest() {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		nil, // execuable factory
+		nil, // taskPostProcessor
 	)
 }
 

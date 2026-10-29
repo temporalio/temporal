@@ -17,11 +17,15 @@ const (
 	workerHostNameColName       = "HostName"
 	workerTaskQueueColName      = "TaskQueue"
 	workerDeploymentNameColName = "DeploymentName"
+	workerBuildIDColName        = "BuildId"
 	workerSdkNameColName        = "SdkName"
 	workerSdkVersionColName     = "SdkVersion"
 	workerStartTimeColName      = "StartTime"
 	workerHeartbeatTimeColName  = "HeartbeatTime"
 	workerStatusColName         = "WorkerStatus"
+	// "Status" is a SQL reserved word, so the parser lowercases and backtick-quotes it.
+	// After stripping backticks we get "status".
+	workerStatusColNameAlias = "status"
 )
 
 const (
@@ -35,7 +39,7 @@ FilterWorkers filters the list of per-namespace worker heartbeats against the pr
 The query should be a valid SQL query without WHERE clause.
 
 Query is used to filter workers based on worker heartbeat info.
-The following worker status attributes are expected are supported as part of the query:
+The following worker attributes are supported as part of the query:
 * WorkerInstanceKey
 * WorkerIdentity
 * HostName
@@ -45,8 +49,8 @@ The following worker status attributes are expected are supported as part of the
 * SdkName
 * SdkVersion
 * StartTime
-* LastHeartbeatTime
-* Status
+* HeartbeatTime
+* WorkerStatus (or Status)
 Currently metrics are not supported as a part of ListWorkers query.
 
 Field names are case-sensitive.
@@ -56,15 +60,19 @@ The query can have conditions on multiple fields.
 Date time fields should be in RFC3339 format.
 Example query:
 
-	"TaskQueue = 'my_task_queue' AND LastHeartbeatTime < '2023-10-27T10:30:00Z' "
+	"TaskQueue = 'my_task_queue' AND HeartbeatTime < '2023-10-27T10:30:00Z' "
 
 Different fields can support different operators.
-  - string fields (e.g., WorkerIdentity, HostName, TaskQueue, DeploymentName, SdkName, SdkVersion):
-		starts_with, not starts_with
-  - time fields (e.g., StartTime, LastHeartbeatTime):
-		 =, !=, >, >=, <, <=, between
+  - string fields (e.g., WorkerIdentity, HostName, TaskQueue, DeploymentName, BuildId, SdkName, SdkVersion):
+		=, !=, starts_with, not starts_with, IS NULL, IS NOT NULL
+  - time fields (e.g., StartTime, HeartbeatTime):
+		 =, !=, >, >=, <, <=, between, IS NULL, IS NOT NULL
   - metric fields (e.g., total_sticky_cache_hit):
 		=, !=, >, >=, <, <=
+
+For string fields, IS NULL matches workers where the field is empty, and IS NOT NULL matches
+workers where the field is non-empty. For time fields, IS NULL matches workers where the
+timestamp is not set.
 
 Returns the list of workers for which the query matches the worker heartbeat, or an error,
 Errors are:
@@ -111,6 +119,12 @@ var (
 			}
 			return hb.DeploymentVersion.DeploymentName
 		},
+		workerBuildIDColName: func(hb *workerpb.WorkerHeartbeat) string {
+			if hb.DeploymentVersion == nil {
+				return ""
+			}
+			return hb.DeploymentVersion.BuildId
+		},
 		workerSdkNameColName: func(hb *workerpb.WorkerHeartbeat) string {
 			return hb.SdkName
 		},
@@ -118,6 +132,9 @@ var (
 			return hb.SdkVersion
 		},
 		workerStatusColName: func(hb *workerpb.WorkerHeartbeat) string {
+			return hb.Status.String()
+		},
+		workerStatusColNameAlias: func(hb *workerpb.WorkerHeartbeat) string {
 			return hb.Status.String()
 		},
 	}
@@ -206,7 +223,7 @@ func (w *workerQueryEngine) evaluateExpression(expr sqlparser.Expr) (bool, error
 	case *sqlparser.RangeCond:
 		return w.evaluateRange(e)
 	case *sqlparser.IsExpr:
-		return false, serviceerror.NewInvalidArgumentf("%s: 'is' expression", notSupportedErrMessage)
+		return w.evaluateIsExpr(e)
 	case *sqlparser.NotExpr:
 		return false, serviceerror.NewInvalidArgumentf("%s: 'not' expression", notSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -241,6 +258,42 @@ func (w *workerQueryEngine) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 	return w.evaluateExpression(expr.Right)
 }
 
+func (w *workerQueryEngine) evaluateIsExpr(expr *sqlparser.IsExpr) (bool, error) {
+	if expr == nil {
+		return false, serviceerror.NewInvalidArgumentf("IsExpr input expression cannot be nil")
+	}
+
+	colNameExpr, ok := expr.Expr.(*sqlparser.ColName)
+	if !ok {
+		return false, serviceerror.NewInvalidArgumentf("invalid filter name: %s", sqlparser.String(expr.Expr))
+	}
+	colName := strings.ReplaceAll(sqlparser.String(colNameExpr), "`", "")
+
+	if expr.Operator != sqlparser.IsNullStr && expr.Operator != sqlparser.IsNotNullStr {
+		return false, serviceerror.NewInvalidArgumentf(
+			"%s: 'is' operator %q is not supported; only IS NULL and IS NOT NULL are supported",
+			notSupportedErrMessage, expr.Operator)
+	}
+
+	isNull := expr.Operator == sqlparser.IsNullStr
+
+	if propertyFunc, ok := propertyMapFuncs[colName]; ok {
+		isEmpty := propertyFunc(w.currentWorker) == ""
+		return isEmpty == isNull, nil
+	}
+
+	switch colName {
+	case workerStartTimeColName, workerHeartbeatTimeColName:
+		timeValue, err := w.getTimeValue(colName)
+		if err != nil {
+			return false, err
+		}
+		return timeValue.IsZero() == isNull, nil
+	default:
+		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
+	}
+}
+
 func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
 	if expr == nil {
 		return false, serviceerror.NewInvalidArgumentf("ComparisonExpr input expression cannot be nil")
@@ -250,32 +303,26 @@ func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (
 	if !ok {
 		return false, serviceerror.NewInvalidArgumentf("invalid filter name: %s", sqlparser.String(expr.Left))
 	}
-	colName := sqlparser.String(colNameExpr)
+	// Strip backticks added by the SQL parser for reserved words (e.g., "Status" → "`status`" → "status").
+	colName := strings.ReplaceAll(sqlparser.String(colNameExpr), "`", "")
 	valExpr, ok := expr.Right.(*sqlparser.SQLVal)
 	if !ok {
 		return false, serviceerror.NewInvalidArgumentf("invalid value: %s", sqlparser.String(expr.Right))
 	}
 	valStr := sqlparser.String(valExpr)
 
-	switch colName {
-	case workerInstanceKeyColName,
-		workerIdentityColName,
-		workerHostNameColName,
-		workerTaskQueueColName,
-		workerDeploymentNameColName,
-		workerSdkNameColName,
-		workerSdkVersionColName,
-		workerStatusColName:
-		propertyFunc, ok := propertyMapFuncs[colName]
-		if !ok {
-			return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
-		}
+	// First check if the column name is a valid property function.
+	if propertyFunc, ok := propertyMapFuncs[colName]; ok {
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
 		}
 		existingVal := propertyFunc(w.currentWorker)
 		return compareQueryString(val, existingVal, expr.Operator, colName)
+	}
+
+	// If not, then check if the column name is a valid time column.
+	switch colName {
 	case workerStartTimeColName:
 		expectedTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
@@ -303,7 +350,8 @@ func (w *workerQueryEngine) evaluateRange(expr *sqlparser.RangeCond) (bool, erro
 	if !ok {
 		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported column name: %s", sqlparser.String(expr.Left))
 	}
-	colNameStr := sqlparser.String(colName)
+	// Strip backticks added by the SQL parser for reserved words (e.g., "Status" → "`status`" → "status").
+	colNameStr := strings.ReplaceAll(sqlparser.String(colName), "`", "")
 
 	switch colNameStr {
 	case workerStartTimeColName, workerHeartbeatTimeColName:

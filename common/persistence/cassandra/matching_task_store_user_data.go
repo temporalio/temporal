@@ -2,9 +2,9 @@ package cassandra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -67,7 +67,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueUserDataRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	for taskQueue, update := range request.Updates {
 		if update.Version == 0 {
@@ -139,7 +139,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
-	row := make(map[string]interface{})
+	row := make(map[string]any)
 	for iter.MapScan(row) {
 		taskQueue, err := getTypedFieldFromRow[string]("task_queue_name", row)
 		if err != nil {
@@ -160,49 +160,53 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 
 		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})
 
-		row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+		row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ListTaskQueueUserDataEntries operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ListTaskQueueUserDataEntries", err)
 	}
 	return response, nil
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
-	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx).Idempotent(true)
 
 	var taskQueues []string
-	row := make(map[string]interface{})
+	var pageToken []byte
 
 	for {
+		iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).PageState(pageToken).Iter()
+
+		row := make(map[string]any)
 		for iter.MapScan(row) {
 			taskQueueRaw, ok := row["task_queue_name"]
 			if !ok {
-				return nil, newFieldNotFoundError("task_queue_name", row)
+				return nil, errors.Join(newFieldNotFoundError("task_queue_name", row), iter.Close())
 			}
 			taskQueue, ok := taskQueueRaw.(string)
 			if !ok {
 				var stringType string
-				return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+				return nil, errors.Join(newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row), iter.Close())
 			}
 
 			taskQueues = append(taskQueues, taskQueue)
 
-			row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+			row = make(map[string]any) // Reinitialize map as MapScan fails on reuse
 		}
-		if len(iter.PageState()) == 0 {
+
+		pageToken = iter.PageState()
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
+		}
+		if len(pageToken) == 0 {
 			break
 		}
 	}
 
-	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTaskQueuesByBuildId operation failed. Error: %v", err)
-	}
 	return taskQueues, nil
 }
 

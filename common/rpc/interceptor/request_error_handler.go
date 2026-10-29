@@ -68,7 +68,7 @@ func (eh *RequestErrorHandler) HandleError(
 
 	isExpectedError := isExpectedErrorByStatusCode(statusCode) || isExpectedErrorByType(err)
 
-	recordErrorMetrics(metricsHandler, err, isExpectedError)
+	recordErrorMetrics(req, metricsHandler, err, isExpectedError)
 	eh.logError(req, fullMethod, nsName, err, statusCode, isExpectedError, logTags)
 }
 
@@ -90,21 +90,25 @@ func (eh *RequestErrorHandler) logError(
 		return
 	}
 
-	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
+	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, eh.workflowTags.Extract(req, fullMethod)...)
 
 	eh.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedError bool) {
+func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isExpectedError bool) {
 	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		limitGroup := ""
+		if errors.Is(err, ErrNamespaceCountLimitServerBusy) {
+			limitGroup = concurrencyLimitGroup(isInternalPerNSPoll(req))
+		}
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
 			1,
 			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
 			metrics.ResourceExhaustedScopeTag(resourceExhaustedErr.Scope),
+			metrics.ConcurrencyLimitGroupTag(limitGroup),
 		)
 	}
 
@@ -175,6 +179,7 @@ func isExpectedErrorByType(err error) bool {
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.TaskAlreadyStarted,
 		*serviceerrors.RetryReplication,
+		*serviceerrors.StalePartitionCounts,
 		*serviceerrors.SyncState:
 		return true
 	default:

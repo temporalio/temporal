@@ -24,6 +24,8 @@ type (
 
 		notifyCh chan struct{}
 	}
+
+	taskPostProcessorFn func([]tasks.Task)
 )
 
 func NewImmediateQueue(
@@ -37,6 +39,7 @@ func NewImmediateQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	factory ExecutableFactory,
+	taskPostProcessor taskPostProcessorFn,
 ) *immediateQueue {
 	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -55,6 +58,10 @@ func NewImmediateQueue(
 			resp, err := shard.GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
+			}
+
+			if taskPostProcessor != nil {
+				taskPostProcessor(resp.Tasks)
 			}
 
 			return resp.Tasks, resp.NextPageToken, nil

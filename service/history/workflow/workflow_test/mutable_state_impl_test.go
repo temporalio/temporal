@@ -6,7 +6,6 @@ package workflow_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"testing"
 	"time"
@@ -24,12 +23,15 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -95,7 +97,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 	t.Parallel()
 
 	nsEntry := tests.LocalNamespaceEntry
-	ms, _ := createMutableState(t, nsEntry, c.createConfig())
+	ms, _, _ := createMutableState(t, nsEntry, c.createConfig())
 
 	startWorkflowExecution(t, ms, nsEntry)
 
@@ -137,6 +139,8 @@ func (c *mutationTestCase) startWFT(
 		nil,
 		nil,
 		false,
+		nil,
+		0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -184,6 +188,7 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 		payload,
 		identity,
 		header,
+		"",
 		nil,
 	)
 	if err != nil {
@@ -191,7 +196,7 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 	}
 }
 
-func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs.Config) (*workflow.MutableStateImpl, *events.MockCache) {
+func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs.Config) (*workflow.MutableStateImpl, *events.MockCache, *shard.ContextTest) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -206,12 +211,12 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 
 	clusterMetadata := shardContext.Resource.ClusterMetadata
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(),
-		nsEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+		nsEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	executionManager := shardContext.Resource.ExecutionMgr
-	executionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
+	executionManager.EXPECT().GetHistoryBranchUtil().Return(persistence.NewHistoryBranchUtil(serialization.NewSerializer())).AnyTimes()
 
 	startTime := time.Time{}
 	logger := log.NewNoopLogger()
@@ -233,7 +238,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 		{Version: 0, EventId: 1},
 	}
 
-	return ms, eventsCache
+	return ms, eventsCache, shardContext
 }
 
 func (c *mutationTestCase) createConfig() *configs.Config {
@@ -361,7 +366,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	cases := []struct {
 		name             string
 		mutateState      func(historyi.MutableState) (*historypb.HistoryEvent, error)
-		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.OperationCompletion)
+		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.CompleteOperationOptions)
 	}{
 		{
 			name: "success",
@@ -377,15 +382,15 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.Nil(t, completion.Error)
+				result, ok := completion.Result.(*commonpb.Payload)
 				require.True(t, ok)
-				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
-				require.Equal(t, "1", success.Reader.Header.Get("length"))
-				buf, err := io.ReadAll(success.Reader)
-				require.NoError(t, err)
-				require.Equal(t, []byte("3"), buf)
-				require.Equal(t, event.GetEventTime().AsTime(), success.CloseTime)
+				protorequire.ProtoEqual(t, &commonpb.Payload{
+					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+					Data:     []byte("3"),
+				}, result)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -397,25 +402,23 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "workflow failed", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "workflow failed", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
 			name: "termination",
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
+				return mutableState.AddWorkflowExecutionTerminatedEvent("dont care", nil, "identity", false, nil)
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "operation terminated", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "operation terminated", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -423,12 +426,11 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateCanceled, failure.State)
-				require.Equal(t, "operation canceled", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateCanceled, completion.Error.State)
+				require.Equal(t, "operation canceled", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 	}
@@ -436,7 +438,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			nsEntry := tests.LocalNamespaceEntry
-			ms, events := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+			ms, events, _ := createMutableState(t, nsEntry, tests.NewDynamicConfig())
 			startWorkflowExecution(t, ms, nsEntry)
 			workflowTask, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 			require.NoError(t, err)
@@ -449,6 +451,8 @@ func TestGetNexusCompletion(t *testing.T) {
 				nil,
 				nil,
 				false,
+				nil,
+				0,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -470,13 +474,14 @@ func TestGetNexusCompletion(t *testing.T) {
 
 func TestLoadHistoryEventFromToken(t *testing.T) {
 	nsEntry := tests.LocalNamespaceEntry
-	ms, evs := createMutableState(t, nsEntry, tests.NewDynamicConfig())
+	ms, evs, shardContext := createMutableState(t, nsEntry, tests.NewDynamicConfig())
 	event := startWorkflowExecution(t, ms, nsEntry)
 	branchToken, err := ms.GetCurrentBranchToken()
 	require.NoError(t, err)
 	firstEventID := event.EventId
+	require.Equal(t, common.FirstEventID, firstEventID)
 
-	token, err := hsm.GenerateEventLoadToken(event)
+	token, err := ms.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 
 	wfKey := ms.GetWorkflowKey()
@@ -486,6 +491,7 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 		RunID:       wfKey.RunID,
 		EventID:     event.EventId,
 		Version:     0,
+		ShardUUID:   shardContext.GetOwner(),
 	}
 	evs.EXPECT().GetEvent(gomock.Any(), gomock.Any(), eventKey, firstEventID, branchToken).Return(event, nil)
 

@@ -1,19 +1,24 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -22,16 +27,18 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -156,7 +163,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			},
 		},
 	} {
-		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 
@@ -256,7 +262,9 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				return cfg
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
+			mutableState.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
+
+			taskGenerator := NewTaskGenerator(namespaceRegistry, nil, mutableState, cfg, archivalMetadata, log.NewTestLogger())
 			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose, false)
 			require.NoError(t, err)
 
@@ -390,11 +398,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		genTasks = append(genTasks, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(namespaceRegistry, nil, mutableState, cfg, archivalMetadata, log.NewTestLogger())
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(genTasks))
+	require.Len(t, genTasks, 2)
 	invocationTask, ok := genTasks[0].(*tasks.StateMachineOutboundTask)
 	var backoffTask *tasks.StateMachineTimerTask
 	if ok {
@@ -435,7 +443,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.Equal(t, int64(3), backoffTask.Version)
 
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 1, len(timers))
+	require.Len(t, timers, 1)
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
 		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
@@ -489,12 +497,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 
 	// No new timer tasks are generated they are collapsed.
 	// Only an outbound task is expected here.
-	require.Equal(t, 1, len(genTasks))
+	require.Len(t, genTasks, 1)
 	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
 	require.True(t, ok)
 
 	timers = mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 2, len(timers))
+	require.Len(t, timers, 2)
 
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
@@ -518,7 +526,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 			},
 			MachineTransitionCount: 1,
 		},
-		Type: nexusoperations.TaskTypeTimeout,
+		Type: nexusoperations.TaskTypeScheduleToCloseTimeout,
 		Data: nil,
 	}, timers[1].Infos[0])
 }
@@ -688,6 +696,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 
 			taskGenerator := NewTaskGenerator(
 				mockShard.GetNamespaceRegistry(),
+				nil,
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
@@ -815,6 +824,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			)
 			taskGenerator := NewTaskGenerator(
 				mockShard.GetNamespaceRegistry(),
+				nil,
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
@@ -822,24 +832,49 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			)
 			resultTasks, _, err := taskGenerator.GenerateMigrationTasks(nil)
 			require.NoError(t, err)
-			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			require.Len(t, resultTasks, len(tc.expectedTaskTypes))
 			if tc.transitionHistoryEnabled {
-				require.Equal(t, 1, len(resultTasks))
+				require.Len(t, resultTasks, 1)
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
+				require.Equal(t, enumsspb.TASK_PRIORITY_LOW, syncVersionTask.Priority)
+				require.True(t, proto.Equal(&historyspb.VersionHistory{
+					Items: executionInfo.VersionHistories.Histories[0].Items,
+				}, syncVersionTask.CurrentVersionHistory))
+				require.Empty(t, syncVersionTask.CurrentVersionHistory.BranchToken)
 				taskEquivalent := syncVersionTask.TaskEquivalents
-				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
 					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+					requireLowReplicationPriority(t, equivalent)
 				}
 			} else {
 				for i, task := range resultTasks {
 					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+					requireLowReplicationPriority(t, task)
 				}
 			}
 		})
+	}
+}
+
+func requireLowReplicationPriority(t *testing.T, task tasks.Task) {
+	t.Helper()
+	switch task := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncVersionedTransitionTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.HistoryReplicationTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncActivityTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncHSMTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	default:
+		require.Fail(t, "unexpected migration task type", "%T", task)
 	}
 }
 
@@ -905,6 +940,7 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 
 	taskGenerator := NewTaskGenerator(
 		namespace.NewMockRegistry(ctrl),
+		nil,
 		ms,
 		&configs.Config{},
 		archiver.NewMockArchivalMetadata(ctrl),
@@ -916,4 +952,1271 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 
 	require.Empty(t, genTasks)
 	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
+}
+
+type (
+	retentionTestComponent struct {
+		chasm.UnimplementedComponent
+	}
+	extendedRetentionComponent  struct{ retentionTestComponent }
+	shortRetentionComponent     struct{ retentionTestComponent }
+	shortenedRetentionComponent struct{ retentionTestComponent }
+	noRetentionComponent        struct{ retentionTestComponent }
+	workflowRetentionComponent  struct{ retentionTestComponent }
+)
+
+func (*retentionTestComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetention(t *testing.T) {
+	t.Parallel()
+
+	closeTime := time.Unix(0, 0)
+	retentionJitterDuration := time.Second
+	minRetentionGlobal := 24 * time.Hour
+	minRetentionLocal := time.Hour
+
+	const testLibraryName = "TestLibrary"
+	extendedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Extended"))
+	shortArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Short"))
+	shortenedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Shortened"))
+	noRetentionArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "NoRetention"))
+
+	newChasmRegistry := func(t *testing.T) *chasm.Registry {
+		ctrl := gomock.NewController(t)
+		registry := chasm.NewRegistry(log.NewTestLogger())
+
+		testLib := chasm.NewMockLibrary(ctrl)
+		testLib.EXPECT().Name().Return(testLibraryName).AnyTimes()
+		testLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*extendedRetentionComponent](
+				"Extended",
+				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+					return 21 * 24 * time.Hour
+				}),
+			),
+			chasm.NewRegistrableComponent[*shortRetentionComponent](
+				"Short",
+				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+					return time.Minute
+				}),
+			),
+			chasm.NewRegistrableComponent[*shortenedRetentionComponent](
+				"Shortened",
+				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+					return 3 * 24 * time.Hour
+				}),
+			),
+			chasm.NewRegistrableComponent[*noRetentionComponent]("NoRetention"),
+		})
+		testLib.EXPECT().Tasks().Return(nil)
+		testLib.EXPECT().NexusServices().Return(nil)
+		testLib.EXPECT().NexusServiceProcessors().Return(nil)
+		require.NoError(t, registry.Register(testLib))
+
+		workflowLib := chasm.NewMockLibrary(ctrl)
+		workflowLib.EXPECT().Name().Return(chasm.WorkflowLibraryName).AnyTimes()
+		workflowLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*workflowRetentionComponent](
+				chasm.WorkflowComponentName,
+				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+					return 14 * 24 * time.Hour
+				}),
+			),
+		})
+		workflowLib.EXPECT().Tasks().Return(nil)
+		workflowLib.EXPECT().NexusServices().Return(nil)
+		workflowLib.EXPECT().NexusServiceProcessors().Return(nil)
+		require.NoError(t, registry.Register(workflowLib))
+
+		return registry
+	}
+
+	testCases := []struct {
+		name               string
+		archetypeID        chasm.ArchetypeID
+		namespaceRetention time.Duration
+		localNamespace     bool
+		nilChasmRegistry   bool
+		expectedRetention  time.Duration
+	}{
+		{
+			name:               "unregistered archetype uses namespace retention",
+			archetypeID:        activity.ArchetypeID,
+			namespaceRetention: 90 * 24 * time.Hour,
+			expectedRetention:  90 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype without retention option uses namespace retention",
+			archetypeID:        noRetentionArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  30 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention overrides with longer retention",
+			archetypeID:        extendedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  21 * 24 * time.Hour,
+		},
+		{
+			name:               "workflow archetype retention overrides namespace retention",
+			archetypeID:        chasm.WorkflowArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  14 * 24 * time.Hour,
+		},
+		{
+			name:               "unspecified archetype is treated as workflow",
+			archetypeID:        chasm.UnspecifiedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  14 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention overrides with shorter retention",
+			archetypeID:        shortenedArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  3 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention is floored at global namespace min retention",
+			archetypeID:        shortArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  minRetentionGlobal,
+		},
+		{
+			name:               "archetype retention is floored at local namespace min retention",
+			archetypeID:        shortArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			localNamespace:     true,
+			expectedRetention:  minRetentionLocal,
+		},
+		{
+			name:               "namespace retention is not floored at namespace min retention",
+			archetypeID:        noRetentionArchetypeID,
+			namespaceRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
+		},
+		{
+			name:               "nil chasm registry uses namespace retention",
+			archetypeID:        extendedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			nilChasmRegistry:   true,
+			expectedRetention:  7 * 24 * time.Hour,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+
+			namespaceInfo := &persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}
+			namespaceConfig := &persistencespb.NamespaceConfig{
+				Retention: durationpb.New(tc.namespaceRetention),
+			}
+			var namespaceEntry *namespace.Namespace
+			if tc.localNamespace {
+				namespaceEntry = namespace.NewLocalNamespaceForTest(namespaceInfo, namespaceConfig, cluster.TestCurrentClusterName)
+			} else {
+				namespaceEntry = namespace.NewGlobalNamespaceForTest(
+					namespaceInfo,
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
+					},
+					tests.Version,
+				)
+			}
+			namespaceRegistry := namespace.NewMockRegistry(ctrl)
+			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+
+			var chasmRegistry *chasm.Registry
+			if !tc.nilChasmRegistry {
+				chasmRegistry = newChasmRegistry(t)
+			}
+
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
+				return &persistencespb.WorkflowExecutionInfo{
+					NamespaceId: tests.NamespaceID.String(),
+				}
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
+			)).AnyTimes()
+			mutableState.EXPECT().GetCloseVersion().Return(int64(0), nil).AnyTimes()
+			mutableState.EXPECT().GetCurrentBranchToken().Return([]byte("branch-token"), nil).AnyTimes()
+
+			// Create a mock ChasmTree that returns the specific archetype ID
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(tc.archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+			var allTasks []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				allTasks = append(allTasks, ts...)
+			}).AnyTimes()
+
+			cfg := &configs.Config{
+				RetentionTimerJitterDuration: func() time.Duration {
+					return retentionJitterDuration
+				},
+				NamespaceMinRetentionGlobal: func() time.Duration {
+					return minRetentionGlobal
+				},
+				NamespaceMinRetentionLocal: func() time.Duration {
+					return minRetentionLocal
+				},
+			}
+
+			taskGenerator := NewTaskGenerator(
+				namespaceRegistry,
+				chasmRegistry,
+				mutableState,
+				cfg,
+				nil, // archivalMetadata not needed for this test
+				testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+			)
+
+			err := taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+			require.NoError(t, err)
+
+			// Find the DeleteHistoryEventTask
+			var deleteHistoryEventTask *tasks.DeleteHistoryEventTask
+			for _, task := range allTasks {
+				if t, ok := task.(*tasks.DeleteHistoryEventTask); ok {
+					deleteHistoryEventTask = t
+					break
+				}
+			}
+
+			require.NotNil(t, deleteHistoryEventTask, "DeleteHistoryEventTask should be created")
+			require.Equal(t, tests.NamespaceID.String(), deleteHistoryEventTask.NamespaceID)
+			require.Equal(t, tests.WorkflowID, deleteHistoryEventTask.WorkflowID)
+			require.Equal(t, tests.RunID, deleteHistoryEventTask.RunID)
+			require.Equal(t, tc.archetypeID, deleteHistoryEventTask.ArchetypeID)
+
+			// Verify the retention time is within expected range
+			require.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention),
+				"Delete time should be at least closeTime + retention")
+			require.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention+retentionJitterDuration),
+				"Delete time should not exceed closeTime + retention + jitter")
+		})
+	}
+}
+
+func TestGenerateWorkerCommandsTasks(t *testing.T) {
+	t.Parallel()
+
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	testCases := []struct {
+		name           string
+		featureEnabled bool
+		commands       []*workerpb.WorkerCommand
+		controlQueue   string
+		expectTask     bool
+	}{
+		{
+			name:           "creates task when enabled with valid inputs",
+			featureEnabled: true,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "test-control-queue",
+			expectTask:     true,
+		},
+		{
+			name:           "no task when feature disabled",
+			featureEnabled: false,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
+		},
+		{
+			name:           "no task when commands empty",
+			featureEnabled: true,
+			commands:       []*workerpb.WorkerCommand{},
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
+		},
+		{
+			name:           "no task when controlQueue empty",
+			featureEnabled: true,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "",
+			expectTask:     false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
+			)).AnyTimes()
+			mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+
+			var capturedTasks []tasks.Task
+			if tc.expectTask {
+				mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+					capturedTasks = append(capturedTasks, ts...)
+				}).Times(1)
+			}
+
+			cfg := &configs.Config{
+				EnableCancelActivityWorkerCommand: func(string) bool { return tc.featureEnabled },
+			}
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, cfg, nil, log.NewTestLogger())
+			err := taskGenerator.GenerateWorkerCommandsTasks(tc.commands, tc.controlQueue)
+			require.NoError(t, err)
+
+			if tc.expectTask {
+				require.Len(t, capturedTasks, 1)
+				commandTask, ok := capturedTasks[0].(*tasks.WorkerCommandsTask)
+				require.True(t, ok)
+				require.Equal(t, tc.commands, commandTask.Commands)
+				require.Equal(t, tc.controlQueue, commandTask.Destination)
+				require.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
+			}
+		})
+	}
+}
+
+// timeSkippingTestConfig builds the minimal config the time-skipping regen paths read.
+// EnableWorkflowExecutionTimeoutTimer must be set explicitly: a bare &configs.Config{} leaves it
+// nil and regen calls it.
+func timeSkippingTestConfig(executionTimeoutTimerEnabled bool) *configs.Config {
+	return &configs.Config{
+		EnableWorkflowExecutionTimeoutTimer: dynamicconfig.GetBoolPropertyFn(executionTimeoutTimerEnabled),
+	}
+}
+
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	skippedDuration := time.Hour
+
+	// Two pending timers: expiry at now+1h and now+2h. Every pending user timer
+	// must be regenerated (not just the earliest), because the user may turn off time skipping after the first timer is started.
+	// And the second timer should still be fired in the correct time after time skipping is turned off.
+	timer1ExpiryTime := now.Add(1 * time.Hour)
+	timer2ExpiryTime := now.Add(2 * time.Hour)
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skippedDuration),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {
+			StartedEventId: 1,
+			ExpiryTime:     timestamppb.New(timer1ExpiryTime),
+		},
+		"timer-2": {
+			StartedEventId: 2,
+			ExpiryTime:     timestamppb.New(timer2ExpiryTime),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	// HadOrHasWorkflowTask is consulted by the backoff-timer regen path; this test
+	// doesn't exercise that path, so it can return true to short-circuit.
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+
+	var capturedTasks []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		capturedTasks = append(capturedTasks, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+	// Both pending user timers must be regenerated.
+	require.Len(t, capturedTasks, 2)
+
+	// Index captured tasks by EventID — emission order follows the sorted
+	// sequence, but the assertions below don't need to depend on it.
+	byEventID := make(map[int64]*tasks.UserTimerTask, len(capturedTasks))
+	for _, task := range capturedTasks {
+		ut, ok := task.(*tasks.UserTimerTask)
+		require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
+		require.Equal(t, tests.WorkflowKey, ut.WorkflowKey)
+		// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
+		require.Equal(t, int64(0), ut.TaskID, "TaskID must be zero (set by shard, not the generator)")
+		byEventID[ut.EventID] = ut
+	}
+
+	// Task generator emits timer tasks with virtual-frame VisibilityTimestamp;
+	// the virtual-to-wallclock subtraction happens inside MutableState.AddTasks,
+	// which is a mock here and therefore records the pre-subtraction value.
+	require.Contains(t, byEventID, int64(1))
+	require.Equal(t, timer1ExpiryTime, byEventID[1].VisibilityTimestamp)
+	require.Contains(t, byEventID, int64(2))
+	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates asserts the
+// contract: regen carries no per-task status of its own and force re-stamps on every call
+// (callers gate it — the active boolean and PartialRefresh's LastUpdateVersionedTransition
+// check). So a second back-to-back call emits the same tasks again, not a no-op. Content is
+// identical; only the shard-assigned TaskID would differ.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(t *testing.T) {
+	t.Parallel()
+
+	tsi := &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: tsi,
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(time.Now().Add(time.Hour))},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).AnyTimes()
+
+	emitCount := 0
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		emitCount += len(ts)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+
+	// First call emits.
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Positive(t, emitCount, "first call must emit at least one task")
+
+	// Second call force-regenerates: emits again (no status latch suppresses it).
+	emitsAfterFirst := emitCount
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
+}
+
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		execInfo    *persistencespb.WorkflowExecutionInfo
+		setupTimers func(mutableState *historyi.MockMutableState)
+	}{
+		{
+			name:     "nil TimeSkippingInfo returns immediately without touching timers",
+			execInfo: &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: nil},
+			// GetPendingTimerInfos and AddTasks must not be called — no expectations set.
+		},
+		{
+			name: "zero AccumulatedSkippedDuration returns immediately without touching timers",
+			execInfo: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(0),
+				},
+			},
+			// GetPendingTimerInfos and AddTasks must not be called — no expectations set.
+		},
+		{
+			name: "no pending timers produces no tasks",
+			execInfo: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				},
+			},
+			setupTimers: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{})
+				// AddTasks must not be called — no expectation set.
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
+			mutableState.EXPECT().GetExecutionInfo().Return(tc.execInfo).AnyTimes()
+			// HadOrHasWorkflowTask is consulted by the backoff-timer regen path. These edge
+			// cases don't exercise that path, so it can return true to short-circuit.
+			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+			if tc.setupTimers != nil {
+				tc.setupTimers(mutableState)
+			}
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+		})
+	}
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_TimeoutTimers tests
+// execution and run timeout timers are regenerated when the workflow skips time.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespaceID     = "ns-id"
+		workflowID      = "wf-id"
+		firstRunID      = "first-run-id"
+		skippedDuration = time.Hour
+		startVersion    = int64(7)
+	)
+	now := time.Now().UTC()
+	userTimerExpiry := now.Add(1 * time.Hour)
+	execExpiry := now.Add(24 * time.Hour)
+	runExpiry := now.Add(3 * time.Hour)
+
+	for _, tc := range []struct {
+		name                       string
+		execExpirationTime         *timestamppb.Timestamp
+		runExpirationTime          *timestamppb.Timestamp
+		executionTimerTaskStatus   int32
+		executionTimeoutTimerOffDC bool
+		wantExecTimeout            bool
+		wantRunTimeout             bool
+	}{
+		{
+			name:                     "both execution and run expirations set",
+			execExpirationTime:       timestamppb.New(execExpiry),
+			runExpirationTime:        timestamppb.New(runExpiry),
+			executionTimerTaskStatus: TimerTaskStatusCreated,
+			wantExecTimeout:          true,
+			wantRunTimeout:           true,
+		},
+		{
+			name:               "only run expiration set",
+			execExpirationTime: nil,
+			runExpirationTime:  timestamppb.New(runExpiry),
+			wantExecTimeout:    false,
+			wantRunTimeout:     true,
+		},
+		{
+			name:                       "execution timeout timer not created",
+			execExpirationTime:         timestamppb.New(execExpiry),
+			runExpirationTime:          timestamppb.New(runExpiry),
+			executionTimeoutTimerOffDC: true,
+			wantExecTimeout:            false,
+			wantRunTimeout:             true,
+		},
+		{
+			name:                       "created execution timeout timer with feature disabled",
+			execExpirationTime:         timestamppb.New(execExpiry),
+			runExpirationTime:          timestamppb.New(runExpiry),
+			executionTimerTaskStatus:   TimerTaskStatusCreated,
+			executionTimeoutTimerOffDC: true,
+			wantExecTimeout:            true,
+			wantRunTimeout:             true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                      namespaceID,
+				WorkflowId:                       workflowID,
+				FirstExecutionRunId:              firstRunID,
+				WorkflowExecutionExpirationTime:  tc.execExpirationTime,
+				WorkflowRunExpirationTime:        tc.runExpirationTime,
+				WorkflowExecutionTimerTaskStatus: tc.executionTimerTaskStatus,
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(skippedDuration),
+				},
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+				"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(userTimerExpiry)},
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			// HadOrHasWorkflowTask is consulted by the backoff-timer regen path. These cases don't
+			// exercise that path (no backoff configured), so it can return true to short-circuit.
+			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+			// GetStartVersion is consulted when a WorkflowRunTimeoutTask is regenerated so the
+			// task can pass CheckTaskVersion in multi-cluster deployments.
+			if tc.wantRunTimeout {
+				mutableState.EXPECT().GetStartVersion().Return(int64(startVersion), nil)
+			}
+
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(!tc.executionTimeoutTimerOffDC), nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+			// Expected task count: always user timer, plus any timeout tasks whose expiration is set.
+			expectedCount := 1
+			if tc.wantExecTimeout {
+				expectedCount++
+			}
+			if tc.wantRunTimeout {
+				expectedCount++
+			}
+			require.Len(t, captured, expectedCount)
+
+			// User timer is always first (emission order in the implementation).
+			userTask, ok := captured[0].(*tasks.UserTimerTask)
+			require.True(t, ok, "first task should be *tasks.UserTimerTask, got %T", captured[0])
+			require.Equal(t, int64(1), userTask.EventID)
+			require.Equal(t, userTimerExpiry, userTask.VisibilityTimestamp)
+
+			// Walk remaining tasks and verify each expected timeout appears exactly once with correct fields.
+			var foundExec, foundRun bool
+			for _, task := range captured[1:] {
+				switch tt := task.(type) {
+				case *tasks.WorkflowExecutionTimeoutTask:
+					require.False(t, foundExec, "WorkflowExecutionTimeoutTask emitted more than once")
+					foundExec = true
+					require.Equal(t, namespaceID, tt.NamespaceID)
+					require.Equal(t, workflowID, tt.WorkflowID)
+					require.Equal(t, firstRunID, tt.FirstRunID)
+					require.Equal(t, execExpiry, tt.VisibilityTimestamp)
+					require.Equal(t, int64(0), tt.TaskID, "TaskID must be zero (set by shard)")
+				case *tasks.WorkflowRunTimeoutTask:
+					require.False(t, foundRun, "WorkflowRunTimeoutTask emitted more than once")
+					foundRun = true
+					require.Equal(t, tests.WorkflowKey, tt.WorkflowKey)
+					require.Equal(t, runExpiry, tt.VisibilityTimestamp)
+					require.Equal(t, int64(0), tt.TaskID, "TaskID must be zero (set by shard)")
+					require.Equal(t, int64(startVersion), tt.Version, "Version must match start version so CheckTaskVersion passes")
+				default:
+					t.Fatalf("unexpected task type %T", task)
+				}
+			}
+			require.Equal(t, tc.wantExecTimeout, foundExec)
+			require.Equal(t, tc.wantRunTimeout, foundRun)
+		})
+	}
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer covers step (3)
+// of RegenerateTimerTasksForTimeSkipping: the fast-forward wake-up task regeneration.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	fastForwardTarget := now.Add(2 * time.Hour)
+
+	type wantTask struct {
+		visibilityTimestamp time.Time
+		versionedTransition *persistencespb.VersionedTransition
+	}
+
+	const currentVersion = int64(99)
+	// Distinct from the live current version so the assertion proves the regenerated task carries the
+	// versioned transition stored on the fast-forward, not a recomputed one.
+	fastForwardVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 7}
+	// Distinct, non-workflow value so the assertion proves the task carries the mutable state's archetype.
+	const archetypeID = uint32(7)
+
+	for _, tc := range []struct {
+		name                string
+		tsi                 *persistencespb.TimeSkippingInfo
+		wantFastForwardTask *wantTask
+		wantUserTimerLen    int
+	}{
+		{
+			name: "fast-forward configured and unreached emits task",
+			tsi: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: false,
+				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
+			},
+			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, versionedTransition: fastForwardVT},
+		},
+		{
+			name: "HasReached=true skips task emission",
+			tsi: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: true,
+				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
+			},
+		},
+		{
+			name: "Enabled=false skips task emission",
+			tsi: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:           false,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: false,
+				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
+			},
+		},
+		{
+			name: "no fast-forward info does not emit fast-forward task",
+			tsi: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: tc.tsi,
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+			// Step (4) is gated by HadOrHasWorkflowTask: true short-circuits and isolates step (3).
+			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+			var fastForwardTasks []*tasks.TimeSkippingFastForwardTimerTask
+			for _, task := range captured {
+				if bt, ok := task.(*tasks.TimeSkippingFastForwardTimerTask); ok {
+					fastForwardTasks = append(fastForwardTasks, bt)
+				}
+			}
+
+			if tc.wantFastForwardTask == nil {
+				require.Empty(t, fastForwardTasks)
+				return
+			}
+
+			require.Len(t, fastForwardTasks, 1)
+			bt := fastForwardTasks[0]
+			require.Equal(t, tests.WorkflowKey, bt.WorkflowKey)
+			require.Equal(t, tc.wantFastForwardTask.visibilityTimestamp, bt.VisibilityTimestamp)
+			// VersionedTransition must come from stored FastForwardInfo, not a recomputed one.
+			protorequire.ProtoEqual(t, tc.wantFastForwardTask.versionedTransition, bt.VersionedTransition)
+			require.Equal(t, archetypeID, bt.ArchetypeID, "ArchetypeID must come from the mutable state's chasm tree")
+			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask(t *testing.T) {
+	t.Parallel()
+
+	fastForwardTarget := time.Now().UTC().Add(2 * time.Hour)
+	fastForwardVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 7}
+	const archetypeID = uint32(7)
+
+	pendingFastForward := func(accumulated time.Duration) *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)},
+			},
+			AccumulatedSkippedDuration: durationpb.New(accumulated),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(fastForwardTarget),
+			},
+			FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
+		}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		tsi      *persistencespb.TimeSkippingInfo
+		wantTask bool
+	}{
+		{
+			name:     "PendingFastForward/Emits",
+			tsi:      pendingFastForward(time.Hour),
+			wantTask: true,
+		},
+		{
+			// The refresher path must not lose the wake-up before the first skip, which is
+			// why this method deliberately omits the parent's accumulated-skip early return.
+			name:     "ZeroAccumulatedSkip/StillEmits",
+			tsi:      pendingFastForward(0),
+			wantTask: true,
+		},
+		{
+			name:     "NoTimeSkippingInfo/NoTask",
+			tsi:      nil,
+			wantTask: false,
+		},
+		{
+			name: "AlreadyReached/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.FastForwardInfo.HasReached = true
+				return tsi
+			}(),
+			wantTask: false,
+		},
+		{
+			name: "Disabled/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.Config.Enabled = false
+				return tsi
+			}(),
+			wantTask: false,
+		},
+		{
+			name: "NoFastForwardInfo/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.FastForwardInfo = nil
+				return tsi
+			}(),
+			wantTask: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: tc.tsi,
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.GenerateTimeSkippingFastForwardTimerTask())
+
+			if !tc.wantTask {
+				require.Empty(t, captured)
+				return
+			}
+
+			require.Len(t, captured, 1)
+			task, ok := captured[0].(*tasks.TimeSkippingFastForwardTimerTask)
+			require.True(t, ok, "expected *tasks.TimeSkippingFastForwardTimerTask, got %T", captured[0])
+			require.Equal(t, tests.WorkflowKey, task.WorkflowKey)
+			require.Equal(t, fastForwardTarget, task.VisibilityTimestamp)
+			protorequire.ProtoEqual(t, fastForwardVT, task.VersionedTransition)
+			require.Equal(t, archetypeID, task.ArchetypeID)
+			require.Equal(t, int64(0), task.TaskID, "TaskID must be zero (set by shard)")
+		})
+	}
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer covers step (4)
+// of RegenerateTimerTasksForTimeSkipping: the backoff-timer regeneration that supports
+// start-with-delay, cron, retry, and CaN-with-backoff.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	startTime := now
+	executionTime := now.Add(time.Hour)
+
+	type backoffTaskExpectation struct {
+		visibilityTimestamp time.Time
+		backoffType         enumsspb.WorkflowBackoffType
+		version             int64
+	}
+
+	const startVersion = int64(13)
+
+	for _, tc := range []struct {
+		name                 string
+		hadOrHasWorkflowTask bool
+		startTime            time.Time
+		executionTime        time.Time
+		cronSchedule         string
+		attempt              int32
+		wantBackoffTask      *backoffTaskExpectation
+	}{
+		{
+			name:                 "HadOrHasWorkflowTask=true skips backoff regen",
+			hadOrHasWorkflowTask: true,
+			startTime:            startTime,
+			executionTime:        executionTime,
+		},
+		{
+			name:                 "child WF (ExecutionTime == StartTime) skips backoff regen",
+			hadOrHasWorkflowTask: false,
+			startTime:            startTime,
+			executionTime:        startTime,
+		},
+		{
+			name:                 "cron schedule emits CRON backoff",
+			hadOrHasWorkflowTask: false,
+			startTime:            startTime,
+			executionTime:        executionTime,
+			cronSchedule:         "0 0 * * *",
+			attempt:              1,
+			wantBackoffTask: &backoffTaskExpectation{
+				visibilityTimestamp: executionTime,
+				backoffType:         enumsspb.WORKFLOW_BACKOFF_TYPE_CRON,
+				version:             startVersion,
+			},
+		},
+		{
+			name:                 "attempt > 1 emits RETRY backoff",
+			hadOrHasWorkflowTask: false,
+			startTime:            startTime,
+			executionTime:        executionTime,
+			attempt:              2,
+			wantBackoffTask: &backoffTaskExpectation{
+				visibilityTimestamp: executionTime,
+				backoffType:         enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY,
+				version:             startVersion,
+			},
+		},
+		{
+			name:                 "first attempt no cron emits DELAY_START backoff",
+			hadOrHasWorkflowTask: false,
+			startTime:            startTime,
+			executionTime:        executionTime,
+			attempt:              1,
+			wantBackoffTask: &backoffTaskExpectation{
+				visibilityTimestamp: executionTime,
+				backoffType:         enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START,
+				version:             startVersion,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				StartTime:     timestamppb.New(tc.startTime),
+				ExecutionTime: timestamppb.New(tc.executionTime),
+				CronSchedule:  tc.cronSchedule,
+				Attempt:       tc.attempt,
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				},
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mutableState.EXPECT().HadOrHasWorkflowTask().Return(tc.hadOrHasWorkflowTask).AnyTimes()
+			if tc.wantBackoffTask != nil {
+				mutableState.EXPECT().GetStartVersion().Return(startVersion, nil)
+			}
+
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+			var backoffTasks []*tasks.WorkflowBackoffTimerTask
+			for _, task := range captured {
+				if bt, ok := task.(*tasks.WorkflowBackoffTimerTask); ok {
+					backoffTasks = append(backoffTasks, bt)
+				}
+			}
+
+			if tc.wantBackoffTask == nil {
+				require.Empty(t, backoffTasks)
+				return
+			}
+
+			require.Len(t, backoffTasks, 1)
+			bt := backoffTasks[0]
+			require.Equal(t, tests.WorkflowKey, bt.WorkflowKey)
+			require.Equal(t, tc.wantBackoffTask.visibilityTimestamp, bt.VisibilityTimestamp)
+			require.Equal(t, tc.wantBackoffTask.backoffType, bt.WorkflowBackoffType)
+			require.Equal(t, tc.wantBackoffTask.version, bt.Version)
+			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
+		})
+	}
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry covers step (5):
+// activity retry timers are re-stamped only for activities in retry backoff, so their
+// wall-clock firing time tracks the new accumulated skip. Activities that are started
+// (actively in flight) must not be regenerated.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	backoffScheduledTime := now.Add(time.Hour)
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
+		1: { // in retry backoff -> regenerated
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          3,
+			Stamp:            7,
+			Version:          42,
+			ScheduledTime:    timestamppb.New(backoffScheduledTime),
+		},
+		2: { // started -> not regenerated
+			ScheduledEventId: 2,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			StartedEventId:   10,
+			ScheduledTime:    timestamppb.New(backoffScheduledTime),
+		},
+	}).AnyTimes()
+
+	var captured []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		captured = append(captured, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+	var retryTasks []*tasks.ActivityRetryTimerTask
+	for _, task := range captured {
+		if rt, ok := task.(*tasks.ActivityRetryTimerTask); ok {
+			retryTasks = append(retryTasks, rt)
+		}
+	}
+
+	require.Len(t, retryTasks, 1, "only the backoff activity should be regenerated")
+	rt := retryTasks[0]
+	require.Equal(t, tests.WorkflowKey, rt.WorkflowKey)
+	require.Equal(t, int64(1), rt.EventID)
+	// VisibilityTimestamp is emitted in the virtual frame; the virtual-to-wallclock
+	// subtraction happens inside MutableState.AddTasks, mocked here.
+	require.Equal(t, backoffScheduledTime, rt.VisibilityTimestamp)
+	require.Equal(t, int32(3), rt.Attempt)
+	require.Equal(t, int32(7), rt.Stamp)
+	require.Equal(t, int64(42), rt.Version)
+	require.Equal(t, int64(0), rt.TaskID, "TaskID must be zero (set by shard)")
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_StartVersionError
+// verifies that an error from GetStartVersion in step (4) propagates out of
+// RegenerateTimerTasksForTimeSkipping.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_StartVersionError(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		StartTime:     timestamppb.New(now),
+		ExecutionTime: timestamppb.New(now.Add(time.Hour)),
+		Attempt:       1,
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(false).AnyTimes()
+	wantErr := errors.New("boom")
+	mutableState.EXPECT().GetStartVersion().Return(int64(0), wantErr)
+
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
+	require.ErrorIs(t, err, wantErr)
+}
+
+func requireAllFieldsPopulated(t *testing.T, taskName string, v reflect.Value, ignore map[string]bool) {
+	t.Helper()
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		field := typ.Field(i)
+		fv := v.Field(i)
+		if field.Anonymous && fv.Kind() == reflect.Struct {
+			requireAllFieldsPopulated(t, taskName, fv, ignore)
+			continue
+		}
+		if ignore[field.Name] {
+			continue
+		}
+		require.Falsef(t, fv.IsZero(),
+			"%s.%s is zero: RegenerateTimerTasksForTimeSkipping must populate it, "+
+				"or add it to this task's ignore-list with a reason", taskName, field.Name)
+	}
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulated is a
+// drift guard for the hand-built task blocks in RegenerateTimerTasksForTimeSkipping.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulated(t *testing.T) {
+	t.Parallel()
+
+	const (
+		startVersion   = int64(7)
+		currentVersion = int64(99)
+	)
+	ffVersionedTransition := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 5}
+	now := time.Now().UTC()
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	// No pending activities: activity-retry regen already reuses the shared generator and
+	// is not at field-omission risk, so it is intentionally out of scope here.
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:                      tests.NamespaceID.String(),
+		WorkflowId:                       tests.WorkflowID,
+		FirstExecutionRunId:              tests.RunID,
+		WorkflowExecutionExpirationTime:  timestamppb.New(now.Add(24 * time.Hour)),
+		WorkflowRunExpirationTime:        timestamppb.New(now.Add(3 * time.Hour)),
+		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
+		// StartTime < ExecutionTime with a cron schedule drives the backoff-timer block
+		// (WORKFLOW_BACKOFF_TYPE_CRON, a non-zero enum value).
+		StartTime:     timestamppb.New(now),
+		ExecutionTime: timestamppb.New(now.Add(5 * time.Minute)),
+		CronSchedule:  "*/5 * * * *",
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(now.Add(2 * time.Hour)),
+				HasReached: false,
+			},
+			FastForwardInfoLastUpdateVersionedTransition: ffVersionedTransition,
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(now.Add(time.Hour))},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	// HadOrHasWorkflowTask=false enables the backoff-timer block.
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(false).AnyTimes()
+	// Run-timeout and backoff tasks read the start version; the fast-forward task reads the
+	// version stored on the FastForwardInfo. Distinct values mirror production sourcing and
+	// catch any block sourcing its version from the wrong place. GetCurrentVersion is no longer
+	// consulted by regen but is stubbed in case that changes.
+	mutableState.EXPECT().GetStartVersion().Return(startVersion, nil).AnyTimes()
+	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	// The fast-forward task reads the archetype from the chasm tree; a non-zero value satisfies the
+	// all-fields-populated drift guard below.
+	mockChasmTree := historyi.NewMockChasmTree(ctrl)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+	var captured []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		captured = append(captured, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+	// TaskID is set by the shard, never the generator, so it is the one field every task
+	// legitimately leaves zero. Any task type needing more exceptions documents them here.
+	taskIDOnly := map[string]bool{"TaskID": true}
+
+	seen := make(map[string]bool)
+	for _, task := range captured {
+		switch task.(type) {
+		case *tasks.UserTimerTask,
+			*tasks.WorkflowExecutionTimeoutTask,
+			*tasks.WorkflowRunTimeoutTask,
+			*tasks.WorkflowBackoffTimerTask,
+			*tasks.TimeSkippingFastForwardTimerTask:
+			name := reflect.TypeOf(task).Elem().Name()
+			seen[name] = true
+			requireAllFieldsPopulated(t, name, reflect.ValueOf(task).Elem(), taskIDOnly)
+		default:
+			t.Fatalf("unexpected task type: %T", task)
+		}
+	}
+
+	// Guard against the setup silently stopping emitting a type, which would make the
+	// completeness check above vacuously pass for it.
+	for _, name := range []string{
+		"UserTimerTask",
+		"WorkflowExecutionTimeoutTask",
+		"WorkflowRunTimeoutTask",
+		"WorkflowBackoffTimerTask",
+		"TimeSkippingFastForwardTimerTask",
+	} {
+		require.Truef(t, seen[name], "expected RegenerateTimerTasksForTimeSkipping to emit a %s", name)
+	}
+}
+
+func TestTaskGeneratorImpl_CloseTaskSkipsParentVerification(t *testing.T) {
+	controller := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(controller)
+	key := definition.NewWorkflowKey("namespace", "workflow", "run")
+	mutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
+	mutableState.EXPECT().GetWorkflowKey().Return(key)
+	mutableState.EXPECT().AddTasks(&tasks.CloseExecutionTask{
+		WorkflowKey:            key,
+		Version:                1,
+		DeleteAfterClose:       true,
+		SkipParentVerification: true,
+	})
+	mutableState.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
+	generator := &TaskGeneratorImpl{mutableState: mutableState}
+	require.NoError(t, generator.GenerateWorkflowCloseTasks(time.Now(), true, true))
 }

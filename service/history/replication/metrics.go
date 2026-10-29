@@ -31,6 +31,8 @@ func TaskOperationTag(
 		return metrics.BackfillHistoryEventsTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
 		return metrics.VerifyVersionedTransitionTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK:
+		return metrics.DeleteExecutionReplicationTaskScope
 	default:
 		return metrics.NoopTaskScope
 	}
@@ -50,6 +52,8 @@ func TaskOperationTagFromTask(
 		return metrics.SyncWorkflowStateTaskScope
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		return metrics.HistoryReplicationTaskScope
+	case enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION:
+		return metrics.DeleteExecutionReplicationTaskScope
 	default:
 		return metrics.UnknownTaskScope
 	}

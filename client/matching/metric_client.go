@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -13,7 +14,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
@@ -40,110 +40,6 @@ func NewMetricClient(
 	}
 }
 
-func (c *metricClient) AddActivityTask(
-	ctx context.Context,
-	request *matchingservice.AddActivityTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddActivityTaskScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.AddActivityTask(ctx, request, opts...)
-}
-
-func (c *metricClient) AddWorkflowTask(
-	ctx context.Context,
-	request *matchingservice.AddWorkflowTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddWorkflowTaskScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.AddWorkflowTask(ctx, request, opts...)
-}
-
-func (c *metricClient) PollActivityTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollActivityTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollActivityTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	if request.PollRequest != nil {
-		c.emitForwardedSourceStats(
-			scope,
-			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
-		)
-	}
-
-	return c.client.PollActivityTaskQueue(ctx, request, opts...)
-}
-
-func (c *metricClient) PollWorkflowTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollWorkflowTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollWorkflowTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	if request.PollRequest != nil {
-		c.emitForwardedSourceStats(
-			scope,
-			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
-		)
-	}
-
-	return c.client.PollWorkflowTaskQueue(ctx, request, opts...)
-}
-
-func (c *metricClient) QueryWorkflow(
-	ctx context.Context,
-	request *matchingservice.QueryWorkflowRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientQueryWorkflowScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.QueryWorkflow(ctx, request, opts...)
-}
-
 func (c *metricClient) emitForwardedSourceStats(
 	metricsHandler metrics.Handler,
 	forwardedFrom string,
@@ -152,16 +48,23 @@ func (c *metricClient) emitForwardedSourceStats(
 	if taskQueue == nil {
 		return
 	}
+	c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, forwardedFrom, taskQueue.GetName())
+}
 
+func (c *metricClient) emitForwardedSourceStatsForTaskQueueName(
+	metricsHandler metrics.Handler,
+	forwardedFrom string,
+	taskQueueName string,
+) {
 	switch {
 	case forwardedFrom != "":
 		metrics.MatchingClientForwardedCounter.With(metricsHandler).Record(1)
 	default:
 		// TODO: confirmed from metrics, it seems this error does happen at the moment...
 		// it means some mangled name come here; need to check why
-		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
+		_, err := tqid.NewTaskQueueFamily("", taskQueueName)
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.NewStringsTag("proto", []string{taskQueue.GetName()}))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueueName))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}
@@ -191,7 +94,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.NewerBuildExists,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.ResourceExhausted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ServiceErrorType(err))
@@ -199,4 +103,23 @@ func (c *metricClient) finishMetricsRecording(
 		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
 	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+}
+
+func (c *metricClient) Route(p tqid.Partition) (string, error) {
+	// Ideally we wouldn't do a type-check here and require c.client to have
+	// Route, but it would require changing too many types all over the place.
+	// This isn't called in a hot path.
+	rc, ok := c.client.(RoutingClient)
+	if !ok {
+		return "", errors.New("not routing client")
+	}
+	return rc.Route(p)
+}
+
+// Stop forwards a deterministic shutdown to the wrapped client. See
+// clientImpl.Stop. It is only invoked via client.Bean.Close.
+func (c *metricClient) Stop() {
+	if s, ok := c.client.(interface{ Stop() }); ok {
+		s.Stop()
+	}
 }

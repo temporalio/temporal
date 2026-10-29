@@ -3,7 +3,9 @@ package temporal
 import (
 	"net/http"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -14,8 +16,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -70,7 +74,7 @@ func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) Ser
 }
 
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
-func InterruptOn(interruptCh <-chan interface{}) ServerOption {
+func InterruptOn(interruptCh <-chan any) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.startupSynchronizationMode.blockingStart = true
 		s.startupSynchronizationMode.interruptCh = interruptCh
@@ -154,11 +158,35 @@ func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFa
 	})
 }
 
-// WithClientFactoryProvider sets a custom ClientFactoryProvider
+// WithCustomHistoryArchiverFactory sets a custom history archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customHistoryArchiverFactory = factory
+	})
+}
+
+// WithCustomVisibilityArchiverFactory sets a custom visibility archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityArchiverFactory = factory
+	})
+}
+
+// WithClientFactoryProvider sets a custom client factory provider.
 // NOTE: this option is experimental and may be changed or removed in future release.
 func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.clientFactoryProvider = clientFactoryProvider
+	})
+}
+
+// WithPersistenceFactoryProvider sets a custom persistence factory provider.
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithPersistenceFactoryProvider(persistenceFactoryProvider persistenceclient.FactoryProviderFn) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.persistenceFactoryProvider = persistenceFactoryProvider
 	})
 }
 
@@ -181,10 +209,47 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
+// WithAdditionalStreamInterceptors sets a chain of ordered custom grpc stream interceptors that will be invoked for all
+// service gRPC stream calls. The list of custom interceptors will be appended to the end of the internal
+// ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
+// the internal ServerInterceptors.
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithAdditionalStreamInterceptors(interceptors ...grpc.StreamServerInterceptor) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.additionalStreamInterceptors = append(s.additionalStreamInterceptors, interceptors...)
+	})
+}
+
+// WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
+func WithTokenProvider(tp auth.TokenProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.tokenProvider = tp
+	})
+}
+
 // WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricsHandler interface
 // metrics.MetricsHandler is the base interface for publishing metric events
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithTestHooks sets custom test hooks.
+// NOTE: this option is for tests only.
+func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.testHooks = &testHooks
+	})
+}
+
+// WithCustomEventLoggerProvider sets a custom OTEL LoggerProvider used to emit structured
+// ("wide") events. Each service builds an events.Handler from it (see events.NewHandler). When
+// unset, events are discarded via a no-op provider.
+//
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithCustomEventLoggerProvider(loggerProvider otellog.LoggerProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.eventLoggerProvider = loggerProvider
 	})
 }

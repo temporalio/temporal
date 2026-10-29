@@ -40,7 +40,7 @@ func TestActivityApiStateReplicationSuite(t *testing.T) {
 
 func (s *ActivityApiStateReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
-		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 	s.setupSuite()
 }
@@ -123,7 +123,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -152,9 +152,9 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
+			require.Len(t, description.PendingActivities, 1)
 			require.True(t, description.PendingActivities[0].Paused)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Nil(t, description.PendingActivities[0].CurrentRetryInterval)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -177,10 +177,10 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
+			require.Len(t, description.PendingActivities, 1)
 			require.True(t, description.PendingActivities[0].Paused)
 			require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Nil(t, description.PendingActivities[0].CurrentRetryInterval)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -204,9 +204,9 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
+			require.Len(t, description.PendingActivities, 1)
 			require.True(t, description.PendingActivities[0].Paused)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Nil(t, description.PendingActivities[0].CurrentRetryInterval)
 			require.Equal(t, int32(10), description.PendingActivities[0].MaximumAttempts)
 		}
 	}, 5*time.Second, 200*time.Millisecond)

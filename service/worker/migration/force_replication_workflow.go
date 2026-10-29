@@ -8,8 +8,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/wideevents"
 )
 
 type (
@@ -117,7 +117,7 @@ const (
 	defaultVerifyIntervalInSeconds                 = 5
 )
 
-func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
+func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) (retErr error) {
 	// For now, we'll return the initial page token for simplicity.
 	// If we want this to be more precise, we could track processed pages.
 	startPageToken := params.NextPageToken
@@ -138,6 +138,8 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
+	finishLifecycle := startForceReplicationWorkflowLifecycle(ctx, params)
+	defer func() { finishLifecycle(retErr, verifiedWorkflowCountForEvent(params)) }()
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
 		wfCount, err := countWorkflowForReplication(ctx, params)
@@ -200,7 +202,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
 }
 
-func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationParams) error {
+func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationParams) (retErr error) {
 	// For now, we'll return the initial page token for simplicity.
 	// If we want this to be more precise, we could track processed pages.
 	startPageToken := params.NextPageToken
@@ -221,6 +223,8 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
+	finishLifecycle := startForceReplicationWorkflowLifecycle(ctx, params)
+	defer func() { finishLifecycle(retErr, verifiedWorkflowCountForEvent(params)) }()
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
 		wfCount, err := countWorkflowForReplication(ctx, params)
@@ -276,6 +280,48 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 
 	params.ContinuedAsNewCount++
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV2, params)
+}
+
+func newForceReplicationWorkflowLifecycle(
+	ctx workflow.Context,
+	params ForceReplicationParams,
+) migrationWorkflowLifecycle {
+	return newMigrationWorkflowLifecycle(
+		ctx,
+		params.Namespace,
+		wideevents.PhaseNamespaceForceReplicationStarted,
+		wideevents.PhaseNamespaceForceReplicationFinished,
+		map[string]any{
+			"query":                     params.Query,
+			"target_cluster":            params.TargetClusterName,
+			"verification_enabled":      params.EnableVerification,
+			"concurrent_activity_count": params.ConcurrentActivityCount,
+			"overall_rps":               params.OverallRps,
+		},
+	)
+}
+
+func startForceReplicationWorkflowLifecycle(
+	ctx workflow.Context,
+	params ForceReplicationParams,
+) func(error, *int64) {
+	if workflow.GetVersion(ctx, migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return func(error, *int64) {}
+	}
+	lifecycle := newForceReplicationWorkflowLifecycle(ctx, params)
+	if lifecycle.isFirstRun() {
+		lifecycle.emitStarted(ctx)
+	}
+	return func(err error, verifiedWorkflowCount *int64) {
+		lifecycle.emitFinished(ctx, err, verifiedWorkflowCount)
+	}
+}
+
+func verifiedWorkflowCountForEvent(params ForceReplicationParams) *int64 {
+	if !params.EnableVerification {
+		return nil
+	}
+	return &params.ReplicatedWorkflowCount
 }
 
 func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params ForceReplicationParams, onDone func(failureReason string)) error {
@@ -390,7 +436,7 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 	return nil
 }
 
-func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (metadataResponse, error) {
+func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (MetadataResponse, error) {
 	// Get cluster metadata, we need namespace ID for history API call.
 	// TODO: remove this step.
 	lao := workflow.LocalActivityOptions{
@@ -399,10 +445,10 @@ func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (me
 	}
 
 	actx := workflow.WithLocalActivityOptions(ctx, lao)
-	var metadataResp metadataResponse
-	metadataRequest := metadataRequest{Namespace: params.Namespace}
+	var metadataResp MetadataResponse
+	MetadataRequest := MetadataRequest{Namespace: params.Namespace}
 	var a *activities
-	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, metadataRequest).Get(ctx, &metadataResp)
+	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest).Get(ctx, &metadataResp)
 	return metadataResp, err
 }
 
@@ -478,7 +524,7 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var migrationExecutions []*replicationspb.MigrationExecutionInfo
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 
@@ -578,7 +624,7 @@ func enqueueReplicationTasksLocal(
 	}
 
 	lactx := workflow.WithLocalActivityOptions(ctx, lao)
-	var migrationExecutions []*replicationspb.MigrationExecutionInfo
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 

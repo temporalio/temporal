@@ -33,8 +33,13 @@ type (
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
+		readinessCtx      context.Context
 		readinessCancel   context.CancelFunc
 		chasmRegistry     *chasm.Registry
+
+		// membershipJoinCancel interrupts the startup membership join delay, if any.
+		membershipJoinCtx    context.Context
+		membershipJoinCancel context.CancelFunc
 	}
 )
 
@@ -50,6 +55,8 @@ func NewService(
 	healthServer *health.Server,
 	chasmRegistry *chasm.Registry,
 ) *Service {
+	readinessCtx, readinessCancel := context.WithCancel(context.Background())
+	membershipJoinCtx, membershipJoinCancel := context.WithCancel(context.Background())
 	return &Service{
 		server:            server,
 		handler:           handler,
@@ -61,6 +68,11 @@ func NewService(
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
 		chasmRegistry:     chasmRegistry,
+		readinessCtx:      readinessCtx,
+		readinessCancel:   readinessCancel,
+
+		membershipJoinCtx:    membershipJoinCtx,
+		membershipJoinCancel: membershipJoinCancel,
 	}
 }
 
@@ -78,12 +90,10 @@ func (s *Service) Start() {
 
 	// start as NOT_SERVING, update to SERVING after initial shards acquired
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
-	readinessCtx, readinessCancel := context.WithCancel(context.Background())
-	s.readinessCancel = readinessCancel
 	go func() {
-		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
+		if s.handler.controller.InitialShardsAcquired(s.readinessCtx) == nil {
 			// add a few seconds for stabilization
-			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
+			if util.InterruptibleSleep(s.readinessCtx, 5*time.Second) == nil {
 				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 			}
 		}
@@ -100,14 +110,19 @@ func (s *Service) Start() {
 
 	// As soon as we join membership, other hosts will send requests for shards that we own,
 	// so we should try to start this after starting the gRPC server.
+	// If Stop runs first, its eviction prevents the membership monitor from joining even if
+	// Start is called afterwards; Stop also cancels the delay so this goroutine exits promptly.
 	go func() {
 		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
 			// In some situations, like rolling upgrades of the history service,
 			// pausing before joining membership can help separate the shard movement
 			// caused by another history instance terminating with this instance starting.
 			s.logger.Info("history start: delaying before membership start",
-				tag.NewDurationTag("startupMembershipJoinDelay", delay))
-			time.Sleep(delay)
+				tag.Duration("startupMembershipJoinDelay", delay))
+			if util.InterruptibleSleep(s.membershipJoinCtx, delay) != nil {
+				s.logger.Info("history start: stopped during membership join delay, not joining membership")
+				return
+			}
 		}
 		s.membershipMonitor.Start()
 	}()
@@ -116,6 +131,8 @@ func (s *Service) Start() {
 // Stop stops the service
 func (s *Service) Stop() {
 	s.readinessCancel()
+
+	s.membershipJoinCancel()
 
 	// remove self from membership ring and wait for traffic to drain
 	var err error
@@ -145,10 +162,20 @@ func (s *Service) Stop() {
 		time.Sleep(s.config.ShutdownDrainDuration())
 	}
 
-	// Stop shard controller. We should have waited long enough for all shards to realize they
-	// lost ownership and close, but if not, this will definitely close them.
-	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
-	s.handler.controller.Stop()
+	enableCloseInboundReplicationStreamOnShutdown := s.config.EnableCloseInboundReplicationStreamOnShutdown()
+	// When enabled, stop handler components (including the replication stream monitor) before
+	// waiting for gRPC handlers to return. This signals inbound stream senders on the peer to
+	// stop, allowing their handler goroutines to unblock and return cleanly before GracefulStop.
+	// Without this, those goroutines block indefinitely and the gRPC server falls back to a
+	// forceful Stop(), causing unclean H2 teardowns on the peer.
+	// Guarded by feature flag so the ordering change can be reverted if needed.
+	if enableCloseInboundReplicationStreamOnShutdown {
+		s.logger.Info("ShutdownHandler: Initiating handler shutdown")
+		s.handler.Stop()
+	} else {
+		s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
+		s.handler.controller.Stop()
+	}
 
 	// All grpc handlers should be cancelled now. Give them a little time to return.
 	t := time.AfterFunc(2*time.Second, func() {
@@ -157,8 +184,9 @@ func (s *Service) Stop() {
 	})
 	s.server.GracefulStop()
 	t.Stop()
-
-	s.handler.Stop()
+	if !enableCloseInboundReplicationStreamOnShutdown {
+		s.handler.Stop()
+	}
 	s.visibilityManager.Close()
 
 	s.logger.Info("history stopped")

@@ -139,7 +139,7 @@ func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityRecord, error) 
 	return record, nil
 }
 
-func serializeToken(token interface{}) ([]byte, error) {
+func serializeToken(token any) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}

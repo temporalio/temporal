@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"hash/maphash"
 	"sync/atomic"
 	"time"
 
@@ -24,19 +25,23 @@ type (
 		config         *taskQueueConfig
 		db             *taskQueueDB
 		logger         log.Logger
-		counterFactory func() counter.Counter
+		counterFactory func(subqueueIndex) counter.Counter
 		appendCh       chan *writeTaskRequest
 
 		// state:
 		taskIDBlock        taskIDBlock
 		currentTaskIDBlock taskIDBlock                       // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 		counters           map[subqueueIndex]counter.Counter // only used in taskWriterLoop.
+		ditherSeed         maphash.Seed                      // seed for fairness pass dither (see pickPasses).
+		// copy of counters' distinct key estimates for safe concurrent access via
+		// getFairnessKeyCountEstimate().
+		keyCountEstimates atomic.Pointer[map[subqueueIndex]int64]
 	}
 )
 
 func newFairTaskWriter(
 	backlogMgr *fairBacklogManagerImpl,
-	counterFactory func() counter.Counter,
+	counterFactory func(subqueueIndex) counter.Counter,
 ) *fairTaskWriter {
 	return &fairTaskWriter{
 		backlogMgr:     backlogMgr,
@@ -48,6 +53,7 @@ func newFairTaskWriter(
 
 		taskIDBlock: noTaskIDs,
 		counters:    make(map[subqueueIndex]counter.Counter),
+		ditherSeed:  maphash.MakeSeed(),
 	}
 }
 
@@ -68,7 +74,7 @@ func (w *fairTaskWriter) appendTask(
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
@@ -115,6 +121,7 @@ func (w *fairTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
 func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel) {
 	// Fetch latest fairness weight overrides from the partition's rate limit manager via pqMgr
 	overrides := w.backlogMgr.pqMgr.GetFairnessWeightOverrides()
+	dither := w.config.FairnessPassDither()
 
 	for i, task := range tasks {
 		pri := task.taskInfo.Priority
@@ -122,9 +129,12 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		weight := getEffectiveWeight(overrides, pri)
 		inc := max(1, int64(strideFactor/weight))
 		base := bases[task.subqueue].pass
+		if dither {
+			base = ditherPass(w.ditherSeed, key, base, inc)
+		}
 		cntr := w.counters[task.subqueue]
 		if cntr == nil {
-			cntr = w.counterFactory()
+			cntr = w.counterFactory(task.subqueue)
 			w.counters[task.subqueue] = cntr
 		}
 		pass := cntr.GetPass(key, base, inc)
@@ -150,6 +160,11 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		return
 	}
 
+	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
+	// can we align them better?
+	persistFairnessKeys := time.NewTimer(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
+	emittedKeyCount := false
+
 	var reqs []*writeTaskRequest
 	for {
 		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
@@ -161,6 +176,10 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		select {
 		case <-w.backlogMgr.tqCtx.Done():
+			if emittedKeyCount {
+				// zero the gauge so a stale value doesn't persist after unload
+				w.recordFairnessKeyCountGauge(0)
+			}
 			return
 		case req := <-w.appendCh:
 			// read a batch of requests from the channel
@@ -175,6 +194,32 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		for _, req := range reqs {
 			req.responseCh <- err
+		}
+
+		// maybe persist fairness key counts if it's time
+		select {
+		case <-persistFairnessKeys.C:
+			// estimating key count may require scanning the whole sketch, so do it here instead of
+			// on every write. counters only change on writes so this is only a little stale.
+			keyCountEstimates := make(map[subqueueIndex]int64, len(w.counters))
+			var maxKeyCountEstimate int64
+			for subqueue, cntr := range w.counters {
+				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
+
+				estimate := int64(cntr.EstimateDistinctKeys())
+				keyCountEstimates[subqueue] = estimate
+				maxKeyCountEstimate = max(maxKeyCountEstimate, estimate)
+			}
+			w.keyCountEstimates.Store(&keyCountEstimates)
+			// Counters for different subqueues can't be unioned, so use the max as a lower
+			// bound. Skip if we have no counters (e.g. draining) to not overwrite the active one.
+			if len(w.counters) > 0 {
+				w.recordFairnessKeyCountGauge(maxKeyCountEstimate)
+				emittedKeyCount = true
+			}
+
+			persistFairnessKeys.Reset(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
+		default:
 		}
 	}
 }
@@ -200,7 +245,10 @@ func (w *fairTaskWriter) writeBatch(reqs []*writeTaskRequest) (retErr error) {
 	if err == nil {
 		w.backlogMgr.wroteNewTasks(resp) // must be called before unpin()
 	} else {
-		w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+		// Context canceled is expected if the task queue unloads during a write.
+		if !common.IsContextCanceledErr(err) {
+			w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+		}
 		w.backlogMgr.signalIfFatal(err)
 	}
 	return err
@@ -237,6 +285,26 @@ func (w *fairTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, erro
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+// recordFairnessKeyCountGauge emits the fairness key count gauge. Like the physical backlog
+// gauges, it's only meaningful when broken down by partition (gauges from different partitions
+// can't be aggregated).
+func (w *fairTaskWriter) recordFairnessKeyCountGauge(count int64) {
+	if !w.config.BreakdownMetricsByTaskQueue() || !w.config.BreakdownMetricsByPartition() ||
+		(w.db.queue.IsVersioned() && !w.config.BreakdownMetricsByBuildID()) {
+		return
+	}
+	metrics.FairnessKeyCountEstimate.With(w.backlogMgr.metricsHandler).Record(float64(count))
+}
+
+// getFairnessKeyCountEstimate returns the estimated number of distinct fairness keys for a
+// subqueue, as of the last time fairness keys were persisted. Safe to be called concurrently.
+func (w *fairTaskWriter) getFairnessKeyCountEstimate(subqueue subqueueIndex) int64 {
+	if m := w.keyCountEstimates.Load(); m != nil {
+		return (*m)[subqueue]
+	}
+	return 0
 }
 
 // getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.

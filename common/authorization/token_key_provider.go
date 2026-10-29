@@ -20,7 +20,7 @@ type TokenKeyProvider interface {
 
 // RawTokenKeyProvider is a TokenKeyProvider that provides keys for validating JWT tokens
 type RawTokenKeyProvider interface {
-	GetKey(ctx context.Context, token *jwt.Token) (interface{}, error)
+	GetKey(ctx context.Context, token *jwt.Token) (any, error)
 	SupportedMethods() []string
 	Close()
 }

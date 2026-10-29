@@ -82,7 +82,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 
 func (s *pagingIteratorSuite) TestIteration_Err_Beginging() {
 	phase := 0
-	ite := NewPagingIterator(func(token []byte) ([]interface{}, []byte, error) {
+	ite := NewPagingIterator(func(token []byte) ([]any, []byte, error) {
 		switch phase {
 		case 0:
 			defer func() { phase++ }()
@@ -102,13 +102,13 @@ func (s *pagingIteratorSuite) TestIteration_Err_Beginging() {
 func (s *pagingIteratorSuite) TestIteration_Err_NotBegining() {
 
 	phase := 0
-	outputs := [][]interface{}{
+	outputs := [][]any{
 		{1, 2, 3, 4, 5},
 	}
 	tokens := [][]byte{
 		[]byte("some random token 1"),
 	}
-	pagingFn := func(token []byte) ([]interface{}, []byte, error) {
+	pagingFn := func(token []byte) ([]any, []byte, error) {
 		switch phase {
 		case 0:
 			s.Equal(0, len(token))

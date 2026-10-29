@@ -68,7 +68,7 @@ func NewExecutableSyncHSMTask(
 	}
 }
 
-func (e *ExecutableSyncHSMTask) QueueID() interface{} {
+func (e *ExecutableSyncHSMTask) QueueID() any {
 	return e.WorkflowKey
 }
 
@@ -76,6 +76,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -89,7 +90,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -121,6 +122,12 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 }
 
 func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.SyncHSMTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -142,7 +149,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 
 		if doContinue, resendErr := e.Resend(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
+			e.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
@@ -154,7 +161,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -169,7 +176,7 @@ func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 			WorkflowId:     e.WorkflowID,
 			RunId:          e.RunID,
 			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-			TaskId:         e.ExecutableTask.TaskID(),
+			TaskId:         e.TaskID(),
 			VisibilityTime: timestamppb.New(e.TaskCreationTime()),
 		}
 	}

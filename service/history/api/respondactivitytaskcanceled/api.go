@@ -6,13 +6,13 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -32,34 +32,6 @@ func Invoke(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	// Handle standalone activity if component ref is present in the token
-	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
-		namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.ActivityId)
-		if err != nil {
-			return nil, err
-		}
-		response, _, err := chasm.UpdateComponent(
-			ctx,
-			componentRef,
-			(*activity.Activity).HandleCanceled,
-			activity.RespondCancelledEvent{
-				Request: req,
-				Token:   token,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     shard.GetMetricsHandler(),
-					NamespaceName:               namespaceEntry.Name().String(),
-					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
-				},
-			},
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
-	}
-
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -73,6 +45,7 @@ func Invoke(
 	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var hasTimeSkippingClockOffset bool
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -126,8 +99,9 @@ func Invoke(
 				return nil, err
 			}
 
-			attemptStartedTime = ai.StartedTime.AsTime()
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
+			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
+			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			hasTimeSkippingClockOffset = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset()
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
@@ -146,15 +120,19 @@ func Invoke(
 			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
-				Status:             workflow.ActivityStatusCanceled,
-				AttemptStartedTime: attemptStartedTime,
-				FirstScheduledTime: firstScheduledTime,
-				Closed:             true,
+				Status:                     workflow.ActivityStatusCanceled,
+				AttemptStartedTime:         attemptStartedTime,
+				FirstScheduledTime:         firstScheduledTime,
+				HasTimeSkippingClockOffset: hasTimeSkippingClockOffset,
+				Closed:                     true,
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          versioningBehavior,
+					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
+				},
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.VersioningBehaviorTag(versioningBehavior))
+			metrics.ActivityTypeTag(token.ActivityType))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }

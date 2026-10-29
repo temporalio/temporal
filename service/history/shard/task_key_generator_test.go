@@ -59,7 +59,7 @@ func (s *taskKeyGeneratorSuite) TestSetTaskKeys_ImmediateTasks() {
 
 	numTask := 5
 	transferTasks := make([]tasks.Task, 0, numTask)
-	for i := 0; i < numTask; i++ {
+	for range numTask {
 		transferTasks = append(
 			transferTasks,
 			tasks.NewFakeTask(
@@ -120,10 +120,10 @@ func (s *taskKeyGeneratorSuite) TestSetTaskKeys_RenewRange() {
 	initialRangeID := s.rangeID
 
 	numTask := 10
-	s.True(numTask > (1 << s.rangeSizeBits))
+	s.Greater(numTask, (1 << s.rangeSizeBits))
 
 	transferTasks := make([]tasks.Task, 0, numTask)
-	for i := 0; i < numTask; i++ {
+	for range numTask {
 		transferTasks = append(
 			transferTasks,
 			tasks.NewFakeTask(tests.WorkflowKey, tasks.CategoryTransfer, now),

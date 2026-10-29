@@ -124,7 +124,7 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var activities []sqlplugin.ActivityInfoMapsRow
-	for i := 0; i < numActivities; i++ {
+	for range numActivities {
 		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		activities = append(activities, activity)
 	}
@@ -291,7 +291,7 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 
 	var activities []sqlplugin.ActivityInfoMapsRow
 	var activityScheduledEventIDs []int64
-	for i := 0; i < numActivities; i++ {
+	for range numActivities {
 		activityScheduledEventID := rand.Int63()
 		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, activityScheduledEventID)
 		activityScheduledEventIDs = append(activityScheduledEventIDs, activityScheduledEventID)
@@ -336,7 +336,7 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var activities []sqlplugin.ActivityInfoMapsRow
-	for i := 0; i < numActivities; i++ {
+	for range numActivities {
 		activityScheduledEventID := rand.Int63()
 		activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, activityScheduledEventID)
 		activities = append(activities, activity)

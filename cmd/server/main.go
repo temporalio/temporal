@@ -183,27 +183,16 @@ func buildCLI() *cli.App {
 
 				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
 				logger.Info("Build info.",
-					tag.NewTimeTag("git-time", build.InfoData.GitTime),
-					tag.NewStringTag("git-revision", build.InfoData.GitRevision),
-					tag.NewBoolTag("git-modified", build.InfoData.GitModified),
-					tag.NewStringTag("go-arch", build.InfoData.GoArch),
-					tag.NewStringTag("go-os", build.InfoData.GoOs),
-					tag.NewStringTag("go-version", build.InfoData.GoVersion),
-					tag.NewBoolTag("cgo-enabled", build.InfoData.CgoEnabled),
-					tag.NewStringTag("server-version", headers.ServerVersion),
-					tag.NewBoolTag("debug-mode", debug.Enabled),
+					tag.Time("git-time", build.InfoData.GitTime),
+					tag.String("git-revision", build.InfoData.GitRevision),
+					tag.Bool("git-modified", build.InfoData.GitModified),
+					tag.String("go-arch", build.InfoData.GoArch),
+					tag.String("go-os", build.InfoData.GoOs),
+					tag.String("go-version", build.InfoData.GoVersion),
+					tag.Bool("cgo-enabled", build.InfoData.CgoEnabled),
+					tag.String("server-version", headers.ServerVersion),
+					tag.Bool("debug-mode", debug.Enabled),
 				)
-
-				var dynamicConfigClient dynamicconfig.Client
-				if cfg.DynamicConfigClient != nil {
-					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
-					if err != nil {
-						return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
-					}
-				} else {
-					dynamicConfigClient = dynamicconfig.NewNoopClient()
-					logger.Info("Dynamic config client is not configured. Using noop client.")
-				}
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(
 					&cfg.Global.Authorization,
@@ -233,7 +222,6 @@ func buildCLI() *cli.App {
 				s, err := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
-					temporal.WithDynamicConfigClient(dynamicConfigClient),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorizer),

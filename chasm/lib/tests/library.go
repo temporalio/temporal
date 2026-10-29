@@ -1,29 +1,69 @@
 package tests
 
-import "go.temporal.io/server/chasm"
+import (
+	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+)
 
 type (
 	library struct {
 		chasm.UnimplementedLibrary
+
+		// retention is nil on the shared Library, so only test clusters, which register their own
+		// library instance (see Module), set a PayloadStore retention.
+		retention dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
+)
+
+const (
+	libraryName   = "tests"
+	componentName = "payloadStore"
+)
+
+var (
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
 var Library = &library{}
 
 func (l *library) Name() string {
-	return "tests"
+	return libraryName
+}
+
+func (l *library) NexusServices() []*nexus.Service {
+	return []*nexus.Service{NewTestServiceNexusService()}
+}
+
+func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+	return []*chasm.NexusServiceProcessor{NewTestServiceNexusServiceProcessor()}
 }
 
 func (l *library) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*PayloadStore]("payloadStore",
-			chasm.WithSearchAttributes(
-				PayloadTotalCountSearchAttribute,
-				PayloadTotalSizeSearchAttribute,
-				PayloadExecutionStatusSearchAttribute,
-				chasm.SearchAttributeTemporalScheduledByID,
-			),
+	opts := []chasm.RegistrableComponentOption{
+		chasm.WithBusinessIDAlias("PayloadStoreId"),
+		chasm.WithRecordPrincipals(),
+		chasm.WithSearchAttributes(
+			PayloadTotalCountSearchAttribute,
+			PayloadTotalSizeSearchAttribute,
+			ExecutionStatusSearchAttribute,
+			chasm.SearchAttributeTaskQueue,
 		),
+		chasm.WithContextValues(map[any]any{
+			componentCtxKey: componentCtxVal,
+		}),
+	}
+	if l.retention != nil {
+		opts = append(opts, chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
+			return l.retention(ns.Name().String())
+		}))
+	}
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*PayloadStore](componentName, opts...),
 	}
 }
 
@@ -31,13 +71,11 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask(
 			"payloadTTLPureTask",
-			&PayloadTTLPureTaskValidator{},
-			&PayloadTTLPureTaskExecutor{},
+			&PayloadTTLPureTaskHandler{},
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"payloadTTLSideEffectTask",
-			&PayloadTTLSideEffectTaskValidator{},
-			&PayloadTTLSideEffectTaskExecutor{},
+			&PayloadTTLSideEffectTaskHandler{},
 		),
 	}
 }

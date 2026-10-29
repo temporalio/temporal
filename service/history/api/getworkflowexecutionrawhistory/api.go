@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
@@ -130,9 +131,16 @@ func Invoke(
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryScope),
 	)
 
+	// Ensure all raw history is proto3 encoded since data may be stored in other formats during testing.
+	// In production (proto3 encoding), this returns the input unchanged.
+	historyBlobs, err := serialization.ReencodeEventBlobsAsProto3(shardContext.GetPayloadSerializer(), rawHistoryResponse.HistoryEventBlobs)
+	if err != nil {
+		return nil, err
+	}
+
 	result :=
 		&adminservice.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
+			HistoryBatches: historyBlobs,
 			VersionHistory: targetVersionHistory,
 			HistoryNodeIds: rawHistoryResponse.NodeIDs,
 		}

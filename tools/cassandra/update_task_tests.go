@@ -15,7 +15,8 @@ func (s *UpdateSchemaTestSuite) SetupSuite() {
 	if err != nil {
 		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
 	}
-	s.SetupSuiteBase(client, "")
+	// No ConnectParams needed: Cassandra CLI defaults work without explicit flags.
+	s.SetupSuiteBase(client, "", test.ConnectParams{})
 }
 
 func (s *UpdateSchemaTestSuite) TearDownSuite() {
@@ -24,14 +25,14 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
+	s.NoError(err)
 	defer client.Close()
 	s.RunUpdateSchemaTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"events", "tasks"})
 }
 
 func (s *UpdateSchemaTestSuite) TestDryrun() {
 	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
+	s.NoError(err)
 	defer client.Close()
 	dir := "../../schema/cassandra/temporal/versioned"
 	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.Version)

@@ -1,0 +1,297 @@
+package scheduler_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+)
+
+type migrationTimeSkippingContext struct {
+	chasm.MutableContext
+	info      *commonpb.TimeSkippingInfo
+	setConfig *commonpb.TimeSkippingConfig
+}
+
+func (c *migrationTimeSkippingContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return common.CloneProto(c.info)
+}
+
+func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.setConfig = common.CloneProto(config)
+}
+
+func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	require.False(t, sched.Schedule.State.Paused)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	require.True(t, sched.Schedule.State.Paused)
+	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
+	require.NotNil(t, sched.WorkflowMigration)
+}
+
+func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *commonpb.TimeSkippingConfig
+	}{
+		{
+			name:   "time skipping enabled",
+			config: &commonpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
+			name:   "time skipping disabled",
+			config: &commonpb.TimeSkippingConfig{Enabled: false},
+		},
+		{name: "time skipping info without config"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			migrationCtx := &migrationTimeSkippingContext{
+				MutableContext: ctx,
+				info: &commonpb.TimeSkippingInfo{
+					EffectiveConfig: common.CloneProto(tt.config),
+				},
+			}
+
+			_, err := sched.MigrateToWorkflow(migrationCtx, &schedulerpb.MigrateToWorkflowRequest{
+				NamespaceId: namespaceID,
+				ScheduleId:  scheduleID,
+			})
+
+			require.ErrorIs(t, err, scheduler.ErrTimeSkippingMigration)
+			require.False(t, sched.Schedule.State.Paused)
+			require.Nil(t, sched.WorkflowMigration)
+			require.Nil(t, migrationCtx.setConfig)
+		})
+	}
+}
+
+func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T) {
+	env := newTestEnv(t, withMockEngine())
+	env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+		return &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{Enabled: false},
+			},
+		}
+	}
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	readCtx := env.ReadContext()
+	env.ExpectReadComponent(readCtx, env.Scheduler)
+	env.ExpectUpdateComponent(env.MutableContext(), env.Scheduler)
+
+	historyClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
+	historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, request *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
+			require.Nil(t, request.GetStartRequest().GetTimeSkippingConfig())
+			require.Nil(t, request.GetStartRequest().GetTimeSkippingStatePropagation())
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		})
+
+	handler := scheduler.NewSchedulerMigrateToWorkflowTaskHandler(scheduler.SchedulerMigrateToWorkflowTaskHandlerOptions{
+		Config:           defaultConfig(),
+		MetricsHandler:   metrics.NoopMetricsHandler,
+		BaseLogger:       env.Logger,
+		HistoryClient:    historyClient,
+		SaMapperProvider: searchattribute.NewTestMapperProvider(nil),
+	})
+	require.NoError(t, handler.Execute(
+		env.EngineContext(),
+		chasm.ComponentRef{},
+		chasm.TaskAttributes{},
+		&schedulerpb.SchedulerMigrateToWorkflowTask{},
+	))
+	require.True(t, env.Scheduler.Closed)
+}
+
+func TestMigrateToWorkflow_SavesPreMigrationState(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Pause the schedule before migration with custom notes.
+	sched.Schedule.State.Paused = true
+	sched.Schedule.State.Notes = "user paused"
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, sched.WorkflowMigration)
+	require.True(t, sched.WorkflowMigration.PreMigrationPaused)
+	require.Equal(t, "user paused", sched.WorkflowMigration.PreMigrationNotes)
+}
+
+func TestMigrateToWorkflow_SavesPreMigrationState_Unpaused(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	require.False(t, sched.Schedule.State.Paused)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, sched.WorkflowMigration)
+	require.False(t, sched.WorkflowMigration.PreMigrationPaused)
+	require.Empty(t, sched.WorkflowMigration.PreMigrationNotes)
+}
+
+func TestMigrateToWorkflow_Idempotent(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	// Second call succeeds without error (no-op).
+	_, err = sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+}
+
+func TestMigrateToWorkflow_Sentinel(t *testing.T) {
+	sentinel, ctx, _ := setupSentinelForTest(t)
+
+	_, err := sentinel.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+}
+
+func TestPatch_UnpauseBlockedDuringMigration(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Initiate migration.
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	// Attempt to unpause should fail.
+	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Patch: &schedulepb.SchedulePatch{
+				Unpause: "resuming",
+			},
+		},
+	})
+
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+}
+
+func TestPatch_RejectedDuringMigration(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	// Every patch mutation, including action-producing patches, must be fenced
+	// while the migration task prepares its V1 snapshot.
+	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Patch: &schedulepb.SchedulePatch{
+				Pause:              "user pause during migration",
+				TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+				BackfillRequest:    []*schedulepb.BackfillRequest{{}},
+			},
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+	require.True(t, sched.Schedule.State.Paused)
+	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
+	require.Empty(t, sched.Backfillers)
+}
+
+func TestUpdate_RejectedDuringMigration(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	// Update should be rejected outright when a migration is pending.
+	newSchedule := defaultSchedule()
+	newSchedule.State.Paused = false
+	newSchedule.State.Notes = "user unpaused"
+
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   newSchedule,
+		},
+	})
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+}
+
+func TestDelete_RejectedDuringMigration(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	_, err = sched.Delete(ctx, &schedulerpb.DeleteScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DeleteScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+	require.False(t, sched.Closed)
+}

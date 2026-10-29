@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -19,6 +20,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.ResetActivityResponse, retError error) {
 	request := req.GetFrontendRequest()
+	var activityMetrics []workflow.ActivityMetricsInfo
+
 	workflowKey := definition.NewWorkflowKey(
 		req.NamespaceId,
 		request.GetExecution().GetWorkflowId(),
@@ -31,6 +34,10 @@ func Invoke(
 		workflowKey,
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
+
 			var activityIDs []string
 			switch a := request.GetActivity().(type) {
 			case *workflowservice.ResetActivityRequest_Id:
@@ -42,6 +49,10 @@ func Invoke(
 						activityIDs = append(activityIDs, ai.ActivityId)
 					}
 				}
+			case *workflowservice.ResetActivityRequest_MatchAll:
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					activityIDs = append(activityIDs, ai.ActivityId)
+				}
 			}
 
 			if len(activityIDs) == 0 {
@@ -49,6 +60,10 @@ func Invoke(
 			}
 
 			for _, activityId := range activityIDs {
+				activityInfo, activityFound := mutableState.GetActivityByActivityID(activityId)
+				if !activityFound {
+					return nil, consts.ErrActivityNotFound
+				}
 				if err := workflow.ResetActivity(
 					ctx,
 					shardContext, mutableState, activityId,
@@ -57,6 +72,7 @@ func Invoke(
 				); err != nil {
 					return nil, err
 				}
+				activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, activityInfo))
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -70,6 +86,10 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	for _, info := range activityMetrics {
+		metrics.ActivityReset.With(info.MetricsHandler(shardContext, metrics.ActivityResetScope)).Record(1)
 	}
 
 	return &historyservice.ResetActivityResponse{}, nil

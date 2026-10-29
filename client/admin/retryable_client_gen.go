@@ -56,6 +56,21 @@ func (c *retryableClient) AddTasks(
 	return resp, err
 }
 
+func (c *retryableClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	var resp *adminservice.ApplyNamespaceMutationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyNamespaceMutation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -80,6 +95,21 @@ func (c *retryableClient) CloseShard(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CloseShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	var resp *adminservice.CountExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountExecutions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -356,6 +386,21 @@ func (c *retryableClient) GetTaskQueueTasks(
 	return resp, err
 }
 
+func (c *retryableClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	var resp *adminservice.GetTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -431,6 +476,21 @@ func (c *retryableClient) ListClusters(
 	return resp, err
 }
 
+func (c *retryableClient) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	var resp *adminservice.ListExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -485,6 +545,21 @@ func (c *retryableClient) MergeDLQTasks(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.MergeDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateScheduleResponse, error) {
+	var resp *adminservice.MigrateScheduleResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.MigrateSchedule(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -620,6 +695,21 @@ func (c *retryableClient) ResendReplicationTasks(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ResendReplicationTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	var resp *adminservice.StartAdminBatchOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.StartAdminBatchOperation(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

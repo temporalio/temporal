@@ -26,13 +26,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 )
 
 type (
 	ForceReplicationWorkflowTestSuite struct {
 		suite.Suite
-		forceReplicationWorkflowFn interface{}
+		forceReplicationWorkflowFn any
 	}
 )
 
@@ -40,7 +41,7 @@ func TestForceReplicationWorkflowTestSuite(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name                       string
-		forceReplicationWorkflowFn interface{}
+		forceReplicationWorkflowFn any
 	}{
 		{
 			name:                       "ForceReplicationWorkflow",
@@ -67,8 +68,16 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	namespaceID := uuid.NewString()
 
 	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 4}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Twice()
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
 	currentPageCount := 0
@@ -82,7 +91,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{{BusinessId: "wf-1"}},
+				Executions:    []*ExecutionInfo{{BusinessID: "wf-1"}},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -90,7 +99,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []*replicationspb.MigrationExecutionInfo{},
+			Executions:    []*ExecutionInfo{},
 			NextPageToken: nil, // last page
 			LastStartTime: startTime,
 			LastCloseTime: closeTime,
@@ -109,6 +118,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
 		TargetClusterEndpoint:   "test-target",
+		ReplicatedWorkflowCount: 6,
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -126,9 +136,14 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	s.Equal(closeTime, status.LastCloseTime)
 	s.True(status.TaskQueueUserDataReplicationStatus.Done)
 	s.Equal("", status.TaskQueueUserDataReplicationStatus.FailureMessage)
-	s.Equal(int64(4), status.TotalWorkflowCount)
-	s.Equal(int64(4), status.ReplicatedWorkflowCount)
+	s.Equal(int64(10), status.TotalWorkflowCount)
+	s.Equal(int64(10), status.ReplicatedWorkflowCount)
 	s.Equal([]byte(nil), status.PageTokenForRestart)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationStarted, lifecycleEvents[0].Phase)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationFinished, lifecycleEvents[1].Phase)
+	s.Equal(wideevents.NamespaceMigrationWorkflowSucceeded, lifecycleEvents[1].Status)
+	s.Require().NotNil(lifecycleEvents[1].VerifiedWorkflowCount)
+	s.Equal(int64(10), *lifecycleEvents[1].VerifiedWorkflowCount)
 }
 
 func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
@@ -144,15 +159,15 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{},
-				NextPageToken: []byte(fmt.Sprintf("fake-page-token-%d", currentPageCount)),
+				Executions:    []*ExecutionInfo{},
+				NextPageToken: fmt.Appendf(nil, "fake-page-token-%d", currentPageCount),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []*replicationspb.MigrationExecutionInfo{},
+			Executions:    []*ExecutionInfo{},
 			NextPageToken: nil, // last page
 		}, nil
 	}
@@ -184,7 +199,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	expectContinueAsNew := true
 
 	// Run the workflow once. We should get a continue as new error.
-	continueAsNewInput, queryStatus := s.testRunForceReplicationForContinueAsNew(
+	continueAsNewInput, queryStatus, lifecycleEvents := s.testRunForceReplicationForContinueAsNew(
 		mockListWorkflows,
 		ForceReplicationParams{
 			Namespace:               "test-ns",
@@ -232,6 +247,8 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	s.Equal(startTime, queryStatus.LastStartTime)
 	s.Equal(1, queryStatus.ContinuedAsNewCount)
 	s.Equal([]byte("fake-initial-page-token"), queryStatus.PageTokenForRestart)
+	s.Require().Len(lifecycleEvents, 1)
+	s.Equal(wideevents.PhaseNamespaceForceReplicationStarted, lifecycleEvents[0].Phase)
 }
 
 func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAsNew(
@@ -239,17 +256,25 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	input ForceReplicationParams,
 	expectContinueAsNew bool,
 	expMaxPageCountPerExecution int,
-) (*ForceReplicationParams, ForceReplicationStatus) {
+) (*ForceReplicationParams, ForceReplicationStatus, []wideevents.NamespaceMigrationWorkflowLifecycleInput) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.NewString()
 
 	var a *activities
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Once()
 	if input.TotalForceReplicateWorkflowCount == 0 {
 		env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
 	}
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(mockListWorkflows).Times(expMaxPageCountPerExecution)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(expMaxPageCountPerExecution)
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(expMaxPageCountPerExecution)
@@ -284,7 +309,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	var status ForceReplicationStatus
 	s.NoError(envValue.Get(&status))
 
-	return continueAsNewParams, status
+	return continueAsNewParams, status, lifecycleEvents
 }
 
 func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
@@ -320,7 +345,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	maxPageCountPerExecution := 2
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(nil, errors.New("mock listWorkflows error"))
@@ -351,7 +376,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
 	currentPageCount := 0
@@ -361,13 +386,13 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{},
+				Executions:    []*ExecutionInfo{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []*replicationspb.MigrationExecutionInfo{},
+			Executions:    []*ExecutionInfo{},
 			NextPageToken: nil, // last page
 		}, nil
 	}).Times(totalPageCount)
@@ -400,7 +425,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
 	currentPageCount := 0
@@ -410,13 +435,13 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{},
+				Executions:    []*ExecutionInfo{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []*replicationspb.MigrationExecutionInfo{},
+			Executions:    []*ExecutionInfo{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -456,7 +481,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
 	currentPageCount := 0
@@ -466,13 +491,13 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{},
+				Executions:    []*ExecutionInfo{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []*replicationspb.MigrationExecutionInfo{},
+			Executions:    []*ExecutionInfo{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -513,10 +538,10 @@ func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
-		Executions:    []*replicationspb.MigrationExecutionInfo{},
+		Executions:    []*ExecutionInfo{},
 		NextPageToken: nil, // last page
 	}, nil)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil)
@@ -556,12 +581,12 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	var a *activities
 	namespaceID := uuid.NewString()
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 3}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
 
-	pages := [][]*replicationspb.MigrationExecutionInfo{
-		{{BusinessId: "wf-1a"}},
-		{{BusinessId: "wf-2a"}, {BusinessId: "wf-2b"}},
-		{{BusinessId: "wf-3a"}},
+	pages := [][]*ExecutionInfo{
+		{{BusinessID: "wf-1a"}},
+		{{BusinessID: "wf-2a"}, {BusinessID: "wf-2b"}},
+		{{BusinessID: "wf-3a"}},
 	}
 
 	totalPageCount := len(pages)
@@ -580,7 +605,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *generateReplicationTasksRequest) error {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
-			ids[i] = we.GetBusinessId()
+			ids[i] = we.BusinessID
 		}
 		capturedGenerateMu.Lock()
 		capturedGenerate = append(capturedGenerate, ids)
@@ -595,7 +620,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
-			ids[i] = we.GetBusinessId()
+			ids[i] = we.BusinessID
 		}
 		capturedVerifyMu.Lock()
 		capturedVerify = append(capturedVerify, ids)
@@ -644,7 +669,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 		namespaceReplicationQueue: mockNamespaceReplicationQueue,
 		taskManager:               mockTaskManager,
 		frontendClient:            mockFrontendClient,
-		logger:                    log.NewCLILogger(),
+		Logger:                    log.NewCLILogger(),
 	}
 
 	// Once per attempt
@@ -718,7 +743,7 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 	return i.ActivityInboundInterceptorBase.Init(i)
 }
 
-func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
+func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...any) {
 	if d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails); ok {
 		i.seedRecordedHeartbeats = append(i.seedRecordedHeartbeats, d)
 	} else if d, ok := details[0].(replicationTasksHeartbeatDetails); ok {

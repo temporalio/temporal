@@ -3,8 +3,10 @@ package signalworkflow
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -27,6 +29,9 @@ func Invoke(
 	externalWorkflowExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 
+	// Capture the currently-running workflow's runID from mutableState via our closure,
+	// in case the caller didn't pin the signal to a specific runID.
+	var runID string
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -37,7 +42,17 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			runID = mutableState.GetExecutionState().GetRunId()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
+				if len(request.GetLinks()) > 0 {
+					shard.GetThrottledLogger().Info("Signal deduplicated by request ID, links on this request not attached.",
+						tag.WorkflowNamespace(request.GetNamespace()),
+						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()),
+						tag.WorkflowRunID(runID),
+						tag.RequestID(request.GetRequestId()),
+						tag.Int("link-count", len(request.GetLinks())))
+				}
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
@@ -88,6 +103,7 @@ func Invoke(
 				request.GetIdentity(),
 				request.GetHeader(),
 				externalWorkflowExecution,
+				request.GetRequestId(),
 				request.GetLinks(),
 			)
 			if err != nil {
@@ -106,5 +122,13 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.SignalWorkflowExecutionResponse{}, nil
+	return &historyservice.SignalWorkflowExecutionResponse{
+		Link: api.GenerateRequestIDRefLink(
+			request.GetNamespace(),
+			request.GetWorkflowExecution().GetWorkflowId(),
+			runID,
+			request.GetRequestId(),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		),
+	}, nil
 }

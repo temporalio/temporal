@@ -51,7 +51,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		MinPass:       minPass,
 	}
 
-	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+	paginationFunc := func(paginationToken []byte) ([]any, []byte, error) {
 		ctx, cancel := newContext(c)
 		defer cancel()
 
@@ -78,7 +78,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 			tasks = filteredTasks
 		}
 
-		var items []interface{}
+		var items []any
 		for _, task := range tasks {
 			items = append(items, task)
 		}
@@ -179,6 +179,50 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 		prettyPrintJSONObject(c, response)
 
 	}
+	return nil
+}
+
+// AdminGetTaskQueueUserData returns the per-type user data for a task queue partition
+func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) error {
+	namespace, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	tqName, err := getRequiredOption(c, FlagTaskQueue)
+	if err != nil {
+		return err
+	}
+
+	tlTypeInt, err := StringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
+	if err != nil {
+		return fmt.Errorf("invalid task queue type: %w", err)
+	}
+	tqType := enumspb.TaskQueueType(tlTypeInt)
+	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
+	partitionID := 0
+	if c.IsSet(FlagPartitionID) {
+		partitionID = c.Int(FlagPartitionID)
+	}
+
+	client := clientFactory.AdminClient(c)
+	req := &adminservice.GetTaskQueueUserDataRequest{
+		Namespace:     namespace,
+		TaskQueue:     tqName,
+		TaskQueueType: tqType,
+		PartitionId:   int32(partitionID),
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, e := client.GetTaskQueueUserData(ctx, req)
+	if e != nil {
+		return fmt.Errorf("unable to get Task Queue User Data: %w", e)
+	}
+	prettyPrintJSONObject(c, response)
 	return nil
 }
 

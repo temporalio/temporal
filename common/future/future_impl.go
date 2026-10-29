@@ -2,8 +2,11 @@ package future
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 )
+
+var errorFutureNotReady = errors.New("future is not ready yet")
 
 const (
 	// pending status indicates future is not ready
@@ -50,6 +53,14 @@ func (f *FutureImpl[T]) Get(
 		var value T
 		return value, ctx.Err()
 	}
+}
+
+func (f *FutureImpl[T]) GetIfReady() (T, error) {
+	if f.Ready() {
+		return f.value, f.err
+	}
+	var value T
+	return value, errorFutureNotReady
 }
 
 func (f *FutureImpl[T]) Set(

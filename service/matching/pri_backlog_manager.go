@@ -19,30 +19,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// this retry policy is currently only used for matching persistence operations
-// that, if failed, the entire task queue needs to be reloaded
-// TODO(pri): old matcher cleanup: move here
-// var persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-// 	WithMaximumInterval(1 * time.Second).
-// 	WithExpirationInterval(30 * time.Second)
-
 type (
-	// backlogManager manages the backlog and persistence of a physical task queue
-	// TODO(pri): old matcher cleanup: move here
-	// backlogManager interface {
-	// 	Start()
-	// 	Stop()
-	// 	WaitUntilInitialized(context.Context) error
-	// 	SpoolTask(taskInfo *persistencespb.TaskInfo) error
-	// 	BacklogCountHint() int64
-	// 	BacklogStatus() *taskqueuepb.TaskQueueStatus
-	// 	TotalApproximateBacklogCount() int64
-	// 	BacklogHeadAge() time.Duration
-	// }
-
 	priBacklogManagerImpl struct {
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
@@ -108,8 +89,7 @@ func (c *priBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -153,6 +133,12 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	// Pass scale info back to physical tq from unversioned (default) queue.
+	// This must be done before c.initializedError.Set().
+	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() && !c.isDraining {
+		c.pqMgr.StartScaleManager(state.scaleState)
 	}
 
 	if state.otherHasTasks {
@@ -225,11 +211,16 @@ func (c *priBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
 			c.signalIfFatal(err)
+
+			if c.hasFinishedDraining() {
+				c.pqMgr.FinishedDraining()
+				return
+			}
 		}
 	}
 }
@@ -276,8 +267,8 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 		// Note that there could be more than one subqueue for the same priority.
 		if _, ok := result[pk]; !ok {
 			result[pk] = &taskqueuepb.TaskQueueStats{
-				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-				// be more appropriate in the future.
+				// TODO(pri): returning 0 to match existing behavior, but maybe -1 (meaning empty)
+				// would be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
 			}
 		}
@@ -295,6 +286,23 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 		}
 	}
 	return result
+}
+
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *priBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -340,6 +348,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueIndex(i)),
 			ApproximateBacklogCount: backlogCountsBySubqueue[i],
+			BacklogDrained:          r.isDrained(),
 		}
 	}
 	return status
@@ -375,14 +384,6 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 	return err
 }
 
-// TODO(pri): old matcher cleanup: move here
-// func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
-// 	return taskIDBlock{
-// 		start: (rangeID-1)*rangeSize + 1,
-// 		end:   rangeID * rangeSize,
-// 	}
-// }
-
 func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
 }
@@ -391,10 +392,42 @@ func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
 }
 
+// hasFinishedDraining returns true if this is a draining backlog manager and all tasks have
+// been fully drained (read and acked).
+func (c *priBacklogManagerImpl) hasFinishedDraining() bool {
+	if !c.isDraining {
+		return false
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	for _, r := range c.subqueues {
+		if !r.isDrained() {
+			return false
+		}
+	}
+	return true
+}
+
+// FinalGC does a final gc pass on all subqueues.
+func (c *priBacklogManagerImpl) FinalGC() {
+	if !softassert.That(c.logger, c.isDraining, "FinalGC called on non-draining backlog manager") {
+		return
+	}
+	c.subqueueLock.Lock()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for _, r := range subqueues {
+		r.finalGC()
+	}
+}
+
 func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
 	c.config.setDefaultPriority(task)
 	if c.isDraining {
 		// draining goes before active backlog so we're guaranteed to finish migration
-		task.effectivePriority -= maxPriorityLevels
+		task.effectivePriority -= effectivePriorityFactor * maxPriorityLevels
 	}
 }

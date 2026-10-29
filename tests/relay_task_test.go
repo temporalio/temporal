@@ -5,27 +5,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type RelayTaskTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*RelayTaskTestSuite]
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(RelayTaskTestSuite))
+	parallelsuite.Run(t, &RelayTaskTestSuite{})
 }
 
 func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-relay-workflow-task-timeout-test"
 	wt := "functional-relay-workflow-task-timeout-test-type"
 	tl := "functional-relay-workflow-task-timeout-test-taskqueue"
@@ -34,7 +34,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -44,9 +44,9 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -71,13 +71,13 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -86,7 +86,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 		testcore.WithExpectedAttemptCount(0),
 		testcore.WithRetries(3),
 		testcore.WithForceNewWorkflowTask)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
@@ -95,9 +95,9 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	//nolint:forbidigo
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
-	for i := 0; i < 3; i++ {
-		events := s.GetHistory(s.Namespace().String(), workflowExecution)
-		if len(events) == 8 {
+	for range 3 {
+		events := env.GetHistory(env.Namespace().String(), workflowExecution)
+		if len(events) >= 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -106,7 +106,8 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
   5 MarkerRecorded
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE`, events)
+  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE
+  9 WorkflowTaskScheduled`, events)
 			workflowTaskTimeout = true
 			break
 		}
@@ -117,7 +118,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 
 	// Now complete workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(workflowComplete)

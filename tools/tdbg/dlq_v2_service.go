@@ -455,7 +455,7 @@ func (ac *DLQV2Service) ListQueues(c *cli.Context) (err error) {
 		return queues[i].MessageCount > queues[j].MessageCount
 	})
 
-	items := make([]interface{}, len(queues))
+	items := make([]any, len(queues))
 	for i, queue := range queues {
 		items[i] = queue
 	}

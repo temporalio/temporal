@@ -2,50 +2,38 @@ package matching
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ForwarderTestSuite struct {
 	suite.Suite
 
-	newFwdr    bool
 	controller *gomock.Controller
 	client     *matchingservicemock.MockMatchingServiceClient
-	fwdr       forwarder
+	fwdr       *priForwarder
 	cfg        *forwarderConfig
 	partition  *tqid.NormalPartition
 }
 
-type forwarder interface {
-	ForwardTask(background context.Context, task *internalTask) error
-	ForwardQueryTask(background context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
-	ForwardPoll(ctx context.Context, p *pollMetadata) (*internalTask, error)
-}
-
-// TODO(pri): cleanup; delete this
-func TestForwarderSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &ForwarderTestSuite{newFwdr: false})
-}
-
 func TestPriorityForwarderSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &ForwarderTestSuite{newFwdr: true})
+	suite.Run(t, &ForwarderTestSuite{})
 }
 
 func (t *ForwarderTestSuite) SetupTest() {
@@ -62,13 +50,8 @@ func (t *ForwarderTestSuite) SetupTest() {
 	t.NoError(err)
 	t.partition = tqFam.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
-	if t.newFwdr {
-		t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-		t.NoError(err)
-	} else {
-		t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-		t.NoError(err)
-	}
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
+	t.NoError(err)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {
@@ -87,7 +70,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	var request *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
@@ -105,7 +88,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.EqualValues(schedToStart, rewritten)
+	t.Equal(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
 }
@@ -116,14 +99,14 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 
 	var request *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			request = arg1
 			t.Equal(bld, request.GetForwardInfo().GetDispatchBuildId())
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0)
+	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -135,7 +118,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.EqualValues(schedToStart, rewritten)
+	t.Equal(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_HISTORY, request.GetForwardInfo().GetTaskSource())
 }
@@ -145,7 +128,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
@@ -160,7 +143,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -172,7 +155,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...any) {
 			request = arg1
 			t.Equal(bld, request.ForwardInfo.GetDispatchBuildId())
 		},
@@ -188,23 +171,10 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
-}
-
-func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	rps := 2
-	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
-	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil)
-	for i := 0; i < rps; i++ {
-		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
-	}
-	t.Equal(errForwarderSlowDown, t.fwdr.ForwardTask(context.Background(), task))
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
@@ -219,7 +189,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	resp := &matchingservice.QueryWorkflowResponse{}
 	var request *matchingservice.QueryWorkflowRequest
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -239,7 +209,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 	resp := &matchingservice.QueryWorkflowResponse{}
 	rps := 2
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil).Times(rps + 1)
-	for i := 0; i < rps; i++ {
+	for range rps {
 		_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 		t.NoError(err)
 	}
@@ -264,7 +234,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -282,6 +252,34 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding workflow poll")
+}
+
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
@@ -294,13 +292,13 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 
 	var request *matchingservice.PollActivityTaskQueueRequest
 	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
@@ -312,114 +310,78 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Nil(task.pollWorkflowTaskQueueResponse())
 }
 
-// TODO(pri): old matcher cleanup
-func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
-	if t.newFwdr {
-		t.T().Skip("priority forwarder is not compatible with this test")
-	}
-	fwdr := t.fwdr.(*Forwarder)
+func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	concurrency := 50
-	testCases := []struct {
-		name          string
-		mustLeakToken bool
-		output        int32
-	}{
-		{"contention", false, int32(concurrency)},
-		{"token_leak", true, 1},
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
 	}
 
-	var adds int32
-	var polls int32
-	var wg sync.WaitGroup
+	var request *matchingservice.PollActivityTaskQueueRequest
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
 
-	for _, tc := range testCases {
-		adds = 0
-		polls = 0
-		t.Run(tc.name, func() {
-			for i := 0; i < concurrency; i++ {
-				wg.Add(1)
-				go func() {
-					timer := time.NewTimer(time.Millisecond * 200)
-					select {
-					case token := <-fwdr.AddReqTokenC():
-						timer.Stop()
-						if !tc.mustLeakToken {
-							token.release()
-						}
-						atomic.AddInt32(&adds, 1)
-					case <-timer.C:
-					}
-
-					timer = time.NewTimer(time.Millisecond * 200)
-					select {
-					case token := <-fwdr.PollReqTokenC():
-						timer.Stop()
-						if !tc.mustLeakToken {
-							token.release()
-						}
-						atomic.AddInt32(&polls, 1)
-					case <-timer.C:
-					}
-					wg.Done()
-				}()
-			}
-			t.True(common.AwaitWaitGroup(&wg, time.Second))
-			t.Equal(tc.output, adds)
-			t.Equal(tc.output, polls)
-		})
-	}
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding activity poll")
 }
 
-// TODO(pri): old matcher cleanup
-func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
-	if t.newFwdr {
-		t.T().Skip("priority forwarder is not compatible with this test")
-	}
-	fwdr := t.fwdr.(*Forwarder)
+func (t *ForwarderTestSuite) TestForwardPollForNexusPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_NEXUS)
 
-	maxOutstandingTasks := int32(1)
-	maxOutstandingPolls := int32(1)
-	t.cfg.ForwarderMaxOutstandingTasks = func() int { return int(atomic.LoadInt32(&maxOutstandingTasks)) }
-	t.cfg.ForwarderMaxOutstandingPolls = func() int { return int(atomic.LoadInt32(&maxOutstandingPolls)) }
-
-	startC := make(chan struct{})
-	doneWG := sync.WaitGroup{}
-	for i := 0; i < 10; i++ {
-		doneWG.Add(1)
-		go func() {
-			<-startC
-			token1 := <-fwdr.AddReqTokenC()
-			token1.release()
-			token2 := <-fwdr.PollReqTokenC()
-			token2.release()
-			doneWG.Done()
-		}()
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollNexusTaskQueueResponse{
+		Response: &workflowservice.PollNexusTaskQueueResponse{
+			TaskToken: []byte("token1"),
+		},
 	}
 
-	maxOutstandingTasks = 10
-	maxOutstandingPolls = 10
-	close(startC)
-	t.True(common.AwaitWaitGroup(&doneWG, time.Second))
+	var request *matchingservice.PollNexusTaskQueueRequest
+	t.client.EXPECT().PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollNexusTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
 
-	t.Equal(10, cap(fwdr.addReqToken.Load().(*ForwarderReqToken).ch))
-	t.Equal(10, cap(fwdr.pollReqToken.Load().(*ForwarderReqToken).ch))
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding Nexus poll")
 }
 
 func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueType) {
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-	t.Nil(err)
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
+	t.NoError(err)
 }
 
 func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, buildId string) {
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client)
-	t.Nil(err)
+	t.fwdr, err = newPriForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client, testhooks.TestHooks{})
+	t.NoError(err)
 }
 
 func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {
@@ -428,4 +390,21 @@ func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {
 		panic(err)
 	}
 	return parent
+}
+
+func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
+	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
+		},
+		TaskId: rand.Int63(),
+	}
 }

@@ -1,13 +1,17 @@
 package config
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 const (
@@ -124,7 +128,7 @@ func (c *Persistence) GetSecondaryVisibilityStoreConfig() DataStore {
 		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
 			esConfig := *ds.Elasticsearch
 			esConfig.Indices = map[string]string{
-				client.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
+				esconfig.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
 			}
 			ds.Elasticsearch = &esConfig
 			return ds
@@ -170,8 +174,13 @@ func (ds *DataStore) Validate() error {
 		)
 	}
 
-	if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
-		ds.SQL.TaskScanPartitions = 1
+	if ds.SQL != nil {
+		if ds.SQL.TaskScanPartitions == 0 {
+			ds.SQL.TaskScanPartitions = 1
+		}
+		if err := ds.SQL.validate(); err != nil {
+			return err
+		}
 	}
 	if ds.Cassandra != nil {
 		if err := ds.Cassandra.validate(); err != nil {
@@ -179,6 +188,9 @@ func (ds *DataStore) Validate() error {
 		}
 	}
 	if ds.Elasticsearch != nil {
+		if err := validateElasticsearch(ds.Elasticsearch); err != nil {
+			return err
+		}
 		if err := ds.Elasticsearch.Validate(); err != nil {
 			return err
 		}
@@ -232,8 +244,8 @@ func (c *CassandraStoreConsistency) validate() error {
 
 	v := reflect.ValueOf(*c)
 
-	for i := 0; i < v.NumField(); i++ {
-		s, ok := v.Field(i).Interface().(*CassandraConsistencySettings)
+	for _, field := range v.Fields() {
+		s, ok := field.Interface().(*CassandraConsistencySettings)
 		if ok {
 			if err := s.validate(); err != nil {
 				return err
@@ -270,4 +282,45 @@ func parseSerialConsistency(serialConsistency string) (gocql.SerialConsistency, 
 	var s gocql.SerialConsistency
 	err := s.UnmarshalText([]byte(strings.ToUpper(serialConsistency)))
 	return s, err
+}
+
+func (c *SQL) validate() error {
+	if c.PasswordCommand != nil && c.Password != "" {
+		return errors.New("passwordCommand and password are mutually exclusive")
+	}
+	if c.PasswordCommand != nil && c.PasswordCommand.Command == "" {
+		return errors.New("passwordCommand.command must not be empty")
+	}
+	return nil
+}
+
+const (
+	defaultPasswordCommandTimeout = 30 * time.Second
+	passwordCommandWaitDelay      = 5 * time.Second
+)
+
+// ResolvePassword returns the database password, either from the static Password
+// field or by executing PasswordCommand. If neither is set, it returns an empty string.
+func (c *SQL) ResolvePassword() (string, error) {
+	if c.PasswordCommand == nil {
+		return c.Password, nil
+	}
+	timeout := c.PasswordCommand.Timeout
+	if timeout == 0 {
+		timeout = defaultPasswordCommandTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, c.PasswordCommand.Command, c.PasswordCommand.Args...) //nolint:gosec
+	// WaitDelay caps how long we block on the stdout pipe after the process is killed.
+	// Without it, a subprocess that inherits the pipe could keep it open indefinitely.
+	cmd.WaitDelay = passwordCommandWaitDelay
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("passwordCommand %q %v failed: %w (stderr: %s)",
+			c.PasswordCommand.Command, c.PasswordCommand.Args, err, stderr.String())
+	}
+	return strings.TrimRight(string(out), "\n\r"), nil
 }

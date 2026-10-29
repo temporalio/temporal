@@ -49,7 +49,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
-		request            interface{}
+		request            any
 		expectedCallerName string
 	}{
 		{
@@ -112,7 +112,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
-			func(ctx context.Context, req interface{}) (interface{}, error) {
+			func(ctx context.Context, req any) (any, error) {
 				resultingCtx = ctx
 				return nil, nil
 			},
@@ -129,7 +129,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
-		request            interface{}
+		request            any
 		expectedCallerType string
 	}{
 		{
@@ -182,7 +182,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
-			func(ctx context.Context, req interface{}) (interface{}, error) {
+			func(ctx context.Context, req any) (any, error) {
 				resultingCtx = ctx
 				return nil, nil
 			},
@@ -203,7 +203,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
-		request            interface{}
+		request            any
 		expectedCallOrigin string
 	}{
 		{
@@ -264,7 +264,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 			ctx,
 			testCase.request,
 			serverInfo,
-			func(ctx context.Context, req interface{}) (interface{}, error) {
+			func(ctx context.Context, req any) (any, error) {
 				resultingCtx = ctx
 				return nil, nil
 			},

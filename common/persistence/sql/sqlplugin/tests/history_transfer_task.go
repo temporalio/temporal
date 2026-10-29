@@ -149,7 +149,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.TransferTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomTransferTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)
@@ -170,7 +170,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 		rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 		s.NoError(err)
 		s.NotEmpty(rows)
-		s.True(len(rows) <= filter.PageSize)
+		s.LessOrEqual(len(rows), filter.PageSize)
 		for index := range rows {
 			rows[index].ShardID = shardID
 		}
@@ -275,7 +275,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.TransferTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomTransferTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)

@@ -26,7 +26,7 @@ func NewTestDataConverter() converter.DataConverter {
 	return &TestDataConverter{}
 }
 
-func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
+func (tdc *TestDataConverter) ToPayloads(values ...any) (*commonpb.Payloads, error) {
 	tdc.NumOfCallToPayloads++
 	result := &commonpb.Payloads{}
 	for i, value := range values {
@@ -40,7 +40,7 @@ func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpb.Paylo
 	return result, nil
 }
 
-func (tdc *TestDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...interface{}) error {
+func (tdc *TestDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...any) error {
 	tdc.NumOfCallFromPayloads++
 	for i, p := range payloads.GetPayloads() {
 		err := tdc.FromPayload(p, valuePtrs[i])
@@ -51,7 +51,7 @@ func (tdc *TestDataConverter) FromPayloads(payloads *commonpb.Payloads, valuePtr
 	return nil
 }
 
-func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpb.Payload, error) {
+func (tdc *TestDataConverter) ToPayload(value any) (*commonpb.Payload, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(value); err != nil {
@@ -66,7 +66,7 @@ func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpb.Payload, e
 	return p, nil
 }
 
-func (tdc *TestDataConverter) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
+func (tdc *TestDataConverter) FromPayload(payload *commonpb.Payload, valuePtr any) error {
 	encoding, ok := payload.GetMetadata()["encoding"]
 	if !ok {
 		return ErrEncodingIsNotSet
@@ -100,7 +100,7 @@ func (tdc *TestDataConverter) ToString(payload *commonpb.Payload) string {
 		return ErrEncodingIsNotSupported.Error()
 	}
 
-	var value interface{}
+	var value any
 	err := decodeGob(payload, &value)
 	if err != nil {
 		return err.Error()
@@ -109,7 +109,7 @@ func (tdc *TestDataConverter) ToString(payload *commonpb.Payload) string {
 	return fmt.Sprintf("%+v", value)
 }
 
-func decodeGob(payload *commonpb.Payload, valuePtr interface{}) error {
+func decodeGob(payload *commonpb.Payload, valuePtr any) error {
 	dec := gob.NewDecoder(bytes.NewBuffer(payload.GetData()))
 	return dec.Decode(valuePtr)
 }

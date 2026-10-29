@@ -9,6 +9,6 @@ const (
 )
 
 var (
-	SchedulerArchetype   = Archetype(fullyQualifiedName(SchedulerLibraryName, SchedulerComponentName))
-	SchedulerArchetypeID = ArchetypeID(generateTypeID(SchedulerArchetype))
+	SchedulerArchetype   = Archetype(FullyQualifiedName(SchedulerLibraryName, SchedulerComponentName))
+	SchedulerArchetypeID = ArchetypeID(GenerateTypeID(SchedulerArchetype))
 )

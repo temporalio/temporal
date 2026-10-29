@@ -75,12 +75,12 @@ func (s *taskRefresherSuite) SetupTest() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.namespaceEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
 		s.mockShard.GetLogger(),
-		s.namespaceEntry.FailoverVersion(),
+		s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		tests.WorkflowID,
 		tests.RunID,
 	)
@@ -112,7 +112,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          1,
+				TransitionCount:          3,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -147,6 +147,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -164,8 +165,8 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 	s.Equal(int32(TimerTaskStatusCreated), mutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
 
 	err = RefreshTasksForWorkflowStart(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		// TransitionCount is higher than workflow state's last update versioned transition,
-		// no task should be generated and no call to task generator should be made.
+		// The replicated range starts after the workflow-start transition. A later
+		// execution-state update must not regenerate workflow-start tasks.
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,
 	})
@@ -225,6 +226,7 @@ func (s *taskRefresherSuite) TestRefreshRecordWorkflowStartedTasks() {
 			RunID:       tests.RunID,
 			EventID:     common.FirstEventID,
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		branchToken,
@@ -276,6 +278,10 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, false)
 	s.NoError(err)
+
+	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false, true).Return(nil)
+	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, true)
+	s.Require().NoError(err)
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		// TransitionCount is higher than workflow state's last update versioned transition,
@@ -1217,6 +1223,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,
@@ -1303,6 +1310,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 			RunID:       tests.RunID,
 			EventID:     int64(6),
 			Version:     common.EmptyVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		int64(4),
 		branchToken,
@@ -1323,7 +1331,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
 			VisibilityLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          3,
+				TransitionCount:          1,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -1346,6 +1354,14 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 
 	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask().Return(nil).Times(1)
 
+	// Workflow start uses StartExecutionVisibilityTask and must not also produce an upsert.
+	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
+
+	mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		TransitionCount:          3,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	}
 	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,
@@ -1368,7 +1384,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	s.NoError(err)
 
 	versionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		TransitionCount:          3,
 	}
 	s.mutableState.GetExecutionInfo().TransitionHistory = []*persistencespb.VersionedTransition{
@@ -1410,7 +1426,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	err = s.taskRefresher.refreshTasksForSubStateMachines(
 		s.mutableState,
 		&persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 			TransitionCount:          4,
 		},
 	)
@@ -1424,7 +1440,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	err = s.taskRefresher.refreshTasksForSubStateMachines(
 		s.mutableState,
 		&persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 			TransitionCount:          5,
 		},
 	)
@@ -1432,6 +1448,104 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	refreshedTasks = s.mutableState.PopTasks()
 	s.Empty(refreshedTasks)
 	s.False(hsmRoot.Dirty())
+}
+
+// TestRefreshTasksForTimeSkipping gates the standby's time-skipping timer re-stamp on
+// TimeSkippingInfo.LastUpdateVersionedTransition. It covers both invariants in one place:
+// regen runs iff a skip happened at/after the watermark (don't miss), and is bounded —
+// it does NOT run when the skip predates the delta or there's no TimeSkippingInfo (don't
+// re-stamp on every unrelated replication delta).
+func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
+	tsiAt := func(tc int64) *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: common.EmptyVersion,
+				TransitionCount:          tc,
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name                   string
+		tsi                    *persistencespb.TimeSkippingInfo
+		status                 enumspb.WorkflowExecutionStatus
+		minVersionedTransition *persistencespb.VersionedTransition
+		wantRegen              bool
+		wantFastForwardRegen   bool
+	}{
+		{
+			// Skip at transition 5, watermark 3 → new to this peer → re-stamp.
+			name:                   "SkipWithinDelta/Regenerates",
+			tsi:                    tsiAt(5),
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 3},
+			wantRegen:              true,
+		},
+		{
+			// Skip at transition 2, watermark 4 → predates the delta → bounded, no re-stamp.
+			name:                   "SkipBeforeDelta/DoesNotRegenerate",
+			tsi:                    tsiAt(2),
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 4},
+			wantRegen:              false,
+		},
+		{
+			// Workflow never enabled time-skipping → never re-stamp.
+			name:                   "NoTimeSkippingInfo/DoesNotRegenerate",
+			tsi:                    nil,
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 4},
+			wantRegen:              false,
+		},
+		{
+			name:                   "FullRefresh/RegeneratesFastForwardOnly",
+			tsi:                    tsiAt(5),
+			minVersionedTransition: EmptyVersionedTransition,
+			wantRegen:              false,
+			wantFastForwardRegen:   true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			status := tc.status
+			if status == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+				status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			}
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				log.NewTestLogger(),
+				tests.LocalNamespaceEntry,
+				&persistencespb.WorkflowMutableState{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						NamespaceId:      tests.NamespaceID.String(),
+						WorkflowId:       tests.WorkflowID,
+						TimeSkippingInfo: tc.tsi,
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  tests.RunID,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status: status,
+					},
+					NextEventId: int64(20),
+				},
+				10,
+			)
+			s.NoError(err)
+
+			// Times asserts the bound directly: 0 means the mock fails if regen is called.
+			times := 0
+			if tc.wantRegen {
+				times = 1
+			}
+			fastForwardTimes := 0
+			if tc.wantFastForwardRegen {
+				fastForwardTimes = 1
+			}
+			s.mockTaskGenerator.EXPECT().RegenerateTimerTasksForTimeSkipping().Return(nil).Times(times)
+			s.mockTaskGenerator.EXPECT().GenerateTimeSkippingFastForwardTimerTask().Return(nil).Times(fastForwardTimes)
+
+			err = s.taskRefresher.refreshTasksForTimeSkipping(mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
+			s.NoError(err)
+		})
+	}
 }
 
 type mockTaskGeneratorProvider struct {

@@ -10,11 +10,10 @@ func TestConstructVisibilitySearchPrefix(t *testing.T) {
 	t.Parallel()
 	assert.Equal(
 		t,
-		constructVisibilitySearchPrefix(
+		"path/namespaceID/visibility", constructVisibilitySearchPrefix(
 			"path",
 			"namespaceID",
 		),
-		"path/namespaceID/visibility",
 	)
 }
 
@@ -22,13 +21,12 @@ func TestConstructIndexedVisibilitySearchPrefix(t *testing.T) {
 	t.Parallel()
 	assert.Equal(
 		t,
-		constructIndexedVisibilitySearchPrefix(
+		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType", constructIndexedVisibilitySearchPrefix(
 			"/path",
 			"namespaceID",
 			"primaryIndexKey",
 			"primaryIndexValue",
 			"secondaryIndexType",
 		),
-		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType",
 	)
 }

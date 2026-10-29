@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -20,8 +21,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-const StandaloneActivityDisabledError = "Standalone activity is disabled"
 
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
@@ -32,11 +31,21 @@ type FrontendHandler interface {
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
 	RequestCancelActivityExecution(context.Context, *workflowservice.RequestCancelActivityExecutionRequest) (*workflowservice.RequestCancelActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
+	PauseActivityExecution(context.Context, *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error)
+	UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error)
+	ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error)
+	UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
 
+var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
+
+var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemented("Standalone activity operator commands are disabled")
+
 type frontendHandler struct {
 	FrontendHandler
+	callbackValidator callbacks.Validator
+	linkValidator     *linkValidator
 	client            activitypb.ActivityServiceClient
 	config            *Config
 	logger            log.Logger
@@ -48,6 +57,8 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
+	callbackValidator callbacks.Validator,
+	linkValidator *linkValidator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -57,6 +68,8 @@ func NewFrontendHandler(
 	saValidator *searchattribute.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
+		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
 		client:            client,
 		config:            config,
 		logger:            logger,
@@ -83,7 +96,7 @@ func (h *frontendHandler) IsStandaloneActivityEnabled(namespaceName string) bool
 // 3. Sends the request to the history activity service.
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -91,7 +104,7 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		return nil, err
 	}
 
-	modifiedReq, err := h.validateAndPopulateStartRequest(req, namespaceID)
+	modifiedReq, err := h.validateAndPopulateStartRequest(ctx, req, namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -111,10 +124,10 @@ func (h *frontendHandler) DescribeActivityExecution(
 	req *workflowservice.DescribeActivityExecutionRequest,
 ) (*workflowservice.DescribeActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := ValidateDescribeActivityExecutionRequest(
+	err := validateAndNormalizeDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -140,10 +153,10 @@ func (h *frontendHandler) PollActivityExecution(
 	req *workflowservice.PollActivityExecutionRequest,
 ) (*workflowservice.PollActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := ValidatePollActivityExecutionRequest(
+	err := validateAndNormalizePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -167,18 +180,17 @@ func (h *frontendHandler) ListActivityExecutions(
 	req *workflowservice.ListActivityExecutionsRequest,
 ) (*workflowservice.ListActivityExecutionsResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
+	pageSize := req.GetPageSize()
+	if maxPageSize := int32(h.config.VisibilityMaxPageSize(req.GetNamespace())); pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
 	}
 
 	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
-		PageSize:      int(req.GetPageSize()),
+		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
 		Query:         req.GetQuery(),
 	})
@@ -188,9 +200,9 @@ func (h *frontendHandler) ListActivityExecutions(
 
 	executions := make([]*apiactivitypb.ActivityExecutionListInfo, 0, len(resp.Executions))
 	for _, exec := range resp.Executions {
-		activityType, _ := chasm.GetValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
-		taskQueue, _ := chasm.GetValue(exec.ChasmSearchAttributes, TaskQueueSearchAttribute)
-		statusStr, _ := chasm.GetValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
+		activityType, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
+		taskQueue, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+		statusStr, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
 		status, _ := enumspb.ActivityExecutionStatusFromString(statusStr)
 
 		info := &apiactivitypb.ActivityExecutionListInfo{
@@ -210,6 +222,9 @@ func (h *frontendHandler) ListActivityExecutions(
 				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
 			}
 		}
+		if executionTime, ok := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, chasm.SearchAttributeExecutionTime); ok {
+			info.ExecutionTime = timestamppb.New(executionTime)
+		}
 		executions = append(executions, info)
 	}
 
@@ -225,16 +240,10 @@ func (h *frontendHandler) CountActivityExecutions(
 	req *workflowservice.CountActivityExecutionsRequest,
 ) (*workflowservice.CountActivityExecutionsResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
-
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
 	})
@@ -256,13 +265,42 @@ func (h *frontendHandler) CountActivityExecutions(
 	}, nil
 }
 
+// DeleteActivityExecution terminates and schedules a standalone activity execution for deletion.
+func (h *frontendHandler) DeleteActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteActivityExecutionRequest,
+) (*workflowservice.DeleteActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateAndNormalizeDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteActivityExecution(ctx, &activitypb.DeleteActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
 	req *workflowservice.TerminateActivityExecutionRequest,
 ) (*workflowservice.TerminateActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceName := req.GetNamespace()
@@ -271,26 +309,12 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
-	req = common.CloneProto(req)
-
-	maxIDLen := h.config.MaxIDLengthLimit()
-	if len(req.GetRequestId()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	if err := validateInputSize(
-		req.GetActivityId(),
-		"activity-termination",
+	if err := validateAndNormalizeTerminateActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
 		h.config.BlobSizeLimitWarn,
-		len(req.GetReason()),
-		h.logger,
-		namespaceName); err != nil {
+		h.logger); err != nil {
 		return nil, err
 	}
 
@@ -310,7 +334,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 ) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -318,21 +342,13 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
-	req = common.CloneProto(req)
-
-	maxIDLen := h.config.MaxIDLengthLimit()
-
-	if len(req.GetRequestId()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	if len(req.GetReason()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
+	if err := validateAndNormalizeRequestCancelActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
 	}
 
 	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
@@ -347,80 +363,86 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 }
 
 func (h *frontendHandler) validateAndPopulateStartRequest(
+	ctx context.Context,
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
-	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
+	// Since validation mutates the request, clone it first so that retries use the original
+	// request. However if the client did not set a request ID then set that before cloning so that
+	// retries use the same request ID.
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+	nexusSerializationContext := req.GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusSerializationContext, maxIDLengthLimit); err != nil {
+		return nil, err
+	}
 
 	if req.RetryPolicy == nil {
 		req.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	if err := validateStartDelay(req.GetStartDelay()); err != nil {
+		return nil, err
+	}
+	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
+	}
+	if req.GetRequestEagerExecution() &&
+		(!h.config.EnableEagerStart(req.GetNamespace()) || req.GetStartDelay().AsDuration() > 0) {
+		req.RequestEagerExecution = false
+	}
+
 	opts := activityOptionsFromStartRequest(req)
-	err := ValidateAndNormalizeActivityAttributes(
+	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
-		h.config.MaxIDLengthLimit(),
-		namespaceID,
+		maxIDLengthLimit,
+		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
-		durationpb.New(0),
 	)
 	if err != nil {
 		return nil, err
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	err = h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err = validateAndNormalizeStartRequest(
+		req,
+		h.config,
+		h.logger,
+		h.saMapperProvider,
+		h.saValidator,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return req, nil
-}
-
-// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone
-// activity specific attributes. Note that this method mutates the input params; the caller must
-// clone the request if necessary (e.g. if it may be retried).
-func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
-	req *workflowservice.StartActivityExecutionRequest,
-) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
-	if err := normalizeAndValidateIDPolicy(req); err != nil {
-		return err
-	}
-
-	if err := validateInputSize(
-		req.GetActivityId(),
-		req.GetActivityType().GetName(),
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		req.Input.Size(),
-		h.logger,
-		req.GetNamespace()); err != nil {
-		return err
-	}
-
-	if req.GetSearchAttributes() != nil {
-		if err := validateAndNormalizeSearchAttributes(
-			req,
-			h.saMapperProvider,
-			h.saValidator); err != nil {
-			return err
+	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
+		if !h.config.EnableCallbacks(req.GetNamespace()) {
+			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
+		}
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
+		}
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	if err := h.linkValidator.ValidateRequestWithCallbacks(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
+		return nil, err
+	}
+
+	if err := validateOnConflictOptions(req); err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
@@ -436,8 +458,138 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 	}
 }
 
-// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
-// back to the StartActivityExecutionRequest.
+func (h *frontendHandler) PauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.PauseActivityExecutionRequest,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
+
+	if err := validateAndNormalizePauseActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.PauseActivityExecution(ctx, &activitypb.PauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.PauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UnpauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.UnpauseActivityExecutionRequest,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
+
+	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.UnpauseActivityExecution(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) ResetActivityExecution(
+	ctx context.Context,
+	req *workflowservice.ResetActivityExecutionRequest,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
+
+	if err := validateAndNormalizeResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.ResetActivityExecution(ctx, &activitypb.ResetActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.ResetActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
+
+	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
+		req,
+		h.config.DefaultActivityRetryPolicy,
+		h.config.MaxIDLengthLimit(),
+	); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UpdateActivityExecutionOptionsResponse{
+		ActivityOptions: resp.GetFrontendResponse().GetActivityOptions(),
+	}, nil
+}
+
+// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions back to the StartActivityExecutionRequest.
 func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
 	req.TaskQueue = opts.TaskQueue
 	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout

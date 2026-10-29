@@ -9,6 +9,38 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *metricClient) AddActivityTask(
+	ctx context.Context,
+	request *matchingservice.AddActivityTaskRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.AddActivityTaskResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientAddActivityTask")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardInfo().GetSourcePartition(), request.GetTaskQueue())
+
+	return c.client.AddActivityTask(ctx, request, opts...)
+}
+
+func (c *metricClient) AddWorkflowTask(
+	ctx context.Context,
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientAddWorkflowTask")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardInfo().GetSourcePartition(), request.GetTaskQueue())
+
+	return c.client.AddWorkflowTask(ctx, request, opts...)
+}
+
 func (c *metricClient) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
 	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
@@ -37,6 +69,34 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *metricClient) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPolls")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
+}
+
+func (c *metricClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPollsPartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+}
+
 func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -63,6 +123,20 @@ func (c *metricClient) CheckTaskQueueVersionMembership(
 	}()
 
 	return c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+}
+
+func (c *metricClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CountWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCountWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountWorkers(ctx, request, opts...)
 }
 
 func (c *metricClient) CreateNexusEndpoint(
@@ -159,6 +233,8 @@ func (c *metricClient) DispatchNexusTask(
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardInfo().GetSourcePartition(), request.GetTaskQueue())
 
 	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
@@ -261,6 +337,20 @@ func (c *metricClient) GetWorkerVersioningRules(
 	return c.client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
+func (c *metricClient) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GrantEagerDispatchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGrantEagerDispatch")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GrantEagerDispatch(ctx, request, opts...)
+}
+
 func (c *metricClient) ListNexusEndpoints(
 	ctx context.Context,
 	request *matchingservice.ListNexusEndpointsRequest,
@@ -303,6 +393,22 @@ func (c *metricClient) ListWorkers(
 	return c.client.ListWorkers(ctx, request, opts...)
 }
 
+func (c *metricClient) PollActivityTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientPollActivityTaskQueue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardedSource(), request.GetPollRequest().GetTaskQueue())
+
+	return c.client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) PollNexusTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollNexusTaskQueueRequest,
@@ -314,7 +420,41 @@ func (c *metricClient) PollNexusTaskQueue(
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardedSource(), request.GetRequest().GetTaskQueue())
+
 	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) PollWorkflowTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientPollWorkflowTaskQueue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardedSource(), request.GetPollRequest().GetTaskQueue())
+
+	return c.client.PollWorkflowTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) QueryWorkflow(
+	ctx context.Context,
+	request *matchingservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.QueryWorkflowResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientQueryWorkflow")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	c.emitForwardedSourceStats(metricsHandler, request.GetForwardInfo().GetSourcePartition(), request.GetTaskQueue())
+
+	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
 func (c *metricClient) RecordWorkerHeartbeat(
@@ -399,6 +539,20 @@ func (c *metricClient) SyncDeploymentUserData(
 	}()
 
 	return c.client.SyncDeploymentUserData(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateFairnessState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateFairnessState(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateNexusEndpoint(

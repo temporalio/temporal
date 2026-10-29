@@ -30,11 +30,38 @@ func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	return ps
 }
 
-func Encode(value ...interface{}) (*commonpb.Payloads, error) {
+func Encode(value ...any) (*commonpb.Payloads, error) {
 	return defaultDataConverter.ToPayloads(value...)
 }
 
-func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
+func EncodeSingle(value any) (*commonpb.Payload, error) {
+	ps, err := defaultDataConverter.ToPayloads(value)
+	if err != nil {
+		return nil, err
+	}
+	if len(ps.GetPayloads()) < 1 {
+		return nil, nil
+	}
+	return ps.GetPayloads()[0], nil
+}
+
+func MustEncodeSingle(value any) *commonpb.Payload {
+	p, err := EncodeSingle(value)
+	if err != nil {
+		panic(fmt.Sprintf("unable to encode single payload: %v", err)) //nolint:forbidigo // Must-helper: callers opt into panic on encode failure
+	}
+	return p
+}
+
+func MustEncode(value ...any) *commonpb.Payloads {
+	p, err := defaultDataConverter.ToPayloads(value...)
+	if err != nil {
+		panic(fmt.Sprintf("unable to encode payloads: %v", err)) //nolint:forbidigo // Must-helper: callers opt into panic on encode failure
+	}
+	return p
+}
+
+func Decode(ps *commonpb.Payloads, valuePtr ...any) error {
 	return defaultDataConverter.FromPayloads(ps, valuePtr...)
 }
 

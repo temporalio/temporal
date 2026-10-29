@@ -1,0 +1,14 @@
+<testsuites tests="1" failures="1">
+    <testsuite name="MySuite" tests="1" failures="1" errors="0" id="0" time="">
+        <testcase name="TestBaz">
+            <failure message="Unexpected call" type="Failed"><![CDATA[=== RUN   TestBaz
+=== CONT  TestBaz
+    helper.go:1: some setup log
+    mock_file.go:42: Unexpected call to SomeMethod(...)
+        expected call at foo_test.go:10 doesn't match argument at index 0.
+        Got:  "actual"
+        Want: is equal to "expected"
+FAIL]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

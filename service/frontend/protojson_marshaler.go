@@ -32,7 +32,7 @@ type temporalProtoDecoder struct {
 }
 
 func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (string, temporalProtoMarshaler) {
-	metadata := map[string]interface{}{}
+	metadata := map[string]any{}
 	if enablePayloadShorthand {
 		metadata[commonpb.EnablePayloadShorthandMetadataKey] = true
 	}
@@ -73,7 +73,7 @@ func (p temporalProtoMarshaler) Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func (p temporalProtoMarshaler) Unmarshal(data []byte, v interface{}) error {
+func (p temporalProtoMarshaler) Unmarshal(data []byte, v any) error {
 	if m, ok := v.(proto.Message); ok {
 		return p.uOpts.Unmarshal(data, m)
 	}

@@ -90,7 +90,7 @@ func NewExecutableHistoryTask(
 	}
 }
 
-func (e *ExecutableHistoryTask) QueueID() interface{} {
+func (e *ExecutableHistoryTask) QueueID() any {
 	return e.WorkflowKey
 }
 
@@ -98,6 +98,8 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
+
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
@@ -110,7 +112,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -140,6 +142,12 @@ func (e *ExecutableHistoryTask) Execute() error {
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -161,7 +169,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 
 		if doContinue, resendErr := e.Resend(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
+			e.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
@@ -173,7 +181,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -192,14 +200,14 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
 		eventBatches := [][]*historypb.HistoryEvent{}
 		for _, eventsBlob := range e.eventsBlobs {
-			events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+			events, err := e.Serializer.DeserializeEvents(eventsBlob)
 			if err != nil {
 				e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
 					tag.ShardID(shardContext.GetShardID()),
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.TaskID(e.TaskID()),
 					tag.Error(err),
 				)
 				return nil
@@ -211,7 +219,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.TaskID(e.TaskID()),
 				)
 				return nil
 			}
@@ -222,7 +230,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			NamespaceId:  e.NamespaceID,
 			WorkflowId:   e.WorkflowID,
 			RunId:        e.RunID,
-			TaskId:       e.ExecutableTask.TaskID(),
+			TaskId:       e.TaskID(),
 			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 			FirstEventId: eventBatches[0][0].GetEventId(),
 			NextEventId:  eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
@@ -256,13 +264,13 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 
 	eventBatches := [][]*historypb.HistoryEvent{}
 	for _, eventsBlob := range e.eventsBlobs {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		events, err := e.Serializer.DeserializeEvents(eventsBlob)
 		if err != nil {
 			e.Logger.Error("unable to deserialize history events",
 				tag.WorkflowNamespaceID(e.NamespaceID),
 				tag.WorkflowID(e.WorkflowID),
 				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
+				tag.TaskID(e.TaskID()),
 				tag.Error(err),
 			)
 			return nil, nil, err
@@ -270,13 +278,13 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.newRunEventsBlob)
+	newRunEvents, err := e.Serializer.DeserializeEvents(e.newRunEventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 			tag.Error(err),
 		)
 		return nil, nil, err

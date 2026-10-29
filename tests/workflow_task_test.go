@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,20 +12,21 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type WorkflowTaskTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*WorkflowTaskTestSuite]
 }
 
 func TestWorkflowTaskTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowTaskTestSuite))
+	parallelsuite.Run(t, &WorkflowTaskTestSuite{})
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -39,7 +39,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -49,7 +49,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -59,11 +59,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -73,13 +73,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
-	for i := 0; i < 12; i++ {
-		resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
+	for range 12 {
+		resp2, err2 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
@@ -93,8 +93,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondWorkflowTaskCompletedResponse{}, resp2)
 
-			resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: env.Namespace().String(),
 				TaskQueue: taskQueue,
 				Identity:  identity,
 			})
@@ -109,8 +109,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	s.Equal(2, hbTimeout)
 
-	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	resp5, err5 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -177,10 +177,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
  44 WorkflowTaskScheduled
  45 WorkflowTaskStarted
  46 WorkflowTaskCompleted
- 47 WorkflowExecutionCompleted`, s.GetHistory(s.Namespace().String(), we))
+ 47 WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), we))
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -193,7 +194,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -203,7 +204,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -213,11 +214,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -227,10 +228,10 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
-	resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	resp2, err2 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
@@ -242,8 +243,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	})
 	s.NoError(err2)
 
-	resp3, err3 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	resp3, err3 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp2.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -264,8 +265,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	})
 	s.NoError(err3)
 
-	resp4, err4 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	resp4, err4 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp3.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -286,8 +287,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	})
 	s.NoError(err4)
 
-	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	resp5, err5 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp4.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -307,7 +308,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	s.NoError(err5)
 	s.Nil(resp5.WorkflowTask)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), we)
+	historyEvents := env.GetHistory(env.Namespace().String(), we)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -328,6 +329,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -339,7 +341,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -349,7 +351,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -359,10 +361,10 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -373,11 +375,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowExecutionSignaled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -388,11 +390,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowExecutionSignaled
-  4 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
@@ -404,10 +406,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
   3 WorkflowExecutionSignaled
   4 WorkflowTaskStarted
   5 WorkflowTaskFailed
-  6 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), we))
+  6 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), we))
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -419,7 +422,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -429,7 +432,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -439,11 +442,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	_, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -452,11 +455,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -467,17 +470,17 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
 	s.NoError(err)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), we)
+	historyEvents := env.GetHistory(env.Namespace().String(), we)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -488,6 +491,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -499,7 +503,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -509,7 +513,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -519,13 +523,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -534,11 +538,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -549,11 +553,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  3 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
-	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-		Namespace: s.Namespace().String(),
+	_, err2 := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
@@ -565,11 +569,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  6 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
@@ -582,10 +586,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), we))
+  7 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), we))
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -597,7 +602,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -607,7 +612,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -617,12 +622,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+	for i := range 10 {
+		resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
@@ -636,8 +641,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-			Namespace: s.Namespace().String(),
+		_, err2 := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: env.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -649,10 +654,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -660,16 +666,18 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
+	histAfterSignal := env.GetHistory(env.Namespace().String(), we)
+	s.GreaterOrEqual(len(histAfterSignal), 5, "Should have at least 5 events after signal")
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
+  5 WorkflowExecutionSignaled`, histAfterSignal[:5])
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -683,11 +691,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
+  7 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
@@ -702,10 +710,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskFailed
-  9 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), we))
+  9 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), we))
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -717,7 +726,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -727,7 +736,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -737,12 +746,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+	for i := range 10 {
+		resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
@@ -756,8 +765,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-			Namespace: s.Namespace().String(),
+		_, err2 := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: env.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -769,11 +778,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	_, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -783,11 +793,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -799,11 +811,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
@@ -815,10 +829,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), we))
+  6 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), we))
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
+	env := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -830,7 +845,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -840,7 +855,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		Identity:            identity,
 	}
 
-	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	we := &commonpb.WorkflowExecution{
@@ -850,12 +865,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  2 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+	for i := range 10 {
+		resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
 		})
@@ -869,8 +884,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-			Namespace: s.Namespace().String(),
+		_, err2 := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: env.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -882,11 +897,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -896,11 +912,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err0 = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
@@ -912,11 +930,13 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, env.GetHistory(env.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer
-	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-		Namespace: s.Namespace().String(),
+	_, err2 := env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
@@ -928,11 +948,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
-  6 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
+  6 WorkflowTaskScheduled`, env.GetHistory(env.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
@@ -945,5 +965,107 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowTaskScheduled
-  7 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), we))
+  7 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), we))
+}
+
+// TestRawHistoryFlowWithSearchAttributes tests that workflows with search attributes
+// work correctly when raw history is sent between internal services.
+// This test verifies that:
+// 1. Search attributes are properly serialized in the workflow started event
+// 2. The history is correctly returned via PollWorkflowTaskQueue response
+// 3. Search attributes are properly processed through the raw history path
+// Note: SendRawHistoryBetweenInternalServices is enabled by default in functional tests
+// (see tests/testcore/dynamic_config_overrides.go)
+func (s *WorkflowTaskTestSuite) TestRawHistoryFlowWithSearchAttributes() {
+	env := testcore.NewEnv(s.T())
+	id := uuid.NewString()
+	wt := "functional-workflow-raw-history-search-attributes"
+	tl := id
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	// Create search attributes with a custom keyword
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": {
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: []byte(`"test-search-value"`),
+			},
+		},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(5 * time.Second),
+		Identity:            identity,
+		SearchAttributes:    searchAttr,
+	}
+
+	resp0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err0)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      resp0.RunId,
+	}
+
+	// Poll for the workflow task - this exercises the raw history flow:
+	// History Service -> Matching Service -> Frontend Service
+	resp1, err1 := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: taskQueue,
+		Identity:  identity,
+	})
+	s.NoError(err1)
+
+	// Verify that we received a valid response with history
+	s.NotNil(resp1)
+	s.NotEmpty(resp1.GetTaskToken())
+	s.NotNil(resp1.GetHistory())
+	s.NotEmpty(resp1.GetHistory().GetEvents())
+
+	// Verify the workflow started event contains search attributes
+	startedEvent := resp1.GetHistory().GetEvents()[0]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startedEvent.GetEventType())
+
+	startedAttrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
+	s.NotNil(startedAttrs)
+	s.NotNil(startedAttrs.GetSearchAttributes())
+	s.Contains(startedAttrs.GetSearchAttributes().GetIndexedFields(), "CustomKeywordField")
+
+	// Complete the workflow task
+	_, err2 := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: resp1.GetTaskToken(),
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("done"),
+					},
+				},
+			},
+		},
+		Identity: identity,
+	})
+	s.NoError(err2)
+
+	// Verify the final history
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), we))
 }

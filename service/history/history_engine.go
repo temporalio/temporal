@@ -14,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pauseactivity"
 	"go.temporal.io/server/service/history/api/pauseworkflow"
+	"go.temporal.io/server/service/history/api/polltimeskipping"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -83,6 +85,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -91,14 +94,23 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 )
 
 type (
+	engineOptions struct {
+		workflowResendScheduler workflowresend.Scheduler
+	}
+
+	// EngineOption adds optional history engine dependencies without adding required parameters.
+	EngineOption func(*engineOptions)
+
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
@@ -115,6 +127,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
+		fastForwardNotifier        notification.TimeSkippingFastForwardNotifier
 		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
@@ -130,14 +143,18 @@ type (
 		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
 		workflowDeleteManager      deletemanager.DeleteManager
-		eventSerializer            serialization.Serializer
+		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
-		versionMembershipCache     worker_versioning.VersionMembershipCache
+		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
+		workerDeploymentClient     workerdeployment.Client
+		routingInfoCache           worker_versioning.RoutingInfoCache
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
+		chasmWorkflowRegistry      *chasmworkflow.Registry
 		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
@@ -145,6 +162,21 @@ type (
 		testHooks                  testhooks.TestHooks
 	}
 )
+
+// WithWorkflowResendScheduler configures the host-level workflow resend scheduler.
+func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
+	return func(options *engineOptions) {
+		options.workflowResendScheduler = scheduler
+	}
+}
+
+func applyEngineOptions(options []EngineOption) engineOptions {
+	var result engineOptions
+	for _, option := range options {
+		option(&result)
+	}
+	return result
+}
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
@@ -154,11 +186,13 @@ func NewEngineWithShardContext(
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
 	config *configs.Config,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
+	workerDeploymentClient workerdeployment.Client,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
-	eventSerializer serialization.Serializer,
+	serializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
@@ -169,11 +203,14 @@ func NewEngineWithShardContext(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
+	options ...EngineOption,
 ) historyi.Engine {
+	engineOptions := applyEngineOptions(options)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -206,25 +243,30 @@ func NewEngineWithShardContext(
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
+		fastForwardNotifier:        notification.NewTimeSkippingFastForwardNotifier(),
 		config:                     config,
+		workflowResendScheduler:    engineOptions.workflowResendScheduler,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
 		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
-		eventSerializer:            eventSerializer,
+		serializer:                 serializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
 		commandHandlerRegistry:     commandHandlerRegistry,
+		chasmWorkflowRegistry:      chasmWorkflowRegistry,
 		workflowCache:              workflowCache,
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
-		versionMembershipCache:     versionMembershipCache,
+		versionCache:               versionCache,
+		workerDeploymentClient:     workerDeploymentClient,
+		routingInfoCache:           routingInfoCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -233,7 +275,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.GetMetricsHandler(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.ChasmWorkflowRegistry(), shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -249,7 +291,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			logger,
 		)
 		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
@@ -266,9 +308,11 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			persistenceRateLimiter,
 			logger,
+			shard.GetEventLogger(),
+			testHooks,
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
 			shard,
@@ -299,6 +343,8 @@ func NewEngineWithShardContext(
 			config.VisibilityAllowList,
 		),
 		config.SuppressErrorSetSystemSearchAttribute,
+		shard.GetMetricsHandler(),
+		logger,
 	)
 
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
@@ -315,9 +361,10 @@ func NewEngineWithShardContext(
 		workflowCache,
 		workflowDeleteManager,
 		clientBean,
-		eventSerializer,
+		serializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
+		testHooks,
 		dlqWriter,
 	)
 
@@ -381,6 +428,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 		if ns.IsGlobalNamespace() &&
 			ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			//nolint:forbidigo // namespace state-change callback; FailoverNamespace operates per-namespace, no workflow context
 			ns.ActiveInCluster(e.currentClusterName) {
 
 			for _, queueProcessor := range e.queueProcessors {
@@ -402,8 +450,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.tokenSerializer,
 		startRequest,
 		e.matchingClient,
-		e.versionMembershipCache,
+		e.versionCache,
+		e.workerDeploymentClient.SignalVersionReactivation,
 		api.NewWorkflowLeaseAndContext,
+		/* allowDerivedRunID */ true,
 	)
 	if err != nil {
 		return nil, err
@@ -424,7 +474,8 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
 		e.matchingClient,
-		e.versionMembershipCache,
+		e.versionCache,
+		e.workerDeploymentClient.SignalVersionReactivation,
 		e.testHooks,
 	)
 }
@@ -522,7 +573,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
@@ -537,7 +588,13 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
-	return verifyfirstworkflowtaskscheduled.Invoke(ctx, request, e.workflowConsistencyChecker)
+	return verifyfirstworkflowtaskscheduled.Invoke(
+		ctx,
+		request,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		e.workflowResendScheduler,
+	)
 }
 
 // RecordWorkflowTaskStarted starts a workflow task
@@ -566,10 +623,12 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.tokenSerializer,
 		e.eventNotifier,
 		e.commandHandlerRegistry,
+		e.chasmWorkflowRegistry,
 		e.searchAttributesValidator,
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
 		e.matchingClient,
+		e.versionCache,
 	)
 	return h.Invoke(ctx, req)
 }
@@ -638,7 +697,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	return signalwithstartworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return signalwithstartworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 func (e *historyEngineImpl) UpdateWorkflowExecution(
@@ -659,6 +718,13 @@ func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	return pollupdate.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	return polltimeskipping.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.fastForwardNotifier)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -711,7 +777,13 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext)
+	return verifychildworkflowcompletionrecorded.Invoke(
+		ctx,
+		req,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		e.workflowResendScheduler,
+	)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -790,7 +862,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	historyEvents, err := ndc.DeserializeBlobs(e.eventSerializer, request.HistoryBatches)
+	historyEvents, err := ndc.DeserializeBlobs(e.serializer, request.HistoryBatches)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +911,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.ResetWorkflowExecutionRequest,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 // UpdateWorkflowExecutionOptions updates the options of a specific workflow execution.
@@ -848,7 +920,7 @@ func (e *historyEngineImpl) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionOptionsRequest,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
@@ -856,6 +928,22 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 ) {
 
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
+}
+
+func (e *historyEngineImpl) NotifyFastForwardUpdate(
+	key notification.TimeSkippingNotificationKey,
+	fastforwardNotification *notification.TimeSkippingFastForwardNotification,
+) {
+	if e.fastForwardNotifier == nil {
+		// Always set by NewEngineWithShardContext; a nil here means a hand-built engine.
+		// Fast-forward notification is best-effort (waiters re-poll on timeout), so log and
+		// skip rather than panic.
+		e.logger.Warn("fastForwardNotifier is not configured; skipping time skipping fast-forward notification",
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowID(key.WorkflowID))
+		return
+	}
+	e.fastForwardNotifier.Notify(key, fastforwardNotification)
 }
 
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {
@@ -917,6 +1005,15 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 	task tasks.Task,
 	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if hook, ok := testhooks.Get(
+		e.testHooks,
+		testhooks.HistoryReplicationTaskConversionInterceptor,
+		namespace.ID(task.GetNamespaceID()),
+	); ok {
+		return hook(task, func() (*replicationspb.ReplicationTask, error) {
+			return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
+		})
+	}
 	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 
@@ -1047,7 +1144,7 @@ func (e *historyEngineImpl) AddTasks(
 	return addtasks.Invoke(
 		ctx,
 		e.shardContext,
-		e.eventSerializer,
+		e.serializer,
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,

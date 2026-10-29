@@ -5,6 +5,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -32,7 +33,8 @@ func newConnPool() *connPool {
 func (cp *connPool) Allocate(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
-	create func(cfg *config.SQL, resolver resolver.ServiceResolver) (*sqlx.DB, error),
+	logger log.Logger,
+	create func(*config.SQL, resolver.ServiceResolver, log.Logger) (*sqlx.DB, error),
 ) (db *sqlx.DB, err error) {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
@@ -47,7 +49,7 @@ func (cp *connPool) Allocate(
 		return entry.db, nil
 	}
 
-	db, err = create(cfg, resolver)
+	db, err = create(cfg, resolver, logger)
 	if err != nil {
 		return nil, err
 	}

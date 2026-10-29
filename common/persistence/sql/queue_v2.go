@@ -35,9 +35,10 @@ type (
 // NewQueueV2 returns an implementation of persistence.QueueV2.
 func NewQueueV2(db sqlplugin.DB,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) persistence.QueueV2 {
 	return &queueV2{
-		SqlStore: NewSqlStore(db, logger),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}
 }
 
@@ -63,7 +64,7 @@ func (q *queueV2) EnqueueMessage(
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
-			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get last messageId. Error: %v",
@@ -82,7 +83,7 @@ func (q *queueV2) EnqueueMessage(
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
-			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. InsertIntoQueueV2Messages operation failed. Error: %v",

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -25,9 +26,10 @@ func newTaskManagerV2(
 	uds userDataStore,
 	tqs taskQueueStore,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (*sqlTaskManagerV2, error) {
 	return &sqlTaskManagerV2{
-		SqlStore:       NewSqlStore(db, logger),
+		SqlStore:       NewSQLStore(db, logger, serializer),
 		userDataStore:  uds,
 		taskQueueStore: tqs,
 	}, nil
@@ -134,7 +136,7 @@ func (m *sqlTaskManagerV2) GetTasks(
 		PageSize:          &request.PageSize,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Failed to get rows. Error: %v", err)
+		return nil, convertSQLError("GetTasks", "failed to get rows", err)
 	}
 
 	response := &persistence.InternalGetTasksResponse{
@@ -175,18 +177,47 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		TaskPass: request.ExclusiveMaxPass,
 		TaskID:   request.ExclusiveMaxTaskID,
 	}
-	result, err := m.DB.DeleteFromTasksV2(ctx, sqlplugin.TasksFilterV2{
+	filter := sqlplugin.TasksFilterV2{
 		RangeHash:         tqHash,
 		TaskQueueID:       tqId,
 		ExclusiveMaxLevel: &exclusiveMaxLevel,
 		Limit:             &request.Limit,
+	}
+
+	if request.ConditionRangeID == 0 {
+		result, err := m.DB.DeleteFromTasksV2(ctx, filter)
+		if err != nil {
+			return 0, convertSQLError("CompleteTasksLessThan", "", err)
+		}
+		nRows, err := result.RowsAffected()
+		if err != nil {
+			return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
+		}
+		return int(nRows), nil
+	}
+
+	var nRows int64
+	err = m.SqlStore.txExecute(ctx, "CompleteTasksLessThan", func(tx sqlplugin.Tx) error {
+		// Lock task queue (subqueue zero holds the range id) and check range id first.
+		queueID, queueHash := taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType, persistence.SubqueueZero)
+		if err := lockTaskQueue(ctx,
+			tx,
+			queueHash,
+			queueID,
+			request.ConditionRangeID,
+			sqlplugin.MatchingTaskVersion2,
+		); err != nil {
+			return err
+		}
+		result, err := tx.DeleteFromTasksV2(ctx, filter)
+		if err != nil {
+			return err
+		}
+		nRows, err = result.RowsAffected()
+		return err
 	})
 	if err != nil {
-		return 0, serviceerror.NewUnavailable(err.Error())
-	}
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
+		return 0, err
 	}
 	return int(nRows), nil
 }

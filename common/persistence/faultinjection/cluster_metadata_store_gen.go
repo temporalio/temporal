@@ -33,7 +33,7 @@ func newFaultInjectionClusterMetadataStore(
 
 // DeleteClusterMetadata wraps ClusterMetadataStore.DeleteClusterMetadata.
 func (d faultInjectionClusterMetadataStore) DeleteClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalDeleteClusterMetadataRequest) (err error) {
-	err = d.generator.generate("DeleteClusterMetadata").inject(func() error {
+	err = d.generator.generate("DeleteClusterMetadata", request).inject(func() error {
 		err = d.ClusterMetadataStore.DeleteClusterMetadata(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionClusterMetadataStore) DeleteClusterMetadata(ctx context.Co
 
 // GetClusterMembers wraps ClusterMetadataStore.GetClusterMembers.
 func (d faultInjectionClusterMetadataStore) GetClusterMembers(ctx context.Context, request *_sourcePersistence.GetClusterMembersRequest) (gp1 *_sourcePersistence.GetClusterMembersResponse, err error) {
-	err = d.generator.generate("GetClusterMembers").inject(func() error {
+	err = d.generator.generate("GetClusterMembers", request).inject(func() error {
 		gp1, err = d.ClusterMetadataStore.GetClusterMembers(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionClusterMetadataStore) GetClusterMembers(ctx context.Contex
 
 // GetClusterMetadata wraps ClusterMetadataStore.GetClusterMetadata.
 func (d faultInjectionClusterMetadataStore) GetClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalGetClusterMetadataRequest) (ip1 *_sourcePersistence.InternalGetClusterMetadataResponse, err error) {
-	err = d.generator.generate("GetClusterMetadata").inject(func() error {
+	err = d.generator.generate("GetClusterMetadata", request).inject(func() error {
 		ip1, err = d.ClusterMetadataStore.GetClusterMetadata(ctx, request)
 		return err
 	})
@@ -60,7 +60,7 @@ func (d faultInjectionClusterMetadataStore) GetClusterMetadata(ctx context.Conte
 
 // ListClusterMetadata wraps ClusterMetadataStore.ListClusterMetadata.
 func (d faultInjectionClusterMetadataStore) ListClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalListClusterMetadataRequest) (ip1 *_sourcePersistence.InternalListClusterMetadataResponse, err error) {
-	err = d.generator.generate("ListClusterMetadata").inject(func() error {
+	err = d.generator.generate("ListClusterMetadata", request).inject(func() error {
 		ip1, err = d.ClusterMetadataStore.ListClusterMetadata(ctx, request)
 		return err
 	})
@@ -69,7 +69,7 @@ func (d faultInjectionClusterMetadataStore) ListClusterMetadata(ctx context.Cont
 
 // PruneClusterMembership wraps ClusterMetadataStore.PruneClusterMembership.
 func (d faultInjectionClusterMetadataStore) PruneClusterMembership(ctx context.Context, request *_sourcePersistence.PruneClusterMembershipRequest) (err error) {
-	err = d.generator.generate("PruneClusterMembership").inject(func() error {
+	err = d.generator.generate("PruneClusterMembership", request).inject(func() error {
 		err = d.ClusterMetadataStore.PruneClusterMembership(ctx, request)
 		return err
 	})
@@ -78,7 +78,7 @@ func (d faultInjectionClusterMetadataStore) PruneClusterMembership(ctx context.C
 
 // SaveClusterMetadata wraps ClusterMetadataStore.SaveClusterMetadata.
 func (d faultInjectionClusterMetadataStore) SaveClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalSaveClusterMetadataRequest) (b1 bool, err error) {
-	err = d.generator.generate("SaveClusterMetadata").inject(func() error {
+	err = d.generator.generate("SaveClusterMetadata", request).inject(func() error {
 		b1, err = d.ClusterMetadataStore.SaveClusterMetadata(ctx, request)
 		return err
 	})
@@ -87,7 +87,7 @@ func (d faultInjectionClusterMetadataStore) SaveClusterMetadata(ctx context.Cont
 
 // UpsertClusterMembership wraps ClusterMetadataStore.UpsertClusterMembership.
 func (d faultInjectionClusterMetadataStore) UpsertClusterMembership(ctx context.Context, request *_sourcePersistence.UpsertClusterMembershipRequest) (err error) {
-	err = d.generator.generate("UpsertClusterMembership").inject(func() error {
+	err = d.generator.generate("UpsertClusterMembership", request).inject(func() error {
 		err = d.ClusterMetadataStore.UpsertClusterMembership(ctx, request)
 		return err
 	})

@@ -26,7 +26,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		targetCluster := "test-target-cluster-" + t.Name()
 		queueType := persistence.QueueTypeHistoryDLQ
 		var queueKeys []persistence.QueueKey
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			queueKey := persistence.QueueKey{
 				QueueType:     queueType,
 				Category:      inTask.GetCategory(),

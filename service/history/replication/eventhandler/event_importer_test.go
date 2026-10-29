@@ -53,7 +53,7 @@ type ImportWorkflowExecutionRequestMatcher struct {
 	ExpectedRequest *historyservice.ImportWorkflowExecutionRequest
 }
 
-func (m *ImportWorkflowExecutionRequestMatcher) Matches(x interface{}) bool {
+func (m *ImportWorkflowExecutionRequestMatcher) Matches(x any) bool {
 	return m.ExpectedRequest.Equal(x)
 }
 
@@ -212,7 +212,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 		7,
 		1001,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func serializeEvents(serializer serialization.Serializer, events [][]*historypb.HistoryEvent) []*commonpb.DataBlob {

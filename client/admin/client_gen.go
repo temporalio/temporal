@@ -39,6 +39,16 @@ func (c *clientImpl) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -57,6 +67,16 @@ func (c *clientImpl) CloseShard(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.CloseShard(ctx, request, opts...)
+}
+
+func (c *clientImpl) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountExecutions(ctx, request, opts...)
 }
 
 func (c *clientImpl) DeepHealthCheck(
@@ -239,6 +259,16 @@ func (c *clientImpl) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -289,6 +319,16 @@ func (c *clientImpl) ListClusters(
 	return c.client.ListClusters(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -327,6 +367,16 @@ func (c *clientImpl) MergeDLQTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateScheduleResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MigrateSchedule(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(
@@ -419,12 +469,22 @@ func (c *clientImpl) ResendReplicationTasks(
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StartAdminBatchOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.SyncWorkflowStateResponse, error) {
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createContextWithStateSyncTimeout(ctx)
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }

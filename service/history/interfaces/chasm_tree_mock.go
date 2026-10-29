@@ -16,6 +16,7 @@ import (
 
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
+	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -72,6 +73,20 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySnapshot", reflect.TypeOf((*MockChasmTree)(nil).ApplySnapshot), arg0)
 }
 
+// ApplySystemMutation mocks base method.
+func (m *MockChasmTree) ApplySystemMutation(arg0 chasm.NodesMutation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplySystemMutation", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplySystemMutation indicates an expected call of ApplySystemMutation.
+func (mr *MockChasmTreeMockRecorder) ApplySystemMutation(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySystemMutation", reflect.TypeOf((*MockChasmTree)(nil).ApplySystemMutation), arg0)
+}
+
 // Archetype mocks base method.
 func (m *MockChasmTree) Archetype() (chasm.Archetype, error) {
 	m.ctrl.T.Helper()
@@ -102,18 +117,18 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 }
 
 // CloseTransaction mocks base method.
-func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (m *MockChasmTree) CloseTransaction(ctx context.Context, isActive bool) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransaction")
+	ret := m.ctrl.Call(m, "CloseTransaction", ctx, isActive)
 	ret0, _ := ret[0].(chasm.NodesMutation)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CloseTransaction indicates an expected call of CloseTransaction.
-func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) CloseTransaction(ctx, isActive any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), ctx, isActive)
 }
 
 // Component mocks base method.
@@ -160,18 +175,32 @@ func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EachPureTask", reflect.TypeOf((*MockChasmTree)(nil).EachPureTask), deadline, callback)
 }
 
-// ExecuteSideEffectTask mocks base method.
-func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, registry *chasm.Registry, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+// ExecuteSideEffectDiscardTask mocks base method.
+func (m *MockChasmTree) ExecuteSideEffectDiscardTask(ctx context.Context, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, registry, executionKey, task, validate)
+	ret := m.ctrl.Call(m, "ExecuteSideEffectDiscardTask", ctx, executionKey, task, validate)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteSideEffectDiscardTask indicates an expected call of ExecuteSideEffectDiscardTask.
+func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectDiscardTask(ctx, executionKey, task, validate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectDiscardTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectDiscardTask), ctx, executionKey, task, validate)
+}
+
+// ExecuteSideEffectTask mocks base method.
+func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, executionKey, task, validate)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ExecuteSideEffectTask indicates an expected call of ExecuteSideEffectTask.
-func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, registry, executionKey, task, validate any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, executionKey, task, validate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, registry, executionKey, task, validate)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, executionKey, task, validate)
 }
 
 // IsDirty mocks base method.
@@ -216,6 +245,33 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
+// MarkTotalTimeSkippedUpdatedInPassive mocks base method.
+func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkTotalTimeSkippedUpdatedInPassive")
+}
+
+// MarkTotalTimeSkippedUpdatedInPassive indicates an expected call of MarkTotalTimeSkippedUpdatedInPassive.
+func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTotalTimeSkippedUpdatedInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkTotalTimeSkippedUpdatedInPassive))
+}
+
+// PartitionedSnapshot mocks base method.
+func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionedSnapshot", arg0)
+	ret0, _ := ret[0].(chasm.NodesSnapshot)
+	ret1, _ := ret[1].(*persistence.ChasmLocalState)
+	return ret0, ret1
+}
+
+// PartitionedSnapshot indicates an expected call of PartitionedSnapshot.
+func (mr *MockChasmTreeMockRecorder) PartitionedSnapshot(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionedSnapshot", reflect.TypeOf((*MockChasmTree)(nil).PartitionedSnapshot), arg0)
+}
+
 // RefreshTasks mocks base method.
 func (m *MockChasmTree) RefreshTasks() error {
 	m.ctrl.T.Helper()
@@ -245,26 +301,27 @@ func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 }
 
 // Terminate mocks base method.
-func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest) error {
+func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest, arg1 metrics.ReasonString) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Terminate", arg0)
+	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Terminate indicates an expected call of Terminate.
-func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0, arg1)
 }
 
 // ValidateSideEffectTask mocks base method.
-func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, error) {
+func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, task)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ValidateSideEffectTask indicates an expected call of ValidateSideEffectTask.

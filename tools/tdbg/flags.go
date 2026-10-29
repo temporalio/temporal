@@ -12,7 +12,11 @@ var (
 	FlagWorkflowIDAlias            = []string{"wid"}
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
+	FlagDeploymentName             = "name"
+	FlagBusinessID                 = "business-id"
+	FlagBusinessIDAlias            = []string{"bid", FlagWorkflowID, FlagWorkflowIDAlias[0]}
 	FlagArchetype                  = "archetype"
+	FlagArchetypeID                = "archetype-id"
 	FlagNumberOfShards             = "number-of-shards"
 	FlagMinEventID                 = "min-event-id"
 	FlagMaxEventID                 = "max-event-id"
@@ -71,4 +75,37 @@ var (
 	FlagAllActive                  = "select-all-active"
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
+	FlagVisibilityQuery            = "query"
+	FlagVisibilityQueryAlias       = []string{"q"}
+	FlagJobID                      = "job-id"
+	FlagDecode                     = "decode"
+	FlagScheduleID                 = "schedule-id"
+	FlagScheduleIDAlias            = []string{"sid"}
+	FlagTarget                     = "target"
+	FlagFromVisibility             = "from-visibility"
+	FlagExecute                    = "execute"
+	FlagWorkers                    = "workers"
+	FlagOutputLog                  = "output-log"
+	FlagBatchType                  = "batch-type"
+	FlagFile                       = "file"
+	FlagStart                      = "lookback-start"
+	FlagStartTime                  = "start-time"
+	FlagEnd                        = "lookback-end"
+	FlagEndTime                    = "end-time"
+	FlagConcurrency                = "concurrency"
+	FlagRPS                        = "rps"
+	FlagListRPS                    = "list-rps"
+	FlagDelayThreshold             = "delay-threshold"
+	FlagIncludePaused              = "include-paused"
+	FlagQuiet                      = "quiet"
+	FlagMinPendingAge              = "min-pending-age"
+	FlagMaxHistoryPages            = "max-history-pages"
+	FlagResumeToken                = "resume-token"
+	FlagOutput                     = "output"
 )
+
+var (
+	FlagFileAlias = []string{"f"}
+)
+
+const defaultMigrateWorkers = 5

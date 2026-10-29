@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -18,14 +19,8 @@ const (
 	DCRedirectionPolicyDefault = ""
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
-	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based namespace
-	// 1. StartWorkflowExecution
-	// 2. SignalWithStartWorkflowExecution
-	// 3. SignalWorkflowExecution
-	// 4. RequestCancelWorkflowExecution
-	// 5. TerminateWorkflowExecution
-	// 6. QueryWorkflow
-	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+	// DCRedirectionPolicySelectedAPIsForwarding means forwarding state-effecting APIs based on namespace
+	// See selectedAPIsForwardingRedirectionPolicyAllowedAPIs for the list of APIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 
 	// DCRedirectionPolicyAllAPIsForwarding means forwarding all APIs based on namespace active cluster
@@ -33,10 +28,11 @@ const (
 )
 
 type (
-	// DCRedirectionPolicy is a DC redirection policy interface
+	// DCRedirectionPolicy is a DC redirection policy interface. fullMethod is the full
+	// gRPC method ("/pkg.Service/Method"), not the bare name.
 	DCRedirectionPolicy interface {
-		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error
-		WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, call func(string) error) error
+		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, fullMethod string, req any, call func(string) error) error
+		WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, fullMethod string, req any, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -47,26 +43,75 @@ type (
 	// SelectedAPIsForwardingRedirectionPolicy is a DC redirection policy
 	// which (based on namespace) forwards selected APIs calls to active cluster
 	SelectedAPIsForwardingRedirectionPolicy struct {
-		currentClusterName string
-		enabledForNS       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		namespaceRegistry  namespace.Registry
-		enableForAllAPIs   bool
+		currentClusterName    string
+		enabledForNS          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		namespaceRegistry     namespace.Registry
+		selectedAPIsOnly      bool
+		// allowlistAdditions are embedder methods that forward under the
+		// selected-APIs policy, keyed by full gRPC method. Nil by default. Without this
+		// an embedder could register a response constructor on the Redirection
+		// interceptor and still never forward, because the allow-list in
+		// selectedAPIsForwardingRedirectionPolicyAllowedAPIs is private
+		// and holds only this server's own methods.
+		allowlistAdditions map[string]struct{}
 	}
 )
 
-// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
-var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
-	"StartWorkflowExecution":           {},
-	"SignalWithStartWorkflowExecution": {},
-	"SignalWorkflowExecution":          {},
-	"RequestCancelWorkflowExecution":   {},
-	"TerminateWorkflowExecution":       {},
-	"QueryWorkflow":                    {},
+// selectedAPIsForwardingRedirectionPolicyAllowedAPIs are the APIs the
+// selected-apis-forwarding policy forwards to the active cluster, keyed by full gRPC
+// method.
+//
+// Full methods rather than bare names because an embedder registers its own services on
+// this server: a bare "DescribeTaskQueue" cannot tell WorkflowService's from another
+// service's, and an entry meant for one would silently apply to the other.
+var selectedAPIsForwardingRedirectionPolicyAllowedAPIs = map[string]struct{}{
+	// Workflow APIs
+	wfMethod("StartWorkflowExecution"):           {},
+	wfMethod("SignalWithStartWorkflowExecution"): {},
+	wfMethod("SignalWorkflowExecution"):          {},
+	wfMethod("UpdateWorkflowExecution"):          {},
+	wfMethod("RequestCancelWorkflowExecution"):   {},
+	wfMethod("TerminateWorkflowExecution"):       {},
+	wfMethod("PauseWorkflowExecution"):           {},
+	wfMethod("UnpauseWorkflowExecution"):         {},
+	wfMethod("ResetWorkflowExecution"):           {},
+	wfMethod("DeleteWorkflowExecution"):          {},
+	wfMethod("QueryWorkflow"):                    {},
+	wfMethod("ExecuteMultiOperation"):            {},
+	// AdminService carries a DeleteWorkflowExecution too, and the bare key this list used
+	// to have covered both. Redirection returns early for anything outside WorkflowService,
+	// so nothing consults this list for it — the entry is here to keep the set the bare key
+	// described, not because a request reaches it.
+	api.AdminServicePrefix + "DeleteWorkflowExecution": {},
+
+	// Standalone Activity APIs
+	wfMethod("StartActivityExecution"):         {},
+	wfMethod("RequestCancelActivityExecution"): {},
+	wfMethod("TerminateActivityExecution"):     {},
+	wfMethod("DeleteActivityExecution"):        {},
+	wfMethod("PauseActivityExecution"):         {},
+	wfMethod("UnpauseActivityExecution"):       {},
+	wfMethod("ResetActivityExecution"):         {},
+	wfMethod("UpdateActivityExecutionOptions"): {},
+
+	// Standalone Nexus Operation APIs
+	wfMethod("StartNexusOperationExecution"):         {},
+	wfMethod("RequestCancelNexusOperationExecution"): {},
+	wfMethod("TerminateNexusOperationExecution"):     {},
+	wfMethod("DeleteNexusOperationExecution"):        {},
 }
 
+func wfMethod(name string) string { return api.WorkflowServicePrefix + name }
+
 // RedirectionPolicyGenerator generate corresponding redirection policy
-func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	namespaceRegistry namespace.Registry, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
+func RedirectionPolicyGenerator(
+	clusterMetadata cluster.Metadata,
+	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	namespaceRegistry namespace.Registry,
+	policy config.DCRedirectionPolicy,
+) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
 		// default policy, noop
@@ -75,10 +120,10 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, enabledForNS d
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, selectedAPIsOnlyForNS, namespaceRegistry)
 	case DCRedirectionPolicyAllAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, selectedAPIsOnlyForNS, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -92,54 +137,83 @@ func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy 
 }
 
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *NoopRedirectionPolicy) WithNamespaceIDRedirect(_ context.Context, _ namespace.ID, _ string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithNamespaceIDRedirect(_ context.Context, _ namespace.ID, _ string, _ any, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(_ context.Context, _ namespace.Name, _ string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(_ context.Context, _ namespace.Name, _ string, _ any, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
 // NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on namespace
-func NewSelectedAPIsForwardingPolicy(currentClusterName string, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
+func NewSelectedAPIsForwardingPolicy(
+	currentClusterName string,
+	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	namespaceRegistry namespace.Registry,
+) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
-		currentClusterName: currentClusterName,
-		enabledForNS:       enabledForNS,
-		namespaceRegistry:  namespaceRegistry,
+		currentClusterName:    currentClusterName,
+		enabledForNS:          enabledForNS,
+		selectedAPIsOnlyForNS: selectedAPIsOnlyForNS,
+		namespaceRegistry:     namespaceRegistry,
+		selectedAPIsOnly:      true,
 	}
 }
 
 // NewAllAPIsForwardingPolicy creates a forwarding policy for all APIs based on namespace
-func NewAllAPIsForwardingPolicy(currentClusterName string, enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
+func NewAllAPIsForwardingPolicy(
+	currentClusterName string,
+	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	namespaceRegistry namespace.Registry,
+) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
-		currentClusterName: currentClusterName,
-		enabledForNS:       enabledForNS,
-		namespaceRegistry:  namespaceRegistry,
-		enableForAllAPIs:   true,
+		currentClusterName:    currentClusterName,
+		enabledForNS:          enabledForNS,
+		selectedAPIsOnlyForNS: selectedAPIsOnlyForNS,
+		namespaceRegistry:     namespaceRegistry,
+		selectedAPIsOnly:      false,
 	}
 }
 
+// WithAdditionalAllowedMethods returns a copy of the policy that also forwards the
+// given full gRPC methods under the selected-APIs policy.
+//
+// Embedders use it to opt their own methods into forwarding.
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithAdditionalAllowedMethods(fullMethods ...string) *SelectedAPIsForwardingRedirectionPolicy {
+	clone := *policy
+	clone.allowlistAdditions = make(map[string]struct{}, len(policy.allowlistAdditions)+len(fullMethods))
+	for method := range policy.allowlistAdditions {
+		clone.allowlistAdditions[method] = struct{}{}
+	}
+	for _, method := range fullMethods {
+		clone.allowlistAdditions[method] = struct{}{}
+	}
+	return &clone
+}
+
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, fullMethod string, _ any, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, fullMethod, call)
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, call func(string) error) error {
-	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespace)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, fullMethod string, _ any, call func(string) error) error {
+	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, fullMethod, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, call func(string) error) error {
-	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, fullMethod string, call func(string) error) error {
+	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, fullMethod)
 
 	err := call(targetDC)
 
@@ -150,6 +224,15 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.
 	return call(targetDC)
 }
 
+// allowed reports whether fullMethod forwards under the selected-APIs policy.
+func (policy *SelectedAPIsForwardingRedirectionPolicy) allowed(fullMethod string) bool {
+	if _, ok := selectedAPIsForwardingRedirectionPolicyAllowedAPIs[fullMethod]; ok {
+		return true
+	}
+	_, ok := policy.allowlistAdditions[fullMethod]
+	return ok
+}
+
 func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError(err error) (string, bool) {
 	namespaceNotActiveErr, ok := err.(*serviceerror.NamespaceNotActive)
 	if !ok {
@@ -158,7 +241,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError
 	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, fullMethod string) (string, bool) {
 	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}
@@ -168,16 +251,17 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	// TODO: Add a workflowId extractor here to get the workflowId from the request
-	if policy.enableForAllAPIs {
-		return namespaceEntry.ActiveClusterName(namespace.EmptyBusinessID), true
+	// Get routingKey from context (set by RoutingKeyInterceptor)
+	routingKey := GetRoutingKeyFromContext(ctx)
+
+	if policy.allowed(fullMethod) {
+		// redirect if API is allow-listed
+		return namespaceEntry.ActiveClusterName(routingKey), true
 	}
 
-	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
-	if !ok {
-		// do not do dc redirection if API is not whitelisted
+	if policy.selectedAPIsOnly || policy.selectedAPIsOnlyForNS(namespaceEntry.Name().String()) {
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(namespace.EmptyBusinessID), true
+	return namespaceEntry.ActiveClusterName(routingKey), true
 }

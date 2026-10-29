@@ -59,18 +59,18 @@ func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 	var value intType
 	fnApplied := false
 
-	interf, ok, err := testMap.GetAndDo(key, func(key interface{}, value interface{}) error {
+	interf, ok, err := testMap.GetAndDo(key, func(key any, value any) error {
 		fnApplied = true
 		return nil
 	})
 	s.Nil(interf, "GetAndDo should return nil when key not found")
-	s.Nil(err, "GetAndDo should return nil when function not applied")
+	s.NoError(err, "GetAndDo should return nil when function not applied")
 	s.False(ok, "GetAndDo should return false when key not found")
 	s.False(fnApplied, "GetAndDo should not apply function when key not exixts")
 
 	value = intType(1)
 	testMap.Put(key, &value)
-	interf, ok, err = testMap.GetAndDo(key, func(key interface{}, value interface{}) error {
+	interf, ok, err = testMap.GetAndDo(key, func(key any, value any) error {
 		fnApplied = true
 		intValue := value.(*intType)
 		*intValue++
@@ -79,7 +79,7 @@ func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 
 	value1 := interf.(*intType)
 	s.Equal(*(value1), intType(2))
-	s.NotNil(err, "GetAndDo should return non nil when function applied")
+	s.Error(err, "GetAndDo should return non nil when function applied")
 	s.True(ok, "GetAndDo should return true when key found")
 	s.True(fnApplied, "GetAndDo should apply function when key exixts")
 }
@@ -91,18 +91,18 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 	fnApplied := false
 
 	value = intType(1)
-	interf, ok, err := testMap.PutOrDo(key, &value, func(key interface{}, value interface{}) error {
+	interf, ok, err := testMap.PutOrDo(key, &value, func(key any, value any) error {
 		fnApplied = true
 		return errors.New("some err")
 	})
 	valueRetuern := interf.(*intType)
 	s.Equal(value, *valueRetuern)
-	s.Nil(err, "PutOrDo should return nil when function not applied")
+	s.NoError(err, "PutOrDo should return nil when function not applied")
 	s.False(ok, "PutOrDo should return false when function not applied")
 	s.False(fnApplied, "PutOrDo should not apply function when key not exixts")
 
 	anotherValue := intType(111)
-	interf, ok, err = testMap.PutOrDo(key, &anotherValue, func(key interface{}, value interface{}) error {
+	interf, ok, err = testMap.PutOrDo(key, &anotherValue, func(key any, value any) error {
 		fnApplied = true
 		intValue := value.(*intType)
 		*intValue++
@@ -110,7 +110,7 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 	})
 	valueRetuern = interf.(*intType)
 	s.Equal(value, *valueRetuern)
-	s.NotNil(err, "PutOrDo should return non nil when function applied")
+	s.Error(err, "PutOrDo should return non nil when function applied")
 	s.True(ok, "PutOrDo should return true when function applied")
 	s.True(fnApplied, "PutOrDo should apply function when key exixts")
 }
@@ -121,14 +121,14 @@ func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 	value := intType(1)
 	testMap.Put(key, &value)
 
-	removed := testMap.RemoveIf(key, func(key interface{}, value interface{}) bool {
+	removed := testMap.RemoveIf(key, func(key any, value any) bool {
 		intValue := value.(*intType)
 		return *intValue == intType(2)
 	})
 	s.Equal(1, testMap.Len(), "TestRemoveIf should only entry if condition is met")
 	s.False(removed, "TestRemoveIf should return false if key is not deleted")
 
-	removed = testMap.RemoveIf(key, func(key interface{}, value interface{}) bool {
+	removed = testMap.RemoveIf(key, func(key any, value any) bool {
 		intValue := value.(*intType)
 		return *intValue == intType(1)
 	})
@@ -141,7 +141,7 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 	countMap := make(map[string]int)
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 
-	for i := 0; i < 1024; i++ {
+	for range 1024 {
 		key := uuid.NewString()
 		countMap[key] = 0
 		testMap.Put(key, boolType(true))
@@ -185,7 +185,7 @@ func (s *ConcurrentTxMapSuite) TestPutIfNotExist() {
 func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 	nKeys := 1024
 	keys := make([]string, nKeys)
-	for i := 0; i < nKeys; i++ {
+	for i := range nKeys {
 		keys[i] = uuid.NewString()
 	}
 
@@ -196,13 +196,11 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 
 	startWG.Add(1)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 
-		doneWG.Add(1)
-
-		go func() {
+		doneWG.Go(func() {
 			startWG.Wait()
-			for n := 0; n < nKeys; n++ {
+			for n := range nKeys {
 				val := intType(rand.Int())
 				if testMap.PutIfNotExist(keys[n], val) {
 					atomic.AddInt32(&total, int32(val))
@@ -210,8 +208,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 					s.True(ok, "Concurrency Get test failed")
 				}
 			}
-			doneWG.Done()
-		}()
+		})
 	}
 
 	startWG.Done()
@@ -220,7 +217,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 	s.Equal(nKeys, testMap.Len(), "Wrong concurrent map size")
 
 	var gotTotal int32
-	for i := 0; i < nKeys; i++ {
+	for i := range nKeys {
 		v, ok := testMap.Get(keys[i])
 		s.True(ok, "Get failed to find previously inserted key")
 		intVal := v.(intType)

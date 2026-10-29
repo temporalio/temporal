@@ -52,6 +52,7 @@ type (
 		logger           log.Logger
 		currentCluster   string
 		hostInfo         membership.HostInfo
+		worker           worker.Worker
 	}
 )
 
@@ -75,7 +76,17 @@ func (s *Processor) Start() error {
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
 
-	return processorWorker.Start()
+	if err := processorWorker.Start(); err != nil {
+		return err
+	}
+	s.worker = processorWorker
+	return nil
+}
+
+func (s *Processor) Stop() {
+	if s.worker != nil {
+		s.worker.Stop()
+	}
 }
 
 func getWorkerOptions(p *Processor) worker.Options {
