@@ -90,12 +90,13 @@ type (
 		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
-		// GradualChangeUntil returns the time until which a gradual membership change is in
-		// progress, or may start. During that time, the result of Lookup/LookupN for some keys
-		// may change without a ChangedEvent being sent to listeners, so listeners that care
-		// about ownership of specific keys should re-check periodically. Returns a time in the
-		// past (or the zero time) if no gradual change is pending.
-		GradualChangeUntil() time.Time
+		// NextLookupChange returns the earliest time after now at which the result of
+		// LookupN(key, n) may change without a ChangedEvent being sent to listeners (due to a
+		// gradual membership change), or the zero time if there is none. Listeners that care
+		// about ownership of specific keys should re-check them at that time. The result may
+		// not actually change at that time, in which case the caller should call
+		// NextLookupChange again.
+		NextLookupChange(key string, n int) time.Time
 	}
 
 	HostInfoProvider interface {

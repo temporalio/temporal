@@ -117,6 +117,6 @@ func (s *staticResolver) AvailableMembers() []membership.HostInfo {
 func (s *staticResolver) RequestRefresh() {
 }
 
-func (s *staticResolver) GradualChangeUntil() time.Time {
+func (s *staticResolver) NextLookupChange(string, int) time.Time {
 	return time.Time{}
 }

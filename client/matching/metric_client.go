@@ -116,6 +116,13 @@ func (c *metricClient) Route(p tqid.Partition) (string, error) {
 	return rc.Route(p)
 }
 
+func (c *metricClient) NextRouteChange(p tqid.Partition) time.Time {
+	if rc, ok := c.client.(RoutingClient); ok {
+		return rc.NextRouteChange(p)
+	}
+	return time.Time{}
+}
+
 // Stop forwards a deterministic shutdown to the wrapped client. See
 // clientImpl.Stop. It is only invoked via client.Bean.Close.
 func (c *metricClient) Stop() {

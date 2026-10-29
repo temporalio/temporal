@@ -257,6 +257,7 @@ func newMatchingEngine(
 		hostInfoProvider:    mockHostInfoProvider,
 		serviceResolver:     mockServiceResolver,
 		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		routeChecksCh:       make(chan struct{}, 1),
 		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
@@ -3229,12 +3230,17 @@ func (m mockRoutingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return hosts[n%len(hosts)].GetAddress(), nil
 }
 
+func (m mockRoutingMatchingClient) NextRouteChange(p tqid.Partition) time.Time {
+	key, n := p.RoutingKey(0)
+	return m.sr.NextLookupChange(key, n+1)
+}
+
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	// need to create a new engine for this test to customize mockServiceResolver
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
-	s.mockServiceResolver.EXPECT().GradualChangeUntil().Return(time.Time{}).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(gomock.Any(), gomock.Any()).Return(time.Time{}).AnyTimes()
 
 	// add Route to MockMatchingServiceClient
 	routingClient := mockRoutingMatchingClient{
@@ -3299,8 +3305,6 @@ func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
-	gradualUntil := time.Now().Add(5 * time.Second)
-	s.mockServiceResolver.EXPECT().GradualChangeUntil().Return(gradualUntil).AnyTimes()
 
 	routingClient := mockRoutingMatchingClient{
 		MockMatchingServiceClient: s.mockMatchingClient,
@@ -3319,46 +3323,67 @@ func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
 	e.Start()
 	defer e.Stop()
 
-	p1, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.NoError(err)
-	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.NoError(err)
-
-	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
-	s.NoError(err)
-	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
-	s.NoError(err)
-	s.Len(e.getTaskQueuePartitions(1000), 2)
+	newPartition := func() tqid.Partition {
+		p, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.NewString(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		s.NoError(err)
+		return p
+	}
+	load := func(p tqid.Partition) {
+		_, _, err := e.getTaskQueuePartitionManager(context.Background(), p, true, loadCauseUnspecified)
+		s.NoError(err)
+	}
 
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
 
-	// p2 moves away partway through a gradual change, without a membership changed event
-	var p2Moved atomic.Bool
-	var p2Lookups atomic.Int32
-	p1key, p1n := p1.RoutingKey(0)
-	p2key, p2n := p2.RoutingKey(0)
-	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self}).AnyTimes()
-	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).DoAndReturn(func(string, int) []membership.HostInfo {
-		p2Lookups.Add(1)
-		if p2Moved.Load() {
-			return []membership.HostInfo{other}
-		}
-		return []membership.HostInfo{self}
-	}).AnyTimes()
+	// p2 and p3 move away partway through a gradual change, without a membership changed
+	// event. p1 doesn't move.
+	var gradual atomic.Bool
+	now := time.Now()
+	expectPartition := func(p tqid.Partition, switchAt time.Time, lookups *atomic.Int32) {
+		moved := func() bool { return !switchAt.IsZero() && !time.Now().Before(switchAt) }
+		key, n := p.RoutingKey(0)
+		s.mockServiceResolver.EXPECT().NextLookupChange(key, n+1).DoAndReturn(func(string, int) time.Time {
+			if !gradual.Load() || switchAt.IsZero() || moved() {
+				return time.Time{}
+			}
+			return switchAt
+		}).AnyTimes()
+		s.mockServiceResolver.EXPECT().LookupN(key, n+1).DoAndReturn(func(string, int) []membership.HostInfo {
+			lookups.Add(1)
+			if moved() {
+				return []membership.HostInfo{other}
+			}
+			return []membership.HostInfo{self}
+		}).AnyTimes()
+	}
+	p1, p2, p3 := newPartition(), newPartition(), newPartition()
+	var p1Lookups, p2Lookups, p3Lookups atomic.Int32
+	expectPartition(p1, time.Time{}, &p1Lookups)
+	expectPartition(p2, now.Add(time.Second), &p2Lookups)
+	expectPartition(p3, now.Add(1500*time.Millisecond), &p3Lookups)
 
-	// one event to start the gradual change
+	load(p1)
+	load(p2)
+
+	// one event for the start of the gradual change, which finds p2's switch time
+	gradual.Store(true)
 	e.membershipChangedCh <- nil
-	await.RequireTrue(s.T(), func() bool { return p2Lookups.Load() > 0 }, time.Second, 10*time.Millisecond)
-	s.Len(e.getTaskQueuePartitions(1000), 2, "nothing should be unloaded yet")
+	await.RequireTrue(s.T(), func() bool { return p1Lookups.Load() > 0 }, time.Second, 10*time.Millisecond)
 
-	p2Moved.Store(true)
+	// p3 is loaded after that, so it's found by the load path
+	load(p3)
+
+	s.Len(e.getTaskQueuePartitions(1000), 3, "nothing should be unloaded yet")
+	s.Zero(p3Lookups.Load())
+
 	await.RequireTruef(s.T(), func() bool {
 		return len(e.getTaskQueuePartitions(1000)) == 1
-	}, 2*time.Second, 10*time.Millisecond, "p2 should have been unloaded by periodic rescan")
+	}, 5*time.Second, 10*time.Millisecond, "p2 and p3 should have been unloaded at their switch times")
 
 	tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p1, false, loadCauseUnspecified)
 	s.NoError(err)
 	s.NotNil(tqm)
+	s.Equal(int32(1), p1Lookups.Load(), "p1 should only have been checked on the membership event")
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {
@@ -6916,6 +6941,10 @@ type routingMatchingClient struct {
 
 func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
+}
+
+func (r *routingMatchingClient) NextRouteChange(tqid.Partition) time.Time {
+	return time.Time{}
 }
 
 func TestMatchingConfigIgnoresPersistedFairnessState(t *testing.T) {

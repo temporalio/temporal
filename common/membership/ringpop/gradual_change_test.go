@@ -54,6 +54,34 @@ func TestPresence(t *testing.T) {
 	require.False(t, leave.present(hash, start))
 }
 
+func TestPresenceNextSwitch(t *testing.T) {
+	t.Parallel()
+	start := time.Unix(1000, 0)
+	end := start.Add(30 * time.Second)
+	const hash = math.MaxUint32 / 4 // switches at 7.5s
+	sw := switchTime(start, end, hash)
+
+	for _, p := range []presence{
+		{joinStart: start, joinEnd: end},
+		{leaveStart: start, leaveEnd: end},
+	} {
+		require.Equal(t, sw, p.nextSwitch(hash, start.Add(-time.Second)))
+		require.Equal(t, sw, p.nextSwitch(hash, sw.Add(-1)))
+		require.True(t, p.nextSwitch(hash, sw).IsZero())
+	}
+
+	// both: returns the earliest one that's still in the future
+	leaveSw := switchTime(start.Add(10*time.Second), end.Add(10*time.Second), hash)
+	both := presence{joinStart: start, joinEnd: end, leaveStart: start.Add(10 * time.Second), leaveEnd: end.Add(10 * time.Second)}
+	require.Equal(t, sw, both.nextSwitch(hash, start))
+	require.Equal(t, leaveSw, both.nextSwitch(hash, sw))
+	require.True(t, both.nextSwitch(hash, leaveSw).IsZero())
+
+	// zero-length windows are covered by refreshes, so they're not included
+	require.True(t, (&presence{joinStart: start, joinEnd: start}).nextSwitch(hash, start.Add(-1)).IsZero())
+	require.True(t, (&presence{leaveStart: start, leaveEnd: start}).nextSwitch(hash, start.Add(-1)).IsZero())
+}
+
 func TestFilterMembersByTime(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1000, 0)
@@ -90,9 +118,6 @@ func TestFilterMembersByTime(t *testing.T) {
 	}, presences)
 
 	require.Equal(t, now.Add(2*time.Second).Unix(), nextEvent) // future-join start
-
-	// future-stop has a zero-length window so it doesn't count
-	require.Equal(t, now.Add(-1*time.Second+maxGradualChangeWindow), gradualTestResolver(hosts, now).GradualChangeUntil())
 }
 
 func TestFilterMembersByTimeNoChange(t *testing.T) {
@@ -103,7 +128,7 @@ func TestFilterMembersByTimeNoChange(t *testing.T) {
 	require.Len(t, filtered, 2)
 	require.Nil(t, presences)
 	require.Zero(t, nextEvent)
-	require.True(t, gradualTestResolver(hosts, now).GradualChangeUntil().IsZero())
+	require.True(t, gradualTestResolver(hosts, now).nextLookupChange("key", 1, now).IsZero())
 }
 
 // gradualTestResolver builds a resolver as it would look after a refresh at refreshTime.
@@ -155,7 +180,6 @@ func TestGradualJoin(t *testing.T) {
 	before := gradualTestResolver(base, start)
 	after := gradualTestResolver(append(base, newHostInfo(joiner.addr, nil)), start)
 	r := gradualTestResolver(append(base, joiner), start)
-	require.Equal(t, end, r.GradualChangeUntil())
 
 	const keys = 20000
 	const buckets = 30
@@ -172,6 +196,7 @@ func TestGradualJoin(t *testing.T) {
 			for _, d := range []time.Duration{window / 4, window / 2, 3 * window / 4} {
 				require.Equal(t, oldOwner, lookupOne(t, r, key, start.Add(d)))
 			}
+			require.True(t, r.nextLookupChange(key, 1, start).IsZero(), "no change expected")
 			continue
 		}
 		require.Equal(t, joiner.addr, newOwner)
@@ -179,6 +204,8 @@ func TestGradualJoin(t *testing.T) {
 		sw := switchTime(start, end, gradualKeyHash(key))
 		require.Equal(t, oldOwner, lookupOne(t, r, key, sw.Add(-1)))
 		require.Equal(t, newOwner, lookupOne(t, r, key, sw))
+		require.Equal(t, sw, r.nextLookupChange(key, 1, start))
+		require.True(t, r.nextLookupChange(key, 1, sw).IsZero())
 		counts[int(sw.Sub(start)*buckets/window)%buckets]++
 	}
 
@@ -213,7 +240,6 @@ func TestGradualLeaveAndJoinTogether(t *testing.T) {
 	hosts := append(gradualTestHosts(10), joiner)
 	hosts[3] = leaver
 	r := gradualTestResolver(hosts, start)
-	require.Equal(t, end, r.GradualChangeUntil())
 
 	moved := 0
 	for i := range 10000 {
@@ -223,12 +249,15 @@ func TestGradualLeaveAndJoinTogether(t *testing.T) {
 		require.Equal(t, oldOwner, lookupOne(t, r, key, start))
 		require.Equal(t, newOwner, lookupOne(t, r, key, end))
 		if oldOwner == newOwner {
+			require.True(t, r.nextLookupChange(key, 1, start).IsZero(), "no change expected")
 			continue
 		}
 		moved++
 		sw := switchTime(start, end, gradualKeyHash(key))
 		require.Equal(t, oldOwner, lookupOne(t, r, key, sw.Add(-1)))
 		require.Equal(t, newOwner, lookupOne(t, r, key, sw))
+		require.Equal(t, sw, r.nextLookupChange(key, 1, start))
+		require.True(t, r.nextLookupChange(key, 1, sw).IsZero())
 		for _, d := range []time.Duration{window / 4, window / 2, 3 * window / 4} {
 			owner := lookupOne(t, r, key, start.Add(d))
 			require.Contains(t, []string{oldOwner, newOwner}, owner, "key should move only once")
@@ -247,4 +276,49 @@ func TestGradualLeaveAll(t *testing.T) {
 	require.Equal(t, []string{"a:1"}, addrs)
 	addrs, _ = r.lookupN("key", 1, start.Add(30*time.Second))
 	require.Empty(t, addrs)
+}
+
+func TestNextLookupChange(t *testing.T) {
+	t.Parallel()
+	start := time.Unix(1000, 0)
+	unix := func(d time.Duration) string { return strconv.FormatInt(start.Add(d).Unix(), 10) }
+
+	// Overlapping joins and leaves with different windows.
+	hosts := gradualTestHosts(8)
+	hosts[1] = newHostInfo(hosts[1].addr, map[string]string{stopAtKey: unix(0), stopWindowKey: "30"})
+	hosts[2] = newHostInfo(hosts[2].addr, map[string]string{stopAtKey: unix(10 * time.Second), stopWindowKey: "20"})
+	hosts = append(hosts,
+		newHostInfo("10.0.0.98:7235", map[string]string{startAtKey: unix(-5 * time.Second), startWindowKey: "30"}),
+		newHostInfo("10.0.0.99:7235", map[string]string{startAtKey: unix(0), startWindowKey: "40"}),
+	)
+	r := gradualTestResolver(hosts, start)
+	final := start.Add(time.Minute)
+
+	changes := 0
+	for i := range 2000 {
+		key := fmt.Sprintf("key-%d", i)
+		for _, n := range []int{1, 3} {
+			// Follow the lookup result through all its changes: it must be constant between
+			// the times returned by nextLookupChange.
+			now := start
+			for {
+				cur, _ := r.lookupN(key, n, now)
+				next := r.nextLookupChange(key, n, now)
+				if next.IsZero() {
+					last, _ := r.lookupN(key, n, final)
+					require.Equal(t, cur, last, "%s %d: changed after %v", key, n, now)
+					break
+				}
+				require.True(t, next.After(now))
+				before, _ := r.lookupN(key, n, next.Add(-1))
+				require.Equal(t, cur, before, "%s %d: changed before %v", key, n, next)
+				after, _ := r.lookupN(key, n, next)
+				if !slices.Equal(cur, after) {
+					changes++
+				}
+				now = next
+			}
+		}
+	}
+	require.Positive(t, changes)
 }

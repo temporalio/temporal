@@ -221,20 +221,6 @@ func (mr *MockServiceResolverMockRecorder) AvailableMembers() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMembers", reflect.TypeOf((*MockServiceResolver)(nil).AvailableMembers))
 }
 
-// GradualChangeUntil mocks base method.
-func (m *MockServiceResolver) GradualChangeUntil() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GradualChangeUntil")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GradualChangeUntil indicates an expected call of GradualChangeUntil.
-func (mr *MockServiceResolverMockRecorder) GradualChangeUntil() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GradualChangeUntil", reflect.TypeOf((*MockServiceResolver)(nil).GradualChangeUntil))
-}
-
 // Lookup mocks base method.
 func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 	m.ctrl.T.Helper()
@@ -290,6 +276,20 @@ func (m *MockServiceResolver) Members() []HostInfo {
 func (mr *MockServiceResolverMockRecorder) Members() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Members", reflect.TypeOf((*MockServiceResolver)(nil).Members))
+}
+
+// NextLookupChange mocks base method.
+func (m *MockServiceResolver) NextLookupChange(key string, n int) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextLookupChange", key, n)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// NextLookupChange indicates an expected call of NextLookupChange.
+func (mr *MockServiceResolverMockRecorder) NextLookupChange(key, n any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextLookupChange", reflect.TypeOf((*MockServiceResolver)(nil).NextLookupChange), key, n)
 }
 
 // RemoveListener mocks base method.

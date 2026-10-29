@@ -6892,6 +6892,10 @@ func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
 
+func (r *routingMatchingClient) NextRouteChange(tqid.Partition) time.Time {
+	return time.Time{}
+}
+
 func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 	return &commonpb.Callback_Nexus_{
 		Nexus: &commonpb.Callback_Nexus{

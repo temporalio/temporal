@@ -197,14 +197,31 @@ func (r *serviceResolver) lookupN(key string, n int, now time.Time) ([]string, m
 	}), rh.hosts
 }
 
-func (r *serviceResolver) GradualChangeUntil() time.Time {
-	var until time.Time
-	for _, p := range r.loadRingAndHosts().presence {
-		if end := p.gradualEnd(); end.After(until) {
-			until = end
-		}
+func (r *serviceResolver) NextLookupChange(key string, n int) time.Time {
+	return r.nextLookupChange(key, n, time.Now())
+}
+
+func (r *serviceResolver) nextLookupChange(key string, n int, now time.Time) time.Time {
+	rh := r.loadRingAndHosts()
+	if len(rh.presence) == 0 || n <= 0 {
+		return time.Time{}
 	}
-	return until
+	// Do the same walk as lookupN, and note the next switch time of each joining or leaving
+	// host that we visit. The result of the lookup depends only on the hosts visited before
+	// the walk stops, so it can't change until one of them switches.
+	keyHash := gradualKeyHash(key)
+	var next time.Time
+	rh.ring.LookupNFiltered(key, n, func(addr string) bool {
+		p, ok := rh.presence[addr]
+		if !ok {
+			return true
+		}
+		if t := p.nextSwitch(keyHash, now); !t.IsZero() && (next.IsZero() || t.Before(next)) {
+			next = t
+		}
+		return p.present(keyHash, now)
+	})
+	return next
 }
 
 func (r *serviceResolver) AddListener(

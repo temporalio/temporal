@@ -35,16 +35,22 @@ func (p *presence) present(keyHash uint32, now time.Time) bool {
 	return true
 }
 
-// gradualEnd returns the end of the latest gradual window in p, or the zero time.
-func (p *presence) gradualEnd() time.Time {
-	var end time.Time
-	if p.joinEnd.After(p.joinStart) {
-		end = p.joinEnd
+// nextSwitch returns the earliest time after now at which present(keyHash, ...) changes, or
+// the zero time if it won't change. Switches in zero-length windows are not included since
+// they coincide with a refresh that sends a ChangedEvent.
+func (p *presence) nextSwitch(keyHash uint32, now time.Time) time.Time {
+	var next time.Time
+	consider := func(start, end time.Time) {
+		if !end.After(start) {
+			return
+		}
+		if t := switchTime(start, end, keyHash); t.After(now) && (next.IsZero() || t.Before(next)) {
+			next = t
+		}
 	}
-	if p.leaveEnd.After(p.leaveStart) && p.leaveEnd.After(end) {
-		end = p.leaveEnd
-	}
-	return end
+	consider(p.joinStart, p.joinEnd)
+	consider(p.leaveStart, p.leaveEnd)
+	return next
 }
 
 // gradualKeyHash returns the hash used to pick the switch time for a key. It must not be
