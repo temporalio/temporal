@@ -1,6 +1,9 @@
 package cache
 
 import (
+	"context"
+
+	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -8,7 +11,11 @@ import (
 // GetMutableState returns the MutableState for the given key from the cache.
 // Exported for testing purposes.
 func GetMutableState(cache Cache, key Key) historyi.MutableState {
-	return getWorkflowContext(cache, key).(*workflow.ContextImpl).MutableState
+	wfContext := getWorkflowContext(cache, key)
+	if wfContext == nil {
+		return nil
+	}
+	return wfContext.(*workflow.ContextImpl).MutableState
 }
 
 // PutContextIfNotExist puts the given workflow Context into the cache, if it doens't already exist.
@@ -21,9 +28,21 @@ func PutContextIfNotExist(cache Cache, key Key, value historyi.WorkflowContext) 
 // ClearMutableState clears cached mutable state for the given key to
 // force a reload from persistence on the next access.
 func ClearMutableState(cache Cache, key Key) {
-	getWorkflowContext(cache, key).Clear()
+	wfContext := getWorkflowContext(cache, key)
+	if wfContext == nil {
+		return
+	}
+	if err := wfContext.Lock(context.Background(), locks.PriorityLow); err != nil {
+		return
+	}
+	defer wfContext.Unlock()
+	wfContext.Clear()
 }
 
 func getWorkflowContext(cache Cache, key Key) historyi.WorkflowContext {
-	return cache.(*cacheImpl).Get(key).(*cacheItem).wfContext
+	entry := cache.(*cacheImpl).Get(key)
+	if entry == nil {
+		return nil
+	}
+	return entry.(*cacheItem).wfContext
 }
