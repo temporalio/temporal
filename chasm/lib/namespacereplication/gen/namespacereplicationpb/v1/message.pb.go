@@ -192,10 +192,10 @@ const (
 	// FAILED_* so it doesn't read as an error.
 	PEER_APPLY_OUTCOME_NOT_ADMITTED PeerApplyOutcome = 6
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload matched the sender's fingerprint.
+	// received payload matched the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MATCH PeerApplyOutcome = 7
 	// The peer processed a shadow request without writing receiver state and the
-	// received payload did not match the sender's fingerprint.
+	// received payload differed from the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
 )
 
@@ -299,12 +299,15 @@ type NamespaceMutation struct {
 	// Shadow mutations exercise the full component and peer transport without
 	// writing namespace state in either the source or destination cell.
 	Shadow bool `protobuf:"varint,6,opt,name=shadow,proto3" json:"shadow,omitempty"`
+	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
+	// Required for shadow mutations and preserved unchanged through peer delivery.
+	ShadowLegacyTaskPayload []byte `protobuf:"bytes,7,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
 	// Replicate-only preserves the legacy no-op UpdateNamespace behavior: the
 	// source snapshot is already authoritative, so do not rewrite it, consume a
 	// notification-version CAS slot, or emit a namespace-updated lifecycle event.
 	// Peer applies remain authoritative. This is deliberately distinct from
 	// shadow, which suppresses writes in both the source and destination cells.
-	ReplicateOnly bool `protobuf:"varint,7,opt,name=replicate_only,json=replicateOnly,proto3" json:"replicate_only,omitempty"`
+	ReplicateOnly bool `protobuf:"varint,8,opt,name=replicate_only,json=replicateOnly,proto3" json:"replicate_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -381,6 +384,13 @@ func (x *NamespaceMutation) GetShadow() bool {
 	return false
 }
 
+func (x *NamespaceMutation) GetShadowLegacyTaskPayload() []byte {
+	if x != nil {
+		return x.ShadowLegacyTaskPayload
+	}
+	return nil
+}
+
 func (x *NamespaceMutation) GetReplicateOnly() bool {
 	if x != nil {
 		return x.ReplicateOnly
@@ -398,7 +408,10 @@ type NamespaceMutationState struct {
 	// Local apply status, including durable retry progress and the terminal outcome.
 	LocalApply *LocalApplyStatus `protobuf:"bytes,3,opt,name=local_apply,json=localApply,proto3" json:"local_apply,omitempty"`
 	// Per-peer apply outcomes, keyed by target cell name.
-	PeerApply     map[string]*PeerApplyStatus `protobuf:"bytes,4,rep,name=peer_apply,json=peerApply,proto3" json:"peer_apply,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	PeerApply map[string]*PeerApplyStatus `protobuf:"bytes,4,rep,name=peer_apply,json=peerApply,proto3" json:"peer_apply,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Source-cluster time when the initial local task was scheduled. Retained
+	// across retries to measure end-to-end latency without destination clock skew.
+	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -457,6 +470,13 @@ func (x *NamespaceMutationState) GetLocalApply() *LocalApplyStatus {
 func (x *NamespaceMutationState) GetPeerApply() map[string]*PeerApplyStatus {
 	if x != nil {
 		return x.PeerApply
+	}
+	return nil
+}
+
+func (x *NamespaceMutationState) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
 	}
 	return nil
 }
@@ -646,7 +666,7 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto p
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xfc\x02\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xb9\x03\n" +
 	"\x11NamespaceMutation\x12N\n" +
 	"\toperation\x18\x01 \x01(\x0e20.temporal.server.api.enums.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
@@ -654,15 +674,18 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\n" +
 	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12.\n" +
 	"\x13is_global_namespace\x18\x05 \x01(\bR\x11isGlobalNamespace\x12\x16\n" +
-	"\x06shadow\x18\x06 \x01(\bR\x06shadow\x12%\n" +
-	"\x0ereplicate_only\x18\a \x01(\bR\rreplicateOnly\"\xd6\x04\n" +
+	"\x06shadow\x18\x06 \x01(\bR\x06shadow\x12;\n" +
+	"\x1ashadow_legacy_task_payload\x18\a \x01(\fR\x17shadowLegacyTaskPayload\x12%\n" +
+	"\x0ereplicate_only\x18\b \x01(\bR\rreplicateOnly\"\x91\x05\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +
 	"\vlocal_apply\x18\x03 \x01(\v2I.temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatusR\n" +
 	"localApply\x12}\n" +
 	"\n" +
-	"peer_apply\x18\x04 \x03(\v2^.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntryR\tpeerApply\x1a\x86\x01\n" +
+	"peer_apply\x18\x04 \x03(\v2^.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntryR\tpeerApply\x129\n" +
+	"\n" +
+	"started_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x1a\x86\x01\n" +
 	"\x0ePeerApplyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
 	"\x05value\x18\x02 \x01(\v2H.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatusR\x05value:\x028\x01\"\xe5\x03\n" +
@@ -739,22 +762,23 @@ var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_d
 	0,  // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.status:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatus
 	5,  // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.local_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
 	7,  // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.peer_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
-	1,  // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
-	10, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.resolved_at:type_name -> google.protobuf.Timestamp
-	11, // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.failure:type_name -> temporal.api.failure.v1.Failure
-	10, // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
-	10, // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
-	11, // 11: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
-	2,  // 12: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
-	10, // 13: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
-	10, // 14: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
-	11, // 15: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
-	6,  // 16: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry.value:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	10, // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.started_at:type_name -> google.protobuf.Timestamp
+	1,  // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
+	10, // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.resolved_at:type_name -> google.protobuf.Timestamp
+	11, // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.failure:type_name -> temporal.api.failure.v1.Failure
+	10, // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
+	10, // 11: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
+	11, // 12: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
+	2,  // 13: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
+	10, // 14: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
+	10, // 15: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
+	11, // 16: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
+	6,  // 17: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry.value:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_init() }

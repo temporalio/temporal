@@ -70,6 +70,7 @@ type Config struct {
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	ResourceExhaustedRetryDelayFloor                                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxInternalPerNSConcurrentLongRunningRequestsPerInstance          dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -196,9 +197,8 @@ type Config struct {
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
-	EnableCHASMSchedulerSentinels    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMSchedulerTimeSkipping dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	DisabledScheduleValidations      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -261,8 +261,6 @@ type Config struct {
 	WorkerCommandsEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	PollerAutoscalingAutoEnroll             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowTimeSkippingEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowTimeSkippingMaxSkipPerSession   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowTaskCompletionBufferSizeLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -272,6 +270,12 @@ type Config struct {
 
 	// CHASM archetypes
 	Activity *activity.Config
+
+	// Time-Skipping related settings
+	WorkflowTimeSkippingEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMSchedulerTimeSkippingEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxSkipPerSession      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TimeSkippingMaxAccumulatedDuration dynamicconfig.DurationPropertyFn
 }
 
 // IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
@@ -333,6 +337,7 @@ func NewConfig(
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
+		ResourceExhaustedRetryDelayFloor:                                  dynamicconfig.FrontendResourceExhaustedRetryDelayFloor.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
 		MaxInternalPerNSConcurrentLongRunningRequestsPerInstance:          dynamicconfig.FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
@@ -406,7 +411,6 @@ func NewConfig(
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
-		EnableCHASMSchedulerTimeSkipping:     dynamicconfig.EnableCHASMSchedulerTimeSkipping.Get(dc),
 		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
@@ -458,8 +462,6 @@ func NewConfig(
 		WorkerCommandsEnabled:                   dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		PollerAutoscalingAutoEnroll:             dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
 		WorkflowPauseEnabled:                    dynamicconfig.WorkflowPauseEnabled.Get(dc),
-		WorkflowTimeSkippingEnabled:             dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
-		WorkflowTimeSkippingMaxSkipPerSession:   dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession.Get(dc),
 		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
 		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
 		WorkflowTaskCompletionBufferSizeLimit:   dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
@@ -468,6 +470,12 @@ func NewConfig(
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 
 		Activity: activity.ConfigProvider(dc),
+
+		// Time-Skipping related settings
+		WorkflowTimeSkippingEnabled:        dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		CHASMSchedulerTimeSkippingEnabled:  dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxSkipPerSession:      dynamicconfig.TimeSkippingMaxSkipPerSession.Get(dc),
+		TimeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
 	}
 }
 

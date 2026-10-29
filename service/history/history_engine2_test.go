@@ -1067,6 +1067,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 			RunID:       workflowExecution.GetRunId(),
 			EventID:     scheduledEvent.GetEventId(),
 			Version:     0,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
@@ -1133,6 +1134,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {
 			RunID:       workflowExecution.GetRunId(),
 			EventID:     scheduledEvent.GetEventId(),
 			Version:     0,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		workflowTaskCompletedEvent.GetEventId(),
 		gomock.Any(),
@@ -1991,7 +1993,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_PolicyFail() {
 	s.Nil(resp)
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCompletedSnapshot() {
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresCompletedSnapshot() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2010,13 +2012,10 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCo
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
-	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
-	s.Len(recordings, 1)
-	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED.String(), recordings[0].Tags["workflow_state"])
+	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRunningSnapshot() {
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresRunningSnapshot() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2031,10 +2030,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRu
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
-	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
-	s.Len(recordings, 1)
-	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING.String(), recordings[0].Tags["workflow_state"])
+	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
@@ -4808,6 +4804,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			RunID:       execution.GetRunId(),
 			EventID:     common.FirstEventID,
 			Version:     startVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		common.FirstEventID,
 		gomock.Any(),
@@ -4821,6 +4818,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			RunID:       execution.GetRunId(),
 			EventID:     timeoutEvent.GetEventId(),
 			Version:     startVersion,
+			ShardUUID:   s.mockShard.GetOwner(),
 		},
 		timeoutEvent.GetEventId(),
 		gomock.Any(),

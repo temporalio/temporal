@@ -365,8 +365,8 @@ func (p *visibilityManagerImpl) AddSearchAttributes(
 // AdminListExecutions implements [manager.AdminVisibilityManager].
 func (p *visibilityManagerImpl) AdminListExecutions(
 	ctx context.Context,
-	request *manager.AdminListExecutionsRequest,
-) (*manager.AdminListExecutionsResponse, error) {
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
 	adminStore, ok := p.store.(store.AdminVisibilityStore)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityStore
@@ -377,7 +377,7 @@ func (p *visibilityManagerImpl) AdminListExecutions(
 		return nil, err
 	}
 
-	resp := &manager.AdminListExecutionsResponse{
+	resp := &adminservice.ListExecutionsResponse{
 		Executions:    make([]*adminservice.VisibilityExecutionInfo, 0, len(storeResp.Executions)),
 		NextPageToken: storeResp.NextPageToken,
 	}
@@ -423,8 +423,8 @@ func (p *visibilityManagerImpl) AdminListExecutions(
 // AdminCountExecutions implements [manager.AdminVisibilityManager].
 func (p *visibilityManagerImpl) AdminCountExecutions(
 	ctx context.Context,
-	request *manager.AdminCountExecutionsRequest,
-) (*manager.AdminCountExecutionsResponse, error) {
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
 	adminStore, ok := p.store.(store.AdminVisibilityStore)
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityStore
@@ -435,7 +435,7 @@ func (p *visibilityManagerImpl) AdminCountExecutions(
 		return nil, err
 	}
 
-	resp := &manager.AdminCountExecutionsResponse{
+	resp := &adminservice.CountExecutionsResponse{
 		Count: storeResp.Count,
 	}
 	if len(storeResp.Groups) > 0 {

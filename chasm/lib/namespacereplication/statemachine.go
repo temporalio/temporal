@@ -18,6 +18,9 @@ var TransitionScheduleLocal = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, _ EventScheduleLocal) error {
+		if c.GetStartedAt() == nil {
+			c.StartedAt = timestamppb.New(ctx.Now(c))
+		}
 		ctx.AddTask(c, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{Attempt: 0})
 		return nil
 	},
@@ -262,10 +265,6 @@ var TransitionAllPeersTerminal = chasm.NewTransition(
 // -----------------------------------------------------------------------------
 // Peer retry: capped exponential backoff with a total budget.
 // -----------------------------------------------------------------------------
-
-// pendingAlertThreshold mirrors the legacy namespace replication DLQ alert
-// timing while a local or peer apply continues trying to resolve.
-const pendingAlertThreshold = time.Minute
 
 // peerRetryBackoff returns the delay after the given number of completed
 // attempts: exponential (initial * 2^(attempts-1)) capped at the configured

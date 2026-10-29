@@ -24,11 +24,10 @@ const (
 	CHASMApplyOutcomeNoChange              = "no_change"
 	CHASMApplyOutcomeNotAdmitted           = "not_admitted"
 	CHASMApplyOutcomeError                 = "error"
+	CHASMApplyOutcomeFencedAmbiguous       = "fenced_ambiguous"
 	CHASMApplyOutcomeRetryableError        = "retryable_error"
 	CHASMApplyOutcomeTerminalError         = "terminal_error"
 	CHASMApplyOutcomeRetryExhausted        = "retry_exhausted"
-	CHASMApplyOutcomeFingerprintError      = "fingerprint_error"
-	CHASMApplyOutcomeFingerprintMismatch   = "fingerprint_mismatch"
 	CHASMApplyOutcomeStateTransitionError  = "state_transition_error"
 	CHASMApplyOutcomeCompleted             = "completed"
 	CHASMApplyOutcomeCompletedWithFailures = "completed_with_failures"
@@ -49,7 +48,6 @@ type CHASMAuthoritativeApplyObservation struct {
 	ComponentRunID              string
 	AttemptCount                int
 	Duration                    time.Duration
-	PendingDuration             *time.Duration
 	PendingAge                  *time.Duration
 	PendingAgeThresholdExceeded bool
 	Error                       error
@@ -68,7 +66,7 @@ func RecordCHASMAuthoritativeApply(
 	tags := []metrics.Tag{
 		metrics.SourceClusterTag(observation.SourceCluster),
 		metrics.TargetClusterTag(observation.TargetCluster),
-		metrics.OperationTag(namespaceReplicationOperation(observation.Task)),
+		metrics.OperationTag(OperationMetricValue(observation.Task.GetNamespaceOperation())),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
 		metrics.OutcomeTag(observation.Outcome),
 	}
@@ -77,12 +75,6 @@ func RecordCHASMAuthoritativeApply(
 		append(tags, metrics.NamespaceTag(observation.Task.GetInfo().GetName()))...,
 	)
 	metrics.NamespaceReplicationCHASMApplyLatency.With(metricsHandler).Record(observation.Duration, tags...)
-	if observation.PendingDuration != nil {
-		metrics.NamespaceReplicationCHASMPeerPendingLatency.With(metricsHandler).Record(
-			max(*observation.PendingDuration, 0),
-			tags...,
-		)
-	}
 	if observation.PendingAge != nil {
 		pendingAge := max(*observation.PendingAge, 0)
 		switch observation.Stage {
@@ -167,9 +159,7 @@ func CHASMAuthoritativeApplyEventData(
 	if observation.ComponentRunID != "" {
 		eventData.Details["component_run_id"] = observation.ComponentRunID
 	}
-	if observation.PendingDuration != nil {
-		eventData.Details["pending_duration_ms"] = max(*observation.PendingDuration, 0).Milliseconds()
-	}
+
 	if observation.PendingAge != nil {
 		eventData.Details["pending_age_ms"] = max(*observation.PendingAge, 0).Milliseconds()
 	}

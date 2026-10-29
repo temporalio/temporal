@@ -4,8 +4,6 @@ import (
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
@@ -20,6 +18,7 @@ func stateTransitionOutcome(successOutcome string, transitionErr error) string {
 }
 
 type componentTerminalObservation struct {
+	shadowCompletion  *shadowCompletionRecord
 	status            namespacereplicationpb.ComponentStatus
 	localOutcome      namespacereplicationpb.LocalApplyOutcome
 	peerOutcomes      map[string]string
@@ -205,113 +204,5 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 	if (!recorded.retryScheduled || saveErr != nil) &&
 		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
-	}
-}
-
-func (h *applyPeerTaskHandler) observePeerApply(
-	ref chasm.ComponentRef,
-	operation enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-	shadow bool,
-	task *namespacereplicationpb.ApplyPeerTask,
-	recorded peerOutcomeRecord,
-	applyErr error,
-	saveErr error,
-	startTime time.Time,
-) {
-	if shadow {
-		return
-	}
-
-	outcome := chasmPeerApplyOutcome(recorded)
-	observationErr := applyErr
-	retryScheduled := saveErr == nil && recorded.retryScheduled
-	details := map[string]any{
-		"attempted_peer_outcome": recorded.attemptedOutcome.String(),
-		"retry_scheduled":        retryScheduled,
-		"retry_exhausted":        recorded.retryExhausted,
-	}
-	if saveErr != nil {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
-		observationErr = saveErr
-		if recorded.retryScheduled {
-			details["retry_requested"] = true
-		}
-		if applyErr != nil {
-			details["apply_error"] = applyErr.Error()
-		}
-	} else if recorded.stateUpdated {
-		details["persisted_peer_outcome"] = recorded.outcome.String()
-	} else {
-		details["state_update_skipped"] = true
-	}
-
-	var pendingDuration *time.Duration
-	if saveErr == nil && !recorded.retryScheduled && !recorded.firstAttemptAt.IsZero() {
-		duration := recorded.resolvedAt.Sub(recorded.firstAttemptAt)
-		pendingDuration = &duration
-	}
-	var pendingAge *time.Duration
-	pendingAgeThresholdExceeded := false
-	if retryScheduled && !recorded.firstAttemptAt.IsZero() {
-		age := max(recorded.resolvedAt.Sub(recorded.firstAttemptAt), 0)
-		pendingAge = &age
-		pendingAgeThresholdExceeded = age >= pendingAlertThreshold
-	}
-	observation := nsreplicationcommon.CHASMAuthoritativeApplyObservation{
-		Task: nsreplicationcommon.NamespaceDetailToTaskAttributes(
-			operation,
-			detail,
-		),
-		Stage:                       nsreplicationcommon.CHASMApplyStagePeer,
-		Outcome:                     outcome,
-		SourceCluster:               h.currentCluster,
-		TargetCluster:               task.GetTargetCell(),
-		ComponentBusinessID:         ref.BusinessID,
-		ComponentRunID:              ref.RunID,
-		AttemptCount:                int(task.GetAttempt()) + 1,
-		Duration:                    time.Since(startTime),
-		PendingDuration:             pendingDuration,
-		PendingAge:                  pendingAge,
-		PendingAgeThresholdExceeded: pendingAgeThresholdExceeded,
-		Error:                       observationErr,
-		Details:                     details,
-	}
-	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
-	// Per-attempt metrics cover ordinary scheduled retries. Keep lifecycle events
-	// for terminal outcomes and state-transition failures so a peer outage does
-	// not produce one wide event per backoff attempt.
-	if (!recorded.retryScheduled || saveErr != nil) &&
-		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
-		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
-	}
-	if saveErr == nil {
-		emitComponentTerminal(
-			h.eventLogger,
-			h.emitNamespaceLifecycleEvents,
-			h.currentCluster,
-			ref,
-			observation.Task,
-			recorded.componentTerminal,
-			nil,
-		)
-	}
-}
-
-func chasmPeerApplyOutcome(recorded peerOutcomeRecord) string {
-	if recorded.retryExhausted {
-		return nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
-	}
-	switch recorded.outcome {
-	case namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED:
-		return nsreplicationcommon.CHASMApplyOutcomeApplied
-	case namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE:
-		return nsreplicationcommon.CHASMApplyOutcomeNoChange
-	case namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED:
-		return nsreplicationcommon.CHASMApplyOutcomeNotAdmitted
-	case namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE:
-		return nsreplicationcommon.CHASMApplyOutcomeRetryableError
-	default:
-		return nsreplicationcommon.CHASMApplyOutcomeTerminalError
 	}
 }

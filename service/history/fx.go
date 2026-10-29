@@ -17,6 +17,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -28,7 +29,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
@@ -72,6 +73,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
+	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
@@ -162,6 +164,23 @@ func NexusOperationDestinationBlockedProvider(
 		})
 		return cb.State() != gobreaker.StateClosed
 	}
+}
+
+// CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// so that existing operator configurations (callback.allowedAddresses) are honored.
+func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
+	cfg := commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: callback.NexusHandlerSourceContextMaxSize.Get(dc),
+	}
+	return commoncallbacks.NewValidator(cfg, namespaceRegistry)
 }
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -412,8 +431,8 @@ func RateLimitInterceptorProvider(
 
 func ESProcessorConfigProvider(
 	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
+) *esconfig.ProcessorConfig {
+	return &esconfig.ProcessorConfig{
 		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -462,7 +481,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func VisibilityManagerConfigProvider(
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+	esProcessorConfig *esconfig.ProcessorConfig,
 	serviceConfig *configs.Config,
 ) *visibility.ManagerConfig {
 	return &visibility.ManagerConfig{

@@ -23,6 +23,36 @@ func TestNamespaceReplicationLifecycleEventName(t *testing.T) {
 	require.Equal(t, NamespaceLifecycleEventName, NamespaceReplicationLifecyclePayload{}.EventName())
 }
 
+func TestNamespaceReplicationMissingPayloadEvent(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		retain bool
+	}{
+		{name: "default drops missing payload"},
+		{name: "opt in retains metadata", retain: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := &captureLogger{}
+			EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
+				Phase: NamespaceReplicationCompared, Outcome: NamespaceReplicationOutcomeError,
+				EventData:                    NamespaceReplicationTaskEventData{NamespaceID: "namespace-id", TaskKind: "namespace"},
+				EmitOnTaskSerializationError: tc.retain,
+			})
+			if !tc.retain {
+				require.Empty(t, logger.records)
+				return
+			}
+			require.Len(t, logger.records, 1)
+			details := namespaceReplicationRecordDetails(t, logger.records[0])
+			require.Equal(t, "unavailable", details["task_payload_status"])
+			require.NotContains(t, details, "task")
+			require.NotContains(t, details, "task_fingerprint")
+		})
+	}
+}
+
 func TestNamespaceReplicationTaskContext(t *testing.T) {
 	task := namespaceReplicationTaskForTest()
 	sourceTaskID := int64(17)
@@ -169,6 +199,7 @@ func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testin
 		CreateNamespaceRequest: request,
 	})
 
+	require.Equal(t, "processed", namespaceReplicationRecordValues(logger.records[0])["phase"])
 	details := namespaceReplicationRecordDetails(t, logger.records[0])
 	got := details["persistence_request"].(map[string]any)
 	require.Equal(t, "CreateNamespaceRequest", got["request_type"])
@@ -202,6 +233,7 @@ func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testin
 		UpdateNamespaceRequest:    request,
 	})
 
+	require.Equal(t, "processed", namespaceReplicationRecordValues(logger.records[0])["phase"])
 	details := namespaceReplicationRecordDetails(t, logger.records[0])
 	got := details["persistence_request"].(map[string]any)
 	require.Equal(t, "UpdateNamespaceRequest", got["request_type"])

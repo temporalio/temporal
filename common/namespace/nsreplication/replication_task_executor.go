@@ -201,7 +201,13 @@ func (h *taskExecutorImpl) ExecuteWithOutcome(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return ApplyOutcomeUnspecified, err
 	}
-	return h.executeValidatedTask(ctx, task)
+	outcome, err := h.executeValidatedTask(ctx, task)
+	if err == nil && outcome == ApplyOutcomeDuplicate && task.GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_UPDATE {
+		// An UPDATE can lose a missing-row CREATE race to an older snapshot.
+		// Retry through apply-if-higher before acknowledging the newer update.
+		return ApplyOutcomeUnspecified, serviceerror.NewUnavailable("namespace created concurrently; retry namespace update")
+	}
+	return outcome, err
 }
 
 func (h *taskExecutorImpl) executeValidatedTask(

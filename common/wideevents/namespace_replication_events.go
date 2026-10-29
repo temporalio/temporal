@@ -25,11 +25,13 @@ type NamespaceReplicationPhase string
 type NamespaceReplicationOutcome string
 
 const (
-	NamespaceReplicationCreated   NamespaceReplicationPhase = "created"
-	NamespaceReplicationReceived  NamespaceReplicationPhase = "received"
-	NamespaceReplicationProcessed NamespaceReplicationPhase = "processed"
-	NamespaceReplicationDLQed     NamespaceReplicationPhase = "dlqed"
-	NamespaceReplicationCompared  NamespaceReplicationPhase = "compared"
+	NamespaceReplicationCreated      NamespaceReplicationPhase = "created"
+	NamespaceReplicationReceived     NamespaceReplicationPhase = "received"
+	NamespaceReplicationProcessed    NamespaceReplicationPhase = "processed"
+	NamespaceReplicationDLQed        NamespaceReplicationPhase = "dlqed"
+	NamespaceReplicationCompared     NamespaceReplicationPhase = "compared"
+	NamespaceReplicationPeerDelivery NamespaceReplicationPhase = "peer_delivery"
+	NamespaceReplicationCompleted    NamespaceReplicationPhase = "completed"
 
 	NamespaceReplicationOutcomeCreated     NamespaceReplicationOutcome = "created"
 	NamespaceReplicationOutcomeUpdated     NamespaceReplicationOutcome = "updated"
@@ -109,12 +111,14 @@ func (p NamespaceReplicationLifecyclePayload) Attributes() []log.KeyValue {
 }
 
 type NamespaceReplicationLifecycleInput struct {
-	Phase                        NamespaceReplicationPhase
-	Outcome                      NamespaceReplicationOutcome
-	EventData                    NamespaceReplicationTaskEventData
-	SourceCluster                string
-	TargetCluster                string
-	SourceTaskID                 *int64
+	Phase         NamespaceReplicationPhase
+	Outcome       NamespaceReplicationOutcome
+	EventData     NamespaceReplicationTaskEventData
+	SourceCluster string
+	TargetCluster string
+	SourceTaskID  *int64
+	// AttemptCount is the transport's attempt number. CHASM uses the one-based
+	// component-managed peer retry attempt, which may be reused on redelivery.
 	AttemptCount                 int
 	Error                        error
 	EmitOnTaskSerializationError bool
@@ -124,7 +128,7 @@ type NamespaceReplicationLifecycleInput struct {
 }
 
 func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicationLifecycleInput) {
-	if in.EventData.TaskPayload == nil {
+	if in.EventData.TaskPayload == nil && !in.EmitOnTaskSerializationError {
 		return
 	}
 
@@ -134,25 +138,29 @@ func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicatio
 	details["task_kind"] = in.EventData.TaskKind
 	details["operation"] = in.EventData.Operation
 
-	taskJSON, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(in.EventData.TaskPayload)
-	if err == nil {
-		details["task"] = json.RawMessage(taskJSON)
+	if in.EventData.TaskPayload == nil {
+		details["task_payload_status"] = "unavailable"
 	} else {
-		if !in.EmitOnTaskSerializationError {
-			return
+		taskJSON, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(in.EventData.TaskPayload)
+		if err == nil {
+			details["task"] = json.RawMessage(taskJSON)
+		} else {
+			if !in.EmitOnTaskSerializationError {
+				return
+			}
+			details["task_payload_status"] = "incomplete"
+			details["task_json_error"] = err.Error()
 		}
-		details["task_payload_status"] = "incomplete"
-		details["task_json_error"] = err.Error()
 	}
 	taskBytes := in.EventData.TaskFingerprintData
 	var fingerprintErr error
-	if len(taskBytes) == 0 {
+	if len(taskBytes) == 0 && in.EventData.TaskPayload != nil {
 		taskBytes, fingerprintErr = proto.MarshalOptions{Deterministic: true}.Marshal(in.EventData.TaskPayload)
 	}
-	if fingerprintErr == nil {
+	if fingerprintErr == nil && (len(taskBytes) > 0 || in.EventData.TaskPayload != nil) {
 		fingerprint := sha256.Sum256(taskBytes)
 		details["task_fingerprint"] = hex.EncodeToString(fingerprint[:])
-	} else {
+	} else if fingerprintErr != nil {
 		if !in.EmitOnTaskSerializationError {
 			return
 		}

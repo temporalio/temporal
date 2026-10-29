@@ -12,23 +12,28 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 )
 
-// PeerApplyResult is the transport-neutral terminal, non-error outcome of
-// processing a namespace mutation at a peer cell. Failures are returned as
-// errors and classified by the task handler (see classifyPeerErr), not modeled
-// here.
-type PeerApplyResult int
-
-// PeerApplyRequest carries one transport attempt and its correlation metadata.
+// PeerApplyRequest carries the independently built namespace snapshot and the
+// original legacy reference used only for shadow validation.
 type PeerApplyRequest struct {
 	SourceCluster       string
 	TargetCluster       string
 	ComponentBusinessID string
 	ComponentRunID      string
-	AttemptCount        int32
-	Operation           enumsspb.NamespaceOperation
-	Detail              *persistencespb.NamespaceDetail
-	Shadow              bool
+	// AttemptCount is the one-based component-managed peer retry attempt.
+	// Task redelivery and transport retries may reuse the same number.
+	AttemptCount            int32
+	Operation               enumsspb.NamespaceOperation
+	Detail                  *persistencespb.NamespaceDetail
+	Shadow                  bool
+	RemovedPeer             bool
+	ShadowLegacyTaskPayload []byte
 }
+
+// PeerApplyResult is the transport-neutral terminal, non-error outcome of
+// processing a namespace mutation at a peer cell. Failures are returned as
+// errors and classified by the task handler (see classifyPeerErr), not modeled
+// here.
+type PeerApplyResult int
 
 const (
 	// PeerApplyResultUnspecified is invalid and must never be treated as a
@@ -38,11 +43,11 @@ const (
 	// (created or updated). Collapses the admin RPC's Applied / Created / Duplicate.
 	PeerApplyResultApplied
 	// PeerApplyResultShadowMatch means the peer processed a shadow request without
-	// writing receiver state and the received payload matched its fingerprint.
+	// writing receiver state and the payload matched the original legacy reference.
 	PeerApplyResultShadowMatch
 	// PeerApplyResultShadowMismatch means the peer processed a shadow request
-	// without writing receiver state and the received payload did not match its
-	// fingerprint.
+	// without writing receiver state and the payload differed from the original
+	// legacy reference.
 	PeerApplyResultShadowMismatch
 	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
 	// (apply-if-higher no-op). A success, not a failure.
@@ -94,20 +99,20 @@ func (a *adminClientPeerApplier) Apply(
 			fmt.Sprintf("marshal namespace mutation: %v", err),
 		)
 	}
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Shadow:               request.Shadow,
-		Fingerprint:          fingerprint,
-		SourceCluster:        request.SourceCluster,
-		ComponentBusinessId:  request.ComponentBusinessID,
-		ComponentRunId:       request.ComponentRunID,
-		AttemptCount:         request.AttemptCount,
-		NamespaceTaskPayload: namespaceTaskPayload,
+		NamespaceTask:           namespaceTask,
+		Shadow:                  request.Shadow,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: request.ShadowLegacyTaskPayload,
+		SourceCluster:           request.SourceCluster,
+		ComponentBusinessId:     request.ComponentBusinessID,
+		ComponentRunId:          request.ComponentRunID,
+		AttemptCount:            request.AttemptCount,
+		RemovedPeer:             request.RemovedPeer,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err

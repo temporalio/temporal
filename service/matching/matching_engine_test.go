@@ -2689,7 +2689,6 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsC
 }
 
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
-	captureHandler := s.captureDroppedOnEngine()
 	clockedCurrent := &persistencespb.TaskQueueUserData{
 		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2697,13 +2696,11 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		},
 	}
 	tests := []struct {
-		name        string
-		incoming    *persistencespb.TaskQueueUserData
-		wantDropped bool
+		name     string
+		incoming *persistencespb.TaskQueueUserData
 	}{
 		{
-			name:        "clockless incoming",
-			wantDropped: true,
+			name: "clockless incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
@@ -2711,8 +2708,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			},
 		},
 		{
-			name:        "older clocked incoming",
-			wantDropped: true,
+			name: "older clocked incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2726,18 +2722,10 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		s.Run(test.name, func() {
 			taskQueue := uuid.NewString()
 			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
-			capture := captureHandler.StartCapture()
-			defer captureHandler.StopCapture(capture)
 
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
 
 			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
-			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
-			if test.wantDropped {
-				s.Len(recordings, 1)
-			} else {
-				s.Empty(recordings)
-			}
 		})
 	}
 }
@@ -3715,23 +3703,36 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
-
-	// Only count tasks above the ack level: acked tasks may not have been gc'ed yet.
 	db := ptqMgr.backlogMgr.getDB()
-	db.Lock()
-	ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
 	if s.fairness {
-		ackLevel = fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
-	}
-	db.Unlock()
-	dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		bm := ptqMgr.backlogMgr.(*fairBacklogManagerImpl)
+		bm.subqueueLock.Lock()
+		tr := bm.subqueues[subqueueZero]
+		bm.subqueueLock.Unlock()
+		tr.lock.Lock()
+		defer tr.lock.Unlock()
 
-	if s.fairness {
-		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
-		// read, making it more accurate in theory, but breaking this test's assumptions.
-		s.InDelta(dbTasks, backlogCount, 2)
+		db.Lock()
+		backlogCount := db.subqueues[subqueueZero].ApproximateBacklogCount
+		ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		completedTasks := tr.completedTaskCountLocked()
+
+		// Completed tasks above the ack level may already be excluded from the estimate.
+		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.
+		s.LessOrEqual(completedTasks, dbTasks)
+		s.GreaterOrEqual(backlogCount, dbTasks-completedTasks)
+		// This upper bound only holds because these tests don't inject CreateTasks faults.
+		// A write that fails without definitely failing (e.g. Unavailable) leaves the count
+		// incremented even if no task was written, so the count could legitimately exceed dbTasks.
+		s.LessOrEqual(backlogCount, dbTasks)
 	} else {
+		backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
+		db.Lock()
+		ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
 		s.LessOrEqual(dbTasks, backlogCount)
 	}
 }
@@ -5138,11 +5139,15 @@ func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 }
 
 func (m *testTaskManager) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5163,11 +5168,15 @@ func (m *testTaskManager) CreateTaskQueue(
 }
 
 func (m *testTaskManager) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5188,9 +5197,13 @@ func (m *testTaskManager) UpdateTaskQueue(
 }
 
 func (m *testTaskManager) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	tlm := m.getQueueData(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -5219,13 +5232,17 @@ func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairL
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
 	}
 
 	m.delay()
@@ -5293,13 +5310,17 @@ func (m *testTaskManager) fault(method, err string) bool {
 }
 
 func (m *testTaskManager) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5366,7 +5387,7 @@ func (m *testTaskManager) CreateTasks(
 }
 
 func (m *testTaskManager) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.Value(request))
@@ -5375,6 +5396,10 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	} else if !m.fairness && request.InclusiveMinPass != 0 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	m.delay()
