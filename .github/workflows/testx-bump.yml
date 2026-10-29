@@ -1,15 +1,15 @@
 name: testx bump
 
-# The server's go.mod replaces go.temporal.io/testx with ./testx, but consumers of the server
+# The server's go.mod replaces go.temporal.io/testx with ./common/testx, but consumers of the server
 # ignore that replace and get the required testx version instead. This workflow keeps that version
-# pointed at the latest commit that changed testx/.
+# pointed at the latest commit that changed common/testx/.
 
 on:
   push:
     branches:
       - main
     paths:
-      - "testx/**"
+      - "common/testx/**"
   schedule:
     # Runs at 0800 UTC (night in the US) daily, to retry a failed or stuck bump and check the pin.
     - cron: "0 8 * * *"
@@ -37,8 +37,8 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
-          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
-          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          app-id: Iv23lixhka3SIlRq24Sd
+          private-key: ${{ secrets.VERSION_BUMPER_PRIVATE_KEY }}
           owner: temporalio
 
       - name: Checkout code
@@ -57,7 +57,7 @@ jobs:
       - name: Require latest testx commit
         id: bump
         run: |
-          sha=$(git rev-list -1 HEAD -- testx/)
+          sha=$(git rev-list -1 HEAD -- common/testx/)
           go get "go.temporal.io/testx@${sha}"
           go mod tidy
           echo "sha=${sha::9}" >> "${GITHUB_OUTPUT}"
@@ -71,7 +71,7 @@ jobs:
           fi
 
           title="Bump go.temporal.io/testx to ${{ steps.bump.outputs.sha }}"
-          if gh pr list --head ${{ env.BRANCH }} --author app/temporal-cicd --state open --json title -q '.[].title' | grep -qxF "${title}"; then
+          if gh pr list --head ${{ env.BRANCH }} --author "app/${APP_SLUG}" --state open --json title -q '.[].title' | grep -qxF "${title}"; then
             echo "An open PR already bumps to this commit"
             exit 0
           fi
@@ -95,6 +95,7 @@ jobs:
           echo "pr_url=${pr_url}" >> "${GITHUB_OUTPUT}"
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          APP_SLUG: ${{ steps.generate-token.outputs.app-slug }}
 
       - name: Approve pull request
         if: steps.create-pr.outputs.pr_url != ''
@@ -110,7 +111,7 @@ jobs:
           PR_URL: ${{ steps.create-pr.outputs.pr_url }}
         run: gh pr merge "${PR_URL}" --auto --squash
 
-  # Fails if the testx version required on main doesn't match testx/, e.g. because the bump failed
+  # Fails if the testx version required on main doesn't match common/testx/, e.g. because the bump failed
   # or its PR got stuck. Builds in this repo don't notice, since they use the replace.
   # Runs nightly (US time), when the bump for the day's testx changes should have landed.
   check-pin:
@@ -134,8 +135,8 @@ jobs:
         run: |
           version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
           pinned=${version##*-}
-          if ! git rev-parse -q --verify "${pinned}^{commit}" >/dev/null || ! git diff --quiet "${pinned}" HEAD -- testx/; then
-            echo "::error file=go.mod::Required testx version doesn't match testx/."
+          if ! git rev-parse -q --verify "${pinned}^{commit}" >/dev/null || ! git diff --quiet "${pinned}" HEAD -- common/testx/; then
+            echo "::error file=go.mod::Required testx version doesn't match common/testx/."
             exit 1
           fi
 
@@ -158,7 +159,7 @@ jobs:
             details+=("The bump job failed.")
           fi
           if [ "${CHECK_PIN_RESULT}" = "failure" ]; then
-            details+=("Required testx version doesn't match testx/.")
+            details+=("Required testx version doesn't match common/testx/.")
           fi
           text=$(printf '%s\n' \
             ":warning: *go.temporal.io/testx version on main needs attention*" \
