@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -37,9 +39,11 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmwci "go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
@@ -62,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/historyrequire"
@@ -2933,6 +2938,65 @@ func (s *adminHandlerSuite) TestMigrateWorkerControllerInstance() {
 	s.ErrorAs(err, &notFound)
 
 	_, err = s.handler.MigrateWorkerControllerInstance(context.Background(), &adminservice.MigrateWorkerControllerInstanceRequest{Namespace: s.namespace.String(), Identity: "me"})
+	var invalid *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalid)
+}
+
+func (s *adminHandlerSuite) TestListWorkerControllerInstances() {
+	visibility := chasm.NewMockVisibilityManager(s.controller)
+	ctx := chasm.NewVisibilityManagerContext(context.Background(), visibility)
+	memo, err := payload.Encode(&wcipb.WorkerControllerInstanceMemo{DeploymentName: "dep", BuildId: "build"})
+	s.NoError(err)
+	keyword := func(v string) *commonpb.Payload { return sadefs.MustEncodeValue(v, enumspb.INDEXED_VALUE_TYPE_KEYWORD) }
+	start := time.Now().UTC().Truncate(time.Second)
+
+	var gotQuery string
+	visibility.EXPECT().ListExecutions(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ reflect.Type, req *chasm.ListExecutionsRequest) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			gotQuery = req.Query
+			s.Equal(s.namespace.String(), req.NamespaceName)
+			s.Equal(10, req.PageSize, "capped to VisibilityMaxPageSize")
+			return &visibilityservice.ListChasmExecutionsResponse{
+				Executions: []*chasmspb.VisibilityExecutionInfo{{
+					BusinessId: "wci-id",
+					RunId:      "run",
+					StartTime:  timestamppb.New(start),
+					ChasmSearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+						"WorkerControllerInstanceStatus": keyword("Running"),
+						"WCIValidationStatus":            keyword("Succeeded"),
+						"WCIComputeProviders":            sadefs.MustEncodeValue([]string{"aws-lambda"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+						"WorkerDeploymentName":           keyword("dep"),
+						"WorkerDeploymentVersion":        keyword("dep:build"),
+					}},
+					ChasmMemo: memo,
+				}},
+				NextPageToken: []byte("next"),
+			}, nil
+		}).Times(2)
+
+	resp, err := s.handler.ListWorkerControllerInstances(ctx, &adminservice.ListWorkerControllerInstancesRequest{Namespace: s.namespace.String(), PageSize: 1000})
+	s.NoError(err)
+	s.Equal(chasmwci.RunningListQuery, gotQuery)
+	s.Equal([]byte("next"), resp.GetNextPageToken())
+	s.Len(resp.GetInstances(), 1)
+	got := resp.GetInstances()[0]
+	s.Equal("wci-id", got.GetInstanceId())
+	s.Equal("run", got.GetRunId())
+	s.Equal("Running", got.GetStatus())
+	s.Equal("Succeeded", got.GetValidationStatus())
+	s.Equal([]string{"aws-lambda"}, got.GetComputeProviders())
+	s.Equal("dep", got.GetDeploymentName())
+	s.Equal("dep:build", got.GetDeploymentVersion())
+	s.Equal(start, got.GetStartTime().AsTime())
+	s.Nil(got.GetCloseTime())
+
+	_, err = s.handler.ListWorkerControllerInstances(ctx, &adminservice.ListWorkerControllerInstancesRequest{
+		Namespace: s.namespace.String(), Query: "WorkerDeploymentName = 'dep'",
+	})
+	s.NoError(err)
+	s.Equal("WorkerDeploymentName = 'dep'", gotQuery)
+
+	_, err = s.handler.ListWorkerControllerInstances(ctx, &adminservice.ListWorkerControllerInstancesRequest{})
 	var invalid *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalid)
 }

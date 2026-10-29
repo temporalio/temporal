@@ -246,6 +246,12 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // ListWorkerControllerInstances lists CHASM-backed worker controller instances, filtering and
+  // returning their CHASM search attributes, which ListExecutions can't resolve.
+  rpc ListWorkerControllerInstances(ListWorkerControllerInstancesRequest) returns (ListWorkerControllerInstancesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }

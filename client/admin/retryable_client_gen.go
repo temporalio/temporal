@@ -521,6 +521,21 @@ func (c *retryableClient) ListQueues(
 	return resp, err
 }
 
+func (c *retryableClient) ListWorkerControllerInstances(
+	ctx context.Context,
+	request *adminservice.ListWorkerControllerInstancesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListWorkerControllerInstancesResponse, error) {
+	var resp *adminservice.ListWorkerControllerInstancesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkerControllerInstances(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,

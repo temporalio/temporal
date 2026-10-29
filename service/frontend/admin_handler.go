@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmwci "go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
@@ -2406,6 +2407,66 @@ func (adh *AdminHandler) MigrateWorkerControllerInstance(
 		return nil, serviceerror.NewInvalidArgumentf("unknown target: %v", target)
 	}
 	return &adminservice.MigrateWorkerControllerInstanceResponse{}, nil
+}
+
+// ListWorkerControllerInstances lists CHASM-backed WCIs; workflow-backed ones are in ListExecutions.
+func (adh *AdminHandler) ListWorkerControllerInstances(
+	ctx context.Context,
+	request *adminservice.ListWorkerControllerInstancesRequest,
+) (_ *adminservice.ListWorkerControllerInstancesResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespace() == "" {
+		return nil, errNamespaceNotSet
+	}
+	pageSize := int(request.GetPageSize())
+	if maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace()); pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	query := request.GetQuery()
+	if query == "" {
+		query = chasmwci.RunningListQuery
+	}
+	resp, err := chasm.ListExecutions[*chasmwci.WorkerControllerInstance, *wcipb.WorkerControllerInstanceMemo](ctx, &chasm.ListExecutionsRequest{
+		NamespaceName: request.GetNamespace(),
+		Query:         query,
+		PageSize:      pageSize,
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	instances := make([]*adminservice.ListWorkerControllerInstancesResponse_Instance, len(resp.Executions))
+	for i, ex := range resp.Executions {
+		sa := ex.ChasmSearchAttributes
+		status, _ := chasm.SearchAttributeValue(sa, chasmwci.StatusSearchAttribute)
+		validation, _ := chasm.SearchAttributeValue(sa, chasmwci.ValidationStatusSearchAttribute)
+		providers, _ := chasm.SearchAttributeValue(sa, chasmwci.ComputeProvidersSearchAttribute)
+		deploymentName, _ := chasm.SearchAttributeValue(sa, chasmwci.DeploymentNameSearchAttribute)
+		deploymentVersion, _ := chasm.SearchAttributeValue(sa, chasmwci.DeploymentVersionSearchAttribute)
+		instance := &adminservice.ListWorkerControllerInstancesResponse_Instance{
+			InstanceId:           ex.BusinessID,
+			RunId:                ex.RunID,
+			Status:               status,
+			ValidationStatus:     validation,
+			ComputeProviders:     providers,
+			DeploymentName:       deploymentName,
+			DeploymentVersion:    deploymentVersion,
+			StartTime:            timestamppb.New(ex.StartTime),
+			StateTransitionCount: ex.StateTransitionCount,
+		}
+		// chasm.ListExecutions turns a missing close time into the Unix epoch.
+		if !ex.CloseTime.IsZero() && ex.CloseTime.Unix() != 0 {
+			instance.CloseTime = timestamppb.New(ex.CloseTime)
+		}
+		instances[i] = instance
+	}
+	return &adminservice.ListWorkerControllerInstancesResponse{
+		Instances:     instances,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (adh *AdminHandler) migrateScheduleToChasm(

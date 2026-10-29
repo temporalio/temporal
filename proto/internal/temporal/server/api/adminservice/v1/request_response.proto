@@ -746,6 +746,34 @@ message MigrateWorkerControllerInstanceRequest {
 
 message MigrateWorkerControllerInstanceResponse {}
 
+message ListWorkerControllerInstancesRequest {
+  // Namespace name.
+  string namespace = 1;
+  // Visibility query over the instance search attributes. Empty lists running instances.
+  string query = 2;
+  int32 page_size = 3;
+  bytes next_page_token = 4;
+}
+
+message ListWorkerControllerInstancesResponse {
+  // A CHASM-backed instance as visibility indexed it; fields come from its search attributes.
+  message Instance {
+    string instance_id = 1;
+    string run_id = 2;
+    string status = 3;
+    string validation_status = 4;
+    repeated string compute_providers = 5;
+    string deployment_name = 6;
+    string deployment_version = 7;
+    google.protobuf.Timestamp start_time = 8;
+    google.protobuf.Timestamp close_time = 9;
+    int64 state_transition_count = 10;
+  }
+
+  repeated Instance instances = 1;
+  bytes next_page_token = 2;
+}
+
 message ListExecutionsRequest {
   // Optional namespace name. If not set, search is made across all namespaces
   // and you cannot filter on any custom search attribute. If set, you can filter

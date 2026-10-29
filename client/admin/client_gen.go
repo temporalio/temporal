@@ -349,6 +349,16 @@ func (c *clientImpl) ListQueues(
 	return c.client.ListQueues(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkerControllerInstances(
+	ctx context.Context,
+	request *adminservice.ListWorkerControllerInstancesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListWorkerControllerInstancesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkerControllerInstances(ctx, request, opts...)
+}
+
 func (c *clientImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,
