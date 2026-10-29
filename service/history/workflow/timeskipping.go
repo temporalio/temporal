@@ -299,9 +299,10 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 		return nil
 	}
 	return &commonpb.TimeSkippingInfo{
-		CurrentTime:     timestamppb.New(currentTime),
-		EffectiveConfig: common.CloneProto(util.tsi.GetConfig()),
-		FastForwardInfo: util.ToFastForwardInfo(),
+		CurrentTime:             timestamppb.New(currentTime),
+		EffectiveConfig:         common.CloneProto(util.tsi.GetConfig()),
+		FastForwardInfo:         util.ToFastForwardInfo(),
+		CurrentSessionSkipCount: util.tsi.GetSessionSkipCount(),
 	}
 }
 
