@@ -40,7 +40,7 @@ const (
 	minConnectTimeout = 20 * time.Second
 
 	// maxGRPCRecvPayloadSize is the default receive limit for gRPC clients and servers.
-	maxGRPCRecvPayloadSize = 128 * 1024 * 1024 // 128 MiB
+	maxGRPCRecvPayloadSize = 32 * 1024 * 1024 // 32 MB
 )
 
 // Dial creates a client connection to the given target with default options.
