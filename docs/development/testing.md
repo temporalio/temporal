@@ -40,7 +40,7 @@ Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoa
 `assert` records a failure but lets the test continue, which often leads to confusing
 cascading errors.
 
-### Polling with await.Require
+### Conditions that must eventually hold
 
 For polling/retry loops in tests, use `await.Require` (or `await.Requiref`)
 from `common/testing/await` instead of testify's `EventuallyWithT`.
