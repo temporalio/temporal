@@ -14,18 +14,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// requestIDsNodeName is the name of the framework-owned data node that records request IDs accepted by
-// UpdateComponent, so that a retried request can be deduplicated.
-//
-// The node is a reserved child of the root node: it is not declared as a field by any component, so
-// syncSubComponents must explicitly keep it (see reservedRootChildren). Keeping it in its own node, rather
-// than in the execution state, means it is only written when a request ID is added.
-const requestIDsNodeName = reservedNodeNamePrefix + "_requestIDs"
-
-// reservedNodeNamePrefix is reserved for framework-owned node names. Component fields must not use a name
-// with this prefix (see Registry.validateFieldNames), so they can't collide with framework-owned nodes.
-const reservedNodeNamePrefix = "__chasm"
-
 var requestIDsValueT = reflect.TypeFor[*persistencespb.ChasmRequestIDs]()
 
 // reservedRootChildren are framework-owned children of the root node that are not backed by a component

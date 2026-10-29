@@ -278,6 +278,9 @@ func (r *Registry) registerComponent(
 		(rc.goType.Kind() == reflect.Pointer && rc.goType.Elem().Kind() == reflect.Struct)) {
 		return fmt.Errorf("component type %s must be struct or pointer to struct", rc.goType.String())
 	}
+	if err := validateFieldNames(rc); err != nil {
+		return err
+	}
 	if _, ok := r.rcByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
@@ -293,21 +296,15 @@ func (r *Registry) validate(rc *RegistrableComponent) error {
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	if err := validateFieldNames(rc); err != nil {
-		return err
-	}
 	return r.validateVisibilityBusinessIDAlias(rc)
 }
 
 // validateFieldNames rejects component fields whose node name uses the prefix reserved for
-// framework-owned nodes.
+// framework-owned nodes. rc.goType must already be validated as a struct or pointer to struct.
 func validateFieldNames(rc *RegistrableComponent) error {
 	componentT := rc.goType
 	if componentT.Kind() == reflect.Pointer {
 		componentT = componentT.Elem()
-	}
-	if componentT.Kind() != reflect.Struct {
-		return nil
 	}
 	for field := range componentT.Fields() {
 		if name := fieldName(field); strings.HasPrefix(name, reservedNodeNamePrefix) {
