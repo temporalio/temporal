@@ -2907,6 +2907,158 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 	requireNoOptionsUpdatedEvent(ctx, t, env, runningWfID)
 }
 
+// TestScheduleMigration_ClosedContinuedAsNewChain covers a V1 schedule whose
+// RunningWorkflows still lists the first run of an action chain that has since
+// continued-as-new and closed. V1 resolves the chain on its next refresh; the
+// migrated V2 schedule must do the same instead of stalling its generator.
+func TestScheduleMigration_ClosedContinuedAsNewChain(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		migrate bool
+	}{
+		{name: "V1", migrate: false},
+		{name: "MigratedToV2", migrate: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testScheduleClosedContinuedAsNewChain(t, tc.migrate)
+		})
+	}
+}
+
+func testScheduleClosedContinuedAsNewChain(t *testing.T, migrate bool) {
+	env := newScheduleEnv(t, testcore.WithWorkerService("V1 scheduler"))
+	ctx := testcore.NewContext()
+
+	sid := testcore.RandomizeStr("sched-closed-can-chain")
+	wid := testcore.RandomizeStr("sched-closed-can-chain-wf")
+	wt := testcore.RandomizeStr("sched-closed-can-chain-wt")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	releaseSignal := "release"
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			return workflow.NewContinueAsNewError(ctx, wt)
+		}
+		workflow.GetSignalChannel(ctx, releaseSignal).Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	// Query V1 directly: frontend DescribeSchedule signals a refresh when it sees
+	// a closed "running" workflow, which would clear the stale state under test.
+	queryV1 := func(ctx context.Context) (*schedulepb.ScheduleInfo, error) {
+		encoded, err := env.SdkClient().QueryWorkflow(ctx, scheduler.WorkflowIDPrefix+sid, "", scheduler.QueryNameDescribe)
+		if err != nil {
+			return nil, err
+		}
+		var resp schedulespb.DescribeResponse
+		if err := encoded.Get(&resp); err != nil {
+			return nil, err
+		}
+		return resp.GetInfo(), nil
+	}
+	describeV2 := func(ctx context.Context) (*schedulepb.ScheduleInfo, error) {
+		resp, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.GetFrontendResponse().GetInfo(), nil
+	}
+
+	// One immediate action, then a single scheduled action at nextTick. Setup must
+	// finish before nextTick so the scheduled action is what observes the stale state.
+	nextTick := time.Now().Add(30 * time.Second).Truncate(time.Second)
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(time.Hour),
+			Phase:    durationpb.New(time.Duration(nextTick.UnixNano() % int64(time.Hour))),
+		}}},
+		Action:   startWorkflowAction(env, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+	}
+	createV1Schedule(ctx, t, env, sid, sched, &schedulepb.SchedulePatch{
+		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+	})
+
+	// SKIP with an empty buffer leaves V1 without a long-poll watcher, so
+	// RunningWorkflows only changes on a refresh.
+	var first *commonpb.WorkflowExecution
+	await.Require(ctx, t, func(at *await.T) {
+		info, err := queryV1(at.Context())
+		require.NoError(at, err)
+		require.Len(at, info.GetRunningWorkflows(), 1)
+		first = info.GetRunningWorkflows()[0]
+	}, 15*time.Second, 200*time.Millisecond)
+
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: first.GetWorkflowId()},
+		})
+		require.NoError(at, err)
+		require.NotEqual(at, first.GetRunId(), desc.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 15*time.Second, 200*time.Millisecond)
+
+	_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: first.GetWorkflowId()},
+		SignalName:        releaseSignal,
+	})
+	require.NoError(t, err)
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: first.GetWorkflowId()},
+		})
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 15*time.Second, 200*time.Millisecond)
+
+	info, err := queryV1(ctx)
+	require.NoError(t, err)
+	require.Len(t, info.GetRunningWorkflows(), 1)
+	require.Equal(t, first.GetRunId(), info.GetRunningWorkflows()[0].GetRunId(),
+		"V1 must still list the closed chain's first run as running")
+
+	describe := queryV1
+	if migrate {
+		env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+		env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
+		env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
+		_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		require.NoError(t, err)
+		awaitV1SchedulerCompleted(ctx, t, env, sid)
+		describe = describeV2
+	}
+	require.True(t, time.Now().Before(nextTick), "setup overran the scheduled action at %v", nextTick)
+
+	await.Requiref(ctx, t, func(at *await.T) {
+		info, err := describe(at.Context())
+		require.NoError(at, err)
+		var firstCompleted, nextStarted bool
+		for _, action := range info.GetRecentActions() {
+			if action.GetStartWorkflowResult().GetRunId() == first.GetRunId() {
+				firstCompleted = action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			}
+			if action.GetScheduleTime().AsTime().Equal(nextTick) {
+				nextStarted = action.GetStartWorkflowResult().GetRunId() != ""
+			}
+		}
+		require.True(at, firstCompleted, "first action should be recorded as completed")
+		require.True(at, nextStarted, "scheduled action at %v should have started", nextTick)
+	}, time.Until(nextTick)+30*time.Second, 500*time.Millisecond, "schedule should resolve the closed chain and take its next action")
+}
+
 // requireNoChasmSentinel asserts that no CHASM entity -- sentinel or otherwise
 // -- exists yet for scheduleID under the scheduler archetype. Used right after
 // creating a V1 schedule to confirm the test's "no sentinel gets written"
