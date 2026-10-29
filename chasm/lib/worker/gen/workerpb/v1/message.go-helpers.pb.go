@@ -7,6 +7,43 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Marshal an object of type WorkerGroupState to the protobuf v3 wire format
+func (val *WorkerGroupState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkerGroupState from the protobuf v3 wire format
+func (val *WorkerGroupState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkerGroupState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkerGroupState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkerGroupState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkerGroupState
+	switch t := that.(type) {
+	case *WorkerGroupState:
+		that1 = t
+	case WorkerGroupState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type WorkerState to the protobuf v3 wire format
 func (val *WorkerState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -45,20 +82,20 @@ func (this *WorkerState) Equal(that interface{}) bool {
 }
 
 var (
-	WorkerStatus_shorthandValue = map[string]int32{
+	WorkerGroupStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Active":      1,
 		"Inactive":    2,
 	}
 )
 
-// WorkerStatusFromString parses a WorkerStatus value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to WorkerStatus
-func WorkerStatusFromString(s string) (WorkerStatus, error) {
-	if v, ok := WorkerStatus_value[s]; ok {
-		return WorkerStatus(v), nil
-	} else if v, ok := WorkerStatus_shorthandValue[s]; ok {
-		return WorkerStatus(v), nil
+// WorkerGroupStatusFromString parses a WorkerGroupStatus value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to WorkerGroupStatus
+func WorkerGroupStatusFromString(s string) (WorkerGroupStatus, error) {
+	if v, ok := WorkerGroupStatus_value[s]; ok {
+		return WorkerGroupStatus(v), nil
+	} else if v, ok := WorkerGroupStatus_shorthandValue[s]; ok {
+		return WorkerGroupStatus(v), nil
 	}
-	return WorkerStatus(0), fmt.Errorf("%s is not a valid WorkerStatus", s)
+	return WorkerGroupStatus(0), fmt.Errorf("%s is not a valid WorkerGroupStatus", s)
 }
