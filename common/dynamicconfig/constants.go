@@ -1504,6 +1504,16 @@ This can help reduce effects of task queue movement.`,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
 	)
+	MatchingDeploymentVersionMonitorGracePeriod = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorGracePeriod",
+		5*time.Minute,
+		`Grace period after a deployment version is registered before the monitor starts checking whether it appeared in task queue user data. If the version is still missing after this period, a counter is emitted every MatchingDeploymentVersionMonitorInterval.`,
+	)
+	MatchingDeploymentVersionMonitorInterval = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorInterval",
+		time.Minute,
+		`How often to check and emit deployment_version_missing_from_user_data after the grace period has elapsed.`,
+	)
 	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
 		"matching.backlogMetricsEmitInterval",
 		time.Minute,
@@ -1908,6 +1918,13 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableHistoryNodeTransactionIDValidation = NewGlobalBoolSetting(
+		"history.enableHistoryNodeTransactionIDValidation",
+		false,
+		`EnableHistoryNodeTransactionIDValidation rejects appending a history node whose transaction ID is not greater than
+		the previous node transaction ID, after asserting shard ownership. Enable it only with a persistence store that
+		implements AssertShardOwnership. This is a safety mechanism and will be removed in the future.`,
 	)
 	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
 		"history.enableWorkflowTaskCompletionPagination",
