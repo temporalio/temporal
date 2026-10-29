@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -118,17 +117,21 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	s.AwaitTruef(onCHASM, 30*time.Second, 200*time.Millisecond, "WCI created on CHASM")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, workflowStatus(), "no workflow-backed WCI")
 
-	// The running-only list query, scoped to this version through its search attribute.
-	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
-	s.NoError(err)
+	// The running-only list query (tdbg worker-controller list), scoped to this version through its search attribute.
 	listedRunning := func() bool {
-		resp, err := chasm.ListExecutions[*wci.WorkerControllerInstance, *wcipb.WorkerControllerInstanceMemo](chasmCtx, &chasm.ListExecutionsRequest{
-			NamespaceName: ns,
-			PageSize:      10,
-			Query:         wci.RunningListQuery + " AND WorkerDeploymentVersion = '" + deploymentName + ":" + buildID + "'",
+		resp, err := env.GetTestCluster().AdminClient().ListWorkerControllerInstances(ctx, &adminservice.ListWorkerControllerInstancesRequest{
+			Namespace: ns,
+			Query:     wci.RunningListQuery + " AND WorkerDeploymentVersion = '" + deploymentName + ":" + buildID + "'",
 		})
 		s.NoError(err)
-		return len(resp.Executions) == 1 && resp.Executions[0].ChasmMemo.GetBuildId() == buildID
+		if len(resp.GetInstances()) != 1 {
+			return false
+		}
+		got := resp.GetInstances()[0]
+		s.Equal(instanceID, got.GetInstanceId())
+		s.Equal("Running", got.GetStatus())
+		s.Equal(deploymentName, got.GetDeploymentName())
+		return true
 	}
 	s.AwaitTruef(listedRunning, testcore.WaitForESToSettle, 200*time.Millisecond, "listed as running")
 
