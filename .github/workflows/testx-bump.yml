@@ -73,8 +73,13 @@ jobs:
           fi
 
           title="Bump go.temporal.io/testx to ${{ steps.bump.outputs.sha }}"
-          pr_url=$(gh pr list --head ${{ env.BRANCH }} --author "app/${APP_SLUG}" --state open --json title,url |
-            jq -r --arg title "${title}" '.[] | select(.title == $title) | .url')
+          open_prs=$(gh pr list \
+            --head ${{ env.BRANCH }} \
+            --author "app/${APP_SLUG}" \
+            --state open \
+            --json title,url)
+          pr_url=$(jq -r --arg title "${title}" '.[] | select(.title == $title) | .url' <<< "${open_prs}")
+
           if [ -n "${pr_url}" ]; then
             mergeable=$(gh pr view "${pr_url}" --json mergeable --jq .mergeable)
             case "${mergeable}" in
