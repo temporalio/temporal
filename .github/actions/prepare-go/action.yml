@@ -20,6 +20,15 @@ outputs:
   dependency_cache_primary_key:
     description: Primary key used for the Go module cache restore.
     value: ${{ steps.restore-deps.outputs.cache-primary-key }}
+  tools_cache_hit:
+    description: Whether the Go tools cache was restored from an exact match.
+    value: ${{ steps.restore-tools.outputs.cache-hit }}
+  tools_cache_path:
+    description: Go tools cache path.
+    value: .bin
+  tools_cache_primary_key:
+    description: Primary key used for the Go tools cache restore.
+    value: ${{ steps.restore-tools.outputs.cache-primary-key }}
 
 runs:
   using: composite
@@ -50,6 +59,13 @@ runs:
       with:
         path: ${{ steps.go-env.outputs.gomodcache }}
         key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
+
+    - name: Restore Go tools
+      id: restore-tools
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: .bin
+        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.setup-go.outputs.go-version }}-tools-${{ hashFiles('Makefile') }}
 
     # Cache restore can miss modules after go.sum changes or partial cache saves.
     # Retrying download here isolates transient Go proxy failures from the Go command.
