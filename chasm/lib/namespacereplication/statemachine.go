@@ -18,6 +18,9 @@ var TransitionScheduleLocal = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, _ EventScheduleLocal) error {
+		if c.GetStartedAt() == nil {
+			c.StartedAt = timestamppb.New(ctx.Now(c))
+		}
 		ctx.AddTask(c, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{Attempt: 0})
 		return nil
 	},

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -135,6 +136,7 @@ func TestUpdateNamespace_PassiveClusterFailoverVersionBump(t *testing.T) {
 				timeSource,
 				NewConfig(dc.NewNoopCollection(), 1024),
 				nil,
+				metrics.NoopMetricsHandler,
 			)
 
 			metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{

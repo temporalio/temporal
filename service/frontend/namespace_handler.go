@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
@@ -57,6 +58,7 @@ type (
 		timeSource             clock.TimeSource
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
+		metricsHandler         metrics.Handler
 	}
 
 	namespaceReplicationTransportMode int
@@ -95,6 +97,7 @@ func newNamespaceHandler(
 	timeSource clock.TimeSource,
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	metricsHandler metrics.Handler,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -109,6 +112,7 @@ func newNamespaceHandler(
 		timeSource:             timeSource,
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
+		metricsHandler:         metricsHandler,
 	}
 }
 
@@ -1483,13 +1487,16 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	}
 
 	legacyTask := nsreplication.NamespaceDetailToTaskAttributes(operation, legacyDetail)
+	namespaceID := chasmDetail.GetInfo().GetId()
+	businessID := namespaceID + ":" + uuid.NewString()
+	peerCells := peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), chasmDetail.GetReplicationConfig().GetClusters(), previousClusters)
 	legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+	d.recordShadowSourceOutcome(legacyTask, legacyPayload, businessID, peerCells, "prepare", err)
 	if err != nil {
 		d.logger.Error("namespace replication shadow legacy reference preparation failed", tag.Error(err))
 		return
 	}
 
-	namespaceID := chasmDetail.GetInfo().GetId()
 	// Shadow validation must not add latency or failure coupling to the
 	// authoritative legacy request. Preserve its trace context but detach from
 	// its cancellation and deadline. This timeout bounds only the detached
@@ -1499,15 +1506,18 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 		backgroundCtx, cancel := rpc.ResetContextTimeout(ctx, namespaceReplicationShadowTimeout)
 		defer cancel()
 		backgroundCtx = headers.SetCallerInfo(backgroundCtx, headers.SystemBackgroundLowCallerInfo)
-		if _, err := d.triggerNamespaceMutation(
+		_, err := d.triggerNamespaceMutation(
 			backgroundCtx,
 			operation,
 			chasmDetail,
 			expectedVersion,
-			previousClusters,
+			peerCells,
 			isGlobalNamespace,
+			businessID,
 			legacyPayload,
-		); err != nil {
+		)
+		d.recordShadowSourceOutcome(legacyTask, legacyPayload, businessID, peerCells, "trigger", err)
+		if err != nil {
 			d.logger.Warn(
 				"namespace replication shadow trigger RPC did not complete",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -1538,25 +1548,22 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
-	previousClusters []string,
+	peerCells []string,
 	isGlobalNamespace bool,
+	businessID string,
 	shadowLegacyPayload []byte,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	namespaceID := detail.GetInfo().GetId()
 	return d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
 		NamespaceId:       namespaceID,
 		SystemNamespaceId: primitives.SystemNamespaceID,
-		BusinessId:        namespaceID + ":" + uuid.NewString(),
+		BusinessId:        businessID,
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation:         operation,
-			NamespaceDetail:   detail,
-			ExpectedVersion:   expectedVersion,
-			IsGlobalNamespace: isGlobalNamespace,
-			PeerCells: peerCellsFromClusters(
-				d.clusterMetadata.GetCurrentClusterName(),
-				detail.GetReplicationConfig().GetClusters(),
-				previousClusters,
-			),
+			Operation:               operation,
+			NamespaceDetail:         detail,
+			ExpectedVersion:         expectedVersion,
+			IsGlobalNamespace:       isGlobalNamespace,
+			PeerCells:               peerCells,
 			Shadow:                  true,
 			ShadowLegacyTaskPayload: shadowLegacyPayload,
 		},
