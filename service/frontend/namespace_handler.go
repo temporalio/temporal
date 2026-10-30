@@ -555,6 +555,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			config.VisibilityArchivalUri = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
+			configurationChanged = true
 			maxLength := d.config.MaxBadBinaries(updateRequest.GetNamespace())
 			// only do merging
 			bb := d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UTC())

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -279,6 +280,73 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsInvalidDu
 	)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespaceBadBinariesOnly() {
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    "namespace-id",
+			Name:  "test-ns",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config: &persistencespb.NamespaceConfig{
+			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+				"existing": {Reason: "existing bad binary", CreateTime: timestamppb.New(now)},
+			}},
+		},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "cluster-a",
+			Clusters:          []string{"cluster-a", "cluster-b"},
+		},
+		ConfigVersion:   7,
+		FailoverVersion: 1,
+	}
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 11,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "test-ns"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: detail, IsGlobalNamespace: true}, nil,
+	)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true)
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		"cluster-a": {Enabled: true},
+		"cluster-b": {Enabled: true},
+	}).AnyTimes()
+	var persisted *persistence.UpdateNamespaceRequest
+	gomock.InOrder(
+		s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+				persisted = request
+				s.Require().Equal(int64(11), request.NotificationVersion)
+				s.Require().True(request.IsGlobalNamespace)
+				s.Require().Equal(int64(8), request.Namespace.GetConfigVersion())
+				s.Require().Equal(int64(1), request.Namespace.GetFailoverVersion())
+				binaries := request.Namespace.GetConfig().GetBadBinaries().GetBinaries()
+				s.Require().Len(binaries, 2)
+				protorequire.ProtoEqual(s.T(), &namespacepb.BadBinaryInfo{Reason: "existing bad binary", CreateTime: timestamppb.New(now)}, binaries["existing"])
+				s.Require().Equal("new bad binary", binaries["new"].GetReason())
+				s.Require().NotNil(binaries["new"].GetCreateTime())
+				return nil
+			},
+		),
+		s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, task *replicationspb.ReplicationTask) error {
+				attributes := task.GetNamespaceTaskAttributes()
+				s.Require().Equal(int64(8), attributes.GetConfigVersion())
+				protorequire.ProtoEqual(s.T(), persisted.Namespace.Config.BadBinaries, attributes.GetConfig().GetBadBinaries())
+				return nil
+			},
+		),
+	)
+	response, err := s.handler.UpdateNamespace(s.T().Context(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: "test-ns",
+		Config: &namespacepb.NamespaceConfig{BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+			"new": {Reason: "new bad binary"},
+		}}},
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(persisted)
+	protorequire.ProtoEqual(s.T(), persisted.Namespace.Config.BadBinaries, response.GetConfig().GetBadBinaries())
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespacePersistsRampOnlyOnSource() {
