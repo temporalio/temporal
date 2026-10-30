@@ -51,7 +51,7 @@ type workflowTasksAndActivitiesPollerParams struct {
 type taskQueueStatsContext struct {
 	*VersioningTestEnv
 	tb              testing.TB
-	ctx             context.Context
+	scope           parallelsuite.Scope
 	minPriority     int
 	maxPriority     int
 	defaultPriority int
@@ -59,7 +59,7 @@ type taskQueueStatsContext struct {
 }
 
 func newTaskQueueStatsContext(
-	ctx context.Context,
+	scope parallelsuite.Scope,
 	t *testing.T,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
@@ -76,7 +76,7 @@ func newTaskQueueStatsContext(
 	return &taskQueueStatsContext{
 		VersioningTestEnv: env,
 		tb:                t,
-		ctx:               ctx,
+		scope:             scope,
 		minPriority:       1,
 		maxPriority:       5,
 		defaultPriority:   3,
@@ -98,7 +98,7 @@ func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
+	return newTaskQueueStatsContext(s, s.T(), behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
@@ -198,7 +198,7 @@ func (s *TaskQueueStatsVersionSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
+	return newTaskQueueStatsContext(s, s.T(), behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(behavior testcore.MatchingBehavior) {
@@ -1200,7 +1200,7 @@ func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
 					}
 				}
 
-				_, err := s.FrontendClient().StartWorkflowExecution(s.ctx, request)
+				_, err := s.FrontendClient().StartWorkflowExecution(s.scope.Context(), request)
 				s.NoError(err)
 
 				total++
@@ -1253,7 +1253,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.scope.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1262,7 +1262,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	})
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollActivityTaskQueue(s.ctx, &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = s.FrontendClient().PollActivityTaskQueue(s.scope.Context(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1288,7 +1288,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					pollReq.DeploymentOptions = deploymentOpts
 				}
 
-				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.ctx, pollReq)
+				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.scope.Context(), pollReq)
 				s.NoError(err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
@@ -1319,7 +1319,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				}
 
-				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.ctx, respondReq)
+				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.scope.Context(), respondReq)
 				s.NoError(err)
 
 				i++
@@ -1345,7 +1345,7 @@ func (s *taskQueueStatsContext) pollActivities(count int, tqName string) {
 		}
 
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
-			s.ctx, pollReq,
+			s.scope.Context(), pollReq,
 		)
 		s.NoError(err)
 		if resp == nil || resp.GetAttempt() < 1 {
@@ -1382,7 +1382,7 @@ func (s *taskQueueStatsContext) validateRates(
 		ReportStats:   true,
 	}
 
-	await.Require(s.Context(), s.tb, func(t *await.T) {
+	await.Require(s.scope.Context(), s.tb, func(t *await.T) {
 		label := "validateRates[" + tqType.String() + "]"
 
 		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
@@ -1432,14 +1432,14 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
+	resp, err := s.FrontendClient().DescribeTaskQueue(s.scope.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Nil(resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
 	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	await.Require(s.Context(), s.tb, func(t *await.T) {
+	await.Require(s.scope.Context(), s.tb, func(t *await.T) {
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
 		req.ReportStats = true
@@ -1487,7 +1487,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 	}
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
-		resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(s.scope.Context(), req)
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Nil(resp.Stats, "stats should not be reported by default")
@@ -1495,7 +1495,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	await.Require(s.Context(), s.tb, func(t *await.T) {
+	await.Require(s.scope.Context(), s.tb, func(t *await.T) {
 		req.ReportStats = true
 		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
 		require.NoError(t, err)
@@ -1537,14 +1537,14 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(s.scope.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	for _, info := range resp.VersionTaskQueues {
 		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	await.Require(s.Context(), s.tb, func(t *await.T) {
+	await.Require(s.scope.Context(), s.tb, func(t *await.T) {
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(t.Context(), req)
 		require.NoError(t, err)
