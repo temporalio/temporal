@@ -53,6 +53,14 @@ func Execute[T any](src Source, key Key) (T, bool) {
 	return zero, false
 }
 
+// Checkpoint executes an error failpoint for key in the registry of src and returns its error.
+// It returns nil if the failpoint is not registered, paused or blocked and then released, or
+// returned or called back with a nil error, so the caller continues as normal.
+func Checkpoint(src Source, key Key) error {
+	err, _ := Execute[error](src, key)
+	return err
+}
+
 func execute[T any](key Key, fpAny any) (T, bool) {
 	fp, ok := fpAny.(*Failpoint[T])
 	if !ok {
