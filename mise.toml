@@ -4,8 +4,32 @@ min_version = "2026.10.9"
 # Go version comes from go.mod; no second pin to keep in sync.
 idiomatic_version_file_enable_tools = ["go"]
 
+[vars]
+# API tools follow the dependency version in go.mod.
+go_api_version = "{{ read_file(path='go.mod') | split(pat='go.temporal.io/api ') | last | split(pat='\\n') | first | trim }}"
+
 [tools]
 protoc = "23.4"
 # Built from source: the generated code is formatted with the Go version the plugin was built with.
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
 "go:google.golang.org/grpc/cmd/protoc-gen-go-grpc" = "1.3.0"
+
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.14.0"
+"go:github.com/daixiang0/gci" = "0.13.6"
+"go:gotest.tools/gotestsum" = "1.12.3"
+"go:github.com/googleapis/api-linter/cmd/api-linter" = "1.32.3"
+"go:github.com/bufbuild/buf/cmd/buf" = "1.6.0"
+"go:go.temporal.io/api/cmd/protogen" = "{{ vars.go_api_version }}"
+"go:github.com/rhysd/actionlint/cmd/actionlint" = "1.7.7"
+"go:go.temporal.io/sdk/contrib/tools/workflowcheck" = "0.6.0"
+# NilAway has no tagged releases; pin the pseudo-version for reproducible CI.
+"go:go.uber.org/nilaway/cmd/nilaway" = "v0.0.0-20260717164209-b48ebb193579"
+"go:github.com/google/yamlfmt/cmd/yamlfmt" = "0.16.0"
+"go:golang.org/x/tools/cmd/goimports" = "0.49.0"
+"go:github.com/hexdigest/gowrap/cmd/gowrap" = "1.4.3"
+"go:github.com/icholy/gomajor" = "0.14.0"
+"go:fillmore-labs.com/errortype" = "0.0.7"
+"go:go.uber.org/mock/mockgen" = "0.6.0"
+"go:golang.org/x/tools/cmd/stringer" = "0.49.0"
+"go:go.temporal.io/api/cmd/protoc-gen-go-helpers" = "{{ vars.go_api_version }}"
+shellcheck = "0.11.0"

@@ -82,11 +82,8 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
-STAMPDIR := .stamp
-export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(PATH)
 export GOROOT := $(shell $(GO) env GOROOT)
-GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) $(GO) install
 
 OTEL ?= false
 ifeq ($(OTEL),true)
@@ -174,11 +171,7 @@ print-go-version:
 
 clean-tools:
 	@printf $(COLOR) "Delete tools..."
-	@rm -rf $(STAMPDIR)
 	@rm -rf $(LOCALBIN)
-
-$(STAMPDIR):
-	@mkdir -p $(STAMPDIR)
 
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
@@ -187,131 +180,32 @@ $(LOCALBIN):
 LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v2.14.0
-GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
-
-# Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-GCI_VERSION := v0.13.6
-GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
-$(GCI): $(LOCALBIN)
-	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
-
-GOTESTSUM_VER := v1.12.3
-GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
-$(GOTESTSUM): | $(LOCALBIN)
-	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
-
-API_LINTER_VER := v1.32.3
-API_LINTER := $(LOCALBIN)/api-linter-$(API_LINTER_VER)
-$(API_LINTER): | $(LOCALBIN)
-	$(call go-install-tool,$(API_LINTER),github.com/googleapis/api-linter/cmd/api-linter,$(API_LINTER_VER))
-
-BUF_VER := v1.6.0
-BUF := $(LOCALBIN)/buf-$(BUF_VER)
-$(BUF): | $(LOCALBIN)
-	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
-
-GO_API_VER = $(shell $(GO) list -m -f '{{.Version}}' go.temporal.io/api \
-	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
-PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
-$(PROTOGEN): | $(LOCALBIN)
-	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
-
-ACTIONLINT_VER := v1.7.7
-ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
-$(ACTIONLINT): | $(LOCALBIN)
-	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
-
-WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
-WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
-$(WORKFLOWCHECK): | $(LOCALBIN)
-	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
-
-# NilAway has no tagged releases; pin the pseudo-version for reproducible CI.
-NILAWAY_VER := v0.0.0-20260717164209-b48ebb193579
-NILAWAY := $(LOCALBIN)/nilaway-$(NILAWAY_VER)
-$(NILAWAY): | $(LOCALBIN)
-	$(call go-install-tool,$(NILAWAY),go.uber.org/nilaway/cmd/nilaway,$(NILAWAY_VER))
-
-YAMLFMT_VER := v0.16.0
-YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
-$(YAMLFMT): | $(LOCALBIN)
-	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
-
-GOIMPORTS_VER := v0.49.0
-GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
-$(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
-	@touch $@
-$(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
-
-GOWRAP_VER := v1.4.3
-GOWRAP := $(LOCALBIN)/gowrap
-$(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
-	@touch $@
-$(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
-
-GOMAJOR_VER := v0.14.0
-GOMAJOR := $(LOCALBIN)/gomajor
-$(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(GOMAJOR),github.com/icholy/gomajor,$(GOMAJOR_VER))
-	@touch $@
-$(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
-
-ERRORTYPE_VER := v0.0.7
-ERRORTYPE := $(LOCALBIN)/errortype
-$(ERRORTYPE): | $(LOCALBIN)
-	$(call go-install-tool,$(ERRORTYPE),fillmore-labs.com/errortype,$(ERRORTYPE_VER))
-
-# Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v0.6.0
-MOCKGEN := $(LOCALBIN)/mockgen
-$(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
-	@touch $@
-$(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
-
-STRINGER_VER := v0.49.0
-STRINGER := $(LOCALBIN)/stringer
-$(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
-	@touch $@
-$(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
 
 # Path to a tool pinned in mise.toml, installing it if missing.
-mise-tool = $(or $(shell command -v mise >/dev/null && mise exec -- sh -c 'command -v $(1)'),$(error $(1) must be installed via mise; see https://mise.jdx.dev/installing-mise.html))
-PROTOC = $(call mise-tool,protoc)
-PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go)
-PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc)
-
-PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers-$(GO_API_VER)
-$(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(PROTOC_GEN_GO_HELPERS),go.temporal.io/api/cmd/protoc-gen-go-helpers,$(GO_API_VER))
-	@touch $@
-$(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
+mise-tool = $(or $(shell command -v mise >/dev/null && mise exec $(2) -- sh -c 'command -v $(1)'),$(error $(1) must be installed via mise; see https://mise.jdx.dev/installing-mise.html))
+GOLANGCI_LINT = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+# Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
+GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
+GOTESTSUM = $(call mise-tool,gotestsum,go:gotest.tools/gotestsum)
+API_LINTER = $(call mise-tool,api-linter,go:github.com/googleapis/api-linter/cmd/api-linter)
+BUF = $(call mise-tool,buf,go:github.com/bufbuild/buf/cmd/buf)
+PROTOGEN = $(call mise-tool,protogen,go:go.temporal.io/api/cmd/protogen)
+ACTIONLINT = $(call mise-tool,actionlint,go:github.com/rhysd/actionlint/cmd/actionlint)
+WORKFLOWCHECK = $(call mise-tool,workflowcheck,go:go.temporal.io/sdk/contrib/tools/workflowcheck)
+NILAWAY = $(call mise-tool,nilaway,go:go.uber.org/nilaway/cmd/nilaway)
+YAMLFMT = $(call mise-tool,yamlfmt,go:github.com/google/yamlfmt/cmd/yamlfmt)
+GOIMPORTS = $(call mise-tool,goimports,go:golang.org/x/tools/cmd/goimports)
+GOMAJOR = $(call mise-tool,gomajor,go:github.com/icholy/gomajor)
+ERRORTYPE = $(call mise-tool,errortype,go:fillmore-labs.com/errortype)
+MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
+PROTOC = $(call mise-tool,protoc,protoc)
+PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd/protoc-gen-go)
+PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/grpc/cmd/protoc-gen-go-grpc)
+PROTOC_GEN_GO_HELPERS = $(call mise-tool,protoc-gen-go-helpers,go:go.temporal.io/api/cmd/protoc-gen-go-helpers)
+SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 
 $(LOCALBIN)/protoc-gen-go-chasm: $(LOCALBIN) cmd/tools/protoc-gen-go-chasm/main.go go.mod go.sum
 	@$(GO) build -o $@ ./cmd/tools/protoc-gen-go-chasm
-
-# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
-# $1 - target path with name of binary (ideally with version)
-# $2 - package url which can be installed
-# $3 - specific version of package
-# This is courtesy of https://github.com/kubernetes-sigs/kubebuilder/pull/3718
-define go-install-tool
-@[ -f $(1) ] || { \
-set -e; \
-package=$(2)@$(3) ;\
-printf $(COLOR) "Downloading $${package}" ;\
-tmpdir=$$(mktemp -d) ;\
-GOBIN=$${tmpdir} $(GO) install $${package} ;\
-mv $${tmpdir}/$$(basename "$$(echo "$(1)" | sed "s/-$(3)$$//")") $(1) ;\
-rm -rf $${tmpdir} ;\
-}
-endef
 
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
@@ -326,7 +220,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@printf $(COLOR) "Generate CHASM proto image..."
 	@$(PROTOC) --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
-protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
+protoc: $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
 	@$(GO) run ./cmd/tools/protogen \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
@@ -396,7 +290,7 @@ temporal-server-debug: $(ALL_SRC)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
 
 ##### Checks #####
-goimports: fmt-imports $(GOIMPORTS)
+goimports: fmt-imports
 	@printf $(COLOR) "Run goimports for all files..."
 	@UNGENERATED_FILES=$$(find . -type f -name '*.go' -print0 | xargs -0 grep -L -e "Code generated by .* DO NOT EDIT." || true) && \
 		$(GOIMPORTS) -w $$UNGENERATED_FILES
@@ -404,9 +298,9 @@ goimports: fmt-imports $(GOIMPORTS)
 lint: lint-code lint-actions lint-api lint-protos lint-yaml
 	@printf $(COLOR) "Run linters..."
 
-lint-actions: $(ACTIONLINT)
+lint-actions:
 	@printf $(COLOR) "Linting GitHub actions..."
-	@$(ACTIONLINT)
+	@mise exec shellcheck -- $(ACTIONLINT)
 
 .PHONY: lint-code lint-code-fast
 # --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
@@ -441,13 +335,13 @@ define lint-go
 	@$(GO) vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
 endef
 
-lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
+lint-code:
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
 	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
-lint-yaml: $(YAMLFMT)
+lint-yaml:
 	@printf $(COLOR) "Checking YAML formatting..."
 	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
 
@@ -457,7 +351,7 @@ lint-yaml: $(YAMLFMT)
 # entire transitive dependency graph and OOMs CI runners.
 .PHONY: lint-nilaway
 NILAWAY_SCOPE ?= chasm/lib/scheduler
-lint-nilaway: $(NILAWAY)
+lint-nilaway:
 	@printf $(COLOR) "Running nilaway..."
 	@$(NILAWAY) \
 		-include-pkgs $(MODULE_ROOT)/$(NILAWAY_SCOPE) \
@@ -466,11 +360,11 @@ lint-nilaway: $(NILAWAY)
 		-exclude-file-docstrings "Code generated by" \
 		./$(NILAWAY_SCOPE)/...
 
-lint-api: $(API_LINTER) $(API_BINPB)
+lint-api: $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
+lint-protos: $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
@@ -499,7 +393,7 @@ fmt-gofix:
 	done; \
 	if [ $$n -ge $(GOFIX_MAX_ITERATIONS) ]; then echo "ERROR: go fix did not converge after $(GOFIX_MAX_ITERATIONS) iterations"; exit 1; fi
 
-fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
+fmt-imports: # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
 	@$(GCI) write --skip-generated -s standard -s default ./*
 
@@ -507,27 +401,27 @@ parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
 	@$(GO) run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
 
-fmt-protos: $(BUF)
+fmt-protos:
 	@printf $(COLOR) "Formatting proto files..."
 	@$(BUF) format -w $(PROTO_ROOT)/internal
 	@$(BUF) format -w --config chasm/lib/buf.yaml chasm/lib
 
-fmt-yaml: $(YAMLFMT)
+fmt-yaml:
 	@printf $(COLOR) "Formatting YAML files..."
 	@$(YAMLFMT) -conf .github/.yamlfmt .
 
 # Edit proto/internal/buf.yaml to exclude specific files from this check.
 # TODO: buf breaking check for CHASM protos.
-buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
+buf-breaking: $(API_BINPB) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Run buf breaking proto changes check..."
 	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) CHASM_BINPB=$(CHASM_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
 		./develop/buf-breaking.sh
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
-	@shellcheck $(ALL_SCRIPTS)
+	@$(SHELLCHECK) $(ALL_SCRIPTS)
 
-workflowcheck: $(WORKFLOWCHECK)
+workflowcheck:
 	@printf $(COLOR) "Run workflowcheck for system workflows..."
 	for dir in $(SYSTEM_WORKFLOWS_ROOT)/*/ ; do \
 		echo "Running workflowcheck on $$dir" ; \
@@ -636,7 +530,7 @@ test: unit-test integration-test functional-test
 $(TEST_OUTPUT_ROOT):
 	@mkdir -p $(TEST_OUTPUT_ROOT)
 
-prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
+prepare-coverage-test: $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
@@ -845,7 +739,7 @@ update-dependencies:
 	@$(GO) get -u -t $(PINNED_DEPENDENCIES) ./...
 	@$(GO) mod tidy
 
-update-dependencies-major: $(GOMAJOR)
+update-dependencies-major:
 	@printf $(COLOR) "Major version upgrades available:"
 	@$(GOMAJOR) list -major
 	@echo ""
@@ -853,9 +747,9 @@ update-dependencies-major: $(GOMAJOR)
 	@$(GOMAJOR) get -major all
 	@$(GO) mod tidy
 
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
+go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
-	@PATH="$(ROOT)/$(LOCALBIN):$(PATH)" $(GO) generate ./...
+	@mise exec go go:go.uber.org/mock/mockgen go:golang.org/x/tools/cmd/goimports go:golang.org/x/tools/cmd/stringer go:github.com/hexdigest/gowrap/cmd/gowrap -- go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

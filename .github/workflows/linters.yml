@@ -21,7 +21,6 @@ jobs:
       - name: lint actions
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           make lint-actions
         shell: bash
 
