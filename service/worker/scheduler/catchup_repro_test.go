@@ -22,6 +22,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/sdk"
@@ -31,15 +32,16 @@ import (
 
 // catchupCase is one first-task-after-a-stall scenario.
 type catchupCase struct {
-	name            string
-	gap             time.Duration // now - LastProcessedTime
-	overlap         enumspb.ScheduleOverlapPolicy
-	running         bool                           // a previous action is still running
-	catchupWindow   time.Duration                  // 0: production's 365d
-	maxBuffer       int                            // 0: tweakable default (1000)
-	deadlockTimeout time.Duration                  // 0: SDK default (1s)
-	chunked         int                            // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
-	args            *schedulespb.StartScheduleArgs // overrides the args built from gap
+	name             string
+	gap              time.Duration // now - LastProcessedTime
+	overlap          enumspb.ScheduleOverlapPolicy
+	running          bool                           // a previous action is still running
+	catchupWindow    time.Duration                  // 0: production's 365d
+	maxBuffer        int                            // 0: tweakable default (1000)
+	deadlockTimeout  time.Duration                  // 0: SDK default (1s)
+	chunked          int                            // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
+	args             *schedulespb.StartScheduleArgs // overrides the args built from gap
+	dcMatchesPerTask *int                           // worker.schedulerV1CatchupMatchesPerTask, injected as fx.go does
 }
 
 // catchupResult is what the first task did.
@@ -221,7 +223,17 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 		})
 
 	start := time.Now()
-	env.ExecuteWorkflow(SchedulerWorkflow, args)
+	if c.dcMatchesPerTask != nil {
+		dc := dynamicconfig.NewNoopCollection()
+		specBuilder := NewSpecBuilder(dynamicconfig.SchedulerSpecWarnIterations.Get(dc), dynamicconfig.SchedulerSpecMaxIterations.Get(dc))
+		env.ExecuteWorkflow(func(ctx workflow.Context, a *schedulespb.StartScheduleArgs) error {
+			return schedulerWorkflowWithSpecBuilder(ctx, a, specBuilder, schedulerDynamicConfig{
+				catchupMatchesPerTask: func() int { return *c.dcMatchesPerTask },
+			})
+		}, args)
+	} else {
+		env.ExecuteWorkflow(SchedulerWorkflow, args)
+	}
 	r.elapsed = time.Since(start)
 
 	require.True(t, env.IsWorkflowCompleted())

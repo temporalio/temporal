@@ -148,6 +148,9 @@ type (
 		// versionOverride reads worker.schedulerV1VersionOverride to select a newer supported
 		// V1 scheduler version while preserving the recorded version as a monotonic floor.
 		versionOverride func() int
+		// catchupMatchesPerTask reads worker.schedulerV1CatchupMatchesPerTask; negative means
+		// CurrentTweakablePolicies.MaxCatchupMatchesPerTask.
+		catchupMatchesPerTask func() int
 
 		// State produced by updateTweakables must remain in TweakablePolicies. MutableSideEffect
 		// callbacks do not run during replay, so scheduler fields are not restored from history.
@@ -279,6 +282,7 @@ type schedulerDynamicConfig struct {
 	migrateWithRunningWorkflows func() bool
 	versionCeiling              func() int
 	versionOverride             func() int
+	catchupMatchesPerTask       func() int
 }
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
@@ -303,6 +307,9 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 	if config.versionOverride == nil {
 		config.versionOverride = func() int { return -1 }
 	}
+	if config.catchupMatchesPerTask == nil {
+		config.catchupMatchesPerTask = func() int { return -1 }
+	}
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -317,6 +324,7 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		migrateWithRunningWorkflows: config.migrateWithRunningWorkflows,
 		versionCeiling:              config.versionCeiling,
 		versionOverride:             config.versionOverride,
+		catchupMatchesPerTask:       config.catchupMatchesPerTask,
 	}
 	return scheduler.run()
 }
@@ -1552,6 +1560,13 @@ func (s *scheduler) updateTweakables() {
 		if p.Version >= TriggerImmediatelyTimestamp {
 			p.EnableCHASMMigration = s.enableCHASMMigration()
 			p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
+		}
+		if p.Version < ChunkedCatchup {
+			// Unused below ChunkedCatchup; zero keeps older runs' recorded tweakables
+			// unchanged, so this field doesn't add a marker to every running schedule.
+			p.MaxCatchupMatchesPerTask = 0
+		} else if v := s.catchupMatchesPerTask(); v >= 0 {
+			p.MaxCatchupMatchesPerTask = v
 		}
 		return p
 	}

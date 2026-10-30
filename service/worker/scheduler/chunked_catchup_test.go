@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -141,6 +142,42 @@ func TestChunkedCatchup(t *testing.T) {
 			require.Empty(t, r.metrics[skipped])
 			require.Empty(t, r.metrics[chunked])
 			require.Zero(t, r.logger.count(chunkWarn)+r.logger.count(skipWarn))
+		})
+	})
+
+	t.Run("dynamic-config", func(t *testing.T) {
+		// 3h behind with a 1h window: 7199 misses, then the first in-window match.
+		missesArgs := func() *schedulespb.StartScheduleArgs {
+			args := newCatchupArgs(t, 3*time.Hour)
+			args.Schedule.Policies.CatchupWindow = durationpb.New(time.Hour)
+			return args
+		}
+		dc := func(n int) *int { return &n }
+
+		t.Run("overrides-binary-default", func(t *testing.T) {
+			r := runCatchupRepro(t, catchupCase{chunked: 5000, dcMatchesPerTask: dc(1000), args: missesArgs()})
+			require.NoError(t, r.err)
+			require.Equal(t, 1000, r.walked)
+			require.True(t, r.next.State.LastProcessedTime.AsTime().Before(baseStartTime), "should continue in a new run")
+		})
+
+		t.Run("negative-uses-binary-default", func(t *testing.T) {
+			r := runCatchupRepro(t, catchupCase{chunked: 2000, dcMatchesPerTask: dc(-1), args: missesArgs()})
+			require.NoError(t, r.err)
+			require.Equal(t, 2000, r.walked)
+		})
+
+		t.Run("zero-disables-chunking", func(t *testing.T) {
+			r := runCatchupRepro(t, catchupCase{chunked: 5000, dcMatchesPerTask: dc(0), args: missesArgs()})
+			require.NoError(t, r.err)
+			require.Equal(t, 7200, r.walked, "all misses, then the Skip shortcut")
+			require.Equal(t, baseStartTime, r.next.State.LastProcessedTime.AsTime())
+		})
+
+		t.Run("ignored-below-ChunkedCatchup", func(t *testing.T) {
+			r := runCatchupRepro(t, catchupCase{dcMatchesPerTask: dc(1000), args: missesArgs()})
+			require.NoError(t, r.err)
+			require.Equal(t, 10800, r.walked, "unchanged pre-v15 walk: every match")
 		})
 	})
 
