@@ -190,12 +190,11 @@ GOMAJOR = $(call mise-tool,gomajor,go:github.com/icholy/gomajor)
 ERRORTYPE = $(call mise-tool,errortype,go:fillmore-labs.com/errortype)
 MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
 PROTOC = $(call mise-tool,protoc,protoc)
-PROTOC_GEN_GO_CHASM = $(shell mise exec go -- go tool -n protoc-gen-go-chasm)
 PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd/protoc-gen-go)
+PROTOC_GEN_GO_CHASM = $(shell mise exec go -- go tool -n protoc-gen-go-chasm)
 PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/grpc/cmd/protoc-gen-go-grpc)
 PROTOC_GEN_GO_HELPERS = $(call mise-tool,protoc-gen-go-helpers,go:go.temporal.io/api/cmd/protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
-
 
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)

@@ -20,6 +20,15 @@ outputs:
   dependency_cache_primary_key:
     description: Primary key used for the Go module cache restore.
     value: ${{ steps.restore-deps.outputs.cache-primary-key }}
+  tools_cache_hit:
+    description: Whether the Go tools cache was restored from an exact match.
+    value: ${{ steps.restore-tools.outputs.cache-hit }}
+  tools_cache_path:
+    description: Go tools cache path.
+    value: .bin
+  tools_cache_primary_key:
+    description: Primary key used for the Go tools cache restore.
+    value: ${{ steps.restore-tools.outputs.cache-primary-key }}
 
 runs:
   using: composite
