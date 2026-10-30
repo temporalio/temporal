@@ -99,7 +99,7 @@ func (h *cancellationInvocationTaskHandler) Validate(
 func (h *cancellationInvocationTaskHandler) Execute(
 	ctx context.Context,
 	cancelRef chasm.ComponentRef,
-	attrs chasm.TaskAttributes,
+	_ chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationTask,
 ) error {
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(cancelRef.NamespaceID))
@@ -122,22 +122,23 @@ func (h *cancellationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
+	// The request is bound by the remaining operation timeout and the task deadline (see setupCallContext).
+	remainingOpTimeout := maxDuration
 	var timeoutType enumspb.TimeoutType
 	if args.startToCloseTimeout > 0 {
-		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
-			callTimeout = t
+		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < remainingOpTimeout {
+			remainingOpTimeout = t
 			timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 		}
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
-			callTimeout = t
+		if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < remainingOpTimeout {
+			remainingOpTimeout = t
 			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 		}
 	}
 
-	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
+	callCtx, cancel := h.setupCallContext(ctx, ns, remainingOpTimeout)
 	defer cancel()
 
 	traceCtx := invocationTraceContext{
@@ -155,7 +156,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	inv, err := h.newInvocation(
 		callCtx, ns, endpoint, args.endpointName, args.service,
-		callTimeout, timeoutType, traceCtx,
+		remainingOpTimeout, timeoutType, traceCtx,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
@@ -173,7 +174,8 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	saveErr := h.saveCancellationResult(ctx, cancelRef, callErr)
 
-	if callErr != nil && isDestinationDown(callErr) {
+	// Only the outbound queue unwraps DestinationDownError, other queues would treat it as a task failure.
+	if callErr != nil && taskDestination(args.endpointName) != "" && isDestinationDown(callErr) {
 		saveErr = queueserrors.NewDestinationDownError(callErr.Error(), saveErr)
 	}
 

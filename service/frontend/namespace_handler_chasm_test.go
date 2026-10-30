@@ -70,7 +70,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 				handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
 					nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
 					archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-					nil, clock.NewEventTimeSource(), cfg, client)
+					nil, clock.NewEventTimeSource(), cfg, client, nil)
 				clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 				clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 				clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
@@ -188,7 +188,7 @@ func (c *blockingNamespaceReplicationClient) TriggerNamespaceMutation(
 func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	handler := &namespaceHandler{
 		logger:            log.NewNoopLogger(),
@@ -273,7 +273,7 @@ func TestInvokeShadowNamespaceMutationSkipsWhenLegacyWouldNotReplicate(t *testin
 func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
 	client := &blockingNamespaceReplicationClient{
 		started:   make(chan context.Context, 1),
 		release:   make(chan struct{}),
@@ -344,8 +344,10 @@ func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 
 func TestInvokeShadowNamespaceMutationReferencePreparationFailure(t *testing.T) {
 	t.Parallel()
+	clusterMetadata := cluster.NewMockMetadata(gomock.NewController(t))
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
-	handler := &namespaceHandler{logger: log.NewNoopLogger(), chasmNsReplClient: client}
+	handler := &namespaceHandler{logger: log.NewNoopLogger(), chasmNsReplClient: client, clusterMetadata: clusterMetadata}
 	detail := &persistencespb.NamespaceDetail{
 		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", Name: string([]byte{0xff}), State: enumspb.NAMESPACE_STATE_REGISTERED},
 		Config:            &persistencespb.NamespaceConfig{},
@@ -394,7 +396,6 @@ func TestTriggerNamespaceMutationIsShadow(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	handler := &namespaceHandler{
 		clusterMetadata:   clusterMetadata,
@@ -413,6 +414,7 @@ func TestTriggerNamespaceMutationIsShadow(t *testing.T) {
 		7,
 		nil,
 		true,
+		"business-id",
 		[]byte("legacy-reference"),
 	)
 	require.NoError(t, err)

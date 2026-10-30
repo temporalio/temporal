@@ -57,9 +57,15 @@ func (a *defaultTokenKeyProvider) initialize() {
 }
 
 func (a *defaultTokenKeyProvider) Close() {
-	a.ticker.Stop()
-	a.stop <- true
-	close(a.stop)
+	// ticker and stop are only set when RefreshInterval > 0, so both may be nil here. Guard them
+	// as localStoreCertProvider.Close and localStoreTlsProvider.Close already do.
+	if a.ticker != nil {
+		a.ticker.Stop()
+	}
+	if a.stop != nil {
+		a.stop <- true
+		close(a.stop)
+	}
 }
 
 func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {

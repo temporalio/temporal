@@ -1380,6 +1380,67 @@ func (s *executableTaskSuite) TestSyncState() {
 	s.True(doContinue)
 }
 
+func (s *executableTaskSuite) TestSyncState_KeepsForceReplication() {
+	testCases := map[string]*replicationspb.ReplicationTask{
+		"SyncVersionedTransition attributes": {
+			Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
+				SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
+					VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{IsForceReplication: true},
+				},
+			},
+		},
+		// Verify and backfill tasks converted from a force replication task only keep the flag in the raw task.
+		"raw task info": {
+			RawTaskInfo: &persistencespb.ReplicationTaskInfo{IsForceReplication: true},
+		},
+	}
+	for name, replicationTask := range testCases {
+		s.Run(name, func() {
+			now := time.Now()
+			s.task = NewExecutableTask(
+				s.toolBox,
+				s.taskId,
+				"metrics-tag",
+				now,
+				now,
+				s.sourceCluster,
+				s.sourceShardKey,
+				replicationTask,
+			)
+			syncStateErr := &serviceerrors.SyncState{
+				NamespaceId: uuid.NewString(),
+				WorkflowId:  uuid.NewString(),
+				RunId:       uuid.NewString(),
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			}
+
+			mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+			s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).Times(1)
+			mockRemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).Return(&adminservice.SyncWorkflowStateResponse{
+				VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{},
+			}, nil).Times(1)
+
+			shardContext := historyi.NewMockShardContext(s.controller)
+			engine := historyi.NewMockEngine(s.controller)
+			s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+				namespace.ID(syncStateErr.NamespaceId),
+				syncStateErr.WorkflowId,
+			).Return(shardContext, nil).Times(1)
+			shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
+			engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, gomock.Any(), s.sourceCluster).DoAndReturn(
+				func(_ context.Context, _ chasm.ArchetypeID, artifact *replicationspb.VersionedTransitionArtifact, _ string) error {
+					s.True(artifact.GetIsForceReplication())
+					return nil
+				},
+			)
+
+			doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+			s.NoError(err)
+			s.True(doContinue)
+		})
+	}
+}
+
 func (s *executableTaskSuite) TestSyncState_NotFound() {
 	syncStateErr := &serviceerrors.SyncState{
 		NamespaceId: uuid.NewString(),
