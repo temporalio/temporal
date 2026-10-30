@@ -126,6 +126,7 @@ func runEverySecondUntilCAN(
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
 	env.SetStartTime(baseStartTime)
+	allowSlowWorkflowTask(env)
 	mockEverySecondActivities(env, c)
 
 	env.ExecuteWorkflow(SchedulerWorkflow, args)
@@ -272,6 +273,9 @@ func TestEverySecondSpec_LongStallDeadlocks(t *testing.T) {
 			var ts testsuite.WorkflowTestSuite
 			env := ts.NewTestWorkflowEnvironment()
 			env.SetStartTime(baseStartTime)
+			if !tc.wantDeadlock {
+				allowSlowWorkflowTask(env)
+			}
 			mockEverySecondActivities(env, c)
 			// Paused schedules sleep without a timer; nudge them to continue-as-new.
 			env.RegisterDelayedCallback(func() { env.SignalWorkflow(SignalNameForceCAN, nil) }, time.Minute)

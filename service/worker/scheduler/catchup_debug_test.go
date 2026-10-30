@@ -39,7 +39,7 @@ import (
 // the SDK deadlock detector and test timeout, which a breakpoint would trip.
 func TestCatchupLoopDebug(t *testing.T) {
 	const (
-		gap           = 24 * time.Hour
+		gap           = time.Hour
 		catchupWindow = 365 * 24 * time.Hour
 		overlap       = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	)
@@ -91,6 +91,7 @@ func TestCatchupLoopDebug(t *testing.T) {
 	ts.SetLogger(log.NewSdkLogger(log.NewNoopLogger()))
 	env := ts.NewTestWorkflowEnvironment()
 	env.SetStartTime(now)
+	allowSlowWorkflowTask(env)
 	var started []string
 	env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Return(
 		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {

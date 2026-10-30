@@ -99,14 +99,14 @@ Outer:
 			}
 		}
 		// everything matches
-		nextTs := time.Date(y, mo, d, h, m, s, 0, cc.tz)
+		nextTS := time.Date(y, mo, d, h, m, s, 0, cc.tz)
 		// we might have reached a nonexistent time that got jumped over by a dst transition.
 		// we can tell if the hour is different from what we think it should be.
-		if nextTs.Hour() != h {
+		if nextTS.Hour() != h {
 			h, m, s = h+1, 0, 0
 			continue Outer
 		}
-		return nextTs.Add(dstoffset)
+		return nextTS.Add(dstoffset)
 	}
 
 	// no more matching times (up to max we checked)
@@ -118,16 +118,16 @@ func refRawNextTime(cs *CompiledSpec, after time.Time) (nominal time.Time) {
 
 	for _, cal := range cs.calendar {
 		if next := refCalendarNext(cal, after); !next.IsZero() {
-			nextTs := next.Unix()
-			if nextTs < minTimestamp {
-				minTimestamp = nextTs
+			nextSec := next.Unix()
+			if nextSec < minTimestamp {
+				minTimestamp = nextSec
 			}
 		}
 	}
 
-	ts := after.Unix()
+	afterSec := after.Unix()
 	for _, iv := range cs.spec.Interval {
-		next := cs.nextIntervalTime(iv, ts)
+		next := cs.nextIntervalTime(iv, afterSec)
 		if next < minTimestamp {
 			minTimestamp = next
 		}

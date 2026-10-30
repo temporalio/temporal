@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -38,7 +37,7 @@ type catchupCase struct {
 	running          bool                           // a previous action is still running
 	catchupWindow    time.Duration                  // 0: production's 365d
 	maxBuffer        int                            // 0: tweakable default (1000)
-	deadlockTimeout  time.Duration                  // 0: SDK default (1s)
+	deadlockTimeout  time.Duration                  // 0: completingDeadlockTimeout
 	chunked          int                            // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
 	args             *schedulespb.StartScheduleArgs // overrides the args built from gap
 	dcMatchesPerTask *int                           // worker.schedulerV1CatchupMatchesPerTask, injected as fx.go does
@@ -141,7 +140,7 @@ func TestCatchupRepro(t *testing.T) {
 		}
 		// Large enough to exceed the 1s detector locally. Nothing is persisted:
 		// the retry would start from the same LastProcessedTime with a larger gap.
-		r := runCatchupRepro(t, catchupCase{gap: 30 * 24 * time.Hour, overlap: skip})
+		r := runCatchupRepro(t, catchupCase{gap: 30 * 24 * time.Hour, overlap: skip, deadlockTimeout: time.Second})
 		require.ErrorContains(t, r.err, "TMPRL1101")
 		require.Nil(t, r.next)
 	})
@@ -194,10 +193,13 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 	env := ts.NewTestWorkflowEnvironment()
 	env.SetStartTime(baseStartTime)
 	deadlockTimeout := c.deadlockTimeout
+	if deadlockTimeout == 0 {
+		deadlockTimeout = completingDeadlockTimeout
+	}
 	if debugging() {
 		// SetWorkerOptions replaces the SDK's TEMPORAL_DEBUG defaults; restore them so
 		// breakpoints don't trip the deadlock detector or the 3s idle test timeout.
-		if deadlockTimeout == 0 {
+		if c.deadlockTimeout == 0 {
 			deadlockTimeout = 24 * time.Hour
 		}
 		env.SetTestTimeout(24 * time.Hour)
@@ -342,7 +344,7 @@ func catchupCaseFromEnv(t *testing.T) (catchupCase, bool) {
 	}
 	if v := os.Getenv("CATCHUP_OVERLAP"); v != "" {
 		p, ok := enumspb.ScheduleOverlapPolicy_value["SCHEDULE_OVERLAP_POLICY_"+strings.ToUpper(strings.ReplaceAll(v, "-", "_"))]
-		require.True(t, ok, fmt.Sprintf("CATCHUP_OVERLAP=%s: want skip, buffer_one, buffer_all, cancel_other, terminate_other or allow_all", v))
+		require.Truef(t, ok, "CATCHUP_OVERLAP=%s: want skip, buffer_one, buffer_all, cancel_other, terminate_other or allow_all", v)
 		c.overlap = enumspb.ScheduleOverlapPolicy(p)
 	}
 	if v := os.Getenv("CATCHUP_RUNNING"); v != "" {
@@ -364,10 +366,26 @@ func catchupCaseFromEnv(t *testing.T) (catchupCase, bool) {
 }
 
 func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
+}
+
+// completingDeadlockTimeout replaces the SDK's 1s deadlock detector in tests that walk a
+// pre-ChunkedCatchup catch-up and are expected to complete: CI runs that loop ~50x slower
+// than a laptop (~70us per match), so 1s makes them flaky.
+const completingDeadlockTimeout = time.Minute
+
+// allowSlowWorkflowTask applies completingDeadlockTimeout, or under TEMPORAL_DEBUG the
+// SDK's debug defaults, which SetWorkerOptions would otherwise replace.
+func allowSlowWorkflowTask(env *testsuite.TestWorkflowEnvironment) {
+	if debugging() {
+		env.SetTestTimeout(24 * time.Hour)
+		env.SetWorkerOptions(sdkworker.Options{DeadlockDetectionTimeout: 24 * time.Hour})
+		return
+	}
+	env.SetWorkerOptions(sdkworker.Options{DeadlockDetectionTimeout: completingDeadlockTimeout})
 }
 
 // debugging reports whether the SDK's debug mode (TEMPORAL_DEBUG) is on.

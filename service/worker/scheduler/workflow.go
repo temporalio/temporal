@@ -889,48 +889,14 @@ func (s *scheduler) walkTimeRange(
 		}
 		walked++
 		lastWalked = next.Next
-		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
-			continue
-		}
-		if !manual && s.Info.UpdateTime.AsTime().After(next.Next) {
-			// We're reprocessing since the most recent event after an update. Discard actions before
-			// the update time (which was just set to "now"). This doesn't have to be guarded with
-			// hasMinVersion because this condition couldn't happen in previous versions.
-			continue
-		}
-		// Record generate latency only for the first action in the batch to
-		// avoid inflating the metric when catching up over a large time range.
-		if !manual && !recordedGenerateLatency {
-			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
-			recordedGenerateLatency = true
-		}
-		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
-			// Action's nominal time was already past the catchup window when
-			// the scheduler woke up. It was never buffered for execution.
-			// action_running is not included: the action was never a candidate
-			// for execution, so whether something is running is irrelevant.
-			s.metrics.WithTags(map[string]string{
-				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
-			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
-			s.Info.MissedCatchupWindow++
+		if s.matchNotStarted(next.Next, end, manual, catchupWindow, &recordedGenerateLatency) {
 			continue
 		}
 		buffered := len(s.State.BufferedStarts)
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 		lastAction = next.Next
-
-		// Stop walking once no later match can be started: under Skip, ProcessBuffer
-		// starts at most one of the starts buffered here and skips the rest; with a
-		// full buffer, addStart drops them. Their OverlapSkipped/BufferDropped counts
-		// are not recorded.
 		if shortcuts {
-			switch {
-			case skipPolicy && len(s.State.BufferedStarts) > buffered:
-				stopReason = metrics.ScheduleCatchupSkipReasonSkipPolicy
-			case len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize:
-				stopReason = metrics.ScheduleCatchupSkipReasonBufferFull
-			}
+			stopReason = s.catchupStopReason(skipPolicy, buffered)
 		}
 
 		if limit != nil {
@@ -940,6 +906,61 @@ func (s *scheduler) walkTimeRange(
 		}
 	}
 	return timeRangeResult{next: next.Next, lastAction: lastAction, lastWalked: lastWalked}
+}
+
+// matchNotStarted applies the checks that keep a match from being passed to addStart, and
+// reports whether it was kept out. It records the generate latency for the first match
+// that reaches the catchup-window check.
+func (s *scheduler) matchNotStarted(
+	next, end time.Time,
+	manual bool,
+	catchupWindow time.Duration,
+	recordedGenerateLatency *bool,
+) bool {
+	if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
+		return true
+	}
+	if !manual && s.Info.UpdateTime.AsTime().After(next) {
+		// We're reprocessing since the most recent event after an update. Discard actions before
+		// the update time (which was just set to "now"). This doesn't have to be guarded with
+		// hasMinVersion because this condition couldn't happen in previous versions.
+		return true
+	}
+	// Record generate latency only for the first action in the batch to
+	// avoid inflating the metric when catching up over a large time range.
+	if !manual && !*recordedGenerateLatency {
+		s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next))
+		*recordedGenerateLatency = true
+	}
+	if !manual && end.Sub(next) > catchupWindow {
+		s.logger.Warn("Schedule missed catchup window", "now", end, "time", next)
+		// Action's nominal time was already past the catchup window when
+		// the scheduler woke up. It was never buffered for execution.
+		// action_running is not included: the action was never a candidate
+		// for execution, so whether something is running is irrelevant.
+		s.metrics.WithTags(map[string]string{
+			metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
+		}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
+		s.Info.MissedCatchupWindow++
+		return true
+	}
+	return false
+}
+
+// catchupStopReason reports why no later match in the range can be started, after a match
+// was passed to addStart with bufferedBefore starts already buffered, or "" if one can.
+// Under Skip, ProcessBuffer starts at most one of the starts buffered from a range and
+// skips the rest; with a full buffer, addStart drops them. Their OverlapSkipped/BufferDropped
+// counts are not recorded.
+func (s *scheduler) catchupStopReason(skipPolicy bool, bufferedBefore int) string {
+	switch {
+	case skipPolicy && len(s.State.BufferedStarts) > bufferedBefore:
+		return metrics.ScheduleCatchupSkipReasonSkipPolicy
+	case len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize:
+		return metrics.ScheduleCatchupSkipReasonBufferFull
+	default:
+		return ""
+	}
 }
 
 // skippedRangeWarnThreshold is the skipped span from which a skip is logged as a warning.

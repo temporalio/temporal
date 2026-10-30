@@ -34,12 +34,12 @@ func randRanges(r *rand.Rand, lo, hi int) []*schedulepb.Range {
 		start := lo + r.IntN(hi-lo+1)
 		rng := &schedulepb.Range{Start: int32(start)}
 		switch r.IntN(3) {
-		case 0: // single value
 		case 1:
 			rng.End = int32(start + r.IntN(hi-start+1))
 		case 2:
 			rng.End = int32(start + r.IntN(hi-start+1))
 			rng.Step = int32(1 + r.IntN(hi-lo+1))
+		default: // single value
 		}
 		out[i] = rng
 	}
@@ -103,11 +103,11 @@ func randSpec(r *rand.Rand) *schedulepb.ScheduleSpec {
 		spec.ExcludeStructuredCalendar = []*schedulepb.StructuredCalendarSpec{randStructuredCalendar(r)}
 	}
 	switch r.IntN(3) {
-	case 0:
 	case 1:
 		spec.Jitter = durationpb.New(-time.Duration(r.IntN(3600)) * time.Second)
 	case 2:
 		spec.Jitter = durationpb.New(time.Duration(r.IntN(3600*1000)) * time.Millisecond)
+	default: // no jitter
 	}
 	if r.IntN(5) == 0 {
 		spec.StartTime = timestamppb.New(randQueryTime(r))

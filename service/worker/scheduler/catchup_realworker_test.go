@@ -84,6 +84,7 @@ func firstWorkflowTask(ctx context.Context, t *testing.T, c sdkclient.Client, ru
 				if started != nil {
 					return started, e
 				}
+			default:
 			}
 		}
 		select {
