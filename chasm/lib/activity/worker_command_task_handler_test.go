@@ -41,11 +41,11 @@ func TestWorkerCommandDispatchTaskHandler_Validate(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "cancel: terminated",
+			name:     "cancel: terminated (not yet supported)",
 			status:   activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 			task:     cancelTask,
 			attempt:  1,
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "cancel: scheduled",
@@ -112,4 +112,23 @@ func TestWorkerCommandDispatchTaskHandler_Validate(t *testing.T) {
 			require.Equal(t, tc.expected, valid)
 		})
 	}
+}
+
+func TestAddWorkerCommandDispatchTask_NoControlQueue(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	attemptState := &activitypb.ActivityAttemptState{
+		WorkerControlTaskQueue: "",
+	}
+	a := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+	}
+
+	a.addWorkerCommandDispatchTask(ctx, &activitypb.WorkerCommandDispatchTask{
+		Command: &activitypb.WorkerCommandDispatchTask_Cancel{},
+	})
+
+	require.Empty(t, ctx.Tasks, "no task should be created when worker has no control queue")
 }

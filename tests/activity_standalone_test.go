@@ -3151,117 +3151,7 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
 }
 
-// TestDispatchCancelCommandOnTerminate tests that when a running standalone activity is terminated,
-// the server dispatches a cancel command to the worker's control queue.
-func (s *standaloneActivityTestSuite) TestDispatchCancelCommandOnTerminate() {
-	env := s.newTestEnv()
-	t := s.T()
-	ctx := s.Context()
 
-	env.GetTestCluster().OverrideDynamicConfig(
-		t, dynamicconfig.EnableCancelActivityWorkerCommand,
-		true,
-	)
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
-	tv := env.Tv()
-	controlQueueName := tv.ControlQueueName(env.Namespace().String())
-
-	startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
-
-	// Poll with worker command support.
-	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity:               tv.WorkerIdentity(),
-		WorkerInstanceKey:      tv.WorkerInstanceKey(),
-		WorkerControlTaskQueue: controlQueueName,
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, activityPollResp.TaskToken)
-
-	// Terminate the activity.
-	_, err = env.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-		Namespace:  env.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      runID,
-		Reason:     "test terminate cancel command",
-		Identity:   "terminator",
-	})
-	require.NoError(t, err)
-
-	execReq := env.pollWorkerCommand(t, ctx, controlQueueName, tv.WorkerIdentity())
-	require.Len(t, execReq.Commands, 1)
-	cancelCmd := execReq.Commands[0].GetCancelActivity()
-	require.NotNil(t, cancelCmd, "expected CancelActivity command")
-	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
-}
-
-// TestDispatchCancelCommandOnTerminateWhilePauseRequested tests that when a standalone activity
-// is in PAUSE_REQUESTED state (attempt still running) and gets terminated, the server dispatches
-// a cancel command to the worker's control queue.
-func (s *standaloneActivityTestSuite) TestDispatchCancelCommandOnTerminateWhilePauseRequested() {
-	env := s.newTestEnv()
-	t := s.T()
-	ctx := s.Context()
-
-	env.GetTestCluster().OverrideDynamicConfig(
-		t, dynamicconfig.EnableCancelActivityWorkerCommand,
-		true,
-	)
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
-	tv := env.Tv()
-	controlQueueName := tv.ControlQueueName(env.Namespace().String())
-
-	startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
-
-	// Poll with worker command support so the activity transitions to STARTED.
-	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity:               tv.WorkerIdentity(),
-		WorkerInstanceKey:      tv.WorkerInstanceKey(),
-		WorkerControlTaskQueue: controlQueueName,
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, activityPollResp.TaskToken)
-
-	// Pause the activity. Since an attempt is in progress, this transitions to PAUSE_REQUESTED.
-	_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
-		Namespace:  env.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      runID,
-		Identity:   "pauser",
-	})
-	require.NoError(t, err)
-
-	// Terminate while in PAUSE_REQUESTED state.
-	_, err = env.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-		Namespace:  env.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      runID,
-		Reason:     "test terminate while pause requested",
-		Identity:   "terminator",
-	})
-	require.NoError(t, err)
-
-	execReq := env.pollWorkerCommand(t, ctx, controlQueueName, tv.WorkerIdentity())
-	require.Len(t, execReq.Commands, 1)
-	cancelCmd := execReq.Commands[0].GetCancelActivity()
-	require.NotNil(t, cancelCmd, "expected CancelActivity command")
-	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
-}
 
 func (s *standaloneActivityTestSuite) TestTerminate() {
 	env := s.newTestEnv()
@@ -15425,5 +15315,23 @@ func (env *standaloneActivityEnv) pollWorkerCommand(
 
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	require.NoError(t, proto.Unmarshal(startOp.Payload.Data, &executeReq))
+
+	// Complete the Nexus task so matching doesn't block waiting for a response.
+	_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  workerIdentity,
+		TaskToken: nexusPollResp.GetTaskToken(),
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+						SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
 	return &executeReq
 }

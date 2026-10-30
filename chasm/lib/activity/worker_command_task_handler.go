@@ -61,6 +61,10 @@ func (h *workerCommandDispatchTaskHandler) Validate(
 	invocation chasm.TaskInvocation,
 	task *activitypb.WorkerCommandDispatchTask,
 ) (bool, error) {
+	// Known limitation: a worker command may be lost during failover. This is
+	// acceptable because worker commands are best-effort for now. For example,
+	// standby can use up the retry limit even though it never sends the command.
+	// After failover, the new active may then drop the command without sending it.
 	if invocation.Attempt > h.config.WorkerCommandsMaxAttempts() {
 		key := ctx.ExecutionKey()
 		h.logger.Info("Worker command dispatch task exceeded max attempts, dropping",
@@ -78,9 +82,14 @@ func (h *workerCommandDispatchTaskHandler) Validate(
 		return false, nil
 	}
 
+	// TODO: Send worker commands when an activity is terminated. There is no later
+	// status change to invalidate the logical task after dispatch. We could write
+	// a completion flag to activity state, but that adds a persistence write for
+	// each command. We need to decide whether to accept that cost or find another
+	// way to clean up the task.
 	switch task.GetCommand().(type) {
 	case *activitypb.WorkerCommandDispatchTask_Cancel:
-		return validateCancelCommand(activity), nil
+		return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, nil
 	default:
 		h.logger.Warn("Unknown worker command type in dispatch task, dropping",
 			tag.NewStringTag("command_type", fmt.Sprintf("%T", task.GetCommand())),
@@ -101,7 +110,7 @@ func (h *workerCommandDispatchTaskHandler) Execute(
 		ctx,
 		activityRef,
 		(*Activity).buildWorkerCommandTaskToken,
-		activityRef,
+		chasm.NoValue(nil),
 	)
 	if err != nil {
 		return err
@@ -118,19 +127,12 @@ func (h *workerCommandDispatchTaskHandler) Execute(
 	}
 
 	dispatchTask := &tasks.WorkerCommandsTask{
-		WorkflowKey: definition.NewWorkflowKey(activityRef.NamespaceID, "", ""),
+		WorkflowKey: definition.NewWorkflowKey(activityRef.NamespaceID, activityRef.BusinessID, activityRef.RunID),
 		Commands:    []*workerpb.WorkerCommand{command},
 		Destination: taskAttrs.Destination,
 	}
 
 	return h.dispatcher.Execute(ctx, dispatchTask, nsEntry.Name().String())
-}
-
-// validateCancelCommand returns true if the activity is in a state where a cancel command
-// should be dispatched to the worker.
-func validateCancelCommand(activity *Activity) bool {
-	return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
-		activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED
 }
 
 // buildWorkerCommand constructs the WorkerCommand proto for the given task.

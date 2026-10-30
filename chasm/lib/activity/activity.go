@@ -229,7 +229,7 @@ func NewEmbeddedActivity(
 
 // buildWorkerCommandTaskToken builds the serialized task token for a worker command.
 // The token must match what was sent to the worker in the poll response.
-func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.ComponentRef) ([]byte, error) {
+func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.NoValue) ([]byte, error) {
 	attempt := a.LastAttempt.Get(ctx)
 	key := ctx.ExecutionKey()
 
@@ -478,14 +478,8 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
-	// If the activity has an attempt running on a worker, proactively notify the worker.
-	// Check before the transition changes the status.
-	actCtx := activityContextFromChasm(ctx)
-	if a.hasAttemptInProgress() && actCtx.config.EnableCancelActivityWorkerCommand(ctx.NamespaceEntry().Name().String()) {
-		a.addWorkerCommandDispatchTask(ctx, &activitypb.WorkerCommandDispatchTask{
-			Command: &activitypb.WorkerCommandDispatchTask_Cancel{},
-		})
-	}
+	// TODO: Send worker commands when an activity is terminated. See Validate in
+	// worker_command_task_handler.go for why this is not yet supported.
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
