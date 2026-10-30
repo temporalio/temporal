@@ -938,6 +938,19 @@ func (r *workflowResetterImpl) reapplyEvents(
 	)
 }
 
+// canReapplyOnReset reports whether an events-reapplication reset would reapply the event.
+func canReapplyOnReset(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		// reapplyEvents drops these when isReset is true: a reset must not cancel or terminate
+		// the run it creates. So they alone never justify resetting a closed workflow.
+		return false
+	default:
+		return workflow.ShouldReapplyEvent(stateMachineRegistry, event)
+	}
+}
+
 func reapplyEvents(
 	ctx context.Context,
 	mutableState historyi.MutableState,
