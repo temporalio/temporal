@@ -27,7 +27,7 @@ tombstone.
 The metadata write and the CHASM state save do not share a transaction. Readback
 usually recovers a committed write after a failed handoff. If a subsequent
 namespace update overwrites the evidence before reconciliation, the component
-records `INDETERMINATE` and emits `fenced_ambiguous` instead of propagating an
+records `INDETERMINATE` and suppresses peer fan-out instead of propagating an
 unproven snapshot.
 
 Later snapshots can converge current peers. A removed peer can remain stale
