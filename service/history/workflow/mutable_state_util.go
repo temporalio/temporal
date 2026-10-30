@@ -68,6 +68,11 @@ func sanitizeExecutionInfo(
 	// Timer tasks are generated locally, do not sync them.
 	executionInfo.StateMachineTimers = nil
 	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+
+	// Storage usage is accrued by each cluster for the storage it holds, do not sync it.
+	if stats := executionInfo.GetExecutionStats(); stats != nil {
+		stats.StorageUsage = nil
+	}
 }
 
 func sanitizeChildExecutionInfo(

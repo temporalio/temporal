@@ -1909,6 +1909,20 @@ func (mr *MockMutableStateMockRecorder) ContinueAsNewMinBackoff(backoffDuration 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContinueAsNewMinBackoff", reflect.TypeOf((*MockMutableState)(nil).ContinueAsNewMinBackoff), backoffDuration)
 }
 
+// CurrentStorageUsage mocks base method.
+func (m *MockMutableState) CurrentStorageUsage() *persistence.StorageUsage {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentStorageUsage")
+	ret0, _ := ret[0].(*persistence.StorageUsage)
+	return ret0
+}
+
+// CurrentStorageUsage indicates an expected call of CurrentStorageUsage.
+func (mr *MockMutableStateMockRecorder) CurrentStorageUsage() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentStorageUsage", reflect.TypeOf((*MockMutableState)(nil).CurrentStorageUsage))
+}
+
 // CurrentTaskQueue mocks base method.
 func (m *MockMutableState) CurrentTaskQueue() *taskqueue.TaskQueue {
 	m.ctrl.T.Helper()

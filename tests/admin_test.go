@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type AdminTestSuite struct {
@@ -54,7 +55,13 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 		var randomUUID string
 		err := workflow.SideEffect(
 			ctx,
-			func(workflow.Context) any { return uuid.New().String() },
+			func(workflow.Context) any {
+				// Hold the first workflow task open so the execution accrues a non-zero storage usage
+				// before the rebuild. Adds no events or state transitions. Must stay under the SDK's
+				// 1s deadlock detection.
+				time.Sleep(250 * time.Millisecond) //nolint:forbidigo
+				return uuid.New().String()
+			},
 		).Get(&randomUUID)
 		s.NoError(err)
 
@@ -156,6 +163,13 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 	)
 	s.Nil(response1.DatabaseMutableState.ExecutionInfo.MutableStateRebuildTime)
 	s.NotNil(response2.DatabaseMutableState.ExecutionInfo.MutableStateRebuildTime)
+
+	// Rebuild recreates mutable state for the same run, so the storage usage accrued so far must survive it.
+	storageUsageBefore := response1.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()
+	s.Positive(storageUsageBefore.GetMutableStateByteSeconds())
+	s.Positive(storageUsageBefore.GetHistoryByteSeconds())
+	s.True(proto.Equal(storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()),
+		"storage usage changed by rebuild: before %v, after %v", storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage())
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableStateRealignsMultipleNexusOperations(testWithChasm bool) {

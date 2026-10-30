@@ -487,6 +487,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
+		CurrentStorageUsage:  historyResponse.GetCurrentStorageUsage(),
 	}, nil
 }
 

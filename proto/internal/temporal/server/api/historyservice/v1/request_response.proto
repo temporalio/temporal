@@ -804,6 +804,9 @@ message DescribeMutableStateResponse {
   // DatabaseMutableState is always available,
   // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
+  // Storage usage on this cluster as of the time of the request: the stored counters plus the
+  // interval since this cluster's last state transition. Equals the stored counters once closed.
+  temporal.server.api.persistence.v1.StorageUsage current_storage_usage = 3;
 }
 
 // At least one of the parameters needs to be provided.

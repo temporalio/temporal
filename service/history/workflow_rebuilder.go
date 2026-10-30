@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -260,6 +261,11 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	// note: this is an admin API, for operator to recover a corrupted mutable state, so state transition count
 	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
 	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
+	// Same run, so storage usage accrued so far must not reset.
+	workflow.SetStorageUsage(
+		rebuildMutableState.GetExecutionInfo(),
+		common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()),
+	)
 	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
 	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
 	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)

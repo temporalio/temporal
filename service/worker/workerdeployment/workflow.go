@@ -366,14 +366,15 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	if err := workflow.SetUpdateHandlerWithOptions(
+	err = workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		RegisterWorkerInWorkerDeployment,
 		d.handleRegisterWorker,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateRegisterWorker,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
