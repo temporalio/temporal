@@ -225,8 +225,8 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 	return Tag{Key: workerVersion, Value: version}
 }
 
-func WorkerVersioningVersionTag(version string) Tag {
-	return Tag{Key: workerVersioningVersion, Value: version}
+func WorkerVersioningVersionTag(featureVersion string) Tag {
+	return Tag{Key: workerVersioningVersion, Value: featureVersion}
 }
 
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
