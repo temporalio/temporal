@@ -6514,6 +6514,127 @@ func (suite *ScheduleSuite) TestJitteredWakeupSurvivesCompletion(chasmEnabled bo
 	require.NoError(t, s.SdkClient().GetWorkflow(ctx, expectedID, "").Get(ctx, nil))
 }
 
+// TestUpdateDuringJitterDelayPreservesAction runs the same public-API assertions
+// against V1 and CHASM. An Update or Patch landing after an action's nominal time
+// but before its jittered fire must not drop that action.
+func (suite *ScheduleSuite) TestUpdateDuringJitterDelayPreservesAction(chasmEnabled bool) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(ctx context.Context, t *testing.T, s *testcore.TestEnv, sid string, sched *schedulepb.Schedule)
+		runs   int32
+	}{
+		{
+			name: "Update",
+			mutate: func(ctx context.Context, t *testing.T, s *testcore.TestEnv, sid string, sched *schedulepb.Schedule) {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: sid,
+					Schedule:   sched,
+					Identity:   "test",
+					RequestId:  uuid.NewString(),
+				})
+				require.NoError(t, err)
+			},
+			runs: 1,
+		},
+		{
+			name: "TriggerImmediately",
+			mutate: func(ctx context.Context, t *testing.T, s *testcore.TestEnv, sid string, _ *schedulepb.Schedule) {
+				patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
+			},
+			runs: 2,
+		},
+	} {
+		suite.Run(tc.name, func(suite *ScheduleSuite) {
+			testUpdateDuringJitterDelay(suite, chasmEnabled, tc.mutate, tc.runs)
+		})
+	}
+}
+
+func testUpdateDuringJitterDelay(
+	suite *ScheduleSuite,
+	chasmEnabled bool,
+	mutate func(ctx context.Context, t *testing.T, s *testcore.TestEnv, sid string, sched *schedulepb.Schedule),
+	wantRuns int32,
+) {
+	t := suite.T()
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := contextFactoryFor(chasmEnabled)(suite.Context())
+	tv := testvars.New(t)
+	wid := tv.WorkflowID()
+	wt := tv.WorkflowType().Name
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	nominal := time.Now().UTC().Truncate(time.Second).Add(8 * time.Second)
+	spec := &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(time.Minute),
+			Phase:    durationpb.New(time.Duration(nominal.Unix()%60) * time.Second),
+		}},
+		Jitter: durationpb.New(20 * time.Second),
+	}
+	builder := scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 })
+	compiled, err := builder.NewCompiledSpec(spec)
+	require.NoError(t, err)
+
+	// Jitter is seeded by namespace ID + schedule ID in both V1 and CHASM, so
+	// choose an ID whose fire lands well after the nominal time.
+	var sid string
+	var next scheduler.GetNextTimeResult
+	for i := range 1000 {
+		sid = fmt.Sprintf("%s-jitter-%d", wid, i)
+		next, err = compiled.GetNextTime(s.NamespaceID().String()+"-"+sid, nominal.Add(-time.Second))
+		require.NoError(t, err)
+		if next.Next.Sub(nominal) >= 15*time.Second {
+			break
+		}
+	}
+	require.Equal(t, nominal, next.Nominal)
+	require.GreaterOrEqual(t, next.Next.Sub(nominal), 15*time.Second)
+	pendingFire := next.Next
+
+	sched := &schedulepb.Schedule{
+		Spec:     spec,
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+	}
+	createSchedule(ctx, t, s, sid, sched)
+	describe := &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid}
+	await.Require(ctx, t, func(t *await.T) {
+		resp, err := s.FrontendClient().DescribeSchedule(t.Context(), describe)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Info.FutureActionTimes)
+		require.Equal(t, pendingFire, resp.Info.FutureActionTimes[0].AsTime())
+	}, awaitTimeout, pollInterval)
+	if time.Now().After(nominal) {
+		t.Skip("schedule creation overran the nominal time; cannot place the update inside the jitter delay")
+	}
+
+	await.RequireTruef(t, func() bool { return time.Now().After(nominal.Add(time.Second)) },
+		awaitTimeout, pollInterval, "wait for the nominal time to pass")
+	mutate(ctx, t, s, sid, sched)
+	if !time.Now().Before(pendingFire.Add(-2 * time.Second)) {
+		t.Skip("mutation overran the jitter delay; cannot place it before the pending fire")
+	}
+
+	expectedID := wid + "-" + nominal.Format(time.RFC3339)
+	await.Require(ctx, t, func(t *await.T) {
+		resp, err := s.FrontendClient().DescribeSchedule(t.Context(), describe)
+		require.NoError(t, err)
+		var fired *schedulepb.ScheduleActionResult
+		for _, a := range resp.Info.RecentActions {
+			if a.StartWorkflowResult.GetWorkflowId() == expectedID {
+				fired = a
+			}
+		}
+		require.NotNil(t, fired, "the action pending in the jitter delay must still fire")
+		require.Equal(t, pendingFire, fired.ScheduleTime.AsTime())
+		require.EqualValues(t, wantRuns, resp.Info.ActionCount)
+		require.Equal(t, wantRuns, runs.Load())
+	}, time.Until(pendingFire)+awaitTimeout, pollInterval)
+}
+
 func (suite *ScheduleSuite) TestTriggerImmediately(chasmEnabled bool) {
 	newContext := contextFactoryFor(chasmEnabled)
 	suite.Run("OnActiveSchedule", func(suite *ScheduleSuite) {

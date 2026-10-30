@@ -379,8 +379,14 @@ func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
 	}
 
 	// Generator readiness.
-	lastProcessedTime := s.Generator.Get(ctx).GetLastProcessedTime()
-	return lastProcessedTime != nil && !lastProcessedTime.AsTime().Before(s.Info.GetUpdateTime().AsTime())
+	// The action cursor can trail UpdateTime while a jittered action is pending,
+	// so readiness also accepts the task watermark.
+	generator := s.Generator.Get(ctx)
+	if generator.GetLastProcessedTime() == nil {
+		return false
+	}
+	processed := util.MaxTime(generator.GetLastProcessedTime().AsTime(), generator.GetLastProcessedTaskTime().AsTime())
+	return !processed.Before(s.Info.GetUpdateTime().AsTime())
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {

@@ -73,10 +73,18 @@ func (g *GeneratorTaskHandler) Execute(
 		g.logSchedule(ctx, logger, "starting schedule", generator, scheduler)
 	}
 
-	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
-	// yet been processed.
+	tweakables := g.config.Tweakables(scheduler.Namespace)
+
+	// Skip actions that fire before the last update. ProcessTimeRange filters by
+	// actual time, so only advance the nominal cursor to UpdateTime-Jitter: a
+	// nominal time at or before that can't fire at or after UpdateTime. Jumping
+	// to UpdateTime would drop an action whose jittered fire is still pending.
+	skipBefore := scheduler.Info.GetUpdateTime().AsTime()
+	if tweakables.EnableGeneratorJitterFix {
+		skipBefore = skipBefore.Add(-scheduler.Schedule.GetSpec().GetJitter().AsDuration())
+	}
 	generator.LastProcessedTime = timestamppb.New(
-		util.MaxTime(generator.LastProcessedTime.AsTime(), scheduler.Info.GetUpdateTime().AsTime()))
+		util.MaxTime(generator.LastProcessedTime.AsTime(), skipBefore))
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
@@ -88,7 +96,6 @@ func (g *GeneratorTaskHandler) Execute(
 		t2 = t1
 	}
 
-	tweakables := g.config.Tweakables(scheduler.Namespace)
 	var limit *int
 	if tweakables.MaxBufferSize > 0 {
 		remaining := tweakables.MaxBufferSize - len(invoker.GetBufferedStarts())
