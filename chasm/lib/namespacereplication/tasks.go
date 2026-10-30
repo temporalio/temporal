@@ -268,12 +268,13 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	return h.commitAfterMetadataWrite(
-		ctx,
-		ref,
-		task,
-		namespace.Name(loaded.Detail.GetInfo().GetName()),
-	)
+	namespaceName := namespace.Name(loaded.Detail.GetInfo().GetName())
+	if fault, ok := testhooks.Get(h.testHooks, testhooks.NamespaceReplicationBeforeLocalCommit, namespaceName); ok {
+		if err := fault(ctx); err != nil {
+			return err
+		}
+	}
+	return h.resolveLocal(ctx, ref, task, false)
 }
 
 // reconcileCreateLocalApply resolves a failed CREATE attempt by comparing the
@@ -313,25 +314,6 @@ func (h *applyLocalTaskHandler) reconcileCreateLocalApply(
 			persistedState,
 		)
 	}
-}
-
-func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
-	ctx context.Context,
-	ref chasm.ComponentRef,
-	task *namespacereplicationpb.ApplyLocalTask,
-	namespaceName namespace.Name,
-) error {
-	fault, ok := testhooks.Get(
-		h.testHooks,
-		testhooks.NamespaceReplicationBeforeLocalCommit,
-		namespaceName,
-	)
-	if ok {
-		if err := fault(ctx); err != nil {
-			return err
-		}
-	}
-	return h.resolveLocal(ctx, ref, task, false)
 }
 
 // reconcileUpdateLocalApply resolves a failed UPDATE attempt by reading the

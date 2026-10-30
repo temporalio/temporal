@@ -435,18 +435,15 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 		{name: "replicate only", wantReplicateOnly: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := handler.triggerNamespaceMutation(t.Context(), &namespacereplicationpb.TriggerNamespaceMutationRequest{
-				BusinessId: "namespace-id:mutation-id",
-				Mutation: &namespacereplicationpb.NamespaceMutation{
-					Operation:               enumsspb.NAMESPACE_OPERATION_UPDATE,
-					NamespaceDetail:         detail,
-					ExpectedVersion:         7,
-					PeerCells:               []string{"cell-b"},
-					IsGlobalNamespace:       true,
-					Shadow:                  tc.wantShadow,
-					ReplicateOnly:           tc.wantReplicateOnly,
-					ShadowLegacyTaskPayload: []byte("legacy-reference"),
-				},
+			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
+				Operation:               enumsspb.NAMESPACE_OPERATION_UPDATE,
+				NamespaceDetail:         detail,
+				ExpectedVersion:         7,
+				PeerCells:               []string{"cell-b"},
+				IsGlobalNamespace:       true,
+				Shadow:                  tc.wantShadow,
+				ReplicateOnly:           tc.wantReplicateOnly,
+				ShadowLegacyTaskPayload: []byte("legacy-reference"),
 			})
 			require.NoError(t, err)
 			request := <-client.requests

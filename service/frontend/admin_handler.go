@@ -1099,6 +1099,10 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
 	if !request.GetShadow() {
+		// CHASM deliveries can arrive out of order. Persist a removal even when this
+		// peer has not received its earlier addition: the config version fences
+		// that delayed addition. Otherwise it can create stale membership after
+		// the source has stopped targeting this peer. Legacy never sets this marker.
 		if request.GetRemovedPeer() {
 			clusters := payloadTask.GetReplicationConfig().GetClusters()
 			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
@@ -1109,9 +1113,13 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			}
 			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
 		}
-		// Absorb brief cell-wide metadata CAS contention before reporting a
-		// destination failure to the source circuit breaker. Each call rereads
-		// metadata and reruns apply-if-higher; durable retries remain in CHASM.
+		// Absorb transient Unavailable errors, including cell-wide metadata CAS
+		// contention and an UPDATE losing a missing-row CREATE race to an older
+		// snapshot. ExecuteWithOutcome converts that duplicate to Unavailable so
+		// the next attempt applies the newer update through apply-if-higher.
+		// Returning Unavailable signals a destination failure at the source and
+		// can open the shared destination circuit breaker, delaying other mutations.
+		// Each attempt rereads metadata; durable retries remain in CHASM.
 		policy := backoff.NewExponentialRetryPolicy(20 * time.Millisecond).
 			WithBackoffCoefficient(2).
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
