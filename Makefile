@@ -31,7 +31,7 @@ proto: lint-protos lint-api protoc proto-codegen
 .PHONY: proto protoc install bins ci-build-misc clean
 
 ##### Arguments ######
-GO = mise exec go -- go
+GO 			= mise exec go -- go
 GOOS        ?= $(shell $(GO) env GOOS)
 GOARCH      ?= $(shell $(GO) env GOARCH)
 GOPATH      ?= $(shell $(GO) env GOPATH)
@@ -210,7 +210,7 @@ $(LOCALBIN)/protoc-gen-go-chasm: $(LOCALBIN) cmd/tools/protoc-gen-go-chasm/main.
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@mise exec go -- ./cmd/tools/getproto/run.sh --out $@
+	@./cmd/tools/getproto/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
