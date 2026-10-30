@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -23,7 +24,23 @@ var def2 = hsmtest.NewDefinition("type2")
 var defs = []hsmtest.Definition{def1, def2}
 var reg = hsm.NewRegistry()
 
-type backend struct{}
+type backend struct {
+	now time.Time
+}
+
+func (b *backend) Now() time.Time {
+	if !b.now.IsZero() {
+		return b.now
+	}
+	return time.Now()
+}
+
+func TestNodeNowUsesWorkflowClock(t *testing.T) {
+	want := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), nil, &backend{now: want})
+	require.NoError(t, err)
+	require.Equal(t, want, root.Now())
+}
 
 func (b *backend) GetCurrentVersion() int64 {
 	return 1

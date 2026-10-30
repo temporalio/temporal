@@ -7966,6 +7966,17 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
 		return closeTransactionResult{}, err
 	}
+	if regenTimerTasksForWorkflowTimeSkipping {
+		// The offset changed before physical tasks are generated. Reset scheduled HSM groups so
+		// the existing close path replaces their wake-ups in deadline order, and reset only CHASM
+		// pure tasks, leaving outbound side-effect tasks untouched.
+		refreshStateMachineTimerTasksForTimeSkipping(ms)
+		if ms.ChasmEnabled() {
+			if err := ms.chasmTree.RefreshPureTasks(); err != nil {
+				return closeTransactionResult{}, err
+			}
+		}
+	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
@@ -9461,12 +9472,9 @@ func (ms *MutableStateImpl) ApplyMutation(
 	}); err != nil {
 		return err
 	}
-	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
-	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
-	// to chasmTree.ApplyMutation does not matter.
-	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
-
-	return nil
+	// Must run after syncExecutionInfo and chasmTree.ApplyMutation so the incoming offset and
+	// replicated logical tasks are both visible before their physical timer status is reset.
+	return ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
@@ -9512,11 +9520,9 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	}); err != nil {
 		return err
 	}
-	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
-	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
-	// to chasmTree.ApplySnapshot does not matter.
-	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
-	return nil
+	// Must run after syncExecutionInfo and chasmTree.ApplySnapshot so the incoming offset and
+	// replicated logical tasks are both visible before their physical timer status is reset.
+	return ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {

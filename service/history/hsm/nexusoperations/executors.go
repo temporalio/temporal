@@ -473,7 +473,7 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 	})
 	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionStarted.Apply(operation, EventStarted{
-			Time:       env.Now(),
+			Time:       node.Now(),
 			Node:       node,
 			Attributes: event.GetNexusOperationStartedEventAttributes(),
 		})
@@ -567,7 +567,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	}
 	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-			Time:        env.Now(),
+			Time:        node.Now(),
 			Failure:     failure,
 			Node:        node,
 			RetryPolicy: e.Config.RetryPolicy(),
@@ -887,13 +887,13 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 						})
 					}
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-						Time:    env.Now(),
+						Time:    n.Now(),
 						Failure: failure,
 						Node:    n,
 					})
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
-					Time:        env.Now(),
+					Time:        n.Now(),
 					Failure:     failure,
 					Node:        n,
 					RetryPolicy: e.Config.RetryPolicy(),
@@ -916,7 +916,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				})
 			}
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
-				Time: env.Now(),
+				Time: n.Now(),
 				Node: n,
 			})
 		})

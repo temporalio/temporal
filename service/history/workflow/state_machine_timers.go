@@ -16,12 +16,7 @@ import (
 // AddNextStateMachineTimerTask generates a state machine timer task if the first deadline doesn't have a task scheduled
 // yet.
 func AddNextStateMachineTimerTask(ms historyi.MutableState) {
-	// filter out empty timer groups
-	timers := ms.GetExecutionInfo().StateMachineTimers
-	timers = slices.DeleteFunc(timers, func(timerGroup *persistencespb.StateMachineTimerGroup) bool {
-		return len(timerGroup.Infos) == 0
-	})
-	ms.GetExecutionInfo().StateMachineTimers = timers
+	timers := removeEmptyStateMachineTimerGroups(ms)
 
 	if len(timers) == 0 {
 		return
@@ -38,6 +33,24 @@ func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 		Version:             ms.GetCurrentVersion(),
 	})
 	timerGroup.Scheduled = true
+}
+
+// refreshStateMachineTimerTasksForTimeSkipping makes the existing close path re-emit timer wake-ups
+// after workflow time changes its virtual-to-wall-clock offset. Multiple groups can already be
+// marked scheduled, so reset all of them. AddNextStateMachineTimerTask replaces the wake-ups one at
+// a time as preceding groups execute.
+func refreshStateMachineTimerTasksForTimeSkipping(ms historyi.MutableState) {
+	for _, timerGroup := range removeEmptyStateMachineTimerGroups(ms) {
+		timerGroup.Scheduled = false
+	}
+}
+
+func removeEmptyStateMachineTimerGroups(ms historyi.MutableState) []*persistencespb.StateMachineTimerGroup {
+	timers := slices.DeleteFunc(ms.GetExecutionInfo().StateMachineTimers, func(timerGroup *persistencespb.StateMachineTimerGroup) bool {
+		return len(timerGroup.Infos) == 0
+	})
+	ms.GetExecutionInfo().StateMachineTimers = timers
+	return timers
 }
 
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
