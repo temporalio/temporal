@@ -2,6 +2,7 @@ package collection
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -135,4 +136,33 @@ func (s *pagingIteratorSuite) TestIteration_Err_NotBegining() {
 		result = append(result, num)
 	}
 	s.Equal([]int{1, 2, 3, 4, 5}, result)
+}
+
+func TestPagingIteratorManyEmptyPages(t *testing.T) {
+	const emptyPages = 256
+	pages := 0
+	iter := NewPagingIterator(func([]byte) ([]int, []byte, error) {
+		pages++
+		if pages <= emptyPages {
+			if pages == emptyPages {
+				var callers [128]uintptr
+				if runtime.Callers(0, callers[:]) == len(callers) {
+					t.Fatal("HasNext grew the stack while skipping empty pages")
+				}
+			}
+			return nil, []byte("next"), nil
+		}
+		return []int{42}, nil, nil
+	})
+
+	if !iter.HasNext() {
+		t.Fatal("expected an item after the empty pages")
+	}
+	item, err := iter.Next()
+	if err != nil || item != 42 {
+		t.Fatalf("Next() = (%d, %v), want (42, nil)", item, err)
+	}
+	if iter.HasNext() || pages != emptyPages+1 {
+		t.Fatalf("iterator did not stop after %d pages", emptyPages+1)
+	}
 }
