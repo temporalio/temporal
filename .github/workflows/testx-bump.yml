@@ -102,7 +102,7 @@ jobs:
 
   notify-failure:
     name: Notify Slack on Failure
-    if: ${{ false }}
+    if: failure()
     needs: [bump, check-pin]
     runs-on: ubuntu-latest
     steps:
