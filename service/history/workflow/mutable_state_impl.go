@@ -179,7 +179,7 @@ type (
 		// Storage usage accounting on this cluster. Kept in memory (not LastUpdateTime) because on a passive
 		// cluster syncExecutionInfo overwrites LastUpdateTime with the source cluster's value.
 		// sizeAtLastClose is the approximate persisted size as of the last closed transaction, lastCloseTime
-		// is the time of that transaction (zero if unknown),
+		// is the wall-clock time of that transaction (zero if unknown), excluding time skipping.
 		sizeAtLastClose    int64
 		lastCloseTime      time.Time
 		runningAtLastClose bool
@@ -617,7 +617,7 @@ func NewMutableStateFromDB(
 	mutableState.sizeAtLastClose = int64(mutableState.GetApproximatePersistedSize())
 	mutableState.runningAtLastClose = mutableState.executionState.GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	if lastUpdateTime := mutableState.executionInfo.GetLastUpdateTime(); lastUpdateTime != nil {
-		mutableState.lastCloseTime = lastUpdateTime.AsTime()
+		mutableState.lastCloseTime = mutableState.withoutSkippedDuration(lastUpdateTime.AsTime())
 	}
 	return mutableState, nil
 }
@@ -8033,7 +8033,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	}
 
 	now := ms.timeSource.Now()
-	ms.closeTransactionAccrueStorageUsage(now)
+	ms.closeTransactionAccrueStorageUsage(ms.withoutSkippedDuration(now))
 
 	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(now)
@@ -8073,7 +8073,7 @@ func (ms *MutableStateImpl) closeTransactionAccrueStorageUsage(
 		)
 	}
 	if !delta.isZero() {
-		ms.executionInfo.StorageUsage = addStorageUsage(ms.executionInfo.StorageUsage, delta)
+		SetStorageUsage(ms.executionInfo, addStorageUsage(ms.executionInfo.GetExecutionStats().GetStorageUsage(), delta))
 	}
 	ms.sizeAtLastClose = int64(ms.GetApproximatePersistedSize())
 	ms.lastCloseTime = now
@@ -9872,7 +9872,6 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.WorkflowTaskBuildIdRedirectCounter,
 			&info.VersionHistories,
 			&info.ExecutionStats,
-			&info.StorageUsage,
 			&info.LastFirstEventTxnId,
 			&info.ParentClock,
 			&info.CloseTransferTaskId,

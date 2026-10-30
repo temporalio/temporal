@@ -262,7 +262,10 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
 	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
 	// Same run, so storage usage accrued so far must not reset.
-	rebuildMutableState.GetExecutionInfo().StorageUsage = common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	workflow.SetStorageUsage(
+		rebuildMutableState.GetExecutionInfo(),
+		common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()),
+	)
 	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
 	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
 	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)

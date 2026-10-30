@@ -49,12 +49,24 @@ func addStorageUsage(
 	return usage
 }
 
-// CurrentStorageUsage returns this cluster's storage usage as of now: the stored counters plus the
+// SetStorageUsage sets the storage usage in executionInfo's ExecutionStats, allocating ExecutionStats
+// if it is nil. It leaves the other ExecutionStats fields unchanged.
+func SetStorageUsage(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	usage *persistencespb.StorageUsage,
+) {
+	if executionInfo.ExecutionStats == nil {
+		executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
+	executionInfo.ExecutionStats.StorageUsage = usage
+}
+
+// CurrentStorageUsage returns this cluster's storage usage as of now (wall clock): the stored counters plus the
 // interval held since this cluster's last closed transaction, which is not accrued yet. A closed
 // execution, or one with no local baseline yet, returns the stored counters. It does not modify the
 // mutable state.
 func (ms *MutableStateImpl) CurrentStorageUsage() *persistencespb.StorageUsage {
-	usage := common.CloneProto(ms.executionInfo.GetStorageUsage())
+	usage := common.CloneProto(ms.executionInfo.GetExecutionStats().GetStorageUsage())
 	if !ms.runningAtLastClose {
 		return usage
 	}
@@ -62,10 +74,17 @@ func (ms *MutableStateImpl) CurrentStorageUsage() *persistencespb.StorageUsage {
 		ms.sizeAtLastClose,
 		ms.executionInfo.GetExecutionStats().GetHistorySize(),
 		ms.lastCloseTime,
-		ms.timeSource.Now(),
+		ms.withoutSkippedDuration(ms.timeSource.Now()),
 	)
 	if delta.isZero() {
 		return usage
 	}
 	return addStorageUsage(usage, delta)
+}
+
+// withoutSkippedDuration converts a reading of ms.timeSource back to wall-clock time. With time
+// skipping, ms.timeSource adds the execution's skipped duration, and skipped time is not storage
+// usage.
+func (ms *MutableStateImpl) withoutSkippedDuration(t time.Time) time.Time {
+	return t.Add(-ms.accumulatedSkippedDuration())
 }

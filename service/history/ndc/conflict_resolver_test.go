@@ -113,7 +113,9 @@ func (s *conflictResolverSuite) TestRebuild() {
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-		StorageUsage:     &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222},
+		ExecutionStats: &persistencespb.ExecutionStats{
+			StorageUsage: &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222},
+		},
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -166,8 +168,8 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())
-	s.Equal(int64(111), rebuildExecutionInfo.GetStorageUsage().GetMutableStateByteSeconds())
-	s.Equal(int64(222), rebuildExecutionInfo.GetStorageUsage().GetHistoryByteSeconds())
+	s.Equal(int64(111), rebuildExecutionInfo.GetExecutionStats().GetStorageUsage().GetMutableStateByteSeconds())
+	s.Equal(int64(222), rebuildExecutionInfo.GetExecutionStats().GetStorageUsage().GetHistoryByteSeconds())
 }
 
 func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_NotCurrent() {

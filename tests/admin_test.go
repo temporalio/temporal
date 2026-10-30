@@ -165,11 +165,11 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 	s.NotNil(response2.DatabaseMutableState.ExecutionInfo.MutableStateRebuildTime)
 
 	// Rebuild recreates mutable state for the same run, so the storage usage accrued so far must survive it.
-	storageUsageBefore := response1.DatabaseMutableState.ExecutionInfo.GetStorageUsage()
+	storageUsageBefore := response1.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()
 	s.Positive(storageUsageBefore.GetMutableStateByteSeconds())
 	s.Positive(storageUsageBefore.GetHistoryByteSeconds())
-	s.True(proto.Equal(storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetStorageUsage()),
-		"storage usage changed by rebuild: before %v, after %v", storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetStorageUsage())
+	s.True(proto.Equal(storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage()),
+		"storage usage changed by rebuild: before %v, after %v", storageUsageBefore, response2.DatabaseMutableState.ExecutionInfo.GetExecutionStats().GetStorageUsage())
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableStateRealignsMultipleNexusOperations(testWithChasm bool) {
