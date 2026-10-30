@@ -60,6 +60,19 @@ func (h *PayloadTTLSideEffectTaskHandler) Validate(
 	return validateTask(chasmContext, store, attributes.TaskAttributes, task.PayloadKey)
 }
 
+func (h *PayloadTTLSideEffectTaskHandler) ValidateStandby(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	attributes chasm.TaskInvocation,
+	task *testspb.TestPayloadTTLSideEffectTask,
+) (bool, error) {
+
+	return chasm.ReadComponent(ctx, ref,
+		func(store *PayloadStore, chasmContext chasm.Context, task *testspb.TestPayloadTTLSideEffectTask) (bool, error) {
+			return validateTask(chasmContext, store, attributes.TaskAttributes, task.PayloadKey)
+		}, task)
+}
+
 func validateTask(
 	chasmContext chasm.Context,
 	store *PayloadStore,

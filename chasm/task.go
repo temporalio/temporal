@@ -9,7 +9,7 @@ import (
 )
 
 // ErrTaskDiscarded is the error returned by the default [SideEffectTaskHandlerBase] Discard implementation,
-// indicating that a side-effect task on a standby cluster has been pending past the discard delay.
+// indicating that standby validation rejected a task without a custom discard handler.
 var ErrTaskDiscarded = errors.New("standby task pending for too long")
 
 type (
@@ -25,7 +25,7 @@ type (
 		Destination string
 	}
 
-	// TaskInvocation is passed to a task's Validate callback. It carries the task's [TaskAttributes]
+	// TaskInvocation is passed to a task's Validate and ValidateStandby callbacks. It carries the task's [TaskAttributes]
 	// together with framework-supplied state for the current processing attempt.
 	TaskInvocation struct {
 		TaskAttributes
@@ -44,7 +44,7 @@ type (
 		TaskValidator[C, T]
 		Execute(context.Context, ComponentRef, TaskAttributes, T) error
 		// Discard implements custom discard behavior on standby clusters. When a side-effect task has been
-		// pending on standby past the discard delay, the framework calls Discard instead of silently dropping
+		// rejected by standby validation, the framework calls Discard instead of silently dropping
 		// the task. For example, the activity dispatch handler implements this to spill tasks to matching.
 		// The ctx carries engine access, but implementations must avoid mutating component state on standby
 		// clusters.
@@ -58,6 +58,16 @@ type (
 		TaskValidator[C, T]
 		Execute(MutableContext, C, TaskAttributes, T) error
 		pureTaskHandler()
+	}
+
+	// StandbyTaskValidator optionally overrides standby validation for a side-effect task.
+	// The callback runs without holding the execution lock and may perform I/O. Component
+	// state must be accessed through ReadComponent; it must not be mutated on standby.
+	// Handlers without this interface fall back to Validate through a locked component read.
+	StandbyTaskValidator[T any] interface {
+		// ValidateStandby returns true to retry the task, false to invoke Discard, or an error
+		// to fail the processing attempt. It receives an engine-enabled context.
+		ValidateStandby(context.Context, ComponentRef, TaskInvocation, T) (bool, error)
 	}
 
 	// TaskValidator is implemented by both [SideEffectTaskHandler] and [PureTaskHandler] to gate
@@ -77,6 +87,8 @@ type (
 		//
 		// The framework automatically calls Validate at key points, such as after closing transactions, to check all
 		// generated tasks before they execute.
+		//
+		// Side-effect handlers may implement [StandbyTaskValidator] to override validation on standby.
 		//
 		// Returns:
 		// - (true, nil) if the task is valid and should be executed

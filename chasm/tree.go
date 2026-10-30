@@ -3871,7 +3871,7 @@ func (n *Node) ExecutePureTask(
 }
 
 // ValidateSideEffectTask checks whether a side effect task should still be
-// executed. Intended for use by standby handlers.
+// executed using the default validator.
 //
 // It returns two booleans:
 //   - isTaskInTree: true if the task's logical counterpart still exists in the
@@ -3889,7 +3889,44 @@ func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
 	chasmTask *tasks.ChasmTask,
 ) (isTaskInTree bool, isValidByComponent bool, retErr error) {
+	return n.validateSideEffectTask(ctx, chasmTask, true)
+}
 
+// IsSideEffectTaskInTree checks task identity and component access under the execution lock.
+// It does not invoke the task handler's validator or cache deserialized task data.
+func (n *Node) IsSideEffectTaskInTree(ctx context.Context, task *tasks.ChasmTask) (bool, error) {
+	inTree, accessible, err := n.validateSideEffectTask(ctx, task, false)
+	return inTree && accessible, err
+}
+
+// ValidateStandbySideEffectTask invokes standby validation without holding the execution
+// lock. The callback receives a reference instead of live component state. The context
+// must have a CHASM engine set, and the caller must have checked task identity under lock.
+func (n *Node) ValidateStandbySideEffectTask(
+	ctx context.Context,
+	executionKey ExecutionKey,
+	task *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+) (bool, error) {
+	rt, err := n.lookupSideEffectTask(ctx, "ValidateStandbySideEffectTask", task)
+	if err != nil {
+		return false, err
+	}
+	var valid bool
+	err = n.invokeSideEffectTaskFn(ctx, rt, executionKey, task, validate, nil,
+		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, data any) error {
+			var err error
+			valid, err = rt.validateStandbyFn(ctx, ref, TaskInvocation{TaskAttributes: attrs, Attempt: task.Attempt}, data)
+			return err
+		})
+	return valid, err
+}
+
+func (n *Node) validateSideEffectTask(
+	ctx context.Context,
+	chasmTask *tasks.ChasmTask,
+	validateComponent bool,
+) (isTaskInTree bool, isValidByComponent bool, retErr error) {
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
 	registrableTask, ok := n.registry.TaskByID(taskTypeID)
@@ -3931,14 +3968,7 @@ func (n *Node) ValidateSideEffectTask(
 	// was added; skip the check in that case to preserve backward compatibility.
 	var logicalTask *persistencespb.ChasmComponentAttributes_Task
 	if taskInfo.TaskVersionedTransition != nil {
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
-		for _, t := range componentAttr.GetSideEffectTasks() {
-			if transitionhistory.Compare(t.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
-				t.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
-				logicalTask = t
-				break
-			}
-		}
+		logicalTask = node.findSideEffectTask(taskInfo)
 		if logicalTask == nil {
 			return false, false, nil
 		}
@@ -3948,6 +3978,15 @@ func (n *Node) ValidateSideEffectTask(
 
 	// Component must be hydrated before the task's validator is called.
 	validateCtx := NewContext(NewContextWithOperationIntent(ctx, OperationIntentProgress), n)
+	if !validateComponent {
+		if err := node.validateAccess(validateCtx, true); err != nil {
+			if errors.Is(err, errAccessCheckFailed) {
+				return true, false, nil
+			}
+			return false, false, err
+		}
+		return true, true, nil
+	}
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, false, err
 	}
@@ -3993,6 +4032,17 @@ func (n *Node) ValidateSideEffectTask(
 	return true, isValidByComponent, retErr
 }
 
+func (n *Node) findSideEffectTask(taskInfo *persistencespb.ChasmTaskInfo) *persistencespb.ChasmComponentAttributes_Task {
+	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
+	for _, task := range componentAttr.GetSideEffectTasks() {
+		if transitionhistory.Compare(task.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
+			task.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
+			return task
+		}
+	}
+	return nil
+}
+
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
 // without holding the execution lock.
 //
@@ -4010,11 +4060,11 @@ func (n *Node) ExecuteSideEffectTask(
 	if err != nil {
 		return err
 	}
-	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskExecuteFn)
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.validateFn, rt.sideEffectTaskExecuteFn)
 }
 
 // ExecuteSideEffectDiscardTask executes the discard handler for the given ChasmTask. This is called on standby
-// clusters when a side effect task has been pending past the discard delay, allowing custom discard behavior
+// clusters when standby validation rejects a side effect task, allowing custom discard behavior
 // (e.g., spilling activity tasks to matching).
 func (n *Node) ExecuteSideEffectDiscardTask(
 	ctx context.Context,
@@ -4026,7 +4076,7 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 	if err != nil {
 		return err
 	}
-	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskDiscardFn)
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.validateFn, rt.sideEffectTaskDiscardFn)
 }
 
 func (n *Node) lookupSideEffectTask(
@@ -4061,6 +4111,7 @@ func (n *Node) invokeSideEffectTaskFn(
 	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
+	validator validateFn,
 	taskFn func(context.Context, ComponentRef, TaskAttributes, any) error,
 ) (retErr error) {
 	taskInfo := chasmTask.Info
@@ -4099,7 +4150,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		componentInitialVT:    refComponentInitialVT(taskInfo.Path, taskInfo.ComponentInitialVersionedTransition),
 
 		// Validate the Ref only once it is accessed by the task's handler.
-		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
+		validationFn: makeValidationFn(validator, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
 	ctx = NewContextWithOperationIntent(ctx, OperationIntentProgress)
@@ -4138,7 +4189,7 @@ func (n *Node) ComponentByPath(
 // given validation callback to be called before the RegistrableTask's registered
 // validator callback. Intended for use to validate mutable state at access time.
 func makeValidationFn(
-	registrableTask *RegistrableTask,
+	validator validateFn,
 	validate func(NodeBackend, Context, Component) error,
 	attempt int,
 	taskAttributes TaskAttributes,
@@ -4154,8 +4205,13 @@ func makeValidationFn(
 		// Side effect's task validator is invoked inside the task handler,
 		// so the panic wrapper ExecuteSideEffectTask() will cover this case.
 
+		// Standby callbacks read component state without using the active task validator.
+		if validator == nil {
+			return nil
+		}
+
 		// Call the TaskValidator.
-		valid, err := registrableTask.validateFn(
+		valid, err := validator(
 			ctx,
 			component,
 			TaskInvocation{TaskAttributes: taskAttributes, Attempt: attempt},
