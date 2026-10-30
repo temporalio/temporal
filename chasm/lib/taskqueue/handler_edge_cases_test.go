@@ -220,12 +220,10 @@ func TestTaskQueueUserDataCompetingWrites(t *testing.T) {
 				request := common.CloneProto(req)
 				request.ExpectedVersion = testCase.expectedVersion
 				request.Clock.WallClock = int64(100 + index)
-				workers.Add(1)
-				go func() {
-					defer workers.Done()
+				workers.Go(func() {
 					response, err := h.UpsertTaskQueueUserData(writeCtx, request)
 					results <- writeResult{request: request, response: response, err: err}
-				}()
+				})
 			}
 			first := await.Rcv(t, gate)
 			second := await.Rcv(t, gate)
