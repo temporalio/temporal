@@ -1,6 +1,8 @@
 package interceptor
 
 import (
+	"context"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
@@ -16,6 +18,7 @@ type (
 	NamespaceIDGetter interface {
 		GetNamespaceId() string
 	}
+	namespaceCtxKey struct{}
 )
 
 // MustGetNamespaceName returns request namespace name
@@ -30,6 +33,24 @@ func MustGetNamespaceName(
 		return namespace.EmptyName
 	}
 	return namespaceName
+}
+
+// GetCachedNamespaceName returns the request namespace name, using the context
+// as a cache across interceptors. The first call resolves via GetNamespaceName
+// and caches the result; subsequent calls return the cached value, saving a
+// type-switch and namespace registry lookup per interceptor. Returns the
+// updated context so callers propagate the cache.
+func GetCachedNamespaceName(
+	ctx context.Context,
+	namespaceRegistry namespace.Registry,
+	req any,
+) (namespace.Name, context.Context) {
+	if ns, ok := ctx.Value(namespaceCtxKey{}).(namespace.Name); ok {
+		return ns, ctx
+	}
+	ns := MustGetNamespaceName(namespaceRegistry, req)
+	ctx = context.WithValue(ctx, namespaceCtxKey{}, ns)
+	return ns, ctx
 }
 
 func GetNamespaceName(
