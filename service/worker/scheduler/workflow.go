@@ -831,10 +831,11 @@ func (s *scheduler) processTimeRange(
 			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
 			// Action's nominal time was already past the catchup window when
 			// the scheduler woke up. It was never buffered for execution.
-			// action_running is not included: the action was never a candidate
-			// for execution, so whether something is running is irrelevant.
+			// action_running is "none": the action was never a candidate for
+			// execution, but Prometheus needs the label set to match buffer_expired.
 			s.metrics.WithTags(map[string]string{
-				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
+				metrics.ScheduleMissedReasonTag:  metrics.ScheduleMissedReasonNotBuffered,
+				metrics.ScheduleActionRunningTag: metrics.ScheduleActionRunningNone,
 			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
