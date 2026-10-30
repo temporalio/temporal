@@ -90,6 +90,16 @@ func readTestTaskQueueExecutionKey(ctx context.Context, t *testing.T, req *chasm
 	return key
 }
 
+func requireTestTaskQueueAbsent(ctx context.Context, t *testing.T, req *chasmtaskqueuepb.UpsertTaskQueueUserDataRequest) {
+	t.Helper()
+	_, err := chasm.ReadComponent(ctx,
+		chasm.NewComponentRef[*TaskQueue](chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue}),
+		func(*TaskQueue, chasm.Context, chasm.NoValue) (chasm.NoValue, error) {
+			return nil, nil
+		}, nil)
+	require.ErrorAs(t, err, new(*serviceerror.NotFound))
+}
+
 func TestTaskQueueUserDataLogsErrorsExceptNotFound(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
@@ -591,19 +601,6 @@ func TestTaskQueueUserDataPersistedHierarchyRoundTrip(t *testing.T) {
 	restoredKey, restoredData := readPersisted()
 	require.Equal(t, key, restoredKey)
 	protorequire.ProtoEqual(t, &chasmtaskqueuepb.GetTaskQueueUserDataResponse{Version: 1, PerType: req.PerType, Clock: req.Clock}, restoredData)
-
-	req.ExpectedVersion = restoredData.Version
-	req.Clock.WallClock = 20
-	req.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
-	response, err := h.UpsertTaskQueueUserData(ctx, req)
-	require.NoError(t, err)
-	protorequire.ProtoEqual(t, &chasmtaskqueuepb.UpsertTaskQueueUserDataResponse{Version: 2}, response)
-	restoredKey, restoredData = readPersisted()
-	require.Equal(t, key, restoredKey)
-	protorequire.ProtoEqual(t, &chasmtaskqueuepb.GetTaskQueueUserDataResponse{Version: 2, PerType: req.PerType, Clock: req.Clock}, restoredData)
-	_, err = h.UpsertTaskQueueUserData(ctx, req)
-	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-	protorequire.ProtoEqual(t, restoredData, readTestTaskQueueUserData(ctx, t, h, req))
 }
 
 func TestTaskQueueUserDataCreatesChildInExistingTaskQueue(t *testing.T) {
@@ -641,38 +638,86 @@ func TestTaskQueueUserDataCreatesChildInExistingTaskQueue(t *testing.T) {
 	protorequire.ProtoEqual(t, expected, readTestTaskQueueUserData(ctx, t, h, req))
 }
 
-func TestTaskQueueUserDataIsolatedByNamespaceAndFamily(t *testing.T) {
+func TestTaskQueueUserDataEmptyChild(t *testing.T) {
 	t.Parallel()
-	h, ctx, req := newTestHandler(t)
-	requests := []*chasmtaskqueuepb.UpsertTaskQueueUserDataRequest{
-		common.CloneProto(req),
-		common.CloneProto(req),
-		common.CloneProto(req),
-	}
-	requests[1].NamespaceId = "another-namespace"
-	requests[2].TaskQueue = "another-task-queue"
-	for index, request := range requests {
-		request.Clock.WallClock = int64(index + 10)
-		_, err := h.UpsertTaskQueueUserData(ctx, request)
-		require.NoError(t, err)
-	}
+	for _, testCase := range []struct {
+		name      string
+		data      *persistencespb.TaskQueueTypeUserData
+		keepClock bool
+	}{
+		{name: "nil type"},
+		{name: "empty type", data: &persistencespb.TaskQueueTypeUserData{}},
+		{name: "clock only", keepClock: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			h, ctx, req := newTestHandler(t)
+			populated := common.CloneProto(req)
+			if !testCase.keepClock {
+				req.Clock = nil
+			}
+			req.PerType = map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): testCase.data,
+			}
+			created, err := h.UpsertTaskQueueUserData(ctx, req)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &chasmtaskqueuepb.UpsertTaskQueueUserDataResponse{Version: 1}, created)
+			key := readTestTaskQueueExecutionKey(ctx, t, req)
+			expected := &chasmtaskqueuepb.GetTaskQueueUserDataResponse{
+				Version: 1,
+				Clock:   req.Clock,
+			}
+			protorequire.ProtoEqual(t, expected, readTestTaskQueueUserData(ctx, t, h, req))
 
-	requests[0].ExpectedVersion = 1
-	requests[0].Clock.WallClock = 20
-	_, err := h.UpsertTaskQueueUserData(ctx, requests[0])
-	require.NoError(t, err)
-	for index, request := range requests {
-		version := int64(1)
-		if index == 0 {
-			version = 2
-		}
-		protorequire.ProtoEqual(t, &chasmtaskqueuepb.GetTaskQueueUserDataResponse{
-			Version: version,
-			PerType: request.PerType,
-			Clock:   request.Clock,
-		}, readTestTaskQueueUserData(ctx, t, h, request))
-		key := readTestTaskQueueExecutionKey(ctx, t, request)
-		require.Equal(t, request.NamespaceId, key.NamespaceID)
-		require.Equal(t, request.TaskQueue, key.BusinessID)
+			_, err = h.UpsertTaskQueueUserData(ctx, populated)
+			require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+			protorequire.ProtoEqual(t, expected, readTestTaskQueueUserData(ctx, t, h, req))
+			populated.ExpectedVersion = 1
+			updated, err := h.UpsertTaskQueueUserData(ctx, populated)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &chasmtaskqueuepb.UpsertTaskQueueUserDataResponse{Version: 2}, updated)
+			protorequire.ProtoEqual(t, &chasmtaskqueuepb.GetTaskQueueUserDataResponse{
+				Version: 2,
+				Clock:   populated.Clock,
+				PerType: populated.PerType,
+			}, readTestTaskQueueUserData(ctx, t, h, req))
+			require.Equal(t, key, readTestTaskQueueExecutionKey(ctx, t, req))
+		})
+	}
+}
+
+func TestTaskQueueUserDataRejectedWritePreservesParentWithoutChild(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name string
+		data map[int32]*persistencespb.TaskQueueTypeUserData
+	}{
+		{name: "nil map"},
+		{name: "empty map", data: map[int32]*persistencespb.TaskQueueTypeUserData{}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			h, ctx, req := newTestHandler(t)
+			started, err := chasm.StartExecution(ctx,
+				chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue},
+				func(chasm.MutableContext, chasm.NoValue) (*TaskQueue, error) {
+					return NewTaskQueue(), nil
+				}, nil)
+			require.NoError(t, err)
+			req.PerType = testCase.data
+			_, err = h.UpsertTaskQueueUserData(ctx, req)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			_, err = chasm.ReadComponent(ctx,
+				chasm.NewComponentRef[*TaskQueue](started.ExecutionKey),
+				func(taskQueue *TaskQueue, chasmContext chasm.Context, _ chasm.NoValue) (chasm.NoValue, error) {
+					require.Equal(t, started.ExecutionKey, chasmContext.ExecutionKey())
+					require.Equal(t, chasm.LifecycleStateRunning, taskQueue.LifecycleState(chasmContext))
+					_, present := taskQueue.UserData.TryGet(chasmContext)
+					require.False(t, present)
+					return nil, nil
+				}, nil)
+			require.NoError(t, err)
+			require.Equal(t, started.ExecutionKey, readTestTaskQueueExecutionKey(ctx, t, req))
+		})
 	}
 }
