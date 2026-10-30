@@ -173,8 +173,10 @@ func Invoke(
 				return nil, err
 			}
 			if len(reappliedEvents) == 0 {
+				// A skipped CHASM event can still leave the tree dirty through mutable access.
+				// Close the transaction before releasing the workflow in that case.
 				return &api.UpdateWorkflowAction{
-					Noop:               true,
+					Noop:               !mutableState.IsDirty(),
 					CreateWorkflowTask: false,
 				}, nil
 			}
