@@ -475,3 +475,73 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	}
 	s.Len(executions, 2, "there should be exactly 2 unique executions")
 }
+
+func TestVisibilityQueryFieldFilters(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		field string
+		index int
+	}{
+		{WorkflowType, 0},
+		{WorkflowID, 1},
+		{RunID, 2},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			storage := connector.NewMockClient(controller)
+			arch := newVisibilityArchiver(log.NewNoopLogger(), metrics.NoopMetricsHandler, storage)
+			uri, err := archiver.NewURI("gs://bucket/archive_with_underscores")
+			require.NoError(t, err)
+			closeTime := time.Date(2020, 2, 5, 12, 0, 0, 0, time.UTC)
+			var filenames []string
+			var expected *workflowpb.WorkflowExecutionInfo
+			for i := range 3 {
+				fields := []string{"workflow-type", "workflow-id", "run-id"}
+				fields[i] = "target"
+				record := &archiverspb.VisibilityRecord{
+					NamespaceId:      "namespace_with_underscores",
+					WorkflowTypeName: fields[0],
+					WorkflowId:       fields[1],
+					RunId:            fields[2],
+					CloseTime:        timestamp.TimePtr(closeTime),
+				}
+				filename := constructVisibilityFilename(record.NamespaceId, record.WorkflowTypeName, record.WorkflowId, record.RunId, indexKeyCloseTimeout, closeTime)
+				filenames = append(filenames, "archive_with_underscores/"+filename)
+				encoded, err := encode(record)
+				require.NoError(t, err)
+				storage.EXPECT().Get(gomock.Any(), uri, filename).Return(encoded, nil).MaxTimes(1)
+				if i == tc.index {
+					expected, err = convertToExecutionInfo(record, searchattribute.TestNameTypeMap())
+					require.NoError(t, err)
+				}
+			}
+			storage.EXPECT().Exist(gomock.Any(), uri, "").Return(true, nil)
+			storage.EXPECT().QueryWithFilters(gomock.Any(), uri, gomock.Any(), 10, 0, gomock.Any()).DoAndReturn(
+				func(_ context.Context, _ archiver.URI, _ string, _ int, _ int, filters []connector.Precondition) ([]string, bool, int, error) {
+					var matches []string
+					for _, filename := range filenames {
+						matched := true
+						for _, filter := range filters {
+							if !filter(filename) {
+								matched = false
+								break
+							}
+						}
+						if matched {
+							matches = append(matches, filename)
+						}
+					}
+					return matches, true, len(matches), nil
+				})
+			response, err := arch.Query(t.Context(), uri, &archiver.QueryVisibilityRequest{
+				NamespaceID: "namespace_with_underscores",
+				PageSize:    10,
+				Query:       tc.field + " = 'target' AND CloseTime = '2020-02-05T12:00:00Z' AND SearchPrecision = 'Day'",
+			}, searchattribute.TestNameTypeMap())
+			require.NoError(t, err)
+			require.Len(t, response.Executions, 1)
+			protorequire.ProtoEqual(t, expected, response.Executions[0])
+		})
+	}
+}
