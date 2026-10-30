@@ -58,9 +58,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: "go.mod"
+      - uses: ./.github/actions/prepare-go
 
       - name: Run unit test
         timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
@@ -146,10 +144,8 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: ./.github/actions/prepare-go
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
-        with:
-          go-version-file: "go.mod"
 
       - name: Run functional test
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}

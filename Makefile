@@ -31,9 +31,10 @@ proto: lint-protos lint-api protoc proto-codegen
 .PHONY: proto protoc install bins ci-build-misc clean
 
 ##### Arguments ######
-GOOS        ?= $(shell go env GOOS)
-GOARCH      ?= $(shell go env GOARCH)
-GOPATH      ?= $(shell go env GOPATH)
+GO = mise exec go -- go
+GOOS        ?= $(shell $(GO) env GOOS)
+GOARCH      ?= $(shell $(GO) env GOARCH)
+GOPATH      ?= $(shell $(GO) env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
@@ -82,8 +83,9 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
 STAMPDIR := .stamp
-export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
-GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
+export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(ROOT)/$(LOCALBIN):$(PATH)
+export GOROOT := $(shell $(GO) env GOROOT)
+GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) $(GO) install
 
 OTEL ?= false
 ifeq ($(OTEL),true)
@@ -167,7 +169,7 @@ endef
 
 ##### Tools #####
 print-go-version:
-	@go version
+	@$(GO) version
 
 clean-tools:
 	@printf $(COLOR) "Delete tools..."
@@ -210,7 +212,7 @@ BUF := $(LOCALBIN)/buf-$(BUF_VER)
 $(BUF): | $(LOCALBIN)
 	$(call go-install-tool,$(BUF),github.com/bufbuild/buf/cmd/buf,$(BUF_VER))
 
-GO_API_VER = $(shell go list -m -f '{{.Version}}' go.temporal.io/api \
+GO_API_VER = $(shell $(GO) list -m -f '{{.Version}}' go.temporal.io/api \
 	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
 $(PROTOGEN): | $(LOCALBIN)
@@ -291,7 +293,7 @@ $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 $(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
 
 $(LOCALBIN)/protoc-gen-go-chasm: $(LOCALBIN) cmd/tools/protoc-gen-go-chasm/main.go go.mod go.sum
-	@go build -o $@ ./cmd/tools/protoc-gen-go-chasm
+	@$(GO) build -o $@ ./cmd/tools/protoc-gen-go-chasm
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
@@ -304,7 +306,7 @@ set -e; \
 package=$(2)@$(3) ;\
 printf $(COLOR) "Downloading $${package}" ;\
 tmpdir=$$(mktemp -d) ;\
-GOBIN=$${tmpdir} go install $${package} ;\
+GOBIN=$${tmpdir} $(GO) install $${package} ;\
 mv $${tmpdir}/$$(basename "$$(echo "$(1)" | sed "s/-$(3)$$//")") $(1) ;\
 rm -rf $${tmpdir} ;\
 }
@@ -313,7 +315,7 @@ endef
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@./cmd/tools/getproto/run.sh --out $@
+	@mise exec go -- ./cmd/tools/getproto/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
@@ -324,7 +326,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@$(PROTOC) --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
-	@go run ./cmd/tools/protogen \
+	@$(GO) run ./cmd/tools/protogen \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
 		-proto-root=$(PROTO_ROOT) \
@@ -341,17 +343,17 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB
 
 proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate -run genrpcwrappers ./client/...
+	@$(GO) generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
-	@go generate ./common/rpc/interceptor/logtags/...
+	@$(GO) generate ./common/rpc/interceptor/logtags/...
 	@printf $(COLOR) "Generate routing key extractor..."
-	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
+	@$(GO) generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
-	@go generate -run gensearchattributehelpers ./common/searchattribute/...
+	@$(GO) generate -run gensearchattributehelpers ./common/searchattribute/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
-	@go get -u go.temporal.io/api@master
+	@$(GO) get -u go.temporal.io/api@master
 
 ##### Binaries #####
 clean-bins:
@@ -366,31 +368,31 @@ clean-bins:
 
 temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o temporal-server ./cmd/server
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o temporal-server ./cmd/server
 
 tdbg: $(ALL_SRC)
 	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o tdbg ./cmd/tools/tdbg
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o tdbg ./cmd/tools/tdbg
 
 fairsim: $(ALL_SRC)
 	@printf $(COLOR) "Build fairsim with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o fairsim ./cmd/tools/fairsim
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o fairsim ./cmd/tools/fairsim
 
 temporal-cassandra-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o temporal-cassandra-tool ./cmd/tools/cassandra
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o temporal-cassandra-tool ./cmd/tools/cassandra
 
 temporal-sql-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o temporal-sql-tool ./cmd/tools/sql
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o temporal-sql-tool ./cmd/tools/sql
 
 temporal-elasticsearch-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-elasticsearch-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o temporal-elasticsearch-tool ./cmd/tools/elasticsearch
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG) -o temporal-elasticsearch-tool ./cmd/tools/elasticsearch
 
 temporal-server-debug: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server-debug with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
 
 ##### Checks #####
 goimports: fmt-imports $(GOIMPORTS)
@@ -435,7 +437,7 @@ define lint-go
 		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
 		--config=.github/.golangci.yml \
 		$(2)
-	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
+	@$(GO) vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
 endef
 
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
@@ -488,7 +490,7 @@ GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
 	@n=0; while [ $$n -lt $(GOFIX_MAX_ITERATIONS) ]; do \
-		output=$$(go fix $(GOFIX_FLAGS) ./... 2>&1); \
+		output=$$($(GO) fix $(GOFIX_FLAGS) ./... 2>&1); \
 		echo "$$output"; \
 		if ! echo "$$output" | grep -q "files updated"; then break; fi; \
 		n=$$((n + 1)); \
@@ -502,7 +504,7 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 
 parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
-	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+	@$(GO) run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
 
 fmt-protos: $(BUF)
 	@printf $(COLOR) "Formatting proto files..."
@@ -539,7 +541,7 @@ EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
-server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
+server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) $(GO) list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
 
 # $(call expect-deps,<tags>,<packages>): fails unless the server built with <tags> depends on all <packages>.
 expect-deps = $(if $(filter-out $(call server-deps,$(1)),$(2)),\
@@ -562,7 +564,7 @@ endef
 # compiles out of the server.
 build-tags-check:
 	@printf $(COLOR) "Check build tags..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
 	$(foreach tag,$(sort $(shell git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go')),$(call check-build-tag,$(tag)))
 
 check: lint shell-check
@@ -571,39 +573,39 @@ check: lint shell-check
 clean-test-output:
 	@printf $(COLOR) "Delete test output..."
 	@rm -rf $(TEST_OUTPUT_ROOT)
-	@go clean -testcache
+	@$(GO) clean -testcache
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
 integration-test: clean-test-output
 	@printf $(COLOR) "Run integration tests..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
 functional-test: clean-test-output
 	@printf $(COLOR) "Run functional tests..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
-	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) $(GO) test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
 	@$(MAKE) verify-test-log
 
 LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
@@ -618,7 +620,7 @@ leak-test:
 		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
 		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
 		LEAK_GC_SETTLE_TIMEOUT=$(LEAK_GC_SETTLE_TIMEOUT) \
-		go test -run TestClusterShutdownLeak -count=1 -v \
+		$(GO) test -run TestClusterShutdownLeak -count=1 -v \
 			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \
 			./tests/leakcheck/ -args -persistenceType=sql -persistenceDriver=sqlite
 
@@ -637,7 +639,7 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	$(GO) run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 # Runs the unit tests of MINIMAL_VARIANT_UNIT_TEST_DIRS with temporal_minimal.
@@ -647,39 +649,39 @@ unit-test-build-tags:
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	$(GO) run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # MUST use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -cover -o /dev/null $(COMPILED_TEST_ARGS) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT)
+	$(GO) test -c -cover -o /dev/null $(COMPILED_TEST_ARGS) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	$(GO) run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	$(GO) run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	$(GO) run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 report-test-crash: $(TEST_OUTPUT_ROOT)
 	@printf $(COLOR) "Generate test crash junit report..."
-	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
+	@$(GO) run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
 generate-test-summary: $(TEST_OUTPUT_ROOT)
-	@go run ./cmd/tools/test-runner generate-summary \
+	@$(GO) run ./cmd/tools/test-runner generate-summary \
 		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
 		--summary-output-dir=$(TEST_OUTPUT_ROOT)
 
@@ -835,12 +837,12 @@ update-dashboards:
 ##### Auxiliary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
-	@go mod tidy
+	@$(GO) mod tidy
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies (minor versions only) ..."
-	@go get -u -t $(PINNED_DEPENDENCIES) ./...
-	@go mod tidy
+	@$(GO) get -u -t $(PINNED_DEPENDENCIES) ./...
+	@$(GO) mod tidy
 
 update-dependencies-major: $(GOMAJOR)
 	@printf $(COLOR) "Major version upgrades available:"
@@ -848,11 +850,11 @@ update-dependencies-major: $(GOMAJOR)
 	@echo ""
 	@printf $(COLOR) "Update dependencies (major versions only) ..."
 	@$(GOMAJOR) get -major all
-	@go mod tidy
+	@$(GO) mod tidy
 
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
-	@PATH="$(ROOT)/$(LOCALBIN):$(PATH)" go generate ./...
+	@PATH="$(ROOT)/$(LOCALBIN):$(PATH)" $(GO) generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
