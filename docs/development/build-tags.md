@@ -24,16 +24,17 @@ make temporal-server BUILD_TAG=temporal_minimal
 # Without optional integrations, except Google Cloud Storage archival.
 make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
 
-# Unit tests of the packages that temporal_minimal changes.
+# Unit tests of the packages with a temporal_minimal variant.
 make unit-test-build-tags
 ```
 
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included.
 
-| Tag                      | Integration                   | Dependencies it brings in |
-| ------------------------ | ----------------------------- | ------------------------- |
-| `temporal_with_gstorage` | Google Cloud Storage archival | Google Cloud Storage SDK  |
+| Tag                           | Integration                   | Dependencies it brings in |
+| ----------------------------- | ----------------------------- | ------------------------- |
+| `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
+| `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 

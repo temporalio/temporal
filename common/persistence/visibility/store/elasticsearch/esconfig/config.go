@@ -1,4 +1,6 @@
-package client
+// Package esconfig holds the Elasticsearch visibility configuration. It doesn't depend on the
+// Elasticsearch client, so configuration code can use it when Elasticsearch is compiled out.
+package esconfig
 
 import (
 	"errors"
@@ -8,9 +10,12 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 const (
+	PersistenceName = "elasticsearch"
+
 	// VisibilityAppName is used to find ES indexName for visibility
 	VisibilityAppName          = "visibility"
 	SecondaryVisibilityAppName = "secondary_visibility"
@@ -63,6 +68,18 @@ type (
 		// Token only required for temporary security credentials retrieved via STS. Otherwise, this is optional.
 		Token string `yaml:"token"`
 	}
+
+	// ProcessorConfig contains all configs for processor
+	ProcessorConfig struct {
+		IndexerConcurrency dynamicconfig.IntPropertyFn
+		// TODO: remove ESProcessor prefix
+		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
+		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
+		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
+		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
+
+		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn
+	}
 )
 
 // GetVisibilityIndex return visibility index name from Elasticsearch config or empty string if it is not defined.
@@ -81,11 +98,11 @@ func (cfg *Config) GetSecondaryVisibilityIndex() string {
 	return cfg.Indices[SecondaryVisibilityAppName]
 }
 
-func (cfg *Config) SetHttpClient(httpClient *http.Client) {
+func (cfg *Config) SetHttpClient(httpClient *http.Client) { //nolint:staticcheck // should be SetHTTPClient
 	cfg.httpClient = httpClient
 }
 
-func (cfg *Config) GetHttpClient() *http.Client {
+func (cfg *Config) GetHttpClient() *http.Client { //nolint:staticcheck // should be GetHTTPClient
 	if cfg == nil {
 		return nil
 	}
