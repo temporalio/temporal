@@ -10,6 +10,7 @@ go_api_version = "{{ read_file(path='go.mod') | split(pat='go.temporal.io/api ')
 
 [tools]
 protoc = "23.4"
+shellcheck = "0.11.0"
 
 # Built from source: the generated code is formatted with the Go version the plugin was built with.
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
@@ -33,4 +34,3 @@ protoc = "23.4"
 "go:go.uber.org/mock/mockgen" = "0.6.0"
 "go:golang.org/x/tools/cmd/stringer" = "0.49.0"
 "go:go.temporal.io/api/cmd/protoc-gen-go-helpers" = "{{ vars.go_api_version }}"
-shellcheck = "0.11.0"
