@@ -72,6 +72,8 @@ var testQueueOptions = Options{
 	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 	ShrinkPredicateMaxPendingKeys:       dynamicconfig.GetIntPropertyFn(10),
+	RangeCompleteBatchSize:              dynamicconfig.GetIntPropertyFn(100),
+	RangeCompleteTimeout:                dynamicconfig.GetDurationPropertyFn(10 * time.Second),
 }
 
 func TestQueueBaseSuite(t *testing.T) {
@@ -803,4 +805,61 @@ func (s *queueBaseSuite) newQueueBase(
 		s.logger,
 		s.metricsHandler,
 	)
+}
+
+func (s *queueBaseSuite) TestRangeCompleteTasks_OptionsAndTimeout() {
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+		},
+		s.config,
+	)
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+	base.options.RangeCompleteBatchSize = dynamicconfig.GetIntPropertyFn(1234)
+	base.options.RangeCompleteTimeout = dynamicconfig.GetDurationPropertyFn(12 * time.Second)
+
+	var capturedCtx context.Context
+	var capturedReq *persistence.RangeCompleteHistoryTasksRequest
+
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *persistence.RangeCompleteHistoryTasksRequest) error {
+			capturedCtx = ctx
+			capturedReq = req
+			return nil
+		},
+	).Times(1)
+
+	minKey := tasks.NewKey(time.Now(), 1)
+	maxKey := tasks.NewKey(time.Now().Add(time.Hour), 10)
+	err := base.rangeCompleteTasks(minKey, maxKey)
+	s.NoError(err)
+
+	s.NotNil(capturedReq)
+	s.Equal(1234, capturedReq.BatchSize)
+
+	deadline, hasDeadline := capturedCtx.Deadline()
+	s.True(hasDeadline)
+	expectedTimeout := 12 * time.Second * debug.TimeoutMultiplier
+	s.WithinDuration(time.Now().Add(expectedTimeout), deadline, 2*time.Second)
+
+	// Test fallback for non-positive timeout
+	base.options.RangeCompleteTimeout = dynamicconfig.GetDurationPropertyFn(0)
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *persistence.RangeCompleteHistoryTasksRequest) error {
+			capturedCtx = ctx
+			capturedReq = req
+			return nil
+		},
+	).Times(1)
+
+	err = base.rangeCompleteTasks(minKey, maxKey)
+	s.NoError(err)
+
+	deadline, hasDeadline = capturedCtx.Deadline()
+	s.True(hasDeadline)
+	fallbackTimeout := 5 * time.Second * debug.TimeoutMultiplier
+	s.WithinDuration(time.Now().Add(fallbackTimeout), deadline, 2*time.Second)
 }
