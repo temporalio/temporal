@@ -30,6 +30,8 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 	require.NoError(t, err)
 	monitor.EXPECT().GetResolver(primitives.FrontendService).Return(resolver, nil)
 	resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{membership.NewHostInfoFromAddress(addr.String())})
+	frontendMembershipAddress, cleanup := membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+	t.Cleanup(cleanup)
 
 	fact := rpc.NewFactory(
 		nil,
@@ -37,8 +39,8 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		nil, // No logger
 		nil, // No metrics handler
 		nil,
-		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
-		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
+		frontendMembershipAddress,
+		frontendMembershipAddress,
 		int(port),
 		nil, // No TLS
 		nil,
@@ -64,6 +66,8 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 	}))
 	defer srv.Close()
 	addr := srv.Listener.Addr()
+	frontendMembershipAddress, cleanup := membership.GRPCResolverURLForTesting(nil, primitives.FrontendService)
+	t.Cleanup(cleanup)
 
 	fact := rpc.NewFactory(
 		nil, // unused
@@ -71,7 +75,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		nil, // No logger
 		nil, // No metrics handler
 		nil,
-		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
+		frontendMembershipAddress,
 		addr.String(),
 		0,   // Port is unused
 		nil, // No TLS
@@ -99,6 +103,8 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 	defer srv.Close()
 	addr := srv.Listener.Addr()
 	tlsConfig := srv.Client().Transport.(*http.Transport).TLSClientConfig
+	frontendMembershipAddress, cleanup := membership.GRPCResolverURLForTesting(nil, primitives.FrontendService)
+	t.Cleanup(cleanup)
 
 	fact := rpc.NewFactory(
 		nil, // unused
@@ -106,7 +112,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		nil, // No logger
 		nil, // No metrics handler
 		nil,
-		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
+		frontendMembershipAddress,
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
