@@ -2601,12 +2601,6 @@ the outbound standby task failed to be processed due to missing events.`,
 close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 data (eg: search attributes) will be lost after workflow is closed.`,
 	)
-	VisibilityProcessorWriteCreateTime = NewNamespaceBoolSetting(
-		"history.visibilityProcessorWriteCreateTime",
-		true,
-		`VisibilityProcessorWriteCreateTime writes CreateTime, the execution's StartTime minus any skipped time
-it inherited, to visibility records.`,
-	)
 	VisibilityProcessorRelocateAttributesMinBlobSize = NewNamespaceIntSetting(
 		"history.visibilityProcessorRelocateAttributesMinBlobSize",
 		0,

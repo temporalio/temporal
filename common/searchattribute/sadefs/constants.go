@@ -36,10 +36,9 @@ const (
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
 	// These fields are not in Elasticsearch mappings definition and therefore are not indexed.
-	MemoEncoding       = "MemoEncoding"
-	Memo               = "Memo"
-	VisibilityTaskKey  = "VisibilityTaskKey"
-	TemporalCreateTime = "TemporalCreateTime" // StartTime minus any skipped time the execution inherited.
+	MemoEncoding      = "MemoEncoding"
+	Memo              = "Memo"
+	VisibilityTaskKey = "VisibilityTaskKey"
 
 	// Added to workflows started by a schedule.
 	TemporalScheduledStartTime = "TemporalScheduledStartTime"

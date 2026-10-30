@@ -77,7 +77,6 @@ type (
 		visibilityQueueTaskExecutor queues.Executor
 
 		enableCloseWorkflowCleanup bool
-		writeCreateTime            bool
 	}
 )
 
@@ -180,7 +179,6 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.mockShard.SetEngineForTesting(h)
 
 	s.enableCloseWorkflowCleanup = false
-	s.writeCreateTime = true
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,
 		s.workflowCache,
@@ -191,7 +189,6 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
 		config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		config.ExternalPayloadsEnabled,
-		func(_ string) bool { return s.writeCreateTime },
 	)
 }
 
@@ -710,26 +707,6 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessExecution_InheritedTimeSki
 			},
 		)
 		s.NoError(s.execute(&tasks.CloseExecutionVisibilityTask{
-			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-			Version:     s.version,
-			TaskID:      59,
-		}))
-	})
-
-	s.Run("Disabled", func() {
-		s.writeCreateTime = false
-		defer func() { s.writeCreateTime = true }()
-		execution, mutableState := newSkippedMutableState()
-		wt := addWorkflowTaskScheduledEvent(mutableState)
-		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)}, nil)
-		s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, request *manager.RecordWorkflowExecutionStartedRequest) error {
-				s.True(request.CreateTime.IsZero())
-				return nil
-			},
-		)
-		s.NoError(s.execute(&tasks.StartExecutionVisibilityTask{
 			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 			Version:     s.version,
 			TaskID:      59,

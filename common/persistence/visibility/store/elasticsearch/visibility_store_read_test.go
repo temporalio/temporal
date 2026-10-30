@@ -633,7 +633,6 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
               "VisibilityTaskKey": "7-619",
               "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
               "StartTime": "2021-06-11T15:04:07.980-07:00",
-              "TemporalCreateTime": "2021-06-11T13:04:07.980-07:00",
               "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
               "WorkflowType": "TestWorkflowExecute"}`,
 			want: &store.InternalExecutionInfo{
