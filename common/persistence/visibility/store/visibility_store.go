@@ -9,6 +9,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -33,12 +35,25 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*InternalCountExecutionsResponse, error)
-		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 
-		// Admin APIs
+		ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
+		CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
+	}
+
+	AdminVisibilityStore interface {
+		VisibilityStore
+
+		AdminListExecutions(
+			ctx context.Context,
+			request *adminservice.ListExecutionsRequest,
+		) (*InternalListExecutionsResponse, error)
+
+		AdminCountExecutions(
+			ctx context.Context,
+			request *adminservice.CountExecutionsRequest,
+		) (*InternalCountExecutionsResponse, error)
 
 		// AddSearchAttributes makes schema changes to add the search attributes. This function must be
 		// idempotent, ie., if a search attribute already exists, this function must be no-op, and must
@@ -48,6 +63,7 @@ type (
 
 	// InternalExecutionInfo is internal visibility info for workflow execution
 	InternalExecutionInfo struct {
+		NamespaceID          string
 		WorkflowID           string
 		RunID                string
 		TypeName             string

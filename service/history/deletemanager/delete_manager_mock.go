@@ -44,18 +44,18 @@ func (m *MockDeleteManager) EXPECT() *MockDeleteManagerMockRecorder {
 	return m.recorder
 }
 
-// AddDeleteWorkflowExecutionTask mocks base method.
-func (m *MockDeleteManager) AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we *common.WorkflowExecution, ms interfaces.MutableState) error {
+// AddDeleteExecutionTask mocks base method.
+func (m *MockDeleteManager) AddDeleteExecutionTask(ctx context.Context, nsID namespace.ID, we *common.WorkflowExecution, ms interfaces.MutableState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDeleteWorkflowExecutionTask", ctx, nsID, we, ms)
+	ret := m.ctrl.Call(m, "AddDeleteExecutionTask", ctx, nsID, we, ms)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddDeleteWorkflowExecutionTask indicates an expected call of AddDeleteWorkflowExecutionTask.
-func (mr *MockDeleteManagerMockRecorder) AddDeleteWorkflowExecutionTask(ctx, nsID, we, ms any) *gomock.Call {
+// AddDeleteExecutionTask indicates an expected call of AddDeleteExecutionTask.
+func (mr *MockDeleteManagerMockRecorder) AddDeleteExecutionTask(ctx, nsID, we, ms any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDeleteWorkflowExecutionTask", reflect.TypeOf((*MockDeleteManager)(nil).AddDeleteWorkflowExecutionTask), ctx, nsID, we, ms)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDeleteExecutionTask", reflect.TypeOf((*MockDeleteManager)(nil).AddDeleteExecutionTask), ctx, nsID, we, ms)
 }
 
 // DeleteWorkflowExecution mocks base method.

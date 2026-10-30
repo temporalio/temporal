@@ -46,6 +46,14 @@ var (
 	NoopTracer         = NoopTracerProvider.Tracer("")
 )
 
+func isEnabled(tp trace.TracerProvider) bool {
+	if tp == nil {
+		return false
+	}
+	_, isNoop := tp.(otelnoop.TracerProvider)
+	return !isNoop
+}
+
 type (
 	metadata struct {
 		Name   string
@@ -55,7 +63,7 @@ type (
 	connection struct {
 		Kind     string
 		Metadata metadata
-		Spec     interface{} `yaml:"-"`
+		Spec     any `yaml:"-"`
 	}
 
 	grpcconn struct {
@@ -86,7 +94,7 @@ type (
 			Protocol string
 		}
 		Metadata metadata
-		Spec     interface{} `yaml:"-"`
+		Spec     any `yaml:"-"`
 	}
 
 	otlpGrpcExporter struct {

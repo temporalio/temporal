@@ -6,6 +6,8 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,8 +46,13 @@ type (
 
 		ShardManager      p.ShardManager
 		ExecutionManager  p.ExecutionManager
-		historyBranchUtil p.HistoryBranchUtil
+		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
+
+		// MutableStateTableCounts reports per-table surviving row counts for a run's
+		// mutable-state sub-collections. Wired from the raw DB by SQL entrypoints;
+		// nil on Cassandra, where these live as columns on the executions row.
+		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -57,7 +64,6 @@ func NewExecutionMutableStateSuite(
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
 	serializer serialization.Serializer,
-	historyBranchUtil p.HistoryBranchUtil,
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
@@ -75,7 +81,7 @@ func NewExecutionMutableStateSuite(
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
-		historyBranchUtil: historyBranchUtil,
+		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 		Logger:            logger,
 	}
 }
@@ -132,7 +138,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew() {
 func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CHASM() {
 	// CHASM snapshot has no events and empty current version history.
 	archetypeID := rand.Uint32()
-	newSnapshot := s.CreateCHASMSnapshot(
+	newSnapshot := s.CreateCHASMExecution(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -151,10 +157,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		rand.Int63(),
 	)
-
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -182,8 +184,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into newSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
 }
@@ -198,7 +201,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -235,7 +238,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CHASM() {
 	// CHASM snapshot has no events and empty current version history.
 	prevLastWriteVersion := rand.Int63()
 	archetypeID := rand.Uint32()
-	prevSnapshot := s.CreateCHASMSnapshot(
+	prevSnapshot := s.CreateCHASMExecution(
 		prevLastWriteVersion,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -285,10 +288,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		rand.Int63(),
 	)
 
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
-
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -315,8 +314,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into prevSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, prevSnapshot)
 	s.AssertHEEqualWithDB(branchToken, prevEvents)
 }
@@ -331,7 +331,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -389,6 +389,83 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
+func (s *ExecutionMutableStateSuite) TestCreateBrandNewDuplicateRunIDOtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, _ := s.createRunThenNewCurrentRun()
+
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		NewWorkflowSnapshot: *dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
+	s.assertCurrentRunID(secondRunID)
+}
+
+func (s *ExecutionMutableStateSuite) TestCreateUpdateCurrentDuplicateRunIDOtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
+
+	secondLastWriteVersion := rand.Int63()
+	secondMutation, secondEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		secondSnapshot.NextEventID,
+		secondLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		secondSnapshot.DBRecordVersion+1,
+		secondBranchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondEvents,
+	})
+	s.NoError(err)
+
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err = s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            secondRunID,
+		PreviousLastWriteVersion: secondLastWriteVersion,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		NewWorkflowSnapshot: *dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot, secondMutation)
+	s.assertCurrentRunID(secondRunID)
+}
+
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_BrandNew() {
 	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
 		rand.Int63(),
@@ -411,7 +488,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -454,7 +531,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -528,7 +605,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
 	archetypeID := rand.Uint32()
-	newSnapshot := s.CreateCHASMSnapshot(
+	newSnapshot := s.CreateCHASMExecution(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -577,7 +654,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	// Mutation for a different run of the same workflowID
 	// not related to the workflow created above
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	currentMutation, currentEvents := RandomMutation(
 		s.T(),
 		s.NamespaceID,
@@ -673,7 +750,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -707,6 +784,121 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
 }
 
+// newDuplicateRunSnapshot returns a newly started run's snapshot whose run ID is s.RunID.
+func (s *ExecutionMutableStateSuite) newDuplicateRunSnapshot() (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
+	snapshot, events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		1,
+		branchToken,
+	)
+	snapshot.Condition = common.FirstEventID
+	return snapshot, events
+}
+
+// createRunThenNewCurrentRun creates a run with ID s.RunID, then closes it and creates a second, running run
+// that becomes current.
+func (s *ExecutionMutableStateSuite) createRunThenNewCurrentRun() (
+	*p.WorkflowSnapshot,
+	*p.WorkflowMutation,
+	string,
+	*p.WorkflowSnapshot,
+	[]byte,
+) {
+	branchToken, firstSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	firstMutation, firstEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		firstSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	secondRunID := uuid.New().String()
+	secondBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, secondRunID, s.HistoryBranchUtil)
+	secondSnapshot, secondEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		secondBranchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *firstMutation,
+		UpdateWorkflowEvents:   firstEvents,
+
+		NewWorkflowSnapshot: secondSnapshot,
+		NewWorkflowEvents:   secondEvents,
+	})
+	s.NoError(err)
+	return firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdateNotZombieWithNewDuplicateRunID() {
+	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
+
+	// Close the current (second) run and create a new run reusing the first, non-current run's ID.
+	secondMutation, secondUpdateEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		secondRunID,
+		secondSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		secondSnapshot.DBRecordVersion+1,
+		secondBranchToken,
+	)
+	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		CheckRunAlreadyExists: true,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondUpdateEvents,
+
+		NewWorkflowSnapshot: dupSnapshot,
+		NewWorkflowEvents:   dupEvents,
+	})
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
+}
+
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	s.CreateWorkflow(
 		rand.Int63(),
@@ -716,7 +908,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	)
 
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -823,7 +1015,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	)
 
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -890,7 +1082,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		rand.Int63(),
 	)
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -931,7 +1123,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		zombieBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newZombieSnapshot, newEvents3 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1016,7 +1208,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 
 	// make current workflow to a different run
 	currentRunID := uuid.New().String()
-	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
+	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.HistoryBranchUtil)
 	currentSnapshot, currentEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1088,7 +1280,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1173,7 +1365,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1214,7 +1406,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		baseBranchToken,
 	)
 	currentRunID := uuid.New().String()
-	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
+	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.HistoryBranchUtil)
 	currentMutation, currentEvents := RandomMutation(
 		s.T(),
 		s.NamespaceID,
@@ -1259,7 +1451,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1343,7 +1535,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1427,7 +1619,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1468,7 +1660,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		baseBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1521,7 +1713,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew_CHASM() {
 	archetypeID := rand.Uint32()
-	currentSnapshot := s.CreateCHASMSnapshot(
+	currentSnapshot := s.CreateCHASMExecution(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1674,7 +1866,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1799,7 +1991,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		branchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1844,7 +2036,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1956,7 +2148,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2026,7 +2218,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2067,7 +2259,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		baseBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2105,7 +2297,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 }
 
 func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	setSnapshot, _ := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2201,7 +2393,7 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 
 func (s *ExecutionMutableStateSuite) TestSet_CHASM() {
 	archetypeID := rand.Uint32()
-	snapshot := s.CreateCHASMSnapshot(
+	snapshot := s.CreateCHASMExecution(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -2265,7 +2457,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2317,7 +2509,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2371,13 +2563,252 @@ func (s *ExecutionMutableStateSuite) TestDelete_NotExists() {
 	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
 }
 
+func (s *ExecutionMutableStateSuite) TestListConcreteExecutions() {
+	if !strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("ListConcreteExecutions is only implemented by cassandra persistence")
+	}
+
+	_, workflowSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	// Do NOT use CreateCHASMExecution() here, which uses the same runID as CreateWorkflow().
+	chasmSnapshot, events := RandomSnapshot(
+		s.T(),
+		uuid.New().String(),
+		uuid.New().String(),
+		uuid.New().String(),
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		ArchetypeID: rand.Uint32(),
+
+		NewWorkflowSnapshot: *chasmSnapshot,
+		NewWorkflowEvents:   events,
+	})
+	s.NoError(err)
+
+	var mutableStates []*persistencespb.WorkflowMutableState
+	request := &p.ListConcreteExecutionsRequest{
+		ShardID:  s.ShardID,
+		PageSize: 1,
+	}
+	for {
+		resp, err := s.ExecutionManager.ListConcreteExecutions(s.Ctx, request)
+		s.NoError(err)
+
+		mutableStates = append(mutableStates, resp.States...)
+		if len(resp.PageToken) == 0 {
+			break
+		}
+
+		request.PageToken = resp.PageToken
+	}
+
+	s.Len(mutableStates, 2)
+
+	// Move mutable state for the chasm execution to index 1
+	if mutableStates[0].ExecutionState.RunId != s.RunID {
+		mutableStates[0], mutableStates[1] = mutableStates[1], mutableStates[0]
+	}
+
+	// ListConcreteExecutions only populates those three fields today.
+	expectedWorkflowMutableState, _ := s.Accumulate(workflowSnapshot)
+	s.ProtoEqual(&persistencespb.WorkflowMutableState{
+		ExecutionInfo:  expectedWorkflowMutableState.ExecutionInfo,
+		ExecutionState: expectedWorkflowMutableState.ExecutionState,
+		NextEventId:    expectedWorkflowMutableState.NextEventId,
+	}, mutableStates[0])
+	expectedCHASMMutableState, _ := s.Accumulate(chasmSnapshot)
+	s.ProtoEqual(&persistencespb.WorkflowMutableState{
+		ExecutionInfo:  expectedCHASMMutableState.ExecutionInfo,
+		ExecutionState: expectedCHASMMutableState.ExecutionState,
+		NextEventId:    expectedCHASMMutableState.NextEventId,
+	}, mutableStates[1])
+}
+
+func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
+	// Create workflow execution.
+	workflowBranchToken, workflowSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	// Create CHASM execution with same ID.
+	// Do NOT use CreateCHASMExecution() here, which uses the runID as CreateWorkflow().
+	chasmRunID := uuid.New().String()
+	chasmArchetypeID := rand.Uint32()
+	chasmSnapshot, events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		chasmRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		ArchetypeID: chasmArchetypeID,
+
+		NewWorkflowSnapshot: *chasmSnapshot,
+		NewWorkflowEvents:   events,
+	})
+	s.NoError(err)
+
+	// Update Workflow execution.
+	workflowMutation, workflowEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		workflowSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		workflowSnapshot.DBRecordVersion+1,
+		workflowBranchToken,
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *workflowMutation,
+		UpdateWorkflowEvents:   workflowEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	// Update CHASM execution.
+	chasmMutation, chasmEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		chasmRunID,
+		chasmSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		chasmSnapshot.DBRecordVersion+1,
+		nil, // No branch token for CHASM
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasmArchetypeID,
+
+		UpdateWorkflowMutation: *chasmMutation,
+		UpdateWorkflowEvents:   chasmEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	// Validate current execution for both archetypes.
+	resp, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(s.RunID, resp.RunID)
+	resp, err = s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasmArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(chasmRunID, resp.RunID)
+
+	// Validate concrete execution for both archetypes.
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, workflowSnapshot, workflowMutation)
+	s.AssertMSEqualWithDB(chasmArchetypeID, chasmSnapshot, chasmMutation)
+
+	// Delete workflow execution.
+	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	err = s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
+	s.AssertMSEqualWithDB(chasmArchetypeID, chasmSnapshot, chasmMutation)
+
+	// Delete CHASM execution.
+	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       chasmRunID,
+		ArchetypeID: chasmArchetypeID,
+	})
+	s.NoError(err)
+	err = s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       chasmRunID,
+		ArchetypeID: chasmArchetypeID,
+	})
+	s.NoError(err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, chasmRunID, chasmArchetypeID)
+}
+
 func (s *ExecutionMutableStateSuite) CreateWorkflow(
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
 ) ([]byte, *p.WorkflowSnapshot, []*p.WorkflowEvents) {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	snapshot, events := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2407,7 +2838,7 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 	return branchToken, snapshot, events
 }
 
-func (s *ExecutionMutableStateSuite) CreateCHASMSnapshot(
+func (s *ExecutionMutableStateSuite) CreateCHASMExecution(
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
@@ -2443,6 +2874,27 @@ func (s *ExecutionMutableStateSuite) CreateCHASMSnapshot(
 	return snapshot
 }
 
+func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
+	resp, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(expectedRunID, resp.RunID)
+}
+
+func (s *ExecutionMutableStateSuite) assertWorkflowRunAlreadyExists(
+	err error,
+	existingState *persistencespb.WorkflowExecutionState,
+) {
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	s.ErrorAs(err, &existsErr)
+	s.Equal(existingState.RunId, existsErr.RunID)
+	s.Equal(existingState.Status, existsErr.Status)
+}
+
 func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	namespaceID string,
 	workflowID string,
@@ -2458,6 +2910,23 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
+
+	// GetWorkflowExecution short-circuits on the missing executions row, so it
+	// can't see orphaned child-table rows; check them directly where possible.
+	if s.MutableStateTableCounts != nil {
+		counts, err := s.MutableStateTableCounts(s.Ctx, s.ShardID, namespaceID, workflowID, runID)
+		s.NoError(err)
+		// Collect all offending tables into one assertion so every leak is
+		// reported, not just the first (a per-table require would stop at one).
+		var orphaned []string
+		for table, n := range counts {
+			if n != 0 {
+				orphaned = append(orphaned, fmt.Sprintf("%s=%d", table, n))
+			}
+		}
+		sort.Strings(orphaned)
+		s.Emptyf(orphaned, "orphaned rows after delete: %v", orphaned)
+	}
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {
@@ -2495,7 +2964,7 @@ func (s *ExecutionMutableStateSuite) assertHEWithDB(
 	if !assertPrefix {
 		s.Nil(resp.NextPageToken)
 	}
-	s.Equal(len(historyEvents), len(resp.HistoryEvents))
+	s.Len(resp.HistoryEvents, len(historyEvents))
 	for i, event := range historyEvents {
 		s.ProtoEqual(event, resp.HistoryEvents[i])
 	}

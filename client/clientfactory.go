@@ -5,6 +5,7 @@ package client
 import (
 	"time"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -33,6 +35,8 @@ type (
 		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
+		NewRemoteOperatorClientWithTimeout(rpcAddress string, timeout time.Duration) operatorservice.OperatorServiceClient
+		NewLocalOperatorClientWithTimeout(timeout time.Duration) (operatorservice.OperatorServiceClient, error)
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -129,17 +133,20 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (interface{}, error) {
+	clientProvider := func(clientKey string) (any, *grpc.ClientConn, error) {
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
-		return matchingservice.NewMatchingServiceClient(connection), nil
+		return matchingservice.NewMatchingServiceClient(connection), connection, nil
 	}
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
-		common.NewClientCache(keyResolver, clientProvider),
+		common.NewClientCache(keyResolver, clientProvider, cf.logger),
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
+		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(cf.dynConfig),
+		resolver,
+		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {
@@ -211,18 +218,52 @@ func (cf *rpcClientFactory) newFrontendClient(
 	return client
 }
 
+func (cf *rpcClientFactory) NewRemoteOperatorClientWithTimeout(
+	rpcAddress string,
+	timeout time.Duration,
+) operatorservice.OperatorServiceClient {
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	client := operatorservice.NewOperatorServiceClient(connection)
+	return cf.newOperatorClient(client, timeout)
+}
+
+func (cf *rpcClientFactory) NewLocalOperatorClientWithTimeout(
+	timeout time.Duration,
+) (operatorservice.OperatorServiceClient, error) {
+	connection := cf.rpcFactory.CreateLocalFrontendGRPCConnection()
+	client := operatorservice.NewOperatorServiceClient(connection)
+	return cf.newOperatorClient(client, timeout), nil
+}
+
+func (cf *rpcClientFactory) newOperatorClient(
+	client operatorservice.OperatorServiceClient,
+	timeout time.Duration,
+) operatorservice.OperatorServiceClient {
+	client = operator.NewClient(timeout, client)
+	if cf.metricsHandler != nil {
+		client = operator.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
+	}
+	return client
+}
+
 func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResolverImpl {
 	return &serviceKeyResolverImpl{
 		resolver: resolver,
 	}
 }
 
-func (r *serviceKeyResolverImpl) Lookup(key string) (string, error) {
-	host, err := r.resolver.Lookup(key)
-	if err != nil {
-		return "", err
+// Lookup returns the address for a node within a batch. key contains the key (including batch
+// number), and index is the index within the batch. If not using batches, index should be 0.
+// Note that Lookup(key) and LookupN(key, n)[0] are equal.
+func (r *serviceKeyResolverImpl) Lookup(key string, index int) (string, error) {
+	hosts := r.resolver.LookupN(key, index+1)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
 	}
-	return host.GetAddress(), nil
+	if index >= len(hosts) {
+		index %= len(hosts)
+	}
+	return hosts[index].GetAddress(), nil
 }
 
 func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {

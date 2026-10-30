@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -27,7 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -37,10 +38,8 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -53,6 +52,7 @@ type (
 		status int32
 
 		logger                 log.Logger
+		eventLogger            otellog.Logger
 		config                 *Config
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
@@ -70,6 +70,7 @@ type (
 	NewOperatorHandlerImplArgs struct {
 		config                 *Config
 		Logger                 log.Logger
+		EventLogger            otellog.Logger
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
 		VisibilityMgr          manager.VisibilityManager
@@ -97,6 +98,7 @@ func NewOperatorHandlerImpl(
 
 	handler := &OperatorHandlerImpl{
 		logger:                 args.Logger,
+		eventLogger:            args.EventLogger,
 		status:                 common.DaemonStatusInitialized,
 		config:                 args.config,
 		sdkClientFactory:       args.sdkClientFactory,
@@ -187,7 +189,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if storeName == esconfig.PersistenceName {
 		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.addSearchAttributesSQL(ctx, request, visManager)
@@ -214,8 +216,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		} else {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(visibilityIndexNameTagName, indexName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(visibilityIndexNameTagName, indexName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 		}
 	}
@@ -281,8 +283,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		if _, ok := aliasToFieldMap[saName]; ok {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(namespaceTagName, nsName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(namespaceTagName, nsName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 			continue
 		}
@@ -369,7 +371,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if storeName == esconfig.PersistenceName {
 		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.removeSearchAttributesSQL(ctx, request, visManager)
@@ -487,7 +489,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
+	if h.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
@@ -607,7 +609,32 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		remoteResponse     *adminservice.DescribeClusterResponse
+		persistedBefore    *persistence.GetClusterMetadataResponse
+		persistenceRequest *persistence.SaveClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(h.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(h.logger, &retError)
+	lifecycleEvent = newRemoteClusterUpsertLifecycleEvent(
+		ctx,
+		h.eventLogger,
+		h.clusterMetadata,
+		h.config,
+		remoteClusterAPIOperator,
+		remoteClusterUpsertRequestFields{
+			FrontendAddress:               request.GetFrontendAddress(),
+			FrontendHTTPAddress:           request.GetFrontendHttpAddress(),
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			EnableReplication:             request.GetEnableReplication(),
+		},
+	)
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -617,6 +644,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	remoteResponse = resp
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
 			errUnableConnectRemoteClusterMessage,
@@ -629,6 +657,20 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := clustermetadata.ValidateClusterInformation(
+		resp.GetClusterName(),
+		clustermetadata.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		h.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
@@ -637,14 +679,14 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	)
 	switch err.(type) {
 	case nil:
+		persistedBefore = clusterData
 		updateRequestVersion = clusterData.Version
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
 		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
-
-	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -659,13 +701,16 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
-	})
+	}
+	persistenceRequest = saveRequest
+	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, saveRequest)
 	if err != nil {
 		return nil, serviceerror.NewInternalf(errUnableToStoreClusterInfo, err)
 	}
 	if !applied {
 		return nil, serviceerror.NewInvalidArgumentf(errUnableToStoreClusterInfo, err)
 	}
+	lifecycleEvent.emitUpsertSuccess(persistedBefore, persistenceRequest)
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
@@ -673,25 +718,43 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		cachedBefore       cachedRemoteClusterLookup
+		persistenceRequest *persistence.DeleteClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(h.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(h.logger, &retError)
+	clusterName := request.GetClusterName()
+	lifecycleEvent = newRemoteClusterRemoveLifecycleEvent(
+		ctx,
+		h.eventLogger,
+		h.clusterMetadata,
+		h.config,
+		remoteClusterAPIOperator,
+		remoteClusterRemoveRequestFields{ClusterName: clusterName},
+	)
 
-	var isClusterNameExist bool
-	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
-		if clusterName == request.GetClusterName() {
-			isClusterNameExist = true
-			break
-		}
-	}
-	if !isClusterNameExist {
+	cachedBefore = lookupCachedRemoteCluster(h.clusterMetadata, clusterName)
+	if !cachedBefore.found {
 		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
 	}
 
-	if err := h.clusterMetadataManager.DeleteClusterMetadata(
-		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
+	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, h.clusterMetadata.GetCurrentClusterName(), clusterName); err != nil {
+		return nil, err
+	}
+
+	deleteRequest := &persistence.DeleteClusterMetadataRequest{ClusterName: clusterName}
+	persistenceRequest = deleteRequest
+	if err := h.clusterMetadataManager.DeleteClusterMetadata(ctx, deleteRequest); err != nil {
 		return nil, serviceerror.NewInternalf(errUnableToDeleteClusterInfo, err)
 	}
+	lifecycleEvent.emitRemoveSuccess(cachedBefore, persistenceRequest)
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
 }
 
@@ -745,6 +808,10 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
+	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()
 		large := remoteShardCount
@@ -775,9 +842,6 @@ func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	request *operatorservice.CreateNexusEndpointRequest,
 ) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Create(ctx, request)
 }
 
@@ -786,9 +850,6 @@ func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	request *operatorservice.UpdateNexusEndpointRequest,
 ) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Update(ctx, request)
 }
 
@@ -797,9 +858,6 @@ func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	request *operatorservice.DeleteNexusEndpointRequest,
 ) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Delete(ctx, request)
 }
 
@@ -808,9 +866,6 @@ func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	request *operatorservice.GetNexusEndpointRequest,
 ) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Get(ctx, request)
 }
 
@@ -819,8 +874,5 @@ func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	request *operatorservice.ListNexusEndpointsRequest,
 ) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.List(ctx, request)
 }

@@ -4,12 +4,15 @@ package ndc
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -20,6 +23,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -45,6 +49,7 @@ import (
 // create path (there will be only current branch)
 // 1. create as current															-> nDCTransactionPolicyCreateAsCurrent
 // 2. create as zombie															-> nDCTransactionPolicyCreateAsZombie
+// 3. create without changing state or current									-> nDCTransactionPolicyCreateBypassCurrent
 //
 // create path (there will be only current branch) + suppress current
 // 1. create as current & suppress current										-> nDCTransactionPolicySuppressCurrentAndCreateAsCurrent
@@ -66,12 +71,12 @@ import (
 // conflict resolve path + suppress current
 // 1. update from zombie to current & suppress current							-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 // 2. update from zombie to current & new created as current & suppress current	-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
-
 type nDCTransactionPolicy int
 
 const (
 	nDCTransactionPolicyCreateAsCurrent nDCTransactionPolicy = iota
 	nDCTransactionPolicyCreateAsZombie
+	nDCTransactionPolicyCreateBypassCurrent
 	nDCTransactionPolicySuppressCurrentAndCreateAsCurrent
 
 	nDCTransactionPolicyUpdateAsCurrent
@@ -175,8 +180,9 @@ func NewTransactionManager(
 		createMgr: nil,
 		updateMgr: nil,
 	}
-	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
-	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
+	taskRefresher := workflow.NewTaskRefresher(shardContext)
+	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck, taskRefresher)
+	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck, taskRefresher)
 	return transactionMgr
 }
 
@@ -266,7 +272,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		return 0, historyi.TransactionPolicyActive, err
 	}
 	isWorkflowRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
-	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(targetWorkflow.GetMutableState().GetExecutionInfo().WorkflowId)
+	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(namespace.RoutingKey{ID: targetWorkflow.GetMutableState().GetExecutionInfo().WorkflowId})
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 	isActiveCluster := targetWorkflowActiveCluster == currentCluster
 
@@ -301,12 +307,36 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		// case 1.b
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
+		if !slices.ContainsFunc(totalEvents, func(event *historypb.HistoryEvent) bool {
+			return canReapplyOnReset(r.shardContext.StateMachineRegistry(), event)
+		}) {
+			// For a closed workflow, if none of the events can be reapplied (e.g. no signal, no update, etc.), skip reset.
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
+		}
+
 		baseMutableState := targetWorkflow.GetMutableState()
 		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.NewString()
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
+		if baseRebuildLastEventID == common.EmptyEventID {
+			// No completed workflow task. Pick the reset anchor by scenario:
+			//  - real pending workflow task: anchor at its ScheduledEventID. The resetter
+			//    rebuilds to that workflow task and fails it (synthesizing a started event if it
+			//    has not started yet), so the scheduled event is a sufficient anchor whether or
+			//    not the task already started.
+			//  - transient (failing, attempt > 1) or speculative pending task: not a usable
+			//    anchor - it has no persisted WorkflowTaskScheduled event (its ScheduledEventID
+			//    is a not-yet-written NextEventID placeholder), so skip it.
+			//  - no workflow task at all: nothing to anchor on.
+			if workflowTask := baseMutableState.GetPendingWorkflowTask(); workflowTask != nil &&
+				!baseMutableState.IsTransientWorkflowTask() &&
+				workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+				baseRebuildLastEventID = workflowTask.ScheduledEventID
+			}
+		}
+
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
@@ -319,6 +349,14 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
+		namespaceName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
+		if err != nil {
+			return 0, historyi.TransactionPolicyActive, err
+		}
+		var resetRequestID string
+		if r.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+			resetRequestID = uuid.New().String()
+		}
 		err = r.workflowResetter.ResetWorkflow(
 			ctx,
 			namespaceID,
@@ -329,7 +367,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			baseRebuildLastEventVersion,
 			baseNextEventID,
 			resetRunID,
-			uuid.NewString(),
+			resetRequestID,
 			targetWorkflow,
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,

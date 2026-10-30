@@ -12,8 +12,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -35,6 +40,7 @@ type (
 		store                          store.VisibilityStore
 		logger                         log.Logger
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespaceRegistry              namespace.Registry
 		chasmRegistry                  *chasm.Registry
 	}
 )
@@ -45,17 +51,20 @@ const (
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerImpl)(nil)
+var _ manager.AdminVisibilityManager = (*visibilityManagerImpl)(nil)
 
 func newVisibilityManagerImpl(
 	store store.VisibilityStore,
 	logger log.Logger,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
 ) *visibilityManagerImpl {
 	return &visibilityManagerImpl{
 		store:                          store,
 		logger:                         logger,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespaceRegistry:              namespaceRegistry,
 		chasmRegistry:                  chasmRegistry,
 	}
 }
@@ -154,50 +163,62 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 
 func (p *visibilityManagerImpl) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	response, err := p.store.ListChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	rc, ok := p.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := p.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeId))
 	}
 	mapper := rc.SearchAttributesMapper()
 
-	executions := make([]*chasm.ExecutionInfo[*commonpb.Payload], 0, len(response.Executions))
+	executions := make([]*chasmspb.VisibilityExecutionInfo, 0, len(response.Executions))
 	for _, exec := range response.Executions {
-		executionInfo, err := p.convertToChasmExecutionInfo(exec, mapper, request.Namespace)
+		executionInfo, err := p.convertToChasmExecutionInfo(
+			exec,
+			mapper,
+			namespace.Name(request.Namespace),
+		)
 		if err != nil {
 			return nil, err
 		}
 		executions = append(executions, executionInfo)
 	}
 
-	return &chasm.ListExecutionsResponse[*commonpb.Payload]{
+	return &visibilityservice.ListChasmExecutionsResponse{
 		Executions:    executions,
 		NextPageToken: response.NextPageToken,
 	}, nil
 }
 
-// convertInternalExecutionToChasmInfo converts a store.InternalExecutionInfo to chasm.ExecutionInfo.
+// convertInternalExecutionToChasmInfo converts a store.InternalExecutionInfo to ChasmExecutionInfo.
 func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 	exec *store.InternalExecutionInfo,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 	namespaceName namespace.Name,
-) (*chasm.ExecutionInfo[*commonpb.Payload], error) {
+) (*chasmspb.VisibilityExecutionInfo, error) {
 	customSAs, chasmSAs := splitSearchAttributes(exec.SearchAttributes)
 
-	chasmTypeMap := searchattribute.NewNameTypeMap(mapper.SATypeMap())
-	decodedChasmSAs, err := searchattribute.Decode(chasmSAs, &chasmTypeMap, false)
+	chasmAliasedSAs, err := aliasChasmSearchAttributes(chasmSAs, mapper)
 	if err != nil {
 		return nil, err
 	}
-	chasmAliasedSAs, err := aliasChasmSearchAttributes(decodedChasmSAs, mapper)
-	if err != nil {
-		return nil, err
+
+	if len(chasmAliasedSAs.GetIndexedFields()) == 0 {
+		chasmAliasedSAs = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+	}
+	// Surface registered system search attribute overrides (e.g. TaskQueue, ExecutionTime), which
+	// are stored in dedicated system columns rather than the search attribute blob.
+	for field, valueType := range mapper.OverriddenSystemFields() {
+		if value, ok := chasmSystemOverrideValue(exec, field); ok {
+			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
+		}
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
@@ -214,19 +235,44 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
-	return &chasm.ExecutionInfo[*commonpb.Payload]{
-		BusinessID:             exec.WorkflowID,
-		RunID:                  exec.RunID,
-		StartTime:              exec.StartTime,
-		CloseTime:              exec.CloseTime,
+	return &chasmspb.VisibilityExecutionInfo{
+		BusinessId:             exec.WorkflowID,
+		RunId:                  exec.RunID,
+		StartTime:              timestamppb.New(exec.StartTime),
+		CloseTime:              timestamppb.New(exec.CloseTime),
 		HistoryLength:          exec.HistoryLength,
 		HistorySizeBytes:       exec.HistorySizeBytes,
 		StateTransitionCount:   exec.StateTransitionCount,
-		ChasmSearchAttributes:  chasm.NewSearchAttributesMap(chasmAliasedSAs),
-		CustomSearchAttributes: customAliasedSAs.GetIndexedFields(),
+		ChasmSearchAttributes:  chasmAliasedSAs,
+		CustomSearchAttributes: customAliasedSAs,
 		Memo:                   userMemo,
 		ChasmMemo:              chasmMemoPayload,
 	}, nil
+}
+
+// chasmSystemOverrideValue returns the value for a registered system search attribute override
+// (e.g. TaskQueue, ExecutionTime), read from the dedicated column on InternalExecutionInfo.
+// Supported fields must match sadefs.IsChasmOverridableSystem (enforced at registration and by
+// TestChasmSystemOverrideReadBridgeCoversOverridableFields).
+func chasmSystemOverrideValue(exec *store.InternalExecutionInfo, field string) (any, bool) {
+	switch field {
+	case sadefs.WorkflowType:
+		return exec.TypeName, true
+	case sadefs.ExecutionTime:
+		return exec.ExecutionTime, true
+	case sadefs.TaskQueue:
+		return exec.TaskQueue, true
+	case sadefs.ParentWorkflowID:
+		return exec.ParentWorkflowID, true
+	case sadefs.ParentRunID:
+		return exec.ParentRunID, true
+	case sadefs.RootWorkflowID:
+		return exec.RootWorkflowID, true
+	case sadefs.RootRunID:
+		return exec.RootRunID, true
+	default:
+		return nil, false
+	}
 }
 
 // splitSearchAttributes splits decoded search attributes into CHASM and custom attributes.
@@ -267,8 +313,8 @@ func splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonp
 
 func (p *visibilityManagerImpl) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	internalResp, err := p.store.CountChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
@@ -308,7 +354,103 @@ func (p *visibilityManagerImpl) AddSearchAttributes(
 	ctx context.Context,
 	request *manager.AddSearchAttributesRequest,
 ) error {
-	return p.store.AddSearchAttributes(ctx, request)
+	adminStore, ok := p.store.(store.AdminVisibilityStore)
+	if !ok {
+		return manager.ErrNotAdminVisibilityStore
+	}
+
+	return adminStore.AddSearchAttributes(ctx, request)
+}
+
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (p *visibilityManagerImpl) AdminListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
+	adminStore, ok := p.store.(store.AdminVisibilityStore)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityStore
+	}
+
+	storeResp, err := adminStore.AdminListExecutions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &adminservice.ListExecutionsResponse{
+		Executions:    make([]*adminservice.VisibilityExecutionInfo, 0, len(storeResp.Executions)),
+		NextPageToken: storeResp.NextPageToken,
+	}
+	for _, storeExecution := range storeResp.Executions {
+		nsName, err := p.namespaceRegistry.GetNamespaceName(namespace.ID(storeExecution.NamespaceID))
+		if err != nil {
+			// If namespace not found, maybe the namespace was deleted.
+			// Log it, and continue with EmptyName.
+			p.logger.Warn(
+				"failed to get namespace by ID",
+				tag.WorkflowNamespaceID(storeExecution.NamespaceID),
+				tag.Error(err),
+			)
+			nsName = namespace.EmptyName
+		}
+
+		archetypeID, err := extractArchetypeID(storeExecution.SearchAttributes)
+		if err != nil || archetypeID == chasm.UnspecifiedArchetypeID {
+			archetypeID = chasm.WorkflowArchetypeID
+		}
+
+		execInfo := &adminservice.VisibilityExecutionInfo{
+			NamespaceId: storeExecution.NamespaceID,
+			Namespace:   nsName.String(),
+			ArchetypeId: archetypeID,
+			BusinessId:  storeExecution.WorkflowID,
+			RunId:       storeExecution.RunID,
+			State:       statusToState(storeExecution.Status),
+			StartTime:   timestamppb.New(storeExecution.StartTime),
+		}
+		if storeExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			execInfo.CloseTime = timestamppb.New(storeExecution.CloseTime)
+			execInfo.ExecutionDuration = durationpb.New(storeExecution.ExecutionDuration)
+			execInfo.HistoryLength = storeExecution.HistoryLength
+			execInfo.HistorySizeBytes = storeExecution.HistorySizeBytes
+			execInfo.StateTransitionCount = storeExecution.StateTransitionCount
+		}
+		resp.Executions = append(resp.Executions, execInfo)
+	}
+	return resp, nil
+}
+
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (p *visibilityManagerImpl) AdminCountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
+	adminStore, ok := p.store.(store.AdminVisibilityStore)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityStore
+	}
+
+	storeResp, err := adminStore.AdminCountExecutions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &adminservice.CountExecutionsResponse{
+		Count: storeResp.Count,
+	}
+	if len(storeResp.Groups) > 0 {
+		resp.Groups = make(
+			[]*adminservice.CountExecutionsResponse_AggregationGroup,
+			len(storeResp.Groups),
+		)
+		for i, group := range storeResp.Groups {
+			resp.Groups[i] = &adminservice.CountExecutionsResponse_AggregationGroup{
+				GroupValues: group.GroupValues,
+				Count:       group.Count,
+			}
+		}
+	}
+	return resp, nil
 }
 
 func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
@@ -333,17 +475,20 @@ func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
 
 func (p *visibilityManagerImpl) convertToCountChasmExecutionsResponse(
 	internal *store.InternalCountExecutionsResponse,
-) (*chasm.CountExecutionsResponse, error) {
-	response := &chasm.CountExecutionsResponse{
-		Count:  internal.Count,
-		Groups: make([]chasm.Group, 0, len(internal.Groups)),
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
+	response := &visibilityservice.CountChasmExecutionsResponse{
+		Count: internal.Count,
+		Groups: make(
+			[]*visibilityservice.CountChasmExecutionsResponse_AggregationGroup,
+			len(internal.Groups),
+		),
 	}
 
-	for _, group := range internal.Groups {
-		response.Groups = append(response.Groups, chasm.Group{
-			Values: group.GroupValues,
-			Count:  group.Count,
-		})
+	for k, group := range internal.Groups {
+		response.Groups[k] = &visibilityservice.CountChasmExecutionsResponse_AggregationGroup{
+			GroupValues: group.GroupValues,
+			Count:       group.Count,
+		}
 	}
 
 	return response, nil
@@ -472,8 +617,10 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 		}
 	}
 
-	// for close records
-	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// for close records. Running and paused workflows are still open executions and
+	// must not have a CloseTime; only truly closed workflows have one.
+	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+		internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
 		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
@@ -528,29 +675,40 @@ func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 }
 
 func isChasmExecution(searchAttributes *commonpb.SearchAttributes) bool {
-	if archetypePayload, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
-		var archetypeIDStr string
-		if err := payload.Decode(archetypePayload, &archetypeIDStr); err == nil {
-			if _, err := strconv.Atoi(archetypeIDStr); err == nil {
-				return true
-			}
-		}
-	}
-	return false
+	archetypeID, err := extractArchetypeID(searchAttributes)
+	return err == nil && archetypeID != chasm.UnspecifiedArchetypeID
 }
 
-// aliasChasmSearchAttributes aliases CHASM search attribute field names and converts them to VisibilityValue.
+func extractArchetypeID(searchAttributes *commonpb.SearchAttributes) (chasm.ArchetypeID, error) {
+	valuePayload, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]
+	if !ok {
+		return chasm.UnspecifiedArchetypeID, nil
+	}
+
+	var value string
+	err := payload.Decode(valuePayload, &value)
+	if err != nil {
+		return chasm.UnspecifiedArchetypeID, err
+	}
+
+	archetypeID, err := strconv.Atoi(value)
+	return chasm.ArchetypeID(archetypeID), err
+}
+
+// aliasChasmSearchAttributes aliases CHASM search attribute field names.
 // This function mirrors the pattern of searchattribute.AliasFields for custom search attributes.
 func aliasChasmSearchAttributes(
-	decodedSearchAttributes map[string]interface{},
+	searchAttributes *commonpb.SearchAttributes,
 	mapper *chasm.VisibilitySearchAttributesMapper,
-) (map[string]chasm.VisibilityValue, error) {
-	if mapper == nil || len(decodedSearchAttributes) == 0 {
+) (*commonpb.SearchAttributes, error) {
+	if mapper == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
 
-	result := make(map[string]chasm.VisibilityValue)
-	for fieldName, value := range decodedSearchAttributes {
+	result := &commonpb.SearchAttributes{
+		IndexedFields: make(map[string]*commonpb.Payload),
+	}
+	for fieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !sadefs.IsChasmSearchAttribute(fieldName) {
 			continue
 		}
@@ -559,51 +717,33 @@ func aliasChasmSearchAttributes(
 		if err != nil {
 			// Silently ignore serviceerror.InvalidArgument because it indicates unregistered field.
 			// INFO: Chasm search attributes must be registered with the CHASM Registry using the WithSearchAttributes() option.
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgumentErr) {
+			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 				continue
 			}
 			return nil, err
 		}
 
-		// Convert value to VisibilityValue (types should be correct after Decode)
-		visValue := convertToVisibilityValue(value)
-		result[aliasName] = visValue
+		result.IndexedFields[aliasName] = saPayload
 	}
 
 	return result, nil
 }
 
-// convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.
-// After Decode, the types should be correct, so simple type detection is sufficient.
-func convertToVisibilityValue(value interface{}) chasm.VisibilityValue {
-	switch val := value.(type) {
-	case int:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int32:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int64:
-		return chasm.VisibilityValueInt64(val)
-	case float32:
-		return chasm.VisibilityValueFloat64(float64(val))
-	case float64:
-		return chasm.VisibilityValueFloat64(val)
-	case bool:
-		return chasm.VisibilityValueBool(val)
-	case time.Time:
-		return chasm.VisibilityValueTime(val)
-	case string:
-		// Try to parse as datetime first
-		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
-			return chasm.VisibilityValueTime(parsedTime)
-		}
-		return chasm.VisibilityValueString(val)
-	case []byte:
-		return chasm.VisibilityValueByteSlice(val)
-	case []string:
-		return chasm.VisibilityValueStringSlice(val)
+// statusToState is best effort translation of execution status to execution state
+// since there is no 1-1 mapping between them.
+func statusToState(status enumspb.WorkflowExecutionStatus) enumsspb.WorkflowExecutionState {
+	switch status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:
+		return enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	default:
-		// Return as string if type is unknown
-		return chasm.VisibilityValueString(fmt.Sprintf("%v", val))
+		return enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED
 	}
 }

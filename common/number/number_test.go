@@ -34,7 +34,7 @@ func (s *numberSuite) TearDownTest() {
 
 func (s *numberSuite) TestInt() {
 	number := rand.Intn(128)
-	for _, n := range []interface{}{
+	for _, n := range []any{
 		int8(number),
 		int16(number),
 		int32(number),
@@ -49,7 +49,7 @@ func (s *numberSuite) TestInt() {
 
 func (s *numberSuite) TestUint() {
 	number := rand.Intn(256)
-	for _, n := range []interface{}{
+	for _, n := range []any{
 		uint8(number),
 		uint16(number),
 		uint32(number),
@@ -64,7 +64,7 @@ func (s *numberSuite) TestUint() {
 
 func (s *numberSuite) TestFloat() {
 	number := rand.Float32() * float32(rand.Int())
-	for _, n := range []interface{}{
+	for _, n := range []any{
 		float32(number),
 		float64(number),
 	} {

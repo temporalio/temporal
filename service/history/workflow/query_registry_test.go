@@ -29,7 +29,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	qr := NewQueryRegistry()
 	ids := make([]string, 100)
 	completionChs := make([]<-chan struct{}, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ids[i], completionChs[i] = qr.BufferQuery(&querypb.WorkflowQuery{})
 	}
 	s.assertBufferedState(qr, ids...)
@@ -37,7 +37,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertQuerySizes(qr, 100, 0, 0, 0)
 	s.assertChanState(false, completionChs...)
 
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		err := qr.SetCompletionState(ids[i], &historyi.QueryCompletionState{
 			Type: QueryCompletionTypeSucceeded,
 			Result: &querypb.WorkflowQueryResult{
@@ -84,7 +84,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(true, completionChs[0:75]...)
 	s.assertChanState(false, completionChs[75:]...)
 
-	for i := 0; i < 75; i++ {
+	for i := range 75 {
 		switch i % 3 {
 		case 0:
 			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &historyi.QueryCompletionState{
@@ -111,7 +111,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(true, completionChs[0:75]...)
 	s.assertChanState(false, completionChs[75:]...)
 
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		qr.RemoveQuery(ids[i])
 		s.assertHasQueries(qr, true, i < 24, true, true)
 		s.assertQuerySizes(qr, 25, 25-i-1, 25, 25)
@@ -162,7 +162,7 @@ func (s *QueryRegistrySuite) assertCompletedState(qr historyi.QueryRegistry, ids
 		s.NotNil(completionState)
 		s.Equal(QueryCompletionTypeSucceeded, completionState.Type)
 		s.NotNil(completionState.Result)
-		s.Nil(completionState.Err)
+		s.NoError(completionState.Err)
 	}
 }
 
@@ -179,7 +179,7 @@ func (s *QueryRegistrySuite) assertUnblockedState(qr historyi.QueryRegistry, ids
 		s.NotNil(completionState)
 		s.Equal(QueryCompletionTypeUnblocked, completionState.Type)
 		s.Nil(completionState.Result)
-		s.Nil(completionState.Err)
+		s.NoError(completionState.Err)
 	}
 }
 
@@ -196,7 +196,7 @@ func (s *QueryRegistrySuite) assertFailedState(qr historyi.QueryRegistry, ids ..
 		s.NotNil(completionState)
 		s.Equal(QueryCompletionTypeFailed, completionState.Type)
 		s.Nil(completionState.Result)
-		s.NotNil(completionState.Err)
+		s.Error(completionState.Err)
 	}
 }
 

@@ -1,7 +1,10 @@
 package metricstest
 
 import (
+	"maps"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -17,24 +20,35 @@ type CapturedRecording struct {
 
 // Capture is a specific capture instance.
 type Capture struct {
-	recordings     map[string][]*CapturedRecording
+	recordings     CaptureSnapshot
 	recordingsLock sync.RWMutex
+	filter         func(string, *CapturedRecording) bool
 }
 
+type CaptureSnapshot = map[string][]*CapturedRecording
+
 // Snapshot returns a copy of all metrics recorded, keyed by name.
-func (c *Capture) Snapshot() map[string][]*CapturedRecording {
+func (c *Capture) Snapshot() CaptureSnapshot {
 	c.recordingsLock.RLock()
 	defer c.recordingsLock.RUnlock()
-	ret := make(map[string][]*CapturedRecording, len(c.recordings))
-	for k, v := range c.recordings {
-		recs := make([]*CapturedRecording, len(v))
-		copy(recs, v)
-		ret[k] = recs
+	ret := maps.Clone(c.recordings)
+	for k, v := range ret {
+		ret[k] = slices.Clone(v)
 	}
 	return ret
 }
 
+// SnapshotMetric returns a copy of the recordings for one metric.
+func (c *Capture) SnapshotMetric(name string) []*CapturedRecording {
+	c.recordingsLock.RLock()
+	defer c.recordingsLock.RUnlock()
+	return slices.Clone(c.recordings[name])
+}
+
 func (c *Capture) record(name string, r *CapturedRecording) {
+	if c.filter != nil && !c.filter(name, r) {
+		return
+	}
 	c.recordingsLock.Lock()
 	defer c.recordingsLock.Unlock()
 	c.recordings[name] = append(c.recordings[name], r)
@@ -45,6 +59,7 @@ type CaptureHandler struct {
 	tags         []metrics.Tag
 	captures     map[*Capture]struct{}
 	capturesLock *sync.RWMutex
+	captureCount *atomic.Int32
 }
 
 var _ metrics.Handler = (*CaptureHandler)(nil)
@@ -54,16 +69,26 @@ func NewCaptureHandler() *CaptureHandler {
 	return &CaptureHandler{
 		captures:     map[*Capture]struct{}{},
 		capturesLock: &sync.RWMutex{},
+		captureCount: &atomic.Int32{},
 	}
 }
 
 // StartCapture returns a started capture. StopCapture should be called on
 // complete.
 func (c *CaptureHandler) StartCapture() *Capture {
-	capture := &Capture{recordings: map[string][]*CapturedRecording{}}
+	return c.StartCaptureWithFilter(nil)
+}
+
+// StartCaptureWithFilter retains only recordings accepted by filter. A nil filter
+// accepts all recordings. The filter must be safe for concurrent calls and must
+// not call back into the handler. StopCapture should be called on completion.
+func (c *CaptureHandler) StartCaptureWithFilter(filter func(string, *CapturedRecording) bool) *Capture {
+	capture := &Capture{recordings: make(CaptureSnapshot), filter: filter}
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
+
 	c.captures[capture] = struct{}{}
+	c.captureCount.Add(1)
 	return capture
 }
 
@@ -71,7 +96,9 @@ func (c *CaptureHandler) StartCapture() *Capture {
 func (c *CaptureHandler) StopCapture(capture *Capture) {
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
+
 	delete(c.captures, capture)
+	c.captureCount.Add(-1)
 }
 
 // WithTags implements [metrics.Handler.WithTags].
@@ -80,10 +107,16 @@ func (c *CaptureHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 		tags:         append(append(make([]metrics.Tag, 0, len(c.tags)+len(tags)), c.tags...), tags...),
 		captures:     c.captures,
 		capturesLock: c.capturesLock,
+		captureCount: c.captureCount,
 	}
 }
 
 func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tags ...metrics.Tag) {
+	// If no captures are active, discard the metric to save memory.
+	if c.captureCount.Load() == 0 {
+		return
+	}
+
 	rec := &CapturedRecording{Value: v, Tags: make(map[string]string, len(c.tags)+len(tags)), Unit: unit}
 	for _, tag := range c.tags {
 		rec.Tags[tag.Key] = tag.Value
@@ -93,8 +126,8 @@ func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tag
 	}
 	c.capturesLock.RLock()
 	defer c.capturesLock.RUnlock()
-	for c := range c.captures {
-		c.record(name, rec)
+	for cap := range c.captures {
+		cap.record(name, rec)
 	}
 }
 

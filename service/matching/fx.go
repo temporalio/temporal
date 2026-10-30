@@ -1,7 +1,7 @@
 package matching
 
 import (
-	"go.temporal.io/server/chasm"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -14,10 +14,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 	"go.temporal.io/server/service/matching/workers"
@@ -34,10 +32,14 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(WorkersRegistryProvider),
 	fx.Provide(NewHandler),
@@ -46,6 +48,8 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
+	fx.Provide(simplePartitionScalerFactoryProvider),
+	fx.Provide(taskQueueRateLimitFractionProviderProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -56,8 +60,23 @@ func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
+	rateLimitFractionProvider TaskQueueRateLimitFractionProvider,
 ) *Config {
-	return NewConfig(dc)
+	cfg := NewConfig(dc)
+	cfg.RateLimitFractionProvider = rateLimitFractionProvider
+	return cfg
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
+	)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
@@ -95,6 +114,32 @@ func TelemetryInterceptorProvider(
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		configs.PollTaskAPISet, // set of APIs that will wait for token instead of immediate rejection
+		serviceConfig.PollWaitForNamespaceRateLimitToken,
+		metricsHandler,
+	)
 }
 
 func RateLimitInterceptorProvider(
@@ -150,40 +195,31 @@ func NamespaceReplicationQueueProvider(
 	return replicatorNamespaceReplicationQueue
 }
 
+func VisibilityManagerConfigProvider(serviceConfig *Config) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: nil, // matching visibility never write
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never write
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
 func VisibilityManagerProvider(
-	logger log.Logger,
-	persistenceConfig *config.Persistence,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
-	metricsHandler metrics.Handler,
-	serviceConfig *Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	namespaceRegistry namespace.Registry,
-	chasmRegistry *chasm.Registry,
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
 ) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		*persistenceConfig,
-		persistenceServiceResolver,
-		customVisibilityStoreFactory,
-		nil, // matching visibility never writes
-		saProvider,
-		searchAttributesMapperProvider,
-		namespaceRegistry,
-		chasmRegistry,
-		serviceConfig.VisibilityPersistenceMaxReadQPS,
-		serviceConfig.VisibilityPersistenceMaxWriteQPS,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
-		serviceConfig.EnableReadFromSecondaryVisibility,
-		serviceConfig.VisibilityEnableShadowReadMode,
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
-		serviceConfig.VisibilityDisableOrderByClause,
-		serviceConfig.VisibilityEnableManualPagination,
-		serviceConfig.VisibilityEnableUnifiedQueryConverter,
-		metricsHandler,
-		logger,
-	)
+	return visibility.NewManager(&managerParams, managerConfig)
+}
+
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
@@ -194,14 +230,30 @@ func WorkersRegistryProvider(
 	lc fx.Lifecycle,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
+	eventLogger otellog.Logger,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
-		NumBuckets:          serviceConfig.WorkerRegistryNumBuckets,
-		TTL:                 serviceConfig.WorkerRegistryEntryTTL,
-		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
-		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,
-		EvictionInterval:    serviceConfig.WorkerRegistryEvictionInterval,
-		MetricsHandler:      metricsHandler,
-		EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+		NumBuckets:                serviceConfig.WorkerRegistryNumBuckets,
+		TTL:                       serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:               serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:                  serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval:          serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:            metricsHandler,
+		EventLogger:               eventLogger,
+		EnableWorkerConfigEvents:  serviceConfig.EnableWorkerConfigEvents,
+		EnableWorkerMetricsEvents: serviceConfig.EnableWorkerMetricsEvents,
+		MetricsConfig: workers.WorkerMetricsConfig{
+			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
+			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
+			BreakdownMetricsByTaskQueue:    serviceConfig.BreakdownMetricsByTaskQueue,
+			ExternalPayloadsEnabled:        serviceConfig.ExternalPayloadsEnabled,
+		},
 	})
+}
+
+func simplePartitionScalerFactoryProvider(dc *dynamicconfig.Collection) PartitionScalerFactory {
+	return newSimplePartitionScalerFactory(
+		dynamicconfig.MatchingPartitionScaler.Get(dc),
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+	)
 }

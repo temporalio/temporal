@@ -35,7 +35,7 @@ func ExampleExponentialRetryPolicy_WithMaximumInterval() {
 	p2 = p2.WithMaximumInterval(time.Second * 10)
 	var e1, e2 time.Duration
 	fmt.Printf("%-10s| %15s| %15s\n", "Attempt", "Delay", "Capped Delay")
-	for attempts := 0; attempts < 10; attempts++ {
+	for attempts := range 10 {
 		d1 := p1.ComputeNextDelay(e1, attempts, nil)
 		d2 := p2.ComputeNextDelay(e2, attempts, nil)
 		e1 += d1
@@ -82,8 +82,8 @@ func (s *RetryPolicySuite) TestExponentialBackoff() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -116,8 +116,8 @@ func (s *RetryPolicySuite) TestMaximumInterval() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -127,10 +127,10 @@ func (s *RetryPolicySuite) TestBackoffCoefficient() {
 
 	r, _ := createRetrier(policy)
 	min, max := getNextBackoffRange(2 * time.Second)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -152,15 +152,15 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 	r, ts := createRetrier(policy)
 	next := r.NextBackOff(nil)
 	min, max := getNextBackoffRange(2 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	s.GreaterOrEqual(next, min, "NextBackoff too low")
+	s.Less(next, max, "NextBackoff too high")
 
 	ts.Advance(2 * time.Second)
 
 	next = r.NextBackOff(nil)
 	min, max = getNextBackoffRange(3 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	s.GreaterOrEqual(next, min, "NextBackoff too low")
+	s.Less(next, max, "NextBackoff too high")
 }
 
 func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
@@ -192,8 +192,8 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 			s.Equal(done, next, "backoff not done yet!!!")
 		} else {
 			min, max := getNextBackoffRange(expected)
-			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
-			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
+			s.GreaterOrEqual(next, min, "NextBackoff too low: actual: %v, min: %v", next, min)
+			s.Less(next, max, "NextBackoff too high: actual: %v, max: %v", next, max)
 			ts.Advance(expected)
 		}
 	}
@@ -205,7 +205,7 @@ func (s *RetryPolicySuite) TestNoMaxAttempts() {
 		WithMaximumInterval(10 * time.Second)
 
 	r, ts := createRetrier(policy)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		next := r.NextBackOff(nil)
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)
@@ -216,11 +216,33 @@ func (s *RetryPolicySuite) TestUnbounded() {
 	policy := createPolicy(50 * time.Millisecond)
 
 	r, ts := createRetrier(policy)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		next := r.NextBackOff(nil)
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)
 	}
+}
+
+// Validate that a policy without maximum interval and expiration interval stops retrying once
+// the computed interval overflows time.Duration. The conversion of an out-of-range float64 to
+// int64 is platform-dependent (it saturates to MaxInt64 on arm64 but wraps negative on amd64),
+// so without an explicit overflow check the policy returns a ~292-year backoff on arm64.
+func (s *RetryPolicySuite) TestUnboundedOverflowReturnsDone() {
+	policy := createPolicy(time.Second)
+
+	// initialInterval * 2^(100-1) overflows int64 nanoseconds by a wide margin
+	s.Equal(done, policy.ComputeNextDelay(0, 100, nil))
+}
+
+// Validate that a policy with a maximum interval keeps retrying at the capped interval even
+// after the raw exponential computation overflows.
+func (s *RetryPolicySuite) TestOverflowWithMaximumIntervalStillRetries() {
+	policy := createPolicy(time.Second).WithMaximumInterval(10 * time.Second)
+
+	next := policy.ComputeNextDelay(0, 100, nil)
+	s.NotEqual(done, next)
+	s.Greater(next, time.Duration(0))
+	s.LessOrEqual(next, 10*time.Second)
 }
 
 // Validate that ErrorDependentRetryPolicy returns the expected delay for a given error, with and without jitter
@@ -257,13 +279,21 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	delay = retrier.NextBackOff(threeSecondError)
 	s.Equal(done, delay)
 
-	// test with jitter
-	policy = NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, _ = createRetrier(policy)
-
-	delay = retrier.NextBackOff(fmt.Errorf("other error"))
-	s.True(delay >= 1*time.Second)
-	s.True(delay < 1500*time.Millisecond)
+	// Test with jitter. Sample many times and require at least one delay strictly above
+	// the base: a single sample can't distinguish working jitter from jitter pinned to the
+	// base value. ComputeNextDelay is called directly so the attempt counter doesn't
+	// exhaust WithMaximumAttempts.
+	jitterPolicy := NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
+	sawJitter := false
+	for range 1000 {
+		delay = jitterPolicy.ComputeNextDelay(0, 1, errors.New("other error"))
+		s.GreaterOrEqual(delay, 1*time.Second)
+		s.Less(delay, 1100*time.Millisecond)
+		if delay > 1*time.Second {
+			sawJitter = true
+		}
+	}
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
 }
 
 func (s *RetryPolicySuite) TestConstantDelayPolicy() {
@@ -285,24 +315,58 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 	delay = retrier.NextBackOff(nil)
 	s.Equal(done, delay)
 
-	// test with jitter
-	policy = NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, _ = createRetrier(policy)
+	// Test with jitter. See TestErrorDependentPolicy for why this samples repeatedly
+	// and asserts that some delay exceeds the base value.
+	jitterPolicy := NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
+	sawJitter := false
+	for range 1000 {
+		delay = jitterPolicy.ComputeNextDelay(0, 1, nil)
+		s.GreaterOrEqual(delay, 2*time.Second)
+		s.Less(delay, 2200*time.Millisecond)
+		if delay > 2*time.Second {
+			sawJitter = true
+		}
+	}
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
+}
 
-	delay = retrier.NextBackOff(nil)
-	s.True(delay >= 2*time.Second)
-	s.True(delay < 2200*time.Millisecond)
+func (s *RetryPolicySuite) TestConditionalRetryPolicy() {
+	sentinel := errors.New("sentinel")
+	whenTrue := NewConstantDelayRetryPolicy(time.Second)
+	whenFalse := NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(2)
+	policy := NewConditionalRetryPolicy(
+		func(err error) bool { return errors.Is(err, sentinel) },
+		whenTrue,
+		whenFalse,
+	)
+
+	// Non-matching error follows the whenFalse policy.
+	s.Equal(2*time.Second, policy.ComputeNextDelay(0, 1, errors.New("other")))
+	s.Equal(done, policy.ComputeNextDelay(0, 2, errors.New("other")))
+
+	// Matching error follows the whenTrue policy regardless of attempt count.
+	s.Equal(time.Second, policy.ComputeNextDelay(0, 100, sentinel))
 }
 
 // Validate jitter computation
 func (s *RetryPolicySuite) TestAddJitter() {
-	for range 10 {
-		delay := 1 * time.Second
-		jitter := 0.5
+	delay := 1 * time.Second
+	jitter := 0.5
+	sawJitter := false
+	for range 1000 {
 		jitteredDelay := addJitter(delay, jitter)
-		s.True(jitteredDelay >= 1*time.Second)
-		s.True(jitteredDelay < 1500*time.Millisecond)
+		s.GreaterOrEqual(jitteredDelay, 1*time.Second)
+		s.Less(jitteredDelay, 1500*time.Millisecond)
+		if jitteredDelay > delay {
+			sawJitter = true
+		}
 	}
+	// The bound above admits the un-jittered base value, so assert the jitter is actually
+	// applied rather than truncated away.
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
+
+	// A zero jitter percentage must return the base delay exactly.
+	s.Equal(delay, addJitter(delay, 0))
 }
 
 func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {

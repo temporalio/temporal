@@ -2,20 +2,25 @@ package replication
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
+
+var compareProgress = cmp.AllowUnexported(ReplicationProgress{})
 
 type (
 	progressCacheSuite struct {
@@ -103,11 +108,11 @@ func (s *progressCacheSuite) TestProgressCache() {
 	s.Nil(cachedProgress)
 
 	err := s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	// get existing progress
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected, cachedProgress)
+	s.DeepEqual(expected, cachedProgress, compareProgress)
 
 	// update existing versioned transition and version history
 	versionedTransitions2 := []*persistencespb.VersionedTransition{
@@ -120,7 +125,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions2, versionHistoryItems2)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected2 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2},
@@ -129,7 +134,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		lastEventVersionHistoryIndex: 0,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected2, cachedProgress)
+	s.DeepEqual(expected2, cachedProgress, compareProgress)
 
 	// add new versioned transition and version history
 	versionedTransitions3 := []*persistencespb.VersionedTransition{
@@ -143,7 +148,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion+1),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions3, versionHistoryItems3)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected3 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
@@ -152,12 +157,86 @@ func (s *progressCacheSuite) TestProgressCache() {
 		lastEventVersionHistoryIndex: 1,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected3, cachedProgress)
+	s.DeepEqual(expected3, cachedProgress, compareProgress)
 
 	// noop update: versioned transition and version history are already included in the existing progress
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
-	s.DeepEqual(expected3, cachedProgress)
+	s.DeepEqual(expected3, cachedProgress, compareProgress)
+}
+
+// TestProgressCache_ConcurrentGetAndUpdate verifies a progress returned by Get can be read while Update runs. The stream
+// sender reads progress via VersionedTransitionSent while SyncWorkflowState calls Update for the same run. Run with
+// -race: the race detector fails this test if Update mutates a progress that Get already handed out.
+func (s *progressCacheSuite) TestProgressCache_ConcurrentGetAndUpdate() {
+	targetClusterID := rand.Int31()
+	seed := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80, TransitionCount: 1}
+	s.NoError(s.progressCache.Update(s.runID, targetClusterID, []*persistencespb.VersionedTransition{seed}, nil))
+
+	const iterations = 1000
+	var (
+		wg        sync.WaitGroup
+		updateErr error
+		unsent    int
+	)
+	wg.Go(func() {
+		for i := range iterations {
+			if err := s.progressCache.Update(s.runID, targetClusterID, []*persistencespb.VersionedTransition{
+				{NamespaceFailoverVersion: 80, TransitionCount: int64(i + 2)},
+			}, nil); err != nil {
+				updateErr = err
+				return
+			}
+		}
+	})
+	wg.Go(func() {
+		for range iterations {
+			if !s.progressCache.Get(s.runID, targetClusterID).VersionedTransitionSent(seed) {
+				unsent++
+			}
+		}
+	})
+	wg.Wait()
+
+	s.NoError(updateErr)
+	s.Zero(unsent, "seed transition should always be reported as sent")
+}
+
+func TestProgressCacheUsesDistinctMetricsTag(t *testing.T) {
+	// Verify that the progress cache uses its own cache_type tag value
+	// ("replication_progress") rather than the mutable state cache's tag value
+	// ("mutablestate"), preventing Prometheus gauge collision. See #9600.
+	ctrl := gomock.NewController(t)
+	mockShard := shard.NewTestContext(
+		ctrl,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		tests.NewDynamicConfig(),
+	)
+	defer ctrl.Finish()
+	defer mockShard.StopForTest()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	NewProgressCache(mockShard.GetConfig(), mockShard.GetLogger(), metricsHandler)
+
+	snapshot := capture.Snapshot()
+	cacheSizeRecordings := snapshot[metrics.CacheSize.Name()]
+	require.NotEmpty(t, cacheSizeRecordings, "expected cache_size metric to be recorded")
+
+	// Verify the cache_type tag is "replication_progress", not "mutablestate"
+	found := false
+	for _, recording := range cacheSizeRecordings {
+		if tag, ok := recording.Tags[metrics.CacheTypeTagName]; ok {
+			require.Equal(t, metrics.ReplicationProgressCacheTypeTagValue, tag,
+				"progress cache should use ReplicationProgressCacheTypeTagValue, not MutableStateCacheTypeTagValue")
+			found = true
+		}
+	}
+	require.True(t, found, "expected cache_size metric with cache_type tag")
 }

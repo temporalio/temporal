@@ -2,10 +2,13 @@ package worker
 
 import (
 	"context"
+	"net"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/matchingservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -17,14 +20,25 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
+
+// ServiceName is the name used for the worker service health check.
+const ServiceName = "temporal.api.workflowservice.v1.WorkerService"
+
+type CustomTaskHandler func(ctx context.Context, task *replicationspb.ReplicationTask) error
 
 type (
 	// Service represents the temporal-worker service. This service hosts all background processing needed for temporal cluster:
@@ -32,6 +46,8 @@ type (
 	// Archiver: Handles archival of workflow histories.
 	Service struct {
 		logger                 log.Logger
+		eventLogger            otellog.Logger
+		eventDataProvider      wideevents.NamespaceReplicationTaskEventDataProvider
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -53,10 +69,16 @@ type (
 		config           *Config
 
 		workerManager                    *workerManager
-		perNamespaceWorkerManager        *perNamespaceWorkerManager
+		perNamespaceWorkerManager        *PerNamespaceWorkerManager
 		scanner                          *scanner.Scanner
+		parentClosePolicyProcessor       *parentclosepolicy.Processor
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
+
+		server       *grpc.Server
+		grpcListener net.Listener
+		healthServer *health.Server
 	}
 
 	// Config contains all the service config for worker
@@ -76,6 +98,7 @@ type (
 		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
+		EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
 		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
@@ -87,12 +110,13 @@ type (
 		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 	}
 )
 
 func NewService(
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	clusterMetadata cluster.Metadata,
@@ -108,10 +132,14 @@ func NewService(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	workerManager *workerManager,
-	perNamespaceWorkerManager *perNamespaceWorkerManager,
+	perNamespaceWorkerManager *PerNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
 	matchingClient resource.MatchingClient,
 	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
+	serializer serialization.Serializer,
+	server *grpc.Server,
+	grpcListener net.Listener,
+	healthServer *health.Server,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -122,6 +150,8 @@ func NewService(
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
 		logger:                    logger,
+		eventLogger:               eventLogger,
+		eventDataProvider:         eventDataProvider,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
@@ -141,11 +171,20 @@ func NewService(
 		perNamespaceWorkerManager:        perNamespaceWorkerManager,
 		matchingClient:                   matchingClient,
 		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
+
+		server:       server,
+		grpcListener: grpcListener,
+		healthServer: healthServer,
 	}
-	if err := s.initScanner(); err != nil {
+	if err := s.initScanner(serializer); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// SetCustomTaskHandler sets an optional handler for custom replication task types.
+func (s *Service) SetCustomTaskHandler(handler CustomTaskHandler) {
+	s.customTaskHandler = handler
 }
 
 // NewConfig builds the new Config for worker service
@@ -182,10 +221,13 @@ func NewConfig(
 			ExecutionScannerHistoryEventIdValidator: dynamicconfig.ExecutionScannerHistoryEventIdValidator.Get(dc),
 			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
 			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
+
+			ScheduleInvariantsScannerOptions: dynamicconfig.ScheduleInvariantsScannerOptions.Get(dc),
 		},
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
 		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
 		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
@@ -206,7 +248,6 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
-		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 	}
 	return config
 }
@@ -219,9 +260,6 @@ func (s *Service) Start() {
 	)
 
 	metrics.RestartCount.With(s.metricsHandler).Record(1)
-
-	s.clusterMetadata.Start()
-	s.namespaceRegistry.Start()
 
 	s.membershipMonitor.Start()
 
@@ -242,6 +280,18 @@ func (s *Service) Start() {
 		s.workerServiceResolver,
 	)
 
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_SERVING)
+
+	reflection.Register(s.server)
+
+	go func() {
+		s.logger.Info("Starting to serve on worker listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			s.logger.Fatal("Failed to serve on worker listener", tag.Error(err))
+		}
+	}()
+
 	s.logger.Info(
 		"worker service started",
 		tag.ComponentWorker,
@@ -251,12 +301,17 @@ func (s *Service) Start() {
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
-	s.namespaceRegistry.Stop()
-	s.clusterMetadata.Stop()
+	if s.parentClosePolicyProcessor != nil {
+		s.parentClosePolicyProcessor.Stop()
+	}
 	s.visibilityManager.Close()
+
+	s.server.GracefulStop()
 
 	s.logger.Info(
 		"worker service stopped",
@@ -282,9 +337,10 @@ func (s *Service) startParentClosePolicyProcessor() {
 			tag.Error(err),
 		)
 	}
+	s.parentClosePolicyProcessor = processor
 }
 
-func (s *Service) initScanner() error {
+func (s *Service) initScanner(serializer serialization.Serializer) error {
 	currentCluster := s.clusterMetadata.GetCurrentClusterName()
 	adminClient, err := s.clientBean.GetRemoteAdminClient(currentCluster)
 	if err != nil {
@@ -305,6 +361,7 @@ func (s *Service) initScanner() error {
 		s.namespaceRegistry,
 		currentCluster,
 		s.hostInfo,
+		serializer,
 	)
 	return nil
 }
@@ -323,6 +380,9 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
+		s.eventLogger,
+		s.config.EmitNamespaceLifecycleEvents,
+		s.eventDataProvider,
 		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,
@@ -331,6 +391,9 @@ func (s *Service) startReplicator() {
 		s.matchingClient,
 		s.namespaceRegistry,
 	)
+	if s.customTaskHandler != nil {
+		msgReplicator.WithCustomTaskHandler(s.customTaskHandler)
+	}
 	msgReplicator.Start()
 }
 

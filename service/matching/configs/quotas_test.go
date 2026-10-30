@@ -48,7 +48,7 @@ func (s *quotasSuite) TestAPIToPriorityMapping() {
 
 func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 	for idx := range APIPrioritiesOrdered[1:] {
-		s.True(APIPrioritiesOrdered[idx] < APIPrioritiesOrdered[idx+1])
+		s.Less(APIPrioritiesOrdered[idx], APIPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -86,7 +86,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 	requestTime := time.Now()
 	limitCount := 0
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if !limiter.Allow(requestTime, apiRequest) {
 			limitCount++
 			s.True(limiter.Allow(requestTime, operatorRequest))

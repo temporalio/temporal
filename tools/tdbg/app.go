@@ -32,9 +32,11 @@ type (
 
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp(opts ...Option) *cli.App {
+	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
+	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 	params := Params{
 		ClientFactory:        NewClientFactory(),
-		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		TaskCategoryRegistry: taskCategoryRegistry,
 		Writer:               os.Stdout,
 		ErrWriter:            os.Stderr,
 		TaskBlobEncoder:      NewProtoTaskBlobEncoder(NewPredefinedTaskBlobDeserializer()),

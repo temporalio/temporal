@@ -62,7 +62,7 @@ func (mdb *db) WriteSchemaUpdateLog(oldVersion string, newVersion string, manife
 }
 
 // Exec executes a sql statement
-func (mdb *db) Exec(stmt string, args ...interface{}) error {
+func (mdb *db) Exec(stmt string, args ...any) error {
 	_, err := mdb.db.Exec(stmt, args...)
 	return err
 }

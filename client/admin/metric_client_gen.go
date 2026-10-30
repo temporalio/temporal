@@ -51,6 +51,20 @@ func (c *metricClient) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientApplyNamespaceMutation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -77,6 +91,20 @@ func (c *metricClient) CloseShard(
 	}()
 
 	return c.client.CloseShard(ctx, request, opts...)
+}
+
+func (c *metricClient) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientCountExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) DeepHealthCheck(
@@ -331,6 +359,20 @@ func (c *metricClient) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetTaskQueueUserData")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -401,6 +443,20 @@ func (c *metricClient) ListClusters(
 	return c.client.ListClusters(ctx, request, opts...)
 }
 
+func (c *metricClient) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientListExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListExecutions(ctx, request, opts...)
+}
+
 func (c *metricClient) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -455,6 +511,20 @@ func (c *metricClient) MergeDLQTasks(
 	}()
 
 	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.MigrateScheduleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientMigrateSchedule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MigrateSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) PurgeDLQMessages(
@@ -581,6 +651,20 @@ func (c *metricClient) ResendReplicationTasks(
 	}()
 
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientStartAdminBatchOperation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StartAdminBatchOperation(ctx, request, opts...)
 }
 
 func (c *metricClient) SyncWorkflowState(

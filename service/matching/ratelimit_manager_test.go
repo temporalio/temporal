@@ -6,9 +6,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/simplelimiter"
 )
 
 type RateLimitManagerSuite struct {
@@ -32,27 +40,101 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 		"test-namespace",
 	)
 	rateLimitManager := newRateLimitManager(mockUserDataManager, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rateLimitManager.Start()
 	rateLimitManager.mu.Lock()
 	// Simulate the condition where fairnessKeyRateLimitDefault is nil
 	rateLimitManager.fairnessKeyRateLimitDefault = nil
 	// Add per-key ready entries to verify they get cleared
-	rateLimitManager.perKeyReady.Put("key1", simpleLimiter(1000))
-	rateLimitManager.perKeyReady.Put("key2", simpleLimiter(2000))
+	rateLimitManager.perKeyReady.Put("key1", simplelimiter.Ready(1000))
+	rateLimitManager.perKeyReady.Put("key2", simplelimiter.Ready(2000))
 	// Set per-key limit to verify it gets cleared
-	rateLimitManager.perKeyLimit = simpleLimiterParams{
-		interval: time.Second,
-		burst:    10,
+	rateLimitManager.perKeyLimit = simplelimiter.Params{
+		Interval: time.Second,
+		Burst:    10,
 	}
 	// Verify initial state
 	s.Equal(2, rateLimitManager.perKeyReady.Size())
-	s.True(rateLimitManager.perKeyLimit.limited())
+	s.True(rateLimitManager.perKeyLimit.Limited())
 	// Update the per-key simple rate limit with fairnessKeyRateLimitDefault as nil
 	rateLimitManager.updatePerKeySimpleRateLimitWithBurstLocked(time.Second)
 	// Verify that clearPerKeyRateLimitsLocked was called
 	// The cache should be replaced with a new empty cache
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
-	s.False(rateLimitManager.perKeyLimit.limited(), "Per-key limit should be cleared")
+	s.False(rateLimitManager.perKeyLimit.Limited(), "Per-key limit should be cleared")
 	rateLimitManager.mu.Unlock()
+}
+
+func TestRateLimitManagerInitialGrants(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		rate    float64
+		granted int32
+	}{
+		{name: "zero rate", rate: 0, granted: 0},
+		{name: "one per second", rate: 1, granted: 2},
+		{name: "ten per second", rate: 10, granted: 11},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, test.rate)
+			config := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("test-namespace", "test-task-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+				NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger())),
+				"test-namespace",
+			)
+			manager := newRateLimitManager(nil, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+			manager.timeSource = clock.NewEventTimeSource().Update(time.Now())
+			manager.Start()
+			t.Cleanup(manager.Stop)
+
+			require.Equal(t, test.granted, manager.grantTokens(nil, 20))
+			require.Zero(t, manager.grantTokens(nil, 1))
+		})
+	}
+}
+
+func TestRateLimitManagerGrantTokens(t *testing.T) {
+	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{},
+			timeSource:      clock.NewEventTimeSource().Update(time.Now()),
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: simplelimiter.MakeParams(2, 500*time.Millisecond),
+		}
+
+		granted := manager.grantTokens(nil, 5)
+		require.Equal(t, int32(2), granted)
+		granted = manager.grantTokens(nil, 1)
+		require.Equal(t, int32(0), granted)
+	})
+
+	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
+		timeSource := clock.NewEventTimeSource().Update(time.Now())
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{},
+			timeSource:      timeSource,
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: simplelimiter.NoLimit(),
+			perKeyLimit:     simplelimiter.MakeParams(1, 0),
+		}
+
+		keyOne := &commonpb.Priority{FairnessKey: "one"}
+		keyTwo := &commonpb.Priority{FairnessKey: "two"}
+		granted := manager.grantTokens(keyOne, 20)
+		require.Equal(t, int32(1), granted)
+		granted = manager.grantTokens(keyOne, 1)
+		require.Equal(t, int32(0), granted)
+		granted = manager.grantTokens(keyTwo, 1)
+		require.Equal(t, int32(1), granted)
+
+		timeSource.Advance(time.Second)
+		granted = manager.grantTokens(keyOne, 2)
+		require.Equal(t, int32(1), granted)
+	})
 }
 
 // Additions to rateLimitManager for use by other unit tests:
@@ -88,4 +170,142 @@ func (r *rateLimitManager) SetFairnessKeyRateLimitDefaultForTesting(rps float64,
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.fairnessKeyRateLimitDefault = &rps
+}
+
+func (r *rateLimitManager) SetAPIConfigRPSForTesting(rps float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.apiConfigRPS = &rps
+	r.computeEffectiveRPSAndSourceLocked()
+}
+
+func (r *rateLimitManager) SetWorkerRPSForTesting(rps float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.workerRPS = &rps
+	r.computeEffectiveRPSAndSourceLocked()
+}
+
+// GetFairnessKeyRateLimitDefaultForTesting returns the stored per-partition fairness-key rate and
+// whether it is set. It is the value stored after fraction and partition scaling.
+func (r *rateLimitManager) GetFairnessKeyRateLimitDefaultForTesting() (float64, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fairnessKeyRateLimitDefault == nil {
+		return 0, false
+	}
+	return *r.fairnessKeyRateLimitDefault, true
+}
+
+func (r *rateLimitManager) GetNumReadPartitionsForTesting() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.numReadPartitions
+}
+
+// newConfigWithFraction returns a Config whose RateLimitFractionProvider always returns the given fraction.
+func newConfigWithFraction(fraction float64) *Config {
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg.RateLimitFractionProvider = TaskQueueRateLimitFractionProviderFunc(
+		func(_ namespace.Name, _ string, _ enumspb.TaskQueueType) float64 {
+			return fraction
+		},
+	)
+	return cfg
+}
+
+// TestFractionScaling_ApiConfigRPS verifies that apiConfigRPS is scaled by the fraction
+// before being divided by the number of read partitions.
+func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
+	cfg := newConfigWithFraction(0.5)
+	config := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		cfg, "test-ns",
+	)
+	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
+	defer rlm.Stop()
+
+	rlm.SetAPIConfigRPSForTesting(100.0)
+
+	rps, source := rlm.GetEffectiveRPSAndSource()
+	// effectiveRPS = apiRPS * fraction / numPartitions; GetEffectiveRPSAndSource multiplies back by numPartitions → apiRPS * fraction
+	s.InEpsilon(50.0, rps, 1e-9)
+	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
+}
+
+// TestFractionScaling_WorkerRPS verifies that workerRPS is scaled by the fraction.
+func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
+	cfg := newConfigWithFraction(0.5)
+	config := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		cfg, "test-ns",
+	)
+	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
+	defer rlm.Stop()
+
+	rlm.SetWorkerRPSForTesting(100.0)
+
+	rps, source := rlm.GetEffectiveRPSAndSource()
+	s.InEpsilon(50.0, rps, 1e-9)
+	s.Equal(enumspb.RATE_LIMIT_SOURCE_WORKER, source)
+}
+
+// TestFractionScaling_FairnessKeyRateLimitDefault verifies that the per-key fairness rate default
+// is also scaled by the fraction (Fix 3 coverage).
+func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault() {
+	const fraction = 0.5
+	const fairnessKeyRPS = float32(100)
+	cfg := newConfigWithFraction(fraction)
+	config := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		cfg, "test-ns",
+	)
+	udm := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						Config: &taskqueuepb.TaskQueueConfig{
+							FairnessKeysRateLimitDefault: &taskqueuepb.RateLimitConfig{
+								RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: fairnessKeyRPS},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rlm := newRateLimitManager(udm, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
+	defer rlm.Stop()
+
+	rlm.UserDataChanged()
+
+	got, ok := rlm.GetFairnessKeyRateLimitDefaultForTesting()
+	s.True(ok)
+	// val = fairnessKeyRPS * fraction / numPartitions
+	numPartitions := rlm.GetNumReadPartitionsForTesting()
+	want := float64(fairnessKeyRPS) * fraction / float64(numPartitions)
+	s.InEpsilon(want, got, 1e-9)
+}
+
+// TestFractionScaling_ZeroFraction verifies that a zero fraction (fully drained) reduces
+// the effective RPS to zero even when an API rate limit is set.
+func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
+	cfg := newConfigWithFraction(0.0)
+	config := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		cfg, "test-ns",
+	)
+	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
+	defer rlm.Stop()
+
+	rlm.SetAPIConfigRPSForTesting(100.0)
+
+	rps, source := rlm.GetEffectiveRPSAndSource()
+	s.InDelta(0.0, rps, 0.0)
+	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
 }

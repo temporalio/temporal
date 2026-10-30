@@ -13,26 +13,46 @@ import (
 type Component interface {
 	LifecycleState(Context) LifecycleState
 
-	Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error)
-
 	// we may not need this in the beginning
 	mustEmbedUnimplementedComponent()
 }
 
+type TerminableComponent interface {
+	Component
+
+	// Terminate method is invoked by the chasm framework on an execution's root component when the execution
+	// needs to be forcefully terminated.
+	// Some examples include:
+	// - Execution state becomes too large.
+	// - Two running executions with the same businessID when namespace performs a force failover.
+	Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error)
+}
+
 type TerminateComponentRequest struct {
-	Identity string
-	Reason   string
-	Details  *commonpb.Payloads
+	Identity  string
+	Reason    string
+	Details   *commonpb.Payloads
+	RequestID string
 }
 
 type TerminateComponentResponse struct{}
 
+// RootComponent is the interface that must be implemented by the top level component of a chasm execution.
+// When the RootComponent's LifecycleState transitions to a closed state, the entire execution is considered closed,
+// and will be cleaned up by the chasm framework after namespace's retention period. The BusinessID is also available for reuse.
+//
+// TODO: (not yet true) Visibility record will no longer be updated after RootComponent is closed.
+type RootComponent interface {
+	TerminableComponent
+
+	// ContextMetadata returns execution metadata to propagate to the request context.
+	// When the ContextMetadataInterceptor is configured with setTrailer=true (history, matching),
+	// these keys are propagated via gRPC trailers. Keys defined in common/contextutil/metadata.go.
+	ContextMetadata(Context) map[string]string
+}
+
 // Embed UnimplementedComponent to get forward compatibility
 type UnimplementedComponent struct{}
-
-func (UnimplementedComponent) Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error) {
-	return TerminateComponentResponse{}, nil
-}
 
 func (UnimplementedComponent) mustEmbedUnimplementedComponent() {}
 
@@ -46,7 +66,7 @@ const (
 	//
 	// LifecycleStateCreated LifecycleState = 1 << iota
 	LifecycleStateRunning LifecycleState = 2 << iota
-	// LifecycleStatePaused
+	LifecycleStatePaused
 
 	// Lifecycle states that are considered CLOSED
 	//
@@ -61,10 +81,16 @@ func (s LifecycleState) IsClosed() bool {
 	return s >= LifecycleStateCompleted
 }
 
+func (s LifecycleState) IsPaused() bool {
+	return s == LifecycleStatePaused
+}
+
 func (s LifecycleState) String() string {
 	switch s {
 	case LifecycleStateRunning:
 		return "Running"
+	case LifecycleStatePaused:
+		return "Paused"
 	case LifecycleStateCompleted:
 		return "Completed"
 	case LifecycleStateFailed:
@@ -74,12 +100,20 @@ func (s LifecycleState) String() string {
 	}
 }
 
+// OperationIntent declares how a caller intends to access a component.
+// Set it with NewContextWithOperationIntent.
 type OperationIntent int
 
 const (
+	// OperationIntentProgress means the caller intends to modify the component.
+	// Rejected for closed executions.
 	OperationIntentProgress OperationIntent = 1 << iota
+
+	// OperationIntentObserve means the caller only intends to read the component.
+	// Allowed for closed executions.
 	OperationIntentObserve
 
+	// OperationIntentUnspecified is the zero value and is treated like observe.
 	OperationIntentUnspecified = OperationIntent(0)
 )
 
@@ -92,7 +126,9 @@ type operationIntentCtxKeyType struct{}
 
 var operationIntentCtxKey = operationIntentCtxKeyType{}
 
-func newContextWithOperationIntent(
+// NewContextWithOperationIntent returns a child context carrying the given OperationIntent.
+// See OperationIntent for the access semantics.
+func NewContextWithOperationIntent(
 	ctx context.Context,
 	intent OperationIntent,
 ) context.Context {

@@ -1,18 +1,35 @@
 package chasm
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 )
 
+// SingletonTaskMode controls how the framework handles a new task of a singleton type
+// when a task of the same type already exists on the component instance.
+type SingletonTaskMode int
+
+const (
+	// SingletonTaskModeReplace removes the existing task and schedules the new one in its place.
+	SingletonTaskModeReplace SingletonTaskMode = iota + 1
+	// SingletonTaskModeIgnore keeps the existing task and discards the new one.
+	SingletonTaskModeIgnore
+)
+
 type (
 	RegistrableTask struct {
-		taskType        string
-		goType          reflect.Type
-		componentGoType reflect.Type  // It is not clear how this one is used.
-		validateFn      reflect.Value // The Validate() method of the TaskValidator interface.
-		executeFn       reflect.Value // The Execute() method of the TaskExecutor interface.
-		isPureTask      bool
+		taskType                 string
+		goType                   reflect.Type
+		componentGoType          reflect.Type // It is not clear how this one is used.
+		validateFn               validateFn
+		pureTaskExecuteFn        pureTaskExecuteFn
+		sideEffectTaskExecuteFn  sideEffectTaskExecuteFn
+		sideEffectTaskDiscardFn  sideEffectTaskDiscardFn
+		isPureTask               bool
+		outboundTaskGroup        string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
+		singletonMode            SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
+		taskCountMetricThreshold *int              // Nil unless opted in. See [WithTaskCountMetric].
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -20,39 +37,95 @@ type (
 	}
 
 	RegistrableTaskOption func(*RegistrableTask)
+
+	validateFn              func(Context, any, TaskInvocation, any, *Registry) (bool, error)
+	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
+	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
+	sideEffectTaskDiscardFn func(context.Context, ComponentRef, TaskAttributes, any) error
 )
 
-// NOTE: C is not Component but any.
+// NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
+// The handler's Discard method is called on standby clusters when a task has been pending past the discard delay.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor SideEffectTaskExecutor[C, T],
+	handler SideEffectTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		reflect.ValueOf(validator).MethodByName("Validate"),
-		reflect.ValueOf(executor).MethodByName("Execute"),
+		func(
+			ctx Context,
+			component any,
+			taskInvocation TaskInvocation,
+			taskData any,
+			registry *Registry,
+		) (bool, error) {
+			return handler.Validate(
+				ctx,
+				component.(C),
+				taskInvocation,
+				taskData.(T),
+			)
+		},
+		nil, // pureTaskExecuteFn is not used for side effect tasks
+		func(
+			ctx context.Context,
+			componentRef ComponentRef,
+			taskAttrs TaskAttributes,
+			taskData any,
+		) error {
+			return handler.Execute(ctx, componentRef, taskAttrs, taskData.(T))
+		},
 		false,
+		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
+			return handler.Discard(ctx, ref, attrs, task.(T))
+		},
 		opts...,
 	)
 }
 
 func NewRegistrablePureTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor PureTaskExecutor[C, T],
+	handler PureTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		reflect.ValueOf(validator).MethodByName("Validate"),
-		reflect.ValueOf(executor).MethodByName("Execute"),
+		func(
+			ctx Context,
+			component any,
+			taskInvocation TaskInvocation,
+			taskData any,
+			registry *Registry,
+		) (bool, error) {
+			return handler.Validate(
+				ctx,
+				component.(C),
+				taskInvocation,
+				taskData.(T),
+			)
+		},
+		func(
+			ctx MutableContext,
+			component any,
+			taskAttrs TaskAttributes,
+			taskData any,
+			registry *Registry,
+		) error {
+			return handler.Execute(
+				ctx,
+				component.(C),
+				taskAttrs,
+				taskData.(T),
+			)
+		},
+		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
+		nil, // sideEffectTaskDiscardFn is not used for pure tasks
 		opts...,
 	)
 }
@@ -60,17 +133,22 @@ func NewRegistrablePureTask[C any, T any](
 func newRegistrableTask(
 	taskType string,
 	goType, componentGoType reflect.Type,
-	validateFn, executeFn reflect.Value,
+	validateFn validateFn,
+	pureTaskExecuteFn pureTaskExecuteFn,
+	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
+	sideEffectTaskDiscardFn sideEffectTaskDiscardFn,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
-		taskType:        taskType,
-		goType:          goType,
-		componentGoType: componentGoType,
-		validateFn:      validateFn,
-		executeFn:       executeFn,
-		isPureTask:      isPureTask,
+		taskType:                taskType,
+		goType:                  goType,
+		componentGoType:         componentGoType,
+		validateFn:              validateFn,
+		pureTaskExecuteFn:       pureTaskExecuteFn,
+		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
+		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
+		isPureTask:              isPureTask,
 	}
 
 	for _, opt := range opts {
@@ -90,8 +168,38 @@ func (rt *RegistrableTask) registerToLibrary(
 	rt.library = library
 
 	fqn := rt.fqType()
-	rt.taskTypeID = generateTypeID(fqn)
+	rt.taskTypeID = GenerateTypeID(fqn)
+	// If outboundTaskGroup wasn't set on creation default it here,
+	// since this is the first place we will have the fqn.
+	if rt.outboundTaskGroup == "" {
+		rt.outboundTaskGroup = fqn
+	}
 	return fqn, rt.taskTypeID, nil
+}
+
+// TaskGroup returns the side-effect task group for the task.
+func (rt *RegistrableTask) TaskGroup() string {
+	return rt.outboundTaskGroup
+}
+
+// GoType returns the reflect.Type of the task's Go struct.
+func (rt *RegistrableTask) GoType() reflect.Type {
+	return rt.goType
+}
+
+// taskCountMetricEnabled reports whether the task type opted into the task count metrics.
+func (rt *RegistrableTask) taskCountMetricEnabled() bool {
+	return rt.taskCountMetricThreshold != nil
+}
+
+// resolveTaskCountMetricThreshold returns the logical task count above which the task count
+// metrics are emitted for this opted in task type, or a negative value if they are disabled.
+// A non-zero dynamicConfigThreshold is an operator override and wins over the registered threshold.
+func (rt *RegistrableTask) resolveTaskCountMetricThreshold(dynamicConfigThreshold int) int {
+	if dynamicConfigThreshold != 0 {
+		return dynamicConfigThreshold
+	}
+	return *rt.taskCountMetricThreshold
 }
 
 // fqType returns the fully qualified name of the task, which is a combination of
@@ -102,5 +210,40 @@ func (rt *RegistrableTask) fqType() string {
 		// this should never happen because the task is only accessible from the library.
 		panic("task is not registered to a library")
 	}
-	return fullyQualifiedName(rt.library.Name(), rt.taskType)
+	return FullyQualifiedName(rt.library.Name(), rt.taskType)
+}
+
+// WithTaskGroup sets the task group for the task. The task group is used when
+// the side effect's destination is specified for grouping semantics on the outbound queue,
+// affects multi-cursor and the circuit breaker.
+// If task group isn't provided, the task group will default to the fully qualified name at library registration.
+func WithTaskGroup(taskgroup string) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.outboundTaskGroup = taskgroup
+	}
+}
+
+// WithSingletonTask configures the task type as a singleton: at most one task of this type
+// may exist per component instance at any time. The mode controls what happens when a new
+// task is added while one already exists:
+//   - [SingletonTaskModeReplace]: the existing task is removed and the new one takes its place.
+//   - [SingletonTaskModeIgnore]: the existing task is kept and the new one is discarded.
+//
+// Singleton semantics are enforced after task validation, so an invalid new task is dropped
+// before any replacement or ignore logic applies.
+func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.singletonMode = mode
+	}
+}
+
+// WithTaskCountMetric opts the task type into the logical task count metrics. At
+// CloseTransaction, the framework counts the execution's logical tasks of this type and emits
+// chasm_logical_task_count and chasm_logical_task_count_exceeded when the count exceeds the
+// threshold, which must be greater than 0. history.chasmLogicalTaskCountAlertThreshold overrides
+// the threshold when set.
+func WithTaskCountMetric(threshold int) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.taskCountMetricThreshold = &threshold
+	}
 }

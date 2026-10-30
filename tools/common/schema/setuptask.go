@@ -37,7 +37,7 @@ func NewSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTas
 // Run executes the task
 func (task *SetupTask) Run() error {
 	config := task.config
-	task.logger.Info("Starting schema setup", tag.NewAnyTag("config", config))
+	task.logger.Info("Starting schema setup", tag.Any("config", config))
 
 	if config.Overwrite {
 		err := task.db.DropAllTables()
@@ -94,7 +94,7 @@ func (task *SetupTask) Run() error {
 		currVerParsed, err := semver.ParseTolerant(currVer)
 		if err != nil {
 			task.logger.Fatal("Unable to parse current version",
-				tag.NewStringTag("current version", currVer),
+				tag.String("current version", currVer),
 				tag.Error(err),
 			)
 		}
@@ -102,7 +102,7 @@ func (task *SetupTask) Run() error {
 		initialVersionParsed, err := semver.ParseTolerant(config.InitialVersion)
 		if err != nil {
 			task.logger.Fatal("Unable to parse initial version",
-				tag.NewStringTag("initial version", config.InitialVersion),
+				tag.String("initial version", config.InitialVersion),
 				tag.Error(err),
 			)
 		}

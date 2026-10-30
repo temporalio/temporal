@@ -12,22 +12,10 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
 
-type (
-	// clientImpl implements Client
-	clientImpl struct {
-		esClient *elastic.Client
-		url      url.URL
-	}
-)
-
-var _ Client = (*clientImpl)(nil)
-
-// newClient create a ES client
-func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elastic.Client, error) {
 	var urls []string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
@@ -46,23 +34,16 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
-		elastic.SetGzip(true),
+		elastic.SetGzip(!cfg.DisableGzip),
 	}
 
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		// Check if httpClient is set in config (e.g., AWS HTTP client)
-		if configHTTPClient := cfg.GetHttpClient(); configHTTPClient != nil {
-			httpClient = configHTTPClient
-		} else if cfg.TLS != nil && cfg.TLS.Enabled {
-			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
-			}
-			httpClient = tlsHttpClient
-		} else {
-			httpClient = http.DefaultClient
+		var err error
+		httpClient, err = NewEsHTTPClient(cfg)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -99,23 +80,30 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		client.Start()
 	}
 
-	return &clientImpl{
-		esClient: client,
-		url:      cfg.URL,
-	}, nil
+	return client, nil
 }
 
-// Build Http Client with TLS
-func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
-	tlsConfig, err := auth.NewTLSConfig(config)
+type (
+	// clientImpl implements Client
+	clientImpl struct {
+		esClient *elastic.Client
+		url      url.URL
+	}
+)
+
+var _ Client = (*clientImpl)(nil)
+
+// newClient create a ES client
+func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+	esClient, err := NewEsClient(cfg, httpClient, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-	tlsClient := &http.Client{Transport: transport}
-
-	return tlsClient, nil
+	return &clientImpl{
+		esClient: esClient,
+		url:      cfg.URL,
+	}, nil
 }
 
 func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
@@ -136,11 +124,95 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	return c.esClient.Search(p.Index).SearchSource(searchSource).Do(ctx)
+	return c.esClient.Search(p.Index).
+		AllowPartialSearchResults(false).
+		SearchSource(searchSource).
+		Do(ctx)
 }
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
-	return c.esClient.Count(index).Query(query).Do(ctx)
+	// Perform the request directly instead of using esClient.Count(...).Do(ctx),
+	// because it discards everything in the response except the count (e.g., shards info).
+	path, err := uritemplates.Expand("/{index}/_count", map[string]string{
+		"index": index,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	var body any
+	if query != nil {
+		src, err := query.Source()
+		if err != nil {
+			return 0, err
+		}
+		body = map[string]any{"query": src}
+	}
+
+	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method: "POST",
+		Path:   path,
+		Body:   body,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	var resp elastic.CountResponse
+	if err := json.Unmarshal(res.Body, &resp); err != nil {
+		return 0, err
+	}
+
+	// Count API doesn't support allow_partial_search_results=false, and returns a partial count
+	// if any shard failed. Return an error instead, so the caller doesn't get a wrong count.
+	if resp.Shards != nil && resp.Shards.Failed > 0 {
+		return 0, newShardFailuresError(resp.Shards)
+	}
+
+	return resp.Count, nil
+}
+
+// newShardFailuresError converts shard failures into an *elastic.Error, so it's handled
+// the same way as any other Elasticsearch error response.
+func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
+	// Shard failures are reported as 429 only if all of them are rejections (i.e., overloaded).
+	status := http.StatusTooManyRequests
+	if len(shards.Failures) == 0 {
+		status = http.StatusServiceUnavailable
+	}
+	failedShards := make([]map[string]any, 0, len(shards.Failures))
+	for _, f := range shards.Failures {
+		if f == nil {
+			continue
+		}
+		// Shard failures don't include a status field, so it's derived from the reason type.
+		if !isRejectedExecutionType(f.Reason["type"]) {
+			status = http.StatusServiceUnavailable
+		}
+		failedShards = append(failedShards, map[string]any{
+			"shard":  f.Shard,
+			"index":  f.Index,
+			"node":   f.Node,
+			"reason": f.Reason,
+		})
+	}
+	return &elastic.Error{
+		Status: status,
+		Details: &elastic.ErrorDetails{
+			Type:         "shard_failures",
+			Reason:       fmt.Sprintf("%d of %d shards failed", shards.Failed, shards.Total),
+			FailedShards: failedShards,
+		},
+	}
+}
+
+func isRejectedExecutionType(reasonType any) bool {
+	switch reasonType {
+	case "es_rejected_execution_exception", // Elasticsearch
+		"rejected_execution_exception": // OpenSearch
+		return true
+	}
+	return false
 }
 
 func (c *clientImpl) CountGroupBy(
@@ -155,7 +227,10 @@ func (c *clientImpl) CountGroupBy(
 		Size(0).
 		TrackTotalHits(false).
 		Aggregation(aggName, agg)
-	return c.esClient.Search(index).SearchSource(searchSource).Do(ctx)
+	return c.esClient.Search(index).
+		AllowPartialSearchResults(false).
+		SearchSource(searchSource).
+		Do(ctx)
 }
 
 func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
@@ -212,7 +287,7 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	}
 
 	// Decode body
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(res.Body, &body); err != nil {
 		return nil, err
 	}
@@ -226,7 +301,7 @@ func (c *clientImpl) GetDateFieldType() string {
 
 func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
 	if body == nil {
-		body = make(map[string]interface{})
+		body = make(map[string]any)
 	}
 	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
@@ -365,45 +440,45 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]interface{} {
-	properties := make(map[string]interface{}, len(mapping))
+func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]any {
+	properties := make(map[string]any, len(mapping))
 	for fieldName, fieldType := range mapping {
-		var typeMap map[string]interface{}
+		var typeMap map[string]any
 		switch fieldType {
 		case enumspb.INDEXED_VALUE_TYPE_TEXT:
-			typeMap = map[string]interface{}{"type": "text"}
+			typeMap = map[string]any{"type": "text"}
 		case enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
-			typeMap = map[string]interface{}{"type": "keyword"}
+			typeMap = map[string]any{"type": "keyword"}
 		case enumspb.INDEXED_VALUE_TYPE_INT:
-			typeMap = map[string]interface{}{"type": "long"}
+			typeMap = map[string]any{"type": "long"}
 		case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-			typeMap = map[string]interface{}{
+			typeMap = map[string]any{
 				"type":           "scaled_float",
 				"scaling_factor": 10000,
 			}
 		case enumspb.INDEXED_VALUE_TYPE_BOOL:
-			typeMap = map[string]interface{}{"type": "boolean"}
+			typeMap = map[string]any{"type": "boolean"}
 		case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-			typeMap = map[string]interface{}{"type": "date_nanos"}
+			typeMap = map[string]any{"type": "date_nanos"}
 		}
 		if typeMap != nil {
 			properties[fieldName] = typeMap
 		}
 	}
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"properties": properties,
 	}
 	return body
 }
 
-func convertMappingBody(esMapping map[string]interface{}, indexName string) map[string]string {
+func convertMappingBody(esMapping map[string]any, indexName string) map[string]string {
 	result := make(map[string]string)
 	index, ok := esMapping[indexName]
 	if !ok {
 		return result
 	}
-	indexMap, ok := index.(map[string]interface{})
+	indexMap, ok := index.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -411,7 +486,7 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
-	mappingsMap, ok := mappings.(map[string]interface{})
+	mappingsMap, ok := mappings.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -420,13 +495,13 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
-	propMap, ok := properties.(map[string]interface{})
+	propMap, ok := properties.(map[string]any)
 	if !ok {
 		return result
 	}
 
 	for fieldName, fieldProp := range propMap {
-		fieldPropMap, ok := fieldProp.(map[string]interface{})
+		fieldPropMap, ok := fieldProp.(map[string]any)
 		if !ok {
 			continue
 		}

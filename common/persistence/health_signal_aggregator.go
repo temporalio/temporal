@@ -7,8 +7,11 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/stats"
 )
 
 const (
@@ -19,6 +22,7 @@ type (
 	HealthSignalAggregator interface {
 		Record(callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
+		LatencyQuantile(quantile float64) float64
 		ErrorRatio() float64
 		Start()
 		Stop()
@@ -33,8 +37,11 @@ type (
 		requestsLock  sync.Mutex
 
 		aggregationEnabled bool
-		latencyAverage     aggregate.MovingWindowAverage
-		errorRatio         aggregate.MovingWindowAverage
+		percentilesEnabled dynamicconfig.BoolPropertyFn
+
+		latencyAverage      aggregate.MovingWindowAverage
+		latencyDistribution stats.TimeWindowedStats
+		errorRatio          aggregate.MovingWindowAverage
 
 		metricsHandler   metrics.Handler
 		emitMetricsTimer *time.Ticker
@@ -45,19 +52,39 @@ type (
 
 func NewHealthSignalAggregator(
 	aggregationEnabled bool,
+	percentilesEnabled dynamicconfig.BoolPropertyFn,
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	latencyWindowSize time.Duration,
+	latencyWindowCount int,
 ) *healthSignalAggregatorImpl {
+	latencyDistribution, err := stats.NewWindowedTDigest(stats.WindowConfig{
+		WindowSize:  latencyWindowSize,
+		WindowCount: latencyWindowCount,
+	})
+	if err != nil {
+		logger.Error("failed to create latency distribution helper, falling back to default config", tag.Error(err))
+		latencyDistribution, err = stats.NewWindowedTDigest(stats.WindowConfig{
+			WindowSize:  5 * time.Second,
+			WindowCount: 10,
+		})
+		if err != nil {
+			logger.Error("failed to create fallback latency distribution helper", tag.Error(err))
+		}
+	}
+
 	ret := &healthSignalAggregatorImpl{
-		status:             common.DaemonStatusInitialized,
-		shutdownCh:         make(chan struct{}),
-		requestCounts:      make(map[int32]int64),
-		metricsHandler:     metricsHandler,
-		emitMetricsTimer:   time.NewTicker(emitMetricsInterval),
-		logger:             logger,
-		aggregationEnabled: aggregationEnabled,
+		status:              common.DaemonStatusInitialized,
+		shutdownCh:          make(chan struct{}),
+		requestCounts:       make(map[int32]int64),
+		metricsHandler:      metricsHandler,
+		emitMetricsTimer:    time.NewTicker(emitMetricsInterval),
+		logger:              logger,
+		aggregationEnabled:  aggregationEnabled,
+		percentilesEnabled:  percentilesEnabled,
+		latencyDistribution: latencyDistribution,
 	}
 
 	if aggregationEnabled {
@@ -90,6 +117,10 @@ func (s *healthSignalAggregatorImpl) Record(callerSegment int32, latency time.Du
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
 
+		if s.percentilesEnabled() && s.latencyDistribution != nil {
+			s.latencyDistribution.RecordToLatestWindow(float64(latency.Milliseconds()))
+		}
+
 		if isUnhealthyError(err) {
 			s.errorRatio.Record(1)
 		} else {
@@ -104,6 +135,18 @@ func (s *healthSignalAggregatorImpl) Record(callerSegment int32, latency time.Du
 
 func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	return s.latencyAverage.Average()
+}
+
+func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) float64 {
+	if !s.percentilesEnabled() {
+		s.logger.Debug("health signal percentile aggregator is disabled")
+		return 0
+	}
+	if s.latencyDistribution == nil {
+		return 0
+	}
+
+	return s.latencyDistribution.Quantile(quantile)
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {

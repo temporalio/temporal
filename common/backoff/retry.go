@@ -3,6 +3,7 @@ package backoff
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -111,6 +112,7 @@ func ThrottleRetryContextWithReturn[T any](
 	isRetryable IsRetryable,
 ) (T, error) {
 	var zero T
+	var result T
 	var err error
 	var next time.Duration
 
@@ -124,7 +126,7 @@ func ThrottleRetryContextWithReturn[T any](
 	r := NewRetrier(policy, timeSrc)
 	t := NewRetrier(throttleRetryPolicy, timeSrc)
 	for ctx.Err() == nil {
-		result, err := fn(ctx)
+		result, err = fn(ctx)
 		if err == nil {
 			return result, nil
 		}
@@ -163,13 +165,7 @@ func ThrottleRetryContextWithReturn[T any](
 // IgnoreErrors can be used as IsRetryable handler for Retry function to exclude certain errors from the retry list
 func IgnoreErrors(errorsToExclude []error) func(error) bool {
 	return func(err error) bool {
-		for _, errorToExclude := range errorsToExclude {
-			if err == errorToExclude {
-				return false
-			}
-		}
-
-		return true
+		return !slices.Contains(errorsToExclude, err)
 	}
 }
 
@@ -177,12 +173,14 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 // initial duration, coefficient, and current attempt number.
 type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
 
-// ExponentialBackoffAlgorithm calculates the backoff duration using exponential algorithm.
-// The result is initInterval * (backoffCoefficient ^ (currentAttempt - 1)).
-// If the calculation overflows int64, it returns the maximum possible duration. A negative result will also never be returned.
+// ExponentialBackoffAlgorithm calculates the backoff duration as `initInterval * (backoffCoefficient ^ (currentAttempt - 1))`.
+// The result is clamped to [0, math.MaxInt64].
 func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
 	result := float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))
-	return time.Duration(max(0, min(int64(result), math.MaxInt64)))
+	if result >= float64(math.MaxInt64) {
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(max(0, int64(result)))
 }
 
 // MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,

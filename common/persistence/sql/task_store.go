@@ -3,6 +3,7 @@ package sql
 import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -26,10 +27,12 @@ func newTaskPersistence(
 	taskScanPartitions int,
 	logger log.Logger,
 	enableFairness bool,
+	serializer serialization.Serializer,
 ) (persistence.TaskStore, error) {
 	store := SqlStore{
-		DB:     db,
-		logger: logger,
+		DB:         db,
+		logger:     logger,
+		serializer: serializer,
 	}
 	userDataStore := userDataStore{SqlStore: store}
 	taskQueueStore := taskQueueStore{
@@ -39,7 +42,7 @@ func newTaskPersistence(
 	}
 	if enableFairness {
 		taskQueueStore.version = sqlplugin.MatchingTaskVersion2
-		return newTaskManagerV2(db, userDataStore, taskQueueStore, logger)
+		return newTaskManagerV2(db, userDataStore, taskQueueStore, logger, serializer)
 	}
-	return newTaskManagerV1(db, userDataStore, taskQueueStore, logger)
+	return newTaskManagerV1(db, userDataStore, taskQueueStore, logger, serializer)
 }

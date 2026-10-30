@@ -57,10 +57,10 @@ type (
 		GetMaxNextVertex() int
 
 		// SetVertexDataFunc sets a function to generate end vertex data
-		SetDataFunc(func(...interface{}) interface{})
-		GetDataFunc() func(...interface{}) interface{}
-		GenerateData(...interface{}) interface{}
-		GetData() interface{}
+		SetDataFunc(func(...any) any)
+		GetDataFunc() func(...any) any
+		GenerateData(...any) any
+		GetData() any
 		DeepCopy() Vertex
 	}
 
@@ -73,8 +73,8 @@ type (
 		SetEndVertex(Vertex)
 		GetEndVertex() Vertex
 		// Condition defines a function to determine if this connection is accessible
-		SetCondition(func(...interface{}) bool)
-		GetCondition() func(...interface{}) bool
+		SetCondition(func(...any) bool)
+		GetCondition() func(...any) bool
 		// Action defines function to perform when the end vertex reached
 		SetAction(func())
 		GetAction() func()

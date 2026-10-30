@@ -61,6 +61,7 @@ func ExampleNewServer() {
 }
 
 func TestNewServer(t *testing.T) {
+	t.Parallel()
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
 
 	ts.NewWorker("hello_world", func(registry worker.Registry) {
@@ -91,6 +92,7 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestNewWorkerWithOptions(t *testing.T) {
+	t.Parallel()
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
 	c := ts.GetDefaultClient()
 
@@ -139,6 +141,7 @@ func TestNewWorkerWithOptions(t *testing.T) {
 }
 
 func TestDefaultWorkerOptions(t *testing.T) {
+	t.Parallel()
 	ts := temporaltest.NewServer(
 		temporaltest.WithT(t),
 		temporaltest.WithBaseWorkerOptions(
@@ -188,6 +191,7 @@ func (denyAllClaimMapper) GetClaims(*authorization.AuthInfo) (*authorization.Cla
 }
 
 func TestBaseServerOptions(t *testing.T) {
+	t.Parallel()
 	// This test verifies that we can set custom claim mappers and authorizers
 	// with BaseServerOptions.
 	ts := temporaltest.NewServer(
@@ -217,6 +221,7 @@ func TestBaseServerOptions(t *testing.T) {
 }
 
 func TestClientWithCustomInterceptor(t *testing.T) {
+	t.Parallel()
 	var opts client.Options
 	opts.Interceptors = append(opts.Interceptors, NewTestInterceptor())
 	ts := temporaltest.NewServer(
@@ -255,6 +260,7 @@ func TestClientWithCustomInterceptor(t *testing.T) {
 }
 
 func TestSearchAttributeRegistration(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
@@ -365,7 +371,7 @@ func BenchmarkRunWorkflow(b *testing.B) {
 }
 
 func SearchAttrWorkflow(ctx workflow.Context, searchAttr string) error {
-	return workflow.UpsertSearchAttributes(ctx, map[string]interface{}{
+	return workflow.UpsertSearchAttributes(ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes used in test
 		searchAttr: "foo",
 	})
 }
@@ -432,7 +438,7 @@ func (i *WorkflowInterceptor) Init(outbound interceptor.WorkflowOutboundIntercep
 	return i.Next.Init(outbound)
 }
 
-func (i *WorkflowInterceptor) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (interface{}, error) {
+func (i *WorkflowInterceptor) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (any, error) {
 	version := workflow.GetVersion(ctx, "version", workflow.DefaultVersion, 1)
 	var err error
 

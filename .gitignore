@@ -24,6 +24,7 @@
 /temporal-*
 /tctl*
 /tdbg
+/fairsim
 
 # proto images
 /proto/image.bin
@@ -44,3 +45,6 @@
 
 **/.venv/
 **/.ruff_cache/
+
+# Ignoring AI agent files
+.agents/

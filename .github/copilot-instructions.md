@@ -1,0 +1,154 @@
+# Code Guidelines
+
+These rules apply when authoring or reviewing code; the Behavior Review and Review Feedback Style sections apply only when reviewing code.
+Express each rule as a concise, direct statement of the expected code or review behavior.
+
+## 1. Behavior Review
+
+The main question of a review is whether the code under review changes Temporal's behavior in the way it intends, and whether it changes Temporal's behavior in any way it does not intend. Behavior includes internal behavior that users do not observe directly, such as persisted state, tasks, and RPCs between services.
+
+- Read the commit messages and, if there is a PR, its title and description, and state the change to Temporal's behavior that they intend. If there is a PR and its description does not say what the PR is intended to change and why, report that as a finding, infer the intended change from the commit messages and the diff, and continue.
+- Read the diff. Then read every changed file completely, together with the code that calls the changed code and the code it calls. Skip generated code (e.g. `*.pb.go`, mocks).
+- Try to find existing code that does something related: code that the description says the change mirrors or replaces, code that does the same thing for another execution type or service, and code paths that the change adds to or bypasses. Read it. The change should either behave like this code or differ from it for a reason.
+- For each condition the reference code checks, each configuration it reads, each side effect it performs and each metric it emits, determine whether the change does the same. If the change bypasses a code path, determine what that code path guaranteed and whether the change still guarantees it. Each difference is a finding unless the PR description or commit messages explain why it is intended. An intended difference is still a finding if its consequence is harmful.
+- Judge whether the apparently intended behavior is right for Temporal: whether it is consistent with the guarantees and conventions of the system and of the related existing code. Report it if not.
+- For each new code path, determine what happens under the default configuration, when a request is retried or delivered twice, when it runs concurrently with other operations on the same state, and when it fails or its response is lost after each step. Determine whether the server and its callers can still make progress in each case.
+- Behavior can be wrong because of code outside the diff, for example a configuration default, a check that exists only on another code path, or a caller that relies on a field being set. Follow each new code path back to the source of its inputs and forward to the consumers of its outputs.
+- A `TODO` records a gap; it does not make the gap acceptable. Report the gap if its consequence matters once the change is released.
+- A test that asserts a behavior shows that the author intended the behavior, not that the behavior is correct.
+- Identify intended behavior that no test covers, and tests that would still pass if the corresponding implementation were reverted. Then review the code against the remaining guidelines.
+- Report behavior findings before code findings. For each behavior finding, state the condition, what happens, what the reference code does, and why it matters. A behavior difference that can lose data, leave an execution unable to make progress, or remove a guarantee that the server provides elsewhere is at least `med`.
+
+## 2. Structural Simplicity
+
+- Designs minimize branches, special cases, indirection, and moving parts.
+- Every line contributes to the implementation or verifies behavior in a test.
+- Tests contain only the setup and complexity needed to exercise the behavior in scope.
+- Tests use deterministic inputs unless randomness is the behavior under test.
+- Tests assert only the behavior in scope; they assume that unrelated operations work. For example, a test that is not about `TerminateWorkflowExecution` assumes that operation works.
+- Values assigned immediately before use are used without redundant nil checks.
+- Packages export only identifiers required by their callers.
+
+## 3. Go Conventions
+
+- Getter names omit the `Get` prefix: use `func (a *Activity) Store()` rather than `GetStore()`.
+- Implementation names omit the `Impl` suffix.
+- Test names place their descriptive name directly after `Test`: use `TestRetry` rather than `Test_Retry`.
+- Names omit package-name stuttering: package `activity` uses `Status` rather than `ActivityStatus`.
+- Map lookups and other operations that return a presence boolean use the comma-ok pattern rather than nil checks.
+- Defaults use `cmp.Or` when zero means "unset"; it returns the first non-zero argument. Side-effecting or expensive fallbacks use an `if` statement because all arguments are evaluated.
+
+## 4. Testing Correctness and Reliability
+
+Before writing, reviewing, or running tests, read and follow the [testing guide](../docs/development/testing.md) for setup, assertions, polling, parallelization, and test helpers.
+
+- Subtests use their own `t` parameter rather than the parent's `t` or `s.T()`.
+- Tests use a table-driven structure when multiple cases exercise the same behavior. Every case has a descriptive name and runs as a subtest.
+- Tests compare a function's complete result with an expected value rather than asserting each field separately; field-level assertions are reserved for cases where only part of the result is relevant.
+- A goroutine that maintains a precondition for later assertions, such as `go s.someHelper(ctx, ...)`, loops until context cancellation or reports success before the test waits for its effect. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
+- Assertions run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
+- Tests do not write to package-level or global variables. Values are threaded through function parameters because parallel tests share the same process.
+- Tests coordinate ordering with explicit synchronization rather than sleeps or elapsed-time thresholds.
+- A background operation that drives a polling condition has a longer timeout than the waiting deadline, so it remains capable of satisfying the condition for the entire wait.
+- Errors from precondition operations are surfaced or retried until success when failure would invalidate the rest of the test; they are not discarded with `_, _ = f()`.
+
+## 5. Inline Code / Avoid Abstractions
+
+- Strings used in only one place remain inline rather than becoming constants.
+- Struct field values are assigned directly in their literals when possible.
+- Types and generic structs provide behavior or meaning beyond the values they wrap.
+- Small amounts of straightforward functionality are implemented directly rather than through a new dependency.
+- Test-suite-level helpers are safe for use from subtests; helpers that depend on subtest-local state remain local to the subtest.
+- Code uses explicit constructs rather than reflection.
+
+## 6. Proper Error Handling
+
+- Use `softassert.That` or `softassert.Fail` to report programming errors and invariant violations.
+- Temporal errors use standard types such as `InvalidArgument`, `NotFound`, and `FailedPrecondition` rather than custom error types.
+- Errors are non-retryable when their tasks must not retry in the queue.
+- Wrapped errors add useful context, for example `fmt.Errorf("multi-operation part 2: %w", err)`; wrappers without additional information are omitted.
+- Library code returns errors instead of panicking, leaving error handling to the caller.
+- Handlers validate inputs at their boundaries rather than deep in business logic.
+- Error type checks use `errors.AsType` rather than `errors.As`.
+- Error-message assertions use `require.ErrorContains` rather than separate `require.Error` and `require.Contains` assertions.
+
+## 7. Consistency with Codebase
+
+- Do not introduce new third-party libraries unless specifically requested.
+- Check existing imports and `go.mod` before assuming a library is available.
+- Code follows the patterns already established in the codebase. For example, libraries pass the frontend request through as other libraries do.
+- Existing utilities are reused before new ones are created.
+- Logger messages are static, and dynamic content is recorded in structured tags.
+- CLI documentation follows the codebase's conventions, including capitalization of proper nouns.
+- Metric tags match existing formats, including `CONSTANT_CASE` for enum values.
+- Error messages match the surrounding code's style, including omission of punctuation for single sentences.
+- Nexus-related logs use the `tag.NexusStage*` value matching the local phase, as defined in `common/log/tag/values.go`.
+- Nexus-related logs include `tag.RequestID` when available; propagate it through helpers, retries, and completion handling to correlate logs across caller and handler services.
+
+## 8. Code comments
+
+- Comments are full sentences that start with a capital letter and end with punctuation. Short labels, end-of-line fragments, directives, and `TODO` markers are exempt.
+- Comments explain behavior that is not apparent to a reader familiar with the codebase.
+- Names convey information that can be expressed clearly through naming; comments cover information that naming cannot convey.
+- Comments contain only the explanation needed to understand the code.
+- Comments use literal language and terminology established in the codebase.
+- Comments use simple sentence structures, with several plain statements rather than one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
+- Comments ordinarily describe the current code without referring to counterfactuals, prior discussions, or the decision process from when the code was written.
+- Comments ordinarily describe the code itself rather than how upstream callers use it.
+
+## 9. API and Proto Design
+
+- Every proto field has a comment.
+- Protobuf fields use canonical snake-case names such as `request_id` rather than `requestId`, and `schedule_time` rather than `scheduledTime`.
+- User-facing errors describe user-facing concepts without exposing internal concepts such as `LowCardinalityKeyword`.
+- Functions accept event-attribute structs instead of continually growing parameter lists.
+- Well-known values use enums rather than integers or strings.
+
+## 10. Concurrency and Safety
+
+- Structs, especially proto messages, use immutable data patterns to avoid data races and synchronization.
+- Synchronization uses `sync.Mutex` by default. Atomics are reserved for specific patterns or demonstrated performance concerns.
+- Synchronization uses `sync.Mutex` rather than `sync.RWMutex` unless reads outnumber writes by more than 1000 to 1 or readers hold the lock for significant time.
+- I/O occurs outside critical sections, with side-effect tasks carrying work that must happen after a lock is released.
+- Data protected by a lock is cloned before the lock is released when it may be modified afterward.
+- Proto message fields accessed outside the workflow lock are cloned with `common.CloneProto(...)` rather than aliased by returning their pointers directly.
+
+## 11. Review Feedback Style
+
+- Review changes holistically as well as line by line.
+- Give concrete replacement text as a code suggestion. If restructuring the code is clearer and shorter than rewording the comment, suggest that code instead.
+- Be direct and practical, without fluff.
+- Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change rather than only stating that it should.
+
+### Comment format
+
+Use this core structure for every actionable finding.
+Replace `SEVERITY` with `nit`, `small`, `med`, or `high`:
+
+```markdown
+<details>
+<summary><strong>SEVERITY</strong> — One-line summary.</summary>
+
+Concise explanation of what is wrong and why it matters, followed by any
+supporting evidence, examples, or implementation notes.
+
+</details>
+
+**Suggestion:** Concrete fix or alternative.
+```
+
+Use HTML tags rather than Markdown inside `<summary>`.
+The summary line is all a reader sees before expanding, so it must state the problem on its own.
+Keep the suggestion outside the collapsible block, as a code suggestion wherever the fix is a concrete edit.
+
+### Severity levels
+
+- `nit` — Stylistic or trivial improvement. Preference-based. Non-blocking.
+- `small` — Minor issue: slightly misleading name, small readability concern, or minor best-practice deviation. Does not affect correctness. Non-blocking.
+- `med` — Moderate issue: missing error handling, logic that is likely wrong in edge cases, test gaps, or design concerns. Affects correctness or maintainability. Blocking.
+- `high` — Serious issue: security vulnerability, data loss risk, crash/panic, race condition, broken functionality, or architectural violation. Blocking.
+
+Report concrete findings at all four severity levels: `nit`, `small`, `med`, and `high`.
+Prefer a small number of high-confidence findings.
+Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
+Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.

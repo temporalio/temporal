@@ -9,9 +9,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -35,7 +38,7 @@ type (
 		GenerateWorkflowCloseTasks(
 			closedTime time.Time,
 			deleteAfterClose bool,
-			skipCloseTransferTask bool,
+			skipParentVerification bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
 		// This task is used to delete the history events of the workflow execution after the retention period expires.
@@ -60,6 +63,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
+		GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -76,10 +80,15 @@ type (
 		GenerateActivityTimerTasks() error
 		GenerateUserTimerTasks() error
 
+		RegenerateTimerTasksForTimeSkipping() error
+		GenerateTimeSkippingFastForwardTimerTask() error
+
 		// replication tasks
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
 		) ([]tasks.Task, error)
+		// GenerateMigrationTasks generates low priority replication tasks and is
+		// for the force replication path only. Do not call it for live replication.
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
@@ -90,6 +99,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
+		chasmRegistry     *chasm.Registry
 		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
@@ -103,6 +113,7 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -110,6 +121,7 @@ func NewTaskGenerator(
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
+		chasmRegistry:     chasmRegistry,
 		mutableState:      mutableState,
 		config:            config,
 		archivalMetadata:  archivalMetadata,
@@ -187,30 +199,20 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
-	skipCloseTransferTask bool,
+	skipParentVerification bool,
 ) error {
 	closeVersion, err := r.mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
 
-	var closeTasks []tasks.Task
-
-	if !skipCloseTransferTask {
-		closeExecutionTask := &tasks.CloseExecutionTask{
-			// TaskID, Visiblitytimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			Version:          closeVersion,
-			DeleteAfterClose: deleteAfterClose,
-		}
-		closeTasks = append(closeTasks, closeExecutionTask)
-	} else {
-		r.logger.Info("Skipping close transfer task generation - already acked on active cluster",
-			tag.WorkflowNamespaceID(r.mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(r.mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(r.mutableState.GetExecutionState().GetRunId()),
-		)
-	}
+	closeTasks := []tasks.Task{&tasks.CloseExecutionTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:            r.mutableState.GetWorkflowKey(),
+		Version:                closeVersion,
+		DeleteAfterClose:       deleteAfterClose,
+		SkipParentVerification: skipParentVerification,
+	}}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
 	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
@@ -243,10 +245,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
 
-			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
-			if delay > retention {
-				delay = retention
-			}
+			delay := min(backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay()), retention)
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := closedTime.Add(delay)
 
@@ -264,7 +263,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTasks(closeTasks...)
 
-	return nil
+	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
+	return r.mutableState.GenerateActivityCancelCommandsForClose()
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.
@@ -279,12 +279,45 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
+		if archetypeRetention, ok := r.getArchetypeRetention(namespaceEntry); ok {
+			retention = archetypeRetention
+		}
 	case *serviceerror.NamespaceNotFound:
 		// namespace is not accessible, use default value above
 	default:
 		return 0, err
 	}
 	return retention, nil
+}
+
+// getArchetypeRetention returns the retention registered by this execution's archetype via
+// chasm.WithRetention, if any. It is floored at the namespace min retention because, unlike the
+// namespace retention, it never goes through the frontend validation that enforces that floor.
+func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Namespace) (time.Duration, bool) {
+	if r.chasmRegistry == nil {
+		return 0, false
+	}
+
+	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	rc, ok := r.chasmRegistry.ComponentByID(archetypeID)
+	if !ok {
+		return 0, false
+	}
+	retention, ok := rc.Retention(namespaceEntry)
+	if !ok {
+		return 0, false
+	}
+
+	var minRetention time.Duration
+	if namespaceEntry.IsGlobalNamespace() {
+		minRetention = r.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = r.config.NamespaceMinRetentionLocal()
+	}
+	return max(retention, minRetention), true
 }
 
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
@@ -575,6 +608,23 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 	return nil
 }
 
+func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
+		return nil
+	}
+
+	if len(commands) == 0 || controlQueue == "" {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkerCommandsTask{
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Commands:    commands,
+		Destination: controlQueue,
+	})
+	return nil
+}
+
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	childInitiatedEventId int64,
 ) error {
@@ -745,21 +795,38 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	}, nil
 }
 
+// GenerateMigrationTasks must only be called from the force replication path
+// (i.e. GenerateLastHistoryReplicationTasks), never from live replication.
+// Every task it returns is marked TASK_PRIORITY_LOW so that bulk backfill does
+// not compete with live replication traffic; using it for live replication
+// would silently demote those tasks.
 func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
 		return nil, 0, err
 	}
-	lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-	if err != nil {
-		return nil, 0, err
+
+	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
+	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
+
+	lastItem := &historyspb.VersionHistoryItem{
+		EventId: common.EmptyEventID,
+		Version: common.EmptyVersion,
 	}
+	nextEventID := common.EmptyEventID
+	if isWorkflow {
+		// version history is empty for non-workflow
+		lastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistory)
+		if err != nil {
+			return nil, 0, err
+		}
+		nextEventID = lastItem.GetEventId() + 1
+	}
+
 	now := time.Now().UTC()
 	workflowKey := r.mutableState.GetWorkflowKey()
 	var taskEquivalents []tasks.Task
-	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
-	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if isWorkflow {
@@ -785,10 +852,13 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
-				NextEventID:         lastItem.GetEventId() + 1,
-				TaskEquivalents:     taskEquivalents,
-				TargetClusters:      targetClusters,
-				IsForceReplication:  true,
+				NextEventID:         nextEventID,
+				CurrentVersionHistory: &historyspb.VersionHistory{
+					Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+				},
+				TaskEquivalents:    taskEquivalents,
+				TargetClusters:     targetClusters,
+				IsForceReplication: true,
 			}}, 1, nil
 		}
 		if !isWorkflow {
@@ -807,28 +877,31 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey:    workflowKey,
 			FirstEventID:   executionInfo.LastFirstEventId,
-			NextEventID:    lastItem.GetEventId() + 1,
+			NextEventID:    nextEventID,
 			Version:        lastItem.GetVersion(),
+			Priority:       enumsspb.TASK_PRIORITY_LOW,
 			TargetClusters: targetClusters,
 		})
 		activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
 		for activityID := range r.mutableState.GetPendingActivityInfos() {
 			activityIDs[activityID] = struct{}{}
 		}
-		taskEquivalents = append(taskEquivalents, convertSyncActivityInfos(
+		for _, syncActivityTask := range convertSyncActivityInfos(
 			now,
 			workflowKey,
 			r.mutableState.GetPendingActivityInfos(),
 			activityIDs,
 			targetClusters,
-		)...)
-		if r.config.EnableNexus() {
-			taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
-				WorkflowKey: workflowKey,
-				// TaskID and VisibilityTimestamp are set by shard
-				TargetClusters: targetClusters,
-			})
+		) {
+			syncActivityTask.(*tasks.SyncActivityTask).Priority = enumsspb.TASK_PRIORITY_LOW
+			taskEquivalents = append(taskEquivalents, syncActivityTask)
 		}
+		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+			Priority:       enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters: targetClusters,
+		})
 	}
 
 	if r.mutableState.IsTransitionHistoryEnabled() &&
@@ -844,10 +917,13 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
-			NextEventID:         lastItem.GetEventId() + 1,
-			TaskEquivalents:     taskEquivalents,
-			TargetClusters:      targetClusters,
-			IsForceReplication:  true,
+			NextEventID:         nextEventID,
+			CurrentVersionHistory: &historyspb.VersionHistory{
+				Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+			},
+			TaskEquivalents:    taskEquivalents,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		}}, 1, nil
 	}
 	if !isWorkflow {
@@ -995,4 +1071,139 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 		}
 	}
 	return true
+}
+
+// RegenerateTimerTasksForTimeSkipping force re-stamps every pending timer task against the
+// current accumulated skip.
+//
+// It needs no per-task dedup status of its own. Callers gate it on whether a skip actually
+// happened: the active close transaction only invokes it when a skip transition was emitted
+// this transaction (regenerateTimerTasksForTimeSkipping), and PartialRefresh only invokes it
+// when TimeSkippingInfo.LastUpdateVersionedTransition falls within the replicated delta (see
+// refreshTasksForTimeSkipping).
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
+
+	if NewTimeSkippingInfoUtil(r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() <= 0 {
+		return nil
+	}
+
+	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
+	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
+	// because time skipping pauses when there is in-flight work. Activity retry
+	// timers are the exception: an activity in retry backoff does not block skipping,
+	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
+	//
+	// NOTE: blocks (1)-(4) below construct their tasks inline rather than calling the
+	// canonical generators (GenerateUserTimerTasks, GenerateWorkflowStartTasks,
+	// GenerateDelayedWorkflowTasks)because those generators bundle creation-time gating and side
+	// effects.
+
+	// (1) user timers — regenerate one task per pending user timer. User timers
+	// are only one of the task types that may need regeneration, so continue to
+	// the timeout timers below even when none are pending.
+	for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
+		r.mutableState.AddTasks(&tasks.UserTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: userTimerSequenceID.Timestamp,
+			EventID:             userTimerSequenceID.EventID,
+		})
+	}
+
+	// (2) execution and run timeout timers.
+	executionInfo := r.mutableState.GetExecutionInfo()
+	executionTimeoutTimer := executionInfo.WorkflowExecutionExpirationTime
+	if !timeNotSet(executionTimeoutTimer) &&
+		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusCreated {
+		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
+			// TaskID is set by shard
+			NamespaceID:         executionInfo.NamespaceId,
+			WorkflowID:          executionInfo.WorkflowId,
+			FirstRunID:          executionInfo.FirstExecutionRunId,
+			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
+		})
+	}
+	runTimeoutTimer := executionInfo.WorkflowRunExpirationTime
+	if !timeNotSet(runTimeoutTimer) {
+		// Version must match the workflow's start version so the executor's
+		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
+		startVersion, err := r.mutableState.GetStartVersion()
+		if err != nil {
+			return err
+		}
+		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
+			Version:             startVersion,
+		})
+	}
+
+	// (3) fast-forward timer
+	if err := r.GenerateTimeSkippingFastForwardTimerTask(); err != nil {
+		return err
+	}
+
+	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
+	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
+	// no backoff has no real timer to regenerate.
+	if !r.mutableState.HadOrHasWorkflowTask() {
+		ei := r.mutableState.GetExecutionInfo()
+		executionTime := ei.GetExecutionTime().AsTime()
+		startTime := ei.GetStartTime().AsTime()
+		if executionTime.After(startTime) {
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			var backOffType enumsspb.WorkflowBackoffType
+			if ei.CronSchedule != "" {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
+			} else if ei.Attempt > 1 {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
+			} else {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: executionTime,
+				Version:             startVersion,
+				WorkflowBackoffType: backOffType,
+			})
+		}
+	}
+	// (5) activity retry backoff timers — no time comparison here. Regen runs after
+	// the skip transaction has advanced virtual now past the next-attempt time, so any
+	// now-relative check would wrongly exclude the activity whose timer needs re-stamping.
+	// The structural check (not started, has retry policy, attempt > 1) is sufficient:
+	// the idle gate already ensures every pending activity is a failed retry when we get here.
+	for _, ai := range r.mutableState.GetPendingActivityInfos() {
+		if activityPendingRetry(ai) {
+			if err := r.GenerateActivityRetryTasks(ai); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
+	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateTimeSkippingFastForwardTimerTask() error {
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
+		return nil
+	}
+	r.mutableState.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),
+		VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
+		ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
+	})
+	return nil
 }

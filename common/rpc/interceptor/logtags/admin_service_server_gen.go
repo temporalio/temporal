@@ -21,6 +21,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.AddTasksResponse:
 		return nil
+	case *adminservice.ApplyNamespaceMutationRequest:
+		return nil
+	case *adminservice.ApplyNamespaceMutationResponse:
+		return nil
 	case *adminservice.CancelDLQJobRequest:
 		return nil
 	case *adminservice.CancelDLQJobResponse:
@@ -28,6 +32,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.CloseShardRequest:
 		return nil
 	case *adminservice.CloseShardResponse:
+		return nil
+	case *adminservice.CountExecutionsRequest:
+		return nil
+	case *adminservice.CountExecutionsResponse:
 		return nil
 	case *adminservice.DeepHealthCheckRequest:
 		return nil
@@ -113,6 +121,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.GetTaskQueueTasksResponse:
 		return nil
+	case *adminservice.GetTaskQueueUserDataRequest:
+		return nil
+	case *adminservice.GetTaskQueueUserDataResponse:
+		return nil
 	case *adminservice.GetWorkflowExecutionRawHistoryRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -142,6 +154,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.ListClustersResponse:
 		return nil
+	case *adminservice.ListExecutionsRequest:
+		return nil
+	case *adminservice.ListExecutionsResponse:
+		return nil
 	case *adminservice.ListHistoryTasksRequest:
 		return nil
 	case *adminservice.ListHistoryTasksResponse:
@@ -157,6 +173,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.MergeDLQTasksRequest:
 		return nil
 	case *adminservice.MergeDLQTasksResponse:
+		return nil
+	case *adminservice.MigrateScheduleRequest:
+		return nil
+	case *adminservice.MigrateScheduleResponse:
 		return nil
 	case *adminservice.PurgeDLQMessagesRequest:
 		return nil
@@ -206,6 +226,12 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.ResendReplicationTasksResponse:
 		return nil
+	case *adminservice.StartAdminBatchOperationRequest:
+		return nil
+	case *adminservice.StartAdminBatchOperationResponse:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+		}
 	case *adminservice.SyncWorkflowStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

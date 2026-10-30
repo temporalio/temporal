@@ -139,6 +139,7 @@ func (s *executableActivityStateTaskSuite) TearDownTest() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -182,6 +183,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -193,6 +195,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
@@ -201,7 +204,9 @@ func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -247,6 +252,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -266,11 +272,12 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")
-	s.Equal(nil, s.task.HandleErr(err))
+	s.NoError(s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
@@ -295,7 +302,7 @@ func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
 		NamespaceId:      s.task.NamespaceID,
 		WorkflowId:       s.task.WorkflowID,
 		RunId:            s.task.RunID,
-		TaskId:           s.task.ExecutableTask.TaskID(),
+		TaskId:           s.task.TaskID(),
 		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		ScheduledEventId: s.task.req.ScheduledEventId,
 		Version:          s.task.req.Version,
@@ -359,11 +366,12 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	batchResult, batched := task1.BatchWith(task2)
 	s.True(batched)
 	activityTask, _ := batchResult.(*ExecutableActivityStateTask)
-	s.Equal(2, len(activityTask.activityInfos))
+	s.Len(activityTask.activityInfos, 2)
 	s.assertAttributeEqual(replicationAttribute1, activityTask.activityInfos[0])
 	s.assertAttributeEqual(replicationAttribute2, activityTask.activityInfos[1])
 
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), namespaceId, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -382,7 +390,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		ActivitiesInfo: activityTask.activityInfos,
 	})
 	err := batchResult.Execute()
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_ShouldNotBatch() {

@@ -38,18 +38,16 @@ func (s *ExecutorTestSuite) TestTaskExecution() {
 	e.Start()
 	var runCounter int64
 	var startWG sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		startWG.Add(1)
-		go func() {
-			defer startWG.Done()
-			for i := 0; i < 20; i++ {
+	for range 5 {
+		startWG.Go(func() {
+			for i := range 20 {
 				if i%2 == 0 {
 					e.Submit(&testTask{TaskStatusDefer, &runCounter})
 					continue
 				}
 				e.Submit(&testTask{TaskStatusDone, &runCounter})
 			}
-		}()
+		})
 	}
 	s.True(common.AwaitWaitGroup(&startWG, time.Second*10))
 	s.True(s.awaitCompletion(e))

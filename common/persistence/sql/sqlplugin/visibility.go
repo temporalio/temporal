@@ -25,7 +25,7 @@ var (
 type (
 	// VisibilitySearchAttributes represents the search attributes json
 	// in executions_visibility table
-	VisibilitySearchAttributes map[string]interface{}
+	VisibilitySearchAttributes map[string]any
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
@@ -39,7 +39,7 @@ type (
 		CloseTime            *time.Time
 		HistoryLength        *int64
 		HistorySizeBytes     *int64
-		ExecutionDuration    *time.Duration
+		ExecutionDuration    *int64
 		StateTransitionCount *int64
 		Memo                 []byte
 		Encoding             string
@@ -69,7 +69,7 @@ type (
 		PageSize         *int
 
 		Query     string
-		QueryArgs []interface{}
+		QueryArgs []any
 		GroupBy   []string
 	}
 
@@ -115,7 +115,7 @@ var _ driver.Valuer = (*VisibilitySearchAttributes)(nil)
 
 var DbFields = getDbFields()
 
-func (vsa *VisibilitySearchAttributes) Scan(src interface{}) error {
+func (vsa *VisibilitySearchAttributes) Scan(src any) error {
 	if src == nil {
 		return nil
 	}
@@ -214,12 +214,18 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 		if bs, ok := value.([]byte); ok {
 			return string(bs), nil
 		}
+		// Default-division workflows have a NULL namespace division. Represent
+		// them as the empty string to match the Elasticsearch behavior, where
+		// documents missing the field are bucketed under "".
+		if value == nil && fieldName == sadefs.TemporalNamespaceDivision {
+			return "", nil
+		}
 		return value, nil
 	}
 }
 
 func getDbFields() []string {
-	t := reflect.TypeOf(VisibilityRow{})
+	t := reflect.TypeFor[VisibilityRow]()
 	dbFields := make([]string, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -240,7 +246,7 @@ func GenerateSelectQuery(
 	convertToDbDateTime func(time.Time) time.Time,
 ) error {
 	whereClauses := make([]string, 0, 10)
-	queryArgs := make([]interface{}, 0, 10)
+	queryArgs := make([]any, 0, 10)
 
 	whereClauses = append(
 		whereClauses,

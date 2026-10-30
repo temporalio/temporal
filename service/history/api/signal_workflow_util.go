@@ -45,7 +45,7 @@ func ValidateSignal(
 			metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()),
 		),
 		shard.GetThrottledLogger(),
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}

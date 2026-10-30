@@ -9,8 +9,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const emptyBacklogAge time.Duration = -1
-
 // backlogAgeTracker is not safe for concurrent use
 type backlogAgeTracker struct {
 	tree treemap.Map // unix nano as int64 -> int (count)

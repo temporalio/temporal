@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -48,12 +50,15 @@ func (s *executorSuite) SetupTest() {
 		s.activeExecutor,
 		s.standbyExecutor,
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		testhooks.TestHooks{},
 	)
 }
 
 func (s *executorSuite) TestExecute_Active() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
+	executable.EXPECT().GetWorkflowID().Return("workflow_id")
 	executable.EXPECT().GetTask().Return(nil)
 	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: currentCluster,
@@ -73,6 +78,7 @@ func (s *executorSuite) TestExecute_Active() {
 func (s *executorSuite) TestExecute_Standby() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
+	executable.EXPECT().GetWorkflowID().Return("workflow_id")
 	executable.EXPECT().GetTask().Return(nil)
 	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: nonCurrentCluster,

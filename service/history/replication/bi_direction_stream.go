@@ -183,7 +183,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err 
 	case s.channel <- resp:
 		return
 	default:
-		s.logger.Warn("no enough worker on bi-direction receiving stream")
+		metrics.ReplicationStreamChannelFull.With(s.metricsHandler).Record(1)
 		s.channel <- resp
 	}
 }

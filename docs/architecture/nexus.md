@@ -20,7 +20,6 @@ communication.
 The frontend exposes the following Nexus HTTP routes over the existing HTTP API (default port is `7243`):
 
 > ⚠️ All of the following routes are considered experimental and may change without notice until the feature stabilizes ⚠️
-
 ### `/namespaces/{namespace}/task-queues/{task_queue}/nexus-services`
 
 Dispatch a nexus task directly to a task queue.
@@ -33,23 +32,21 @@ Dispatch a nexus task directly to a registered endpoint by ID. (more on this lat
 
 Complete a Nexus operation via callback.
 
-# Trying Nexus Out
+# Nexus Environment Configurations
 
-Since Nexus is a new feature with experimental APIs and has not been exercised in production, it is disabled by default
-until it is considered stable.
+Nexus is enabled by default in server version `1.26.0` or newer.
 
-Nexus is only supported in single cluster setups for the time being due to endpoint registry replication not being implemented
-yet.
+> NOTE: Nexus is only supported in single cluster setups due to endpoint registry replication not being implemented.
 
 ## Enabling Nexus
 
 To enable Nexus in your deployment:
 
 > NOTE: Replace `$PUBLIC_URL` with a URL value that is accessible to external callers or internally within the cluster.
-> At the time of writing external Nexus calls are considered experimental so it should be safe to use the address of an
-> internal load balancer for the frontend service.
 
-1. Ensure that the server's static configuration file enables the HTTP API.
+1. Ensure that the server's [static configuration file](https://docs.temporal.io/references/configuration) enables the
+   HTTP API. It is on by default in all of the Temporal provided configurations, including the default configuration
+   for the docker image and in the helm-chart.
 
     ```yaml
     services:
@@ -66,39 +63,32 @@ To enable Nexus in your deployment:
           httpAddress: $PUBLIC_URL:7243
     ```
 
-2. Enable Nexus via dynamic config, set the public callback URL, and set the allowed callback addresses.
+2. Configure Nexus settings in the [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+
+- 2a. Starting with version 1.31.0, callbacks for worker targets always use the system callback URL
+  (`temporal://system`). No callback URL configuration is required.
+
+- 2b. Prior to version 1.30.0, you must set a public callback URL, and allowed callback addresses. These configurations
+  are also required for calling **experimental** external endpoint targets.
 
     ```yaml
-    system.enableNexus:
-      - value: true
     component.nexusoperations.callback.endpoint.template:
       # The URL must be publicly accessible if the callback is meant to be called by external services.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
       # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
-    component.callbacks.allowedAddresses:
-      # This list is a security mechanism for limiting which callback URLs are accepted by the server.
-      # Attackers may leverage the callback mechanism to force the server to call arbitrary URLs.
-      # The config below is only recommended for development, tune this to your requirements.
-      - value:
-          - Pattern: "*"
-            AllowInsecure: true
+    # From version 1.32.x
+    callback.allowedAddresses:
+    # Uncomment versions older than 1.32.x
+    # component.callbacks.allowedAddresses:
+      # Limits which callback URLs are accepted by the server.
+      # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
+      # For production, restrict allowed hosts and set AllowInsecure to false
+      # whenever HTTPS/TLS is supported. Allowing HTTP increases MITM and data exposure risk.
+     - value:
+         - Pattern: "*" # Update to restrict allowed callers, e.g. "$PUBLIC_URL:7243/*"
+           AllowInsecure: true # In production, set to false and ensure traffic is HTTPS/TLS encrypted
     ```
-
-## Disabling Nexus
-
-To disable Nexus completely a server restart is required as the outbound queue processor (detailed below) is started
-if `system.enableNexus` is on, but does not shut itself down when this config is disabled. See [Disabling
-the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutting off processing on a running server.
-
-## Downgrading to a Pre-Nexus Server Release
-
-In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
-(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
-triggered.
-
-After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
-[DLQ](../admin/dlq.md) without any retries. Workflows with pending Nexus operations will be stuck.
 
 # Components
 
@@ -129,8 +119,8 @@ The endpoints table is versioned where every write to the table increments its v
 purposes: to ensure writes are serialized, and to determine whether a node has an up-to-date view of the table when long
 polling.
 
-> ⚠️  At the time of writing, replication for the registry is not implemented and Nexus shouldn't be used in multi cluster
-setups. Replication will be implemented at a later time.⚠️
+> ⚠️  Nexus shouldn't be used in multi cluster setups because replication for the registry is not implemented. 
+> This feature is planned for the future. ⚠️
 
 ## Outbound Task Queue
 
@@ -238,7 +228,7 @@ The circuit breaker is dynamically configurable via:
 
 ## Nexus Operations
 
-The [`nexusoperations` component](../../components/nexusoperations) holds all of the logic for scheduling Nexus
+The [`nexusoperations` component](../../service/history/hsm/nexusoperations) holds all of the logic for scheduling Nexus
 Operations from a workflow and maintaining the Operations's lifecycle.
 
 There are some other pieces of Nexus logic spread around other parts of the server (`common`, `frontend`, and
@@ -250,7 +240,7 @@ Machine framework (docs TBD).
 ### `Operation` State Machine
 
 The
-[Operation](https://github.com/temporalio/temporal/blob/a0fdea5319be5f1631d7e2b0f6f06c38dae3d413/components/nexusoperations/statemachine.go#L65)
+[Operation](../../service/history/hsm/nexusoperations/statemachine.go)
 state machine manages the lifetime of an Operation the StartOperation request.
 
 The state machine transitions between these states (as defined in code):
@@ -330,7 +320,7 @@ releases the mutable state lock while making the HTTP request, and reacquires th
 Since Nexus Operations can provide their results asynchronously, when constructing the `StartOperation` call, the
 executor adds a callback URL along with a set of headers to later correlate the operation completion with the calling
 workflow and operation state machine. The
-[component.nexusoperations.callback.endpoint.template](https://github.com/temporalio/temporal/blob/7c8025aff96af7d72a91af615f1d625817842894/components/nexusoperations/config.go#L69)
+[component.nexusoperations.callback.endpoint.template](../../service/history/hsm/nexusoperations/config.go)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
 publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
@@ -347,14 +337,15 @@ The workflow closed trigger will trigger a callback when a workflow completes su
 cancellation, or termination, as well as carry over the callbacks to the next execution in a chain when a workflow is
 retried or continues-as-new.
 
-Similarly to Nexus Operations, callbacks are implemented via a hierarchical state machine and a set of executors, which
-are located in [the components directory](../../components/callbacks).
+Callbacks are implemented as CHASM components and task handlers in the
+[callback library](../../chasm/lib/callback). The
+[legacy HSM callbacks package](../../service/history/hsm/callbacks) remains for persisted HSM state.
 
 Callbacks are continously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
 permanently fail, or the workflow's retention period expires.
 
-The timeout for making a single callback HTTP call is configurable via: `component.callbacks.request.timeout`
-(default is 10 seconds).
+The timeout for making a single callback HTTP call is configurable via: `callback.request.timeout`
+(default is 10 seconds). The legacy HSM implementation uses `component.callbacks.request.timeout`.
 
 ### `Callback` State Machine
 
@@ -447,5 +438,5 @@ sequenceDiagram
     Frontend -->>- Client: Response
 ```
 
-[nexus-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/nexusoperations/config.go#L77-L87
-[callback-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/callbacks/config.go#L40-L50
+[nexus-retry-policy]: ../../service/history/hsm/nexusoperations/config.go
+[callback-retry-policy]: ../../chasm/lib/callback/config.go

@@ -132,8 +132,8 @@ func NewHTTPAPIServer(
 		h.matchAdditionalHeaders[v] = true
 	}
 	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
-		if strings.HasSuffix(v, "*") {
-			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(strings.TrimSuffix(v, "*")))
+		if before, ok := strings.CutSuffix(v, "*"); ok {
+			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(before))
 		} else {
 			h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
 		}
@@ -235,8 +235,8 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Debug(
 		"HTTP API call",
-		tag.NewStringTag("http-method", r.Method),
-		tag.NewAnyTag("http-url", r.URL),
+		tag.String("http-method", r.Method),
+		tag.Any("http-url", r.URL),
 	)
 
 	// Need to change the accept header based on whether pretty and/or
@@ -349,9 +349,9 @@ type serviceMethod struct {
 	handler grpc.UnaryHandler
 }
 
-var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-var protoMessageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
-var errorType = reflect.TypeOf((*error)(nil)).Elem()
+var contextType = reflect.TypeFor[context.Context]()
+var protoMessageType = reflect.TypeFor[proto.Message]()
+var errorType = reflect.TypeFor[error]()
 
 func newInlineClientConn(
 	servers map[string]any,
@@ -364,8 +364,7 @@ func newInlineClientConn(
 	methods := map[string]*serviceMethod{}
 	for qualifiedServerName, server := range servers {
 		serverVal := reflect.ValueOf(server)
-		for i := 0; i < serverVal.Type().NumMethod(); i++ {
-			reflectMethod := serverVal.Type().Method(i)
+		for reflectMethod := range serverVal.Type().Methods() {
 			// We intentionally look this up by name to not assume method indexes line
 			// up from type to value
 			methodVal := serverVal.MethodByName(reflectMethod.Name)
@@ -386,7 +385,7 @@ func newInlineClientConn(
 			fullMethod := "/" + qualifiedServerName + "/" + reflectMethod.Name
 			methods[fullMethod] = &serviceMethod{
 				info: grpc.UnaryServerInfo{Server: server, FullMethod: fullMethod},
-				handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler: func(ctx context.Context, req any) (any, error) {
 					ret := methodVal.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
 					err, _ := ret[1].Interface().(error)
 					return ret[0].Interface(), err
@@ -487,7 +486,7 @@ func chainUnaryServerInterceptors(interceptors []grpc.UnaryServerInterceptor) gr
 }
 
 func chainUnaryInterceptors(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return interceptors[0](ctx, req, info, getChainUnaryHandler(interceptors, 0, info, handler))
 	}
 }
@@ -501,7 +500,7 @@ func getChainUnaryHandler(
 	if curr == len(interceptors)-1 {
 		return finalHandler
 	}
-	return func(ctx context.Context, req interface{}) (interface{}, error) {
+	return func(ctx context.Context, req any) (any, error) {
 		return interceptors[curr+1](ctx, req, info, getChainUnaryHandler(interceptors, curr+1, info, finalHandler))
 	}
 }

@@ -7,38 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	namespacepb "go.temporal.io/api/namespace/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	test "go.temporal.io/server/common/testing"
 )
 
-func base(t *testing.T) *namespace.Namespace {
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
-			Id:   namespace.NewID().String(),
-			Name: t.Name(),
-			Data: make(map[string]string),
-		},
-		Config: &persistencespb.NamespaceConfig{
-			BadBinaries: &namespacepb.BadBinaries{
-				Binaries: make(map[string]*namespacepb.BadBinaryInfo),
-			},
-		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: "foo",
-			Clusters:          []string{"foo", "bar"},
-		},
-	}
-	factory := namespace.NewDefaultReplicationResolverFactory()
-	resolver := factory(detail)
-	ns, err := namespace.FromPersistentState(detail, resolver)
-	require.NoError(t, err)
-	return ns
-}
-
 func TestActiveInCluster(t *testing.T) {
-	base := base(t)
+	base := test.NewNamespace(t)
 
 	for _, tt := range [...]struct {
 		name        string
@@ -87,7 +62,7 @@ func TestActiveInCluster(t *testing.T) {
 
 func Test_GetRetentionDays(t *testing.T) {
 	const defaultRetention = 7 * 24 * time.Hour
-	base := base(t).Clone(namespace.WithRetention(timestamp.DurationFromDays(7)))
+	base := test.NewNamespace(t).Clone(namespace.WithRetention(timestamp.DurationFromDays(7)))
 	for _, tt := range [...]struct {
 		name       string
 		retention  string
@@ -115,7 +90,7 @@ func Test_GetRetentionDays(t *testing.T) {
 }
 
 func TestNamespace_GetCustomData(t *testing.T) {
-	base := base(t)
+	base := test.NewNamespace(t)
 	ns := base.Clone(namespace.WithData("foo", "bar"))
 	data := ns.GetCustomData("foo")
 	assert.Equal(t, "bar", data)

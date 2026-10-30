@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -39,11 +41,56 @@ type perNsWorkerManagerSuite struct {
 	cmp1 *workercommon.MockPerNSWorkerComponent
 	cmp2 *workercommon.MockPerNSWorkerComponent
 
-	manager *perNamespaceWorkerManager
+	manager *PerNamespaceWorkerManager
 }
 
 func TestPerNsWorkerManager(t *testing.T) {
 	suite.Run(t, new(perNsWorkerManagerSuite))
+}
+
+func TestPerNsWorkerManagerStopStopsBackgroundLoops(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := gomock.NewController(t)
+		logger := log.NewTestLogger()
+		cfactory := sdk.NewMockClientFactory(controller)
+		registry := namespace.NewMockRegistry(controller)
+		hostInfo := membership.NewHostInfoFromAddress("self")
+		serviceResolver := membership.NewMockServiceResolver(controller)
+
+		manager := PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
+			Logger:            logger,
+			SdkClientFactory:  cfactory,
+			NamespaceRegistry: registry,
+			HostName:          "self",
+			Config: &Config{
+				PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
+			},
+			ClusterMetadata: clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		})
+
+		registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
+		serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any())
+		manager.Start(hostInfo, serviceResolver)
+
+		registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
+		serviceResolver.EXPECT().RemoveListener(gomock.Any())
+		stopManager(t, manager)
+	})
+}
+
+func stopManager(t *testing.T, manager *PerNamespaceWorkerManager) {
+	t.Helper()
+
+	stopped := make(chan struct{})
+	go func() {
+		manager.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		require.FailNow(t, "manager stop timed out")
+	}
 }
 
 func (s *perNsWorkerManagerSuite) SetupTest() {
@@ -57,7 +104,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 	s.cmp1 = workercommon.NewMockPerNSWorkerComponent(s.controller)
 	s.cmp2 = workercommon.NewMockPerNSWorkerComponent(s.controller)
 
-	s.manager = NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
+	s.manager = PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
 		Logger:            s.logger,
 		SdkClientFactory:  s.cfactory,
 		NamespaceRegistry: s.registry,
@@ -97,7 +144,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 func (s *perNsWorkerManagerSuite) TearDownTest() {
 	s.registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
 	s.serviceResolver.EXPECT().RemoveListener(gomock.Any())
-	s.manager.Stop()
+	stopManager(s.T(), s.manager)
 }
 
 func (s *perNsWorkerManagerSuite) TestDisabled() {
@@ -484,7 +531,7 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 	// try to start 100 workers
 	// rate limiter will allow 10, then 10 more after a short delay, then no more for 10s
 	delay := 50 * time.Millisecond
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		res := quotas.NewMockReservation(s.controller)
 		mockLimiter.EXPECT().Reserve().Return(res)
 		switch i % 10 {
@@ -508,13 +555,13 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 	starts := make(chan struct{}, 100)
 	wkr.EXPECT().Start().Do(func() { starts <- struct{}{} }).AnyTimes()
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ns := testns(fmt.Sprintf("test-%d", i), enumspb.NAMESPACE_STATE_REGISTERED)
 		s.manager.namespaceCallback(ns, false)
 	}
 
 	start := time.Now()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-starts
 	}
 	select {
@@ -524,7 +571,7 @@ func (s *perNsWorkerManagerSuite) TestRateLimit() {
 	}
 	s.Less(time.Since(start), delay, "should be 10 started immediately")
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-starts
 	}
 	select {
@@ -558,7 +605,7 @@ func TestPerNsWorkerManagerSubscription(t *testing.T) {
 	t.Cleanup(dc.Stop)
 	config := NewConfig(dc, nil)
 
-	manager := NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
+	manager := PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
 		Logger:            logger,
 		SdkClientFactory:  cfactory,
 		NamespaceRegistry: registry,

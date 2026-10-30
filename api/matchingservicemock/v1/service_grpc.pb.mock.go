@@ -122,6 +122,46 @@ func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingPoll(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingPoll), varargs...)
 }
 
+// CancelOutstandingWorkerPolls mocks base method.
+func (m *MockMatchingServiceClient) CancelOutstandingWorkerPolls(ctx context.Context, in *matchingservice.CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPolls", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPolls indicates an expected call of CancelOutstandingWorkerPolls.
+func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingWorkerPolls(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPolls", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingWorkerPolls), varargs...)
+}
+
+// CancelOutstandingWorkerPollsPartition mocks base method.
+func (m *MockMatchingServiceClient) CancelOutstandingWorkerPollsPartition(ctx context.Context, in *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPollsPartition", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsPartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPollsPartition indicates an expected call of CancelOutstandingWorkerPollsPartition.
+func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingWorkerPollsPartition(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPollsPartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingWorkerPollsPartition), varargs...)
+}
+
 // CheckTaskQueueUserDataPropagation mocks base method.
 func (m *MockMatchingServiceClient) CheckTaskQueueUserDataPropagation(ctx context.Context, in *matchingservice.CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
 	m.ctrl.T.Helper()
@@ -160,6 +200,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueVersionMembership
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueVersionMembership), varargs...)
+}
+
+// CountWorkers mocks base method.
+func (m *MockMatchingServiceClient) CountWorkers(ctx context.Context, in *matchingservice.CountWorkersRequest, opts ...grpc.CallOption) (*matchingservice.CountWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CountWorkers", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CountWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWorkers indicates an expected call of CountWorkers.
+func (mr *MockMatchingServiceClientMockRecorder) CountWorkers(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkers", reflect.TypeOf((*MockMatchingServiceClient)(nil).CountWorkers), varargs...)
 }
 
 // CreateNexusEndpoint mocks base method.
@@ -442,6 +502,26 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerVersioningRules(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerVersioningRules), varargs...)
 }
 
+// GrantEagerDispatch mocks base method.
+func (m *MockMatchingServiceClient) GrantEagerDispatch(ctx context.Context, in *matchingservice.GrantEagerDispatchRequest, opts ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GrantEagerDispatchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MockMatchingServiceClientMockRecorder) GrantEagerDispatch(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MockMatchingServiceClient)(nil).GrantEagerDispatch), varargs...)
+}
+
 // ListNexusEndpoints mocks base method.
 func (m *MockMatchingServiceClient) ListNexusEndpoints(ctx context.Context, in *matchingservice.ListNexusEndpointsRequest, opts ...grpc.CallOption) (*matchingservice.ListNexusEndpointsResponse, error) {
 	m.ctrl.T.Helper()
@@ -702,6 +782,26 @@ func (mr *MockMatchingServiceClientMockRecorder) SyncDeploymentUserData(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).SyncDeploymentUserData), varargs...)
 }
 
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceClient) UpdateFairnessState(ctx context.Context, in *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateFairnessState", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateFairnessState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateFairnessState), varargs...)
+}
+
 // UpdateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) UpdateNexusEndpoint(ctx context.Context, in *matchingservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -886,6 +986,36 @@ func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingPoll(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingPoll), arg0, arg1)
 }
 
+// CancelOutstandingWorkerPolls mocks base method.
+func (m *MockMatchingServiceServer) CancelOutstandingWorkerPolls(arg0 context.Context, arg1 *matchingservice.CancelOutstandingWorkerPollsRequest) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPolls", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPolls indicates an expected call of CancelOutstandingWorkerPolls.
+func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingWorkerPolls(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPolls", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingWorkerPolls), arg0, arg1)
+}
+
+// CancelOutstandingWorkerPollsPartition mocks base method.
+func (m *MockMatchingServiceServer) CancelOutstandingWorkerPollsPartition(arg0 context.Context, arg1 *matchingservice.CancelOutstandingWorkerPollsPartitionRequest) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPollsPartition", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsPartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPollsPartition indicates an expected call of CancelOutstandingWorkerPollsPartition.
+func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingWorkerPollsPartition(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPollsPartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingWorkerPollsPartition), arg0, arg1)
+}
+
 // CheckTaskQueueUserDataPropagation mocks base method.
 func (m *MockMatchingServiceServer) CheckTaskQueueUserDataPropagation(arg0 context.Context, arg1 *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
 	m.ctrl.T.Helper()
@@ -914,6 +1044,21 @@ func (m *MockMatchingServiceServer) CheckTaskQueueVersionMembership(arg0 context
 func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueVersionMembership(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueVersionMembership), arg0, arg1)
+}
+
+// CountWorkers mocks base method.
+func (m *MockMatchingServiceServer) CountWorkers(arg0 context.Context, arg1 *matchingservice.CountWorkersRequest) (*matchingservice.CountWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountWorkers", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CountWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWorkers indicates an expected call of CountWorkers.
+func (mr *MockMatchingServiceServerMockRecorder) CountWorkers(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkers", reflect.TypeOf((*MockMatchingServiceServer)(nil).CountWorkers), arg0, arg1)
 }
 
 // CreateNexusEndpoint mocks base method.
@@ -1126,6 +1271,21 @@ func (mr *MockMatchingServiceServerMockRecorder) GetWorkerVersioningRules(arg0, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerVersioningRules), arg0, arg1)
 }
 
+// GrantEagerDispatch mocks base method.
+func (m *MockMatchingServiceServer) GrantEagerDispatch(arg0 context.Context, arg1 *matchingservice.GrantEagerDispatchRequest) (*matchingservice.GrantEagerDispatchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GrantEagerDispatchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MockMatchingServiceServerMockRecorder) GrantEagerDispatch(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MockMatchingServiceServer)(nil).GrantEagerDispatch), arg0, arg1)
+}
+
 // ListNexusEndpoints mocks base method.
 func (m *MockMatchingServiceServer) ListNexusEndpoints(arg0 context.Context, arg1 *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
 	m.ctrl.T.Helper()
@@ -1319,6 +1479,21 @@ func (m *MockMatchingServiceServer) SyncDeploymentUserData(arg0 context.Context,
 func (mr *MockMatchingServiceServerMockRecorder) SyncDeploymentUserData(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).SyncDeploymentUserData), arg0, arg1)
+}
+
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceServer) UpdateFairnessState(arg0 context.Context, arg1 *matchingservice.UpdateFairnessStateRequest) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFairnessState", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateFairnessState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateFairnessState), arg0, arg1)
 }
 
 // UpdateNexusEndpoint mocks base method.

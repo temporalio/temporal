@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -163,10 +164,15 @@ func (m *taskManagerImpl) CreateTasks(
 	request *CreateTasksRequest,
 ) (*CreateTasksResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo.Data
-	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
-	if err != nil {
-		return nil, err
+
+	var taskQueueInfoBlob *commonpb.DataBlob
+	if request.UpdateMetadata {
+		taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+		var err error
+		taskQueueInfoBlob, err = m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tasks := make([]*InternalCreateTask, len(request.Tasks))
@@ -186,12 +192,13 @@ func (m *taskManagerImpl) CreateTasks(
 		}
 	}
 	internalRequest := &InternalCreateTasksRequest{
-		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
-		TaskQueue:     request.TaskQueueInfo.Data.GetName(),
-		TaskType:      request.TaskQueueInfo.Data.GetTaskType(),
-		RangeID:       request.TaskQueueInfo.RangeID,
-		TaskQueueInfo: taskQueueInfoBlob,
-		Tasks:         tasks,
+		NamespaceID:    taskQueueInfo.GetNamespaceId(),
+		TaskQueue:      taskQueueInfo.GetName(),
+		TaskType:       taskQueueInfo.GetTaskType(),
+		RangeID:        request.TaskQueueInfo.RangeID,
+		TaskQueueInfo:  taskQueueInfoBlob,
+		Tasks:          tasks,
+		UpdateMetadata: request.UpdateMetadata,
 	}
 	return m.taskStore.CreateTasks(ctx, internalRequest)
 }

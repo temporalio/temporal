@@ -3,12 +3,15 @@ package chasm
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,8 +24,8 @@ const (
 )
 
 var (
-	visibilityComponentTypeID = generateTypeID(visibilityComponentType)
-	visibilityTaskTypeID      = generateTypeID(visibilityTaskType)
+	visibilityComponentTypeID = GenerateTypeID(visibilityComponentType)
+	visibilityTaskTypeID      = GenerateTypeID(visibilityTaskType)
 )
 
 // VisibilitySearchAttributesProvider if implemented by the root Component,
@@ -43,9 +46,31 @@ type VisibilityMemoProvider interface {
 
 // VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
 type VisibilitySearchAttributesMapper struct {
+	// map from CHASM and predefined search attribute aliases to field names.
 	aliasToField map[string]string
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
+
+	// systemAliasToField maps a CHASM search attribute alias to a system field
+	// (e.g. "ScheduleId" -> "WorkflowId"). Used to resolve system search attribute aliases,
+	// including the businessID alias configured via WithBusinessIDAlias.
+	systemAliasToField map[string]string
+
+	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime, TaskQueue)
+	// this archetype overrides with its own value, stored in the dedicated system column. Value is
+	// the field's indexed value type.
+	overriddenSystemFields map[string]enumspb.IndexedValueType
+}
+
+// newVisibilitySearchAttributesMapper returns a mapper with all maps initialized.
+func newVisibilitySearchAttributesMapper() *VisibilitySearchAttributesMapper {
+	return &VisibilitySearchAttributesMapper{
+		aliasToField:           make(map[string]string),
+		fieldToAlias:           make(map[string]string),
+		saTypeMap:              make(map[string]enumspb.IndexedValueType),
+		systemAliasToField:     make(map[string]string),
+		overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
+	}
 }
 
 // Alias returns the alias for a given field.
@@ -55,7 +80,10 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	}
 	alias, ok := v.fieldToAlias[field]
 	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+		return "", serviceerror.NewInvalidArgumentf(
+			"visibility search attributes mapper has no registered field %q",
+			field,
+		)
 	}
 	return alias, nil
 }
@@ -65,11 +93,38 @@ func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
 	}
-	field, ok := v.aliasToField[alias]
-	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+	if field, ok := v.aliasToField[alias]; ok {
+		return field, nil
 	}
-	return field, nil
+	if field, ok := v.resolveSystemAlias(alias); ok {
+		return field, nil
+	}
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+}
+
+// resolveSystemAlias resolves a system search attribute alias to its field name.
+// It handles the `Temporal` prefix variations (e.g., "ScheduleId" and "TemporalScheduleId").
+func (v *VisibilitySearchAttributesMapper) resolveSystemAlias(alias string) (string, bool) {
+	if v.systemAliasToField == nil {
+		return "", false
+	}
+	if field, ok := v.systemAliasToField[alias]; ok {
+		return field, true
+	}
+	// Try without the `Temporal` prefix.
+	if strings.HasPrefix(alias, sadefs.ReservedPrefix) {
+		withoutPrefix := alias[len(sadefs.ReservedPrefix):]
+		if field, ok := v.systemAliasToField[withoutPrefix]; ok {
+			return field, true
+		}
+	} else {
+		// Try with the `Temporal` prefix.
+		withPrefix := sadefs.ReservedPrefix + alias
+		if field, ok := v.systemAliasToField[withPrefix]; ok {
+			return field, true
+		}
+	}
+	return "", false
 }
 
 // SATypeMap returns the type map for the CHASM search attributes.
@@ -78,6 +133,25 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 		return nil
 	}
 	return v.saTypeMap
+}
+
+// IsSystemOverride returns true if this archetype overrides the given system search attribute
+// field with its own value (written to the dedicated system column).
+func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.overriddenSystemFields[field]
+	return ok
+}
+
+// OverriddenSystemFields returns the system search attribute fields this archetype overrides,
+// keyed by field name with the field's indexed value type as the value.
+func (v *VisibilitySearchAttributesMapper) OverriddenSystemFields() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.overriddenSystemFields
 }
 
 // ValueType returns the type of a CHASM search attribute field.
@@ -98,6 +172,8 @@ type Visibility struct {
 
 	Data *persistencespb.ChasmVisibilityData
 
+	// Do NOT access those fields directly.
+	// Use the provided getters and setters instead.
 	SA   Field[*commonpb.SearchAttributes]
 	Memo Field[*commonpb.Memo]
 }
@@ -115,47 +191,83 @@ func NewVisibility(
 	return visibility
 }
 
+// NewVisibilityWithData creates a Visibility component with the provided custom search attributes and memo.
+// Returns an InvalidArgument error if any custom search attribute key is reserved (see sadefs.IsReserved).
 func NewVisibilityWithData(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 	customMemo map[string]*commonpb.Payload,
-) *Visibility {
+) (*Visibility, error) {
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return nil, err
+	}
+
 	visibility := &Visibility{
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
 		},
-		SA: NewDataField(
+	}
+
+	// Filter out nil/empty payload values for search attributes.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+	if len(filteredSA) != 0 {
+		visibility.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
-		),
-		Memo: NewDataField(
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
+		)
+	}
+
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+	if len(filteredMemo) != 0 {
+		visibility.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
-		),
+			&commonpb.Memo{Fields: filteredMemo},
+		)
 	}
 
 	visibility.generateTask(mutableContext)
-	return visibility
+	return visibility, nil
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (v *Visibility) GetSearchAttributes(
+// CustomSearchAttributes returns the stored custom search attribute fields.
+// Nil is returned if there are none.
+//
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
+func (v *Visibility) CustomSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	sa, _ := v.SA.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return sa.GetIndexedFields()
+	return maps.Clone(sa.GetIndexedFields())
 }
 
-func (v *Visibility) SetSearchAttributes(
+// MergeCustomSearchAttributes merges the provided custom search attribute fields into the existing ones.
+//   - If a key in `customSearchAttributes` already exists,
+//     the value in `customSearchAttributes` replaces the existing value.
+//   - If a key in `customSearchAttributes` has nil or empty slice payload value,
+//     the key is deleted from the existing search attributes if it exists.
+//     If all search attributes are removed, the underlying search attributes node is deleted.
+//   - If `customSearchAttributes` is empty, this is a no-op.
+//   - If any key in `customSearchAttributes` is reserved (see sadefs.IsReserved),
+//     an InvalidArgument error is returned and the existing search attributes are left unchanged.
+func (v *Visibility) MergeCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) {
-	currentSA, ok := v.SA.TryGet(mutableContext)
+) error {
+	if len(customSearchAttributes) == 0 {
+		return nil
+	}
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return err
+	}
 
+	currentSA, ok := v.SA.TryGet(mutableContext)
 	if !ok {
 		currentSA = &commonpb.SearchAttributes{}
 		v.SA = NewDataField(mutableContext, currentSA)
@@ -165,23 +277,91 @@ func (v *Visibility) SetSearchAttributes(
 		currentSA.GetIndexedFields(),
 		customSearchAttributes,
 	)
+	if len(currentSA.IndexedFields) == 0 {
+		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
+	}
+
 	v.generateTask(mutableContext)
+	return nil
 }
 
-func (v *Visibility) GetMemo(
+// ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
+// Nil/empty payload values are filtered.
+// If `customSearchAttributes` is empty or all values are nil after filtering, the underlying search attributes node is deleted.
+// If any key in `customSearchAttributes` is reserved (see sadefs.IsReserved),
+// an InvalidArgument error is returned and the existing search attributes are left unchanged.
+func (v *Visibility) ReplaceCustomSearchAttributes(
+	mutableContext MutableContext,
+	customSearchAttributes map[string]*commonpb.Payload,
+) error {
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return err
+	}
+
+	// Filter out nil/empty payload values.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+
+	if len(filteredSA) == 0 {
+		_, ok := v.SA.TryGet(mutableContext)
+		if !ok {
+			// Already empty, no-op
+			return nil
+		}
+
+		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
+	} else {
+		v.SA = NewDataField(
+			mutableContext,
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
+		)
+	}
+
+	v.generateTask(mutableContext)
+	return nil
+}
+
+// validateCustomSearchAttributes rejects custom search attribute keys that are reserved for
+// system, predefined, or CHASM search attributes, including any key with the "Temporal" prefix.
+// Custom search attributes with these names cannot be registered, so they would otherwise
+// collide with (or be written directly into) system-owned visibility fields.
+func validateCustomSearchAttributes(customSearchAttributes map[string]*commonpb.Payload) error {
+	for key := range customSearchAttributes {
+		if sadefs.IsReserved(key) {
+			return serviceerror.NewInvalidArgumentf("search attribute %s is reserved by system", key)
+		}
+	}
+	return nil
+}
+
+// CustomMemo returns the stored custom memo fields.
+// Nil is returned if there are none.
+//
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
+func (v *Visibility) CustomMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	memo, _ := v.Memo.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return memo.GetFields()
+	return maps.Clone(memo.GetFields())
 }
 
-func (v *Visibility) SetMemo(
+// MergeCustomMemo merges the provided custom memo fields into the existing ones.
+//   - If a key in `customMemo` already exists,
+//     the value in `customMemo` replaces the existing value.
+//   - If a key in `customMemo` has nil or empty slice payload value,
+//     the key is deleted from the existing memo if it exists.
+//     If all memo fields are removed, the underlying memo node is deleted.
+//   - If `customMemo` is empty, this is a no-op.
+func (v *Visibility) MergeCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	currentMemo, ok := v.Memo.TryGet(mutableContext)
+	if len(customMemo) == 0 {
+		return
+	}
 
+	currentMemo, ok := v.Memo.TryGet(mutableContext)
 	if !ok {
 		currentMemo = &commonpb.Memo{}
 		v.Memo = NewDataField(mutableContext, currentMemo)
@@ -191,6 +371,36 @@ func (v *Visibility) SetMemo(
 		currentMemo.GetFields(),
 		customMemo,
 	)
+	if len(currentMemo.Fields) == 0 {
+		v.Memo = NewEmptyField[*commonpb.Memo]()
+	}
+	v.generateTask(mutableContext)
+}
+
+// ReplaceCustomMemo replaces the existing custom memo fields with the provided ones.
+// If `customMemo` is empty, the underlying memo node is deleted.
+func (v *Visibility) ReplaceCustomMemo(
+	mutableContext MutableContext,
+	customMemo map[string]*commonpb.Payload,
+) {
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+
+	if len(filteredMemo) == 0 {
+		_, ok := v.Memo.TryGet(mutableContext)
+		if !ok {
+			// Already empty, no-op
+			return
+		}
+
+		v.Memo = NewEmptyField[*commonpb.Memo]()
+	} else {
+		v.Memo = NewDataField(
+			mutableContext,
+			&commonpb.Memo{Fields: filteredMemo},
+		)
+	}
+
 	v.generateTask(mutableContext)
 }
 
@@ -205,14 +415,16 @@ func (v *Visibility) generateTask(
 	)
 }
 
-type visibilityTaskHandler struct{}
+type visibilityTaskHandler struct {
+	SideEffectTaskHandlerBase[*persistencespb.ChasmVisibilityTaskData]
+}
 
 var defaultVisibilityTaskHandler = &visibilityTaskHandler{}
 
 func (v *visibilityTaskHandler) Validate(
 	_ Context,
 	component *Visibility,
-	_ TaskAttributes,
+	_ TaskInvocation,
 	task *persistencespb.ChasmVisibilityTaskData,
 ) (bool, error) {
 	return task.TransitionCount == component.Data.TransitionCount, nil
@@ -225,5 +437,5 @@ func (v *visibilityTaskHandler) Execute(
 	_ *persistencespb.ChasmVisibilityTaskData,
 ) error {
 	//nolint:forbidigo
-	panic("chasm visibilityTaskExecutor should not be called directly")
+	panic("chasm visibilityTaskHandler should not be called directly")
 }

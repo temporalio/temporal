@@ -5,18 +5,44 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
-func ServiceErrorInterceptor(
+const truncatedSuffix = "... <truncated>"
+
+type ServiceErrorInterceptor struct {
+	maxMessageLength dynamicconfig.IntPropertyFn
+
+	metricsHandler metrics.Handler
+	logger         log.Logger
+}
+
+func NewServiceErrorInterceptor(
+	maxMessageLength dynamicconfig.IntPropertyFn,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *ServiceErrorInterceptor {
+	return &ServiceErrorInterceptor{
+		maxMessageLength: maxMessageLength,
+
+		metricsHandler: metricsHandler,
+		logger:         logger,
+	}
+}
+
+func (i *ServiceErrorInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	_ *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
-
-	resp, err := handler(ctx, req)
+) (any, error) {
+	resp, err := i.capturePanicHandler(ctx, req, handler)
 
 	var deserializationError *serialization.DeserializationError
 	var serializationError *serialization.SerializationError
@@ -24,5 +50,24 @@ func ServiceErrorInterceptor(
 	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
 		err = serviceerror.NewDataLoss(err.Error())
 	}
-	return resp, serviceerror.ToStatus(err).Err()
+
+	// truncate message length if needed
+	maxLength := i.maxMessageLength()
+	st := serviceerror.ToStatus(err)
+	if len(st.Message()) > maxLength {
+		p := st.Proto()
+		p.Message = util.TruncateUTF8(p.Message, maxLength-len(truncatedSuffix)) + truncatedSuffix
+		st = status.FromProto(p)
+	}
+
+	return resp, st.Err()
+}
+
+func (i *ServiceErrorInterceptor) capturePanicHandler(
+	ctx context.Context,
+	req any,
+	handler grpc.UnaryHandler,
+) (_ any, retError error) {
+	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
+	return handler(ctx, req)
 }

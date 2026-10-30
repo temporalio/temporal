@@ -76,6 +76,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueue string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
@@ -99,6 +100,11 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return failedCause, err
+	}
+
 	opts := &activitypb.ActivityOptions{
 		TaskQueue:              attributes.TaskQueue,
 		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
@@ -108,15 +114,16 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		RetryPolicy:            attributes.RetryPolicy,
 	}
 
-	err := activity.ValidateAndNormalizeActivityAttributes(
+	err = activity.ValidateAndNormalizeEmbeddedActivity(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,
 		v.maxIDLengthLimit,
-		namespaceID,
+		namespaceEntry.Name(),
 		opts,
 		attributes.GetPriority(),
-		runTimeout)
+		runTimeout,
+		workflowTaskQueue)
 
 	if err != nil {
 		return failedCause, err
@@ -408,7 +415,8 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, executionInfo.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -532,7 +540,8 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, parentInfo.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
 
@@ -547,14 +556,13 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 }
 
 func (v *CommandAttrValidator) validateActivityRetryPolicy(
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	retryPolicy *commonpb.RetryPolicy,
 ) error {
 	if retryPolicy == nil {
 		return nil
 	}
-	// TODO: this is a namespace setting, not a namespace id setting
-	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceID.String())
+	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }

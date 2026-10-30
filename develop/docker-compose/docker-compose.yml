@@ -15,7 +15,7 @@ services:
     networks:
       - temporal-dev-network
   cassandra:
-    image: cassandra:3.11
+    image: cassandra:5.0
     container_name: temporal-dev-cassandra
     ports:
       - "9042:9042"

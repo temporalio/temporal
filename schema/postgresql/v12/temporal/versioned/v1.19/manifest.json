@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.19",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Adds current_chasm_executions table for separate archetype ID space",
+  "SchemaUpdateCqlFiles": [
+    "current_chasm_executions.sql"
+  ]
+}

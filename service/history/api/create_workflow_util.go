@@ -11,14 +11,15 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -50,15 +51,27 @@ func NewWorkflowWithSignal(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (historyi.MutableState, error) {
-	newMutableState, err := CreateMutableState(
+	startTime := workflow.AdjustNowWithTimeSkipping(
+		shard.GetTimeSource().Now(),
+		startRequest.GetTimeSkippingStatePropagation(),
+	)
+	newMutableState, err := createMutableState(
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
 		startRequest.StartRequest.WorkflowRunTimeout,
 		workflowID,
 		runID,
+		startTime,
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := newMutableState.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
+		RequestID: startRequest.StartRequest.GetRequestId(),
+		Callbacks: startRequest.StartRequest.GetCompletionCallbacks(),
+	}); err != nil {
 		return nil, err
 	}
 
@@ -82,6 +95,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetRequestId(),
 			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err
@@ -113,6 +127,8 @@ func NewWorkflowWithSignal(
 			nil,
 			nil,
 			false,
+			nil,
+			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
@@ -145,19 +161,22 @@ func NewWorkflowLeaseAndContext(
 			shardCtx.GetLogger(),
 			shardCtx.GetThrottledLogger(),
 			shardCtx.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		wcache.NoopReleaseFn,
 		ms,
 	), nil
 }
 
-func CreateMutableState(
+func createMutableState(
 	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
+	startTime time.Time,
 ) (historyi.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
@@ -166,7 +185,7 @@ func CreateMutableState(
 		namespaceEntry,
 		workflowID,
 		runID,
-		shard.GetTimeSource().Now(),
+		startTime,
 	)
 	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
@@ -236,7 +255,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}
@@ -251,7 +270,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return common.ErrMemoSizeExceedsLimit
 	}

@@ -94,7 +94,7 @@ func (e *JSONPBEncoder) encodeSlice(
 ) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString("[")
-	for i := 0; i < len; i++ {
+	for i := range len {
 		pb := item(i)
 		bs, err := e.marshaler.Marshal(pb)
 		if err != nil {

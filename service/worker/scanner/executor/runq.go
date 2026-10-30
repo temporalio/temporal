@@ -82,7 +82,7 @@ func newThreadSafeList() *threadSafeList {
 	}
 }
 
-func (tl *threadSafeList) add(elem interface{}) {
+func (tl *threadSafeList) add(elem any) {
 	tl.Lock()
 	defer tl.Unlock()
 	tl.list.PushBack(elem)

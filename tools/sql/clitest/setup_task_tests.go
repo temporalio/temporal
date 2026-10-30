@@ -46,7 +46,12 @@ func (s *SetupSchemaTestSuite) SetupSuite() {
 		s.Fail("error creating sql connection:%v", err)
 	}
 	s.conn = conn
-	s.SetupSuiteBase(conn, s.pluginName)
+	s.SetupSuiteBase(conn, s.pluginName, test.ConnectParams{
+		Host:     s.host,
+		Port:     s.port,
+		User:     testUser,
+		Password: testPassword,
+	})
 }
 
 // TearDownSuite tear down test suite

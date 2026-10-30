@@ -30,10 +30,10 @@ func NewSDKVersionInterceptor() *SDKVersionInterceptor {
 // Intercept a grpc request
 func (vi *SDKVersionInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	sdkName, sdkVersion := headers.GetClientNameAndVersion(ctx)
 	if sdkName != "" && sdkVersion != "" {
 		vi.RecordSDKInfo(sdkName, sdkVersion)

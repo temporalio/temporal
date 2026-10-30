@@ -22,8 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Task that fires when a worker lease expires.
-// When this fires, the worker transitions to INACTIVE (terminal) and is deleted.
+// LeaseExpiryTask closes the group run if its shared lease has not been renewed.
 type LeaseExpiryTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

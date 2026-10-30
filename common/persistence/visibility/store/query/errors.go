@@ -19,9 +19,10 @@ var (
 	MalformedSqlQueryErrMessage = "malformed SQL query"
 	NotSupportedErrMessage      = "operation is not supported"
 	InvalidExpressionErrMessage = "invalid expression"
+	InvalidSearchAttribute      = "invalid search attribute"
 )
 
-func NewConverterError(format string, a ...interface{}) error {
+func NewConverterError(format string, a ...any) error {
 	message := fmt.Sprintf(format, a...)
 	return &ConverterError{message: message}
 }
@@ -49,8 +50,7 @@ func NewOperatorNotSupportedError(
 }
 
 func wrapConverterError(message string, err error) error {
-	var converterErr *ConverterError
-	if errors.As(err, &converterErr) {
+	if converterErr, ok := errors.AsType[*ConverterError](err); ok {
 		return NewConverterError("%s: %v", message, converterErr)
 	}
 	return err

@@ -1,46 +1,35 @@
 package worker
 
-import (
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/log"
-	"google.golang.org/grpc"
-)
+import "go.temporal.io/server/chasm"
 
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	leaseExpiryTaskExecutor *LeaseExpiryTaskExecutor
+	leaseExpiryTaskExecutor *leaseExpiryTaskExecutor
 }
 
-func NewLibrary(
-	logger log.Logger,
-	config *Config,
-) *Library {
-	return &Library{
-		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger),
-	}
+// NewNilLibrary registers persisted component and task types for offline readers.
+func NewNilLibrary() *Library {
+	return &Library{}
+}
+
+func NewLibrary() *Library {
+	return &Library{leaseExpiryTaskExecutor: &leaseExpiryTaskExecutor{}}
 }
 
 func (l *Library) Name() string {
-	return "worker"
+	return libraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Worker](string(Archetype)),
+		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName),
+		chasm.NewRegistrableComponent[*Worker](workerComponentName),
 	}
 }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrablePureTask(
-			"expiry",
-			l.leaseExpiryTaskExecutor,
-			l.leaseExpiryTaskExecutor,
-		),
+		chasm.NewRegistrablePureTask("expiry", l.leaseExpiryTaskExecutor),
 	}
-}
-
-func (l *Library) RegisterServices(server *grpc.Server) {
-	// No gRPC services for Worker currently
 }

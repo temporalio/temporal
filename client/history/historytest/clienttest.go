@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace/embedded"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/testing/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -50,7 +52,7 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 	listener := nettest.NewListener(nettest.NewPipe())
 
 	serveErrs := make(chan error, 1)
-	grpcServer := createServer(historyTaskQueueManager)
+	grpcServer := createServer(t, historyTaskQueueManager)
 	go func() {
 		serveErrs <- grpcServer.Serve(listener)
 	}()
@@ -116,7 +118,7 @@ func readTasks(
 
 	// We want to run a test where the client makes multiple requests to the server because the client is stateful. In
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
@@ -133,13 +135,17 @@ func readTasks(
 	}
 }
 
-func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
+func createServer(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
-	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
+	historyHandler, err := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
 		TaskQueueManager:     historyTaskQueueManager,
 		TracerProvider:       fakeTracerProvider{},
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
-	})
+		ChasmRegistry:        chasm.NewRegistry(log.NewNoopLogger()),
+	}, fxtest.NewLifecycle(t))
+	if err != nil {
+		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
+	}
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)
 	return grpcServer
@@ -152,6 +158,8 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 		address,
 	}).AnyTimes()
 	serviceResolver.EXPECT().Lookup(gomock.Any()).Return(address, nil).AnyTimes()
+	serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),
@@ -176,7 +184,7 @@ func enqueueTasks(
 	task := &tasks.WorkflowTask{
 		TaskID: 42,
 	}
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		_, err := historyTaskQueueManager.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			SourceCluster: sourceCluster,

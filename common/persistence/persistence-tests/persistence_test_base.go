@@ -1,13 +1,14 @@
 package persistencetests
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/trace"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -61,7 +62,24 @@ type (
 		FaultInjection    *config.FaultInjection
 		Logger            log.Logger `yaml:"-"`
 	}
+)
 
+// ApplyDefaults copies database configuration from src, preserving any non-zero values already set.
+func (o *TestBaseOptions) ApplyDefaults(src *TestBaseOptions) {
+	o.StoreType = cmp.Or(o.StoreType, src.StoreType)
+	o.SQLDBPluginName = cmp.Or(o.SQLDBPluginName, src.SQLDBPluginName)
+	o.DBName = cmp.Or(o.DBName, src.DBName)
+	o.DBUsername = cmp.Or(o.DBUsername, src.DBUsername)
+	o.DBPassword = cmp.Or(o.DBPassword, src.DBPassword)
+	o.DBHost = cmp.Or(o.DBHost, src.DBHost)
+	o.DBPort = cmp.Or(o.DBPort, src.DBPort)
+	o.SchemaDir = cmp.Or(o.SchemaDir, src.SchemaDir)
+	if o.ConnectAttributes == nil {
+		o.ConnectAttributes = src.ConnectAttributes
+	}
+}
+
+type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
@@ -98,7 +116,7 @@ type (
 
 	// TestTransferTaskIDGenerator helper
 	TestTransferTaskIDGenerator struct {
-		seqNum int64
+		seqNum atomic.Int64
 	}
 )
 
@@ -111,17 +129,23 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 
 func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
 	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(3)
+		options.DBName = GenerateRandomDBName()
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := cassandra.NewTestCluster(
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
 	return testCluster
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
 func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
-	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(3)
-	}
 	logger := options.Logger
 	if logger == nil {
 		logger = log.NewTestLogger()
@@ -151,7 +175,42 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(
+		options.SQLDBPluginName,
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.ConnectAttributes,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
+	return NewTestBaseForCluster(testCluster, logger)
+}
+
+func NewTestBaseWithEs(options *TestBaseOptions) *TestBase {
+	logger := options.Logger
+	if logger == nil {
+		logger = log.NewTestLogger()
+	}
+
+	if options.DBHost == "" {
+		options.DBHost = environment.GetESAddress()
+	}
+	if options.DBPort == 0 {
+		options.DBPort = environment.GetESPort()
+	}
+
+	testCluster := newEsTestCluster(
+		options.DBHost,
+		options.DBPort,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBName,
+		logger,
+	)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
@@ -191,6 +250,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
+	serializer := serialization.NewSerializer()
 	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
@@ -199,6 +259,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 		s.TracerProvider,
+		serializer,
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,
@@ -206,7 +267,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.PersistenceRateLimiter,
 		quotas.NoopRequestRateLimiter,
 		quotas.NoopRequestRateLimiter,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		clusterName,
 		metrics.NoopMetricsHandler,
@@ -304,7 +365,7 @@ func (s *TestBase) EqualTimes(t1, t2 time.Time) {
 
 // GenerateTransferTaskID helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
-	return atomic.AddInt64(&g.seqNum, 1), nil
+	return g.seqNum.Add(1), nil
 }
 
 // Publish is a utility method to add messages to the queue
@@ -357,7 +418,7 @@ func (s *TestBase) GetAckLevels(
 func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(20)
 
 	return backoff.ThrottleRetryContext(
 		ctx,
@@ -419,23 +480,10 @@ func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
 	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
-func randString(length int) string {
-	const lowercaseSet = "abcdefghijklmnopqrstuvwxyz"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = lowercaseSet[rand.Int63()%int64(len(lowercaseSet))]
-	}
-	return string(b)
-}
-
-// GenerateRandomDBName helper
-// Format: MMDDHHMMSS_abc
-func GenerateRandomDBName(n int) string {
-	var prefix strings.Builder
-	prefix.WriteString(time.Now().UTC().Format("0102150405"))
-	prefix.WriteRune('_')
-	prefix.WriteString(randString(n))
-	return prefix.String()
+func GenerateRandomDBName() string {
+	uuidPart := strings.ReplaceAll(uuid.NewString(), "-", "")
+	// Keep generated DB names short enough for Cassandra keyspaces after XDC tests append cluster suffixes.
+	return "test_" + uuidPart[:24]
 }
 
 func timeComparator(t1, t2 time.Time, timeTolerance time.Duration) bool {

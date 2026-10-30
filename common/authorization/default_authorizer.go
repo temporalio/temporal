@@ -3,6 +3,7 @@ package authorization
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/api"
 )
 
@@ -56,7 +57,9 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	}
 
 	if hasRole >= getRequiredRole(metadata.Access) {
-		return resultAllow, nil
+		result := Result{Decision: DecisionAllow}
+		result.Principal = &commonpb.Principal{Type: claims.AuthType, Name: claims.Subject}
+		return result, nil
 	}
 	return resultDeny, nil
 }

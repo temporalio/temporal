@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -34,6 +35,7 @@ type (
 		pagingTokenSerializer                       *jsonHistoryTokenSerializer
 		transactionSizeLimit                        dynamicconfig.IntPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+		storeChecksRunAlreadyExists                 bool
 	}
 )
 
@@ -48,6 +50,7 @@ func NewExecutionManager(
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
+	checker, ok := persistence.(RunAlreadyExistsChecker)
 	return &executionManagerImpl{
 		serializer:            serializer,
 		eventBlobCache:        eventBlobCache,
@@ -56,6 +59,7 @@ func NewExecutionManager(
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
+		storeChecksRunAlreadyExists:                 ok && checker.SupportsCheckRunAlreadyExists(),
 	}
 }
 
@@ -67,14 +71,90 @@ func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
 	return m.persistence.GetHistoryBranchUtil()
 }
 
-// The below three APIs are related to serialization/deserialization
+// assertRunNotExists returns WorkflowRunAlreadyExistsError if the run already exists. It is used unless the store
+// implements RunAlreadyExistsChecker and SupportsCheckRunAlreadyExists returns true.
+func (m *executionManagerImpl) assertRunNotExists(
+	ctx context.Context,
+	shardID int32,
+	archetypeID chasm.ArchetypeID,
+	executionState *persistencespb.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) error {
+	resp, err := m.persistence.GetWorkflowExecution(ctx, &GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: executionInfo.NamespaceId,
+		WorkflowID:  executionInfo.WorkflowId,
+		RunID:       executionState.RunId,
+		ArchetypeID: archetypeID,
+	})
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	existingState, err := m.serializer.WorkflowExecutionStateFromBlob(resp.State.ExecutionState)
+	if err != nil {
+		return err
+	}
+	return &WorkflowRunAlreadyExistsError{
+		Msg:    fmt.Sprintf("Workflow run already exists, run ID: %v", executionState.RunId),
+		RunID:  executionState.RunId,
+		Status: existingState.Status,
+	}
+}
 
+// historySizeRollback records HistorySize increments applied to caller-owned ExecutionStats
+// during a write so they can be reverted if the write fails. The persistence layer mutates
+// the caller's (shared) in-memory mutable state in place; without reverting on failure, a
+// failed write that is later retried with the same mutable state double-counts HistorySize
+// (e.g. workflow-id reuse, where createBrandNew fails and createAsCurrent retries the same
+// snapshot). HistorySize is the only stat accumulated in this layer, so it is the only one
+// that needs this treatment.
+type historySizeRollback struct {
+	applied []appliedHistorySize
+}
+
+type appliedHistorySize struct {
+	stats *persistencespb.ExecutionStats
+	delta int64
+}
+
+// add applies sizeDiff to stats.HistorySize and remembers it so it can be reverted.
+func (r *historySizeRollback) add(stats *persistencespb.ExecutionStats, sizeDiff int) {
+	delta := int64(sizeDiff)
+	stats.HistorySize += delta
+	r.applied = append(r.applied, appliedHistorySize{stats: stats, delta: delta})
+}
+
+// revertOnError undoes every applied increment if *err is non-nil. Intended to be deferred
+// against a function's named return error.
+func (r *historySizeRollback) revertOnError(err *error) {
+	if *err == nil {
+		return
+	}
+	for _, a := range r.applied {
+		a.stats.HistorySize -= a.delta
+	}
+}
+
+// The below three APIs are related to serialization/deserialization
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
-) (*CreateWorkflowExecutionResponse, error) {
+) (_ *CreateWorkflowExecutionResponse, retErr error) {
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "CreateWorkflowExecution")
 	newSnapshot := request.NewWorkflowSnapshot
+	if request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
+		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
+
 	newWorkflowXDCKVs, newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(
 		ctx,
 		request.ShardID,
@@ -85,7 +165,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
+	rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newHistoryDiff.SizeDiff)
 
 	if err := ValidateCreateWorkflowModeState(
 		request.Mode,
@@ -105,7 +185,6 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "CreateWorkflowExecution")
 	newRequest := &InternalCreateWorkflowExecutionRequest{
 		ShardID:                  request.ShardID,
 		RangeID:                  request.RangeID,
@@ -113,6 +192,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
 		ArchetypeID:              archetypeID,
+		CheckRunAlreadyExists:    request.CheckRunAlreadyExists && m.storeChecksRunAlreadyExists,
 		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
@@ -132,10 +212,19 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
-) (*UpdateWorkflowExecutionResponse, error) {
+) (_ *UpdateWorkflowExecutionResponse, retErr error) {
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
+	if newSnapshot != nil && request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
+		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	updateWorkflowXDCKVs, updateWorkflowNewEvents, updateWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(
 		ctx,
@@ -146,7 +235,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	updateMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(updateWorkflowHistoryDiff.SizeDiff)
+	rollback.add(updateMutation.ExecutionInfo.ExecutionStats, updateWorkflowHistoryDiff.SizeDiff)
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
@@ -161,7 +250,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
 
 	if err := ValidateUpdateWorkflowModeState(
@@ -190,7 +279,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}
 	}
 
-	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
 		ShardID: request.ShardID,
 		RangeID: request.RangeID,
@@ -198,6 +286,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		Mode: request.Mode,
 
 		ArchetypeID: archetypeID,
+
+		CheckRunAlreadyExists: request.CheckRunAlreadyExists && m.storeChecksRunAlreadyExists,
 
 		UpdateWorkflowMutation:  *serializedWorkflowMutation,
 		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
@@ -223,6 +313,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -273,7 +364,10 @@ func (m *executionManagerImpl) deleteHistoryTasks(
 func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *ConflictResolveWorkflowExecutionRequest,
-) (*ConflictResolveWorkflowExecutionResponse, error) {
+) (_ *ConflictResolveWorkflowExecutionResponse, retErr error) {
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	resetSnapshot := request.ResetWorkflowSnapshot
 	newSnapshot := request.NewWorkflowSnapshot
@@ -288,7 +382,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	resetSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(resetWorkflowHistoryDiff.SizeDiff)
+	rollback.add(resetSnapshot.ExecutionInfo.ExecutionStats, resetWorkflowHistoryDiff.SizeDiff)
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowEvents []*InternalAppendHistoryNodesRequest
@@ -303,7 +397,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
 
 	var currentWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
@@ -319,7 +413,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		currentMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(currentWorkflowHistoryDiff.SizeDiff)
+		rollback.add(currentMutation.ExecutionInfo.ExecutionStats, currentWorkflowHistoryDiff.SizeDiff)
 	}
 
 	if err := ValidateConflictResolveWorkflowModeState(
@@ -391,6 +485,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -431,8 +526,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
 		respErr = serviceerror.NewNotFoundf(
 			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
@@ -589,7 +683,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +720,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -710,8 +804,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
-
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +825,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -853,8 +946,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
 		respErr = serviceerror.NewNotFoundf("workflow not found for ID: %v", request.WorkflowID)
 	}
@@ -897,7 +989,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
 ) error {
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return err
 	}
@@ -911,7 +1003,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 		WorkflowID:  input.WorkflowID,
 		ArchetypeID: archetypeID,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 	})
 }
 
@@ -1047,6 +1139,13 @@ func (m *executionManagerImpl) trimHistoryNode(
 	runID string,
 	archetypeID chasm.ArchetypeID,
 ) {
+	if archetypeID != chasm.WorkflowArchetypeID {
+		// TODO: [chasm-events] remove this check when history events are supported
+		// in chasm framework.
+		// For now, we can return early and avoid unnecessary GetWorkflowExecution call.
+		return
+	}
+
 	response, err := m.GetWorkflowExecution(ctx, &GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
@@ -1069,6 +1168,11 @@ func (m *executionManagerImpl) trimHistoryNode(
 	if err != nil {
 		return
 	}
+	if len(branchToken) == 0 {
+		// Branch token can be empty if there is no history for chasm executions.
+		return
+	}
+
 	mutableStateLastNodeID := executionInfo.LastFirstEventId
 	mutableStateLastNodeTransactionID := executionInfo.LastFirstEventTxnId
 	if _, err := m.TrimHistoryBranch(ctx, &TrimHistoryBranchRequest{
@@ -1187,11 +1291,6 @@ func (m *executionManagerImpl) assertAndConvertArchetypeID(
 		"ArchetypeID not specified, defaulting to Workflow.",
 		tag.Operation(methodName),
 	) {
-		return chasm.WorkflowArchetypeID, true
-	}
-
-	// This is a temporary exception to allow Schedules run in the same ID space as workflows.
-	if archetypeID == chasm.SchedulerArchetypeID {
 		return chasm.WorkflowArchetypeID, true
 	}
 

@@ -78,14 +78,12 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 }
 
 func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
-	f := Field[any]{}
-	fT := reflect.TypeOf(f)
+	fT := reflect.TypeFor[Field[any]]()
 	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestChasmMapTypePrefix() {
-	c := Map[string, any]{}
-	cT := reflect.TypeOf(c)
+	cT := reflect.TypeFor[Map[string, any]]()
 	s.True(strings.HasPrefix(cT.String(), chasmMapTypePrefix))
 }
 
@@ -211,6 +209,35 @@ func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
 	for r := range unmanagedFieldsOf(reflect.TypeFor[unmanagedFields]()) {
 		result = append(result, r.name)
 	}
-	s.Equal(2, len(result))
+	s.Len(result, 2)
 	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
+}
+
+func (s *fieldsIteratorSuite) TestHasVisibilityField() {
+	type componentWithVisibility struct {
+		UnimplementedComponent
+		DataField  *protoMessageType
+		Visibility Field[*Visibility]
+	}
+
+	type componentWithoutVisibility struct {
+		UnimplementedComponent
+		DataField *protoMessageType
+		SomeField Field[string]
+	}
+
+	s.Run("component with Visibility field", func() {
+		s.True(hasVisibilityField(reflect.TypeFor[componentWithVisibility]()))
+		s.True(hasVisibilityField(reflect.TypeFor[*componentWithVisibility]()))
+	})
+
+	s.Run("component without Visibility field", func() {
+		s.False(hasVisibilityField(reflect.TypeFor[componentWithoutVisibility]()))
+		s.False(hasVisibilityField(reflect.TypeFor[*componentWithoutVisibility]()))
+	})
+
+	s.Run("non-struct type", func() {
+		s.False(hasVisibilityField(reflect.TypeFor[string]()))
+		s.False(hasVisibilityField(reflect.TypeFor[int]()))
+	})
 }

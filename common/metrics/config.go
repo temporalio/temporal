@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/cactus/go-statsd-client/v5/statsd"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
+	"go.temporal.io/server/common/softassert"
 )
 
 type (
@@ -66,6 +68,9 @@ type (
 		// (instead of milliseconds).
 		// This config only takes effect when using prometheus via opentelemetry framework
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
+		// TagsCacheMaxSize controls the maximum number of entries in the metrics
+		// tag cache. When the cache is full, all entries are cleared. Default: 10000.
+		TagsCacheMaxSize int `yaml:"tagsCacheMaxSize"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -433,10 +438,18 @@ func newPrometheusScope(
 	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
+	var definitionConflicts tally.Counter
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
+				// Tally drops recordings if the same metric name is used with different label names or help text.
+				// Report a soft assertion so tests using this reporter fail, while production keeps running.
+				if strings.Contains(err.Error(), "has different label names or a different help string") {
+					definitionConflicts.Inc(1)
+					softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
+					return
+				}
 				logger.Warn("error in prometheus reporter", tag.Error(err))
 			},
 		},
@@ -452,6 +465,8 @@ func newPrometheusScope(
 		Prefix:          clientConfig.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
+	// Cache the counter because OnError runs while a scope's metric lock is held.
+	definitionConflicts = scope.Counter(PrometheusMetricDefinitionConflicts.Name())
 	return scope
 }
 
@@ -479,7 +494,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.ClientConfig.RecordTimerInSeconds)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.RecordTimerInSeconds)
 	}
 
 	// fallback to tally if no framework is specified

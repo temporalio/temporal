@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -24,12 +26,13 @@ func (t *testSearchAttributeInterceptor) Intercept(col *SAColumn) error {
 
 func TestSearchAttributeInterceptor(t *testing.T) {
 	t.Parallel()
-
 	interceptor := &testSearchAttributeInterceptor{}
 	c := NewNilQueryConverter(
 		"",
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	).WithSearchAttributeInterceptor(interceptor)
 
 	_, err := c.Convert("ExecutionStatus='Running' order by StartTime")

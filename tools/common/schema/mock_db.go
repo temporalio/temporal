@@ -10,7 +10,7 @@ type (
 )
 
 // Exec executes a cql statement
-func (db *mockSQLDB) Exec(stmt string, args ...interface{}) error {
+func (db *mockSQLDB) Exec(stmt string, args ...any) error {
 	return fmt.Errorf("unimplemented")
 }
 

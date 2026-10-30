@@ -37,6 +37,6 @@ type (
 		Index       string
 		ID          string
 		Version     int64
-		Doc         map[string]interface{}
+		Doc         map[string]any
 	}
 )

@@ -40,12 +40,11 @@ type (
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data    *protoMessageType
-		SubComponent11       Field[*TestSubComponent11]
-		SubComponent11_2     Field[*TestSubComponent11]
-		SubData11            Field[*protoMessageType] // Random proto message.
-		SubComponent2Pointer Field[*TestSubComponent2]
-		DataPointer          Field[*protoMessageType]
+		SubComponent1Data *protoMessageType
+		SubComponent11    Field[*TestSubComponent11]
+		SubComponent11_2  Field[*TestSubComponent11]
+		SubData11         Field[*protoMessageType] // Random proto message.
+		RootPointer       Field[*TestComponent]
 
 		ParentPtr ParentPtr[*TestComponent]
 	}
@@ -54,6 +53,8 @@ type (
 		UnimplementedComponent
 
 		SubComponent11Data *protoMessageType
+		GrandparentPointer Field[*TestComponent]
+		ParentComponentPtr Field[*TestSubComponent1]
 
 		ParentPtr ParentPtr[*TestSubComponent1]
 	}
@@ -61,6 +62,13 @@ type (
 	TestSubComponent2 struct {
 		UnimplementedComponent
 		SubComponent2Data *protoMessageType
+	}
+
+	TestTimeSkippingImplComponent struct {
+		UnimplementedComponent
+
+		ComponentData        *protoMessageType
+		isExecutionSkippable bool
 	}
 
 	TestSubComponent interface {
@@ -80,17 +88,30 @@ var (
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestTimeSkippingImplComponent)(nil)
+	_ TimeSkippingRuntimeGate            = (*TestTimeSkippingImplComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
 	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return LifecycleStateCompleted
 	default:
 		return LifecycleStateFailed
 	}
+}
+
+func (tc *TestComponent) Pause(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+}
+
+func (tc *TestComponent) Unpause(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 func (tc *TestComponent) Terminate(
@@ -109,6 +130,11 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 }
 
+func (tc *TestComponent) ContextMetadata(_ Context) map[string]string {
+	// TODO: Export context metadata from this test root.
+	return nil
+}
+
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
 func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 	return []SearchAttributeKeyValue{
@@ -124,7 +150,24 @@ func (tc *TestComponent) Memo(_ Context) proto.Message {
 }
 
 func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
+	switch tsc1.SubComponent1Data.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	default:
+		return LifecycleStateFailed
+	}
+}
+
+func (tsc1 *TestSubComponent1) Pause(_ MutableContext) {
+	tsc1.SubComponent1Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+}
+
+func (tsc1 *TestSubComponent1) Unpause(_ MutableContext) {
+	tsc1.SubComponent1Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 func (tsc1 *TestSubComponent1) GetData() string {
@@ -132,11 +175,40 @@ func (tsc1 *TestSubComponent1) GetData() string {
 }
 
 func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
+	switch tsc11.SubComponent11Data.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	default:
+		return LifecycleStateFailed
+	}
 }
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) ContextMetadata(_ Context) map[string]string {
+	return nil
+}
+
+func (gc *TestTimeSkippingImplComponent) Terminate(
+	_ MutableContext,
+	_ TerminateComponentRequest,
+) (TerminateComponentResponse, error) {
+	return TerminateComponentResponse{}, nil
+}
+
+// IsExecutionSkippable implements the TimeSkippingRuntimeGate interface.
+func (gc *TestTimeSkippingImplComponent) IsExecutionSkippable(_ Context) bool {
+	return gc.isExecutionSkippable
 }
 
 func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
@@ -331,7 +403,7 @@ func renderProtoPointer(v reflect.Value) string {
 		// Handle oneof-style interface fields
 		if field.Type.Kind() == reflect.Interface && !fieldValue.IsNil() {
 			oneofVal := fieldValue.Elem()
-			if oneofVal.Kind() == reflect.Ptr {
+			if oneofVal.Kind() == reflect.Pointer {
 				oneofVal = oneofVal.Elem()
 			}
 
@@ -344,7 +416,7 @@ func renderProtoPointer(v reflect.Value) string {
 				oneofFieldValue := oneofVal.Field(j)
 
 				// Handle nested proto inside oneof
-				if oneofFieldValue.Kind() == reflect.Ptr && oneofFieldValue.Elem().Kind() == reflect.Struct {
+				if oneofFieldValue.Kind() == reflect.Pointer && oneofFieldValue.Elem().Kind() == reflect.Struct {
 					result += fmt.Sprintf("\t\t\t%s: %s,\n", oneofField.Name, renderProtoPointer(oneofFieldValue))
 				} else {
 					result += fmt.Sprintf("\t\t\t%s: %#v,\n", oneofField.Name, oneofFieldValue.Interface())
@@ -355,7 +427,7 @@ func renderProtoPointer(v reflect.Value) string {
 		}
 
 		// Recursively handle nested proto messages (pointer to struct)
-		if field.Type.Kind() == reflect.Ptr && fieldValue.Kind() == reflect.Ptr && fieldValue.Elem().Kind() == reflect.Struct {
+		if field.Type.Kind() == reflect.Pointer && fieldValue.Kind() == reflect.Pointer && fieldValue.Elem().Kind() == reflect.Struct {
 			result += fmt.Sprintf("\t\t%s: %s,\n", field.Name, renderProtoPointer(fieldValue))
 			continue
 		}

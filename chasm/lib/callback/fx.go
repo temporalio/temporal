@@ -9,6 +9,13 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/httpfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -23,26 +30,45 @@ func register(
 // httpCallerProviderProvider provides an HTTPCallerProvider for CHASM callbacks.
 func httpCallerProviderProvider(
 	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
+	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	testHooks testhooks.TestHooks,
+	config *Config,
 ) (HTTPCallerProvider, error) {
+	logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
-	defaultClient := &http.Client{}
+	externalTransport, err := common.NewHTTPTransport(nil)
+	if err != nil {
+		return nil, err
+	}
+	externalClient := &http.Client{
+		Transport: httpClientTransportInstrumenter.Instrument(externalTransport),
+	}
+	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
+	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 
-	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
-		return func(r *http.Request) (*http.Response, error) {
+	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
+		scope := httpfaults.Scope{NamespaceID: namespace.ID(key.NamespaceID)}
+		routingLogger := log.With(logger, tag.WorkflowNamespaceID(key.NamespaceID))
+		caller := func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
+				namespaceRegistry,
 				httpClientCache,
-				defaultClient,
+				callbackTokenGenerator,
+				externalClient,
 				localClient,
-				logger,
+				routingLogger,
+				config.InspectSourceHeader(),
 			)
 		}
+		return httpfaults.Wrap(httpFaultGenerator, scope, caller)
 	})
 	return m.Get, nil
 }
@@ -51,8 +77,8 @@ var Module = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(configProvider),
 	fx.Provide(httpCallerProviderProvider),
-	fx.Provide(NewInvocationTaskExecutor),
-	fx.Provide(NewBackoffTaskExecutor),
+	fx.Provide(newInvocationTaskHandler),
+	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

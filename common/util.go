@@ -15,8 +15,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -24,6 +26,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
@@ -91,6 +95,8 @@ const (
 
 	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
 	FailureReasonActivityTimeout = "activity %v timeout"
+	// FailureReasonActivityRetryScheduleToCloseTimeout is failureReason for when an activity retry cannot be scheduled before its schedule-to-close timeout.
+	FailureReasonActivityRetryScheduleToCloseTimeout = "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -167,17 +173,41 @@ func CreateFrontendClientRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(frontendClientRetryMaxAttempts)
 }
 
-// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service
-func CreateHistoryClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(historyClientRetryInitialInterval).
-		WithMaximumAttempts(historyClientRetryMaxAttempts)
-
+// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the historyClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateHistoryClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(historyClientRetryInitialInterval, historyClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
 }
 
-// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service
-func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval).
-		WithMaximumAttempts(matchingClientRetryMaxAttempts)
+// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the matchingClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateMatchingClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(matchingClientRetryInitialInterval, matchingClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
+}
+
+func newClientRetryPolicy(initialInterval time.Duration, maxAttempts int, retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	capped := backoff.NewExponentialRetryPolicy(initialInterval).
+		WithMaximumAttempts(maxAttempts)
+	// No max-attempts cap; bounded by the default 1-minute expiration interval
+	// and the caller's context.
+	extended := backoff.NewExponentialRetryPolicy(initialInterval)
+	predicate := func(err error) bool {
+		return retryUnboundedOnSystemResourceExhausted() && isSystemResourceExhausted(err)
+	}
+	return backoff.NewConditionalRetryPolicy(predicate, extended, capped)
+}
+
+func isSystemResourceExhausted(err error) bool {
+	if re, ok := err.(*serviceerror.ResourceExhausted); ok {
+		return re.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
+	}
+	return false
 }
 
 // CreateMatchingClientLongPollRetryPolicy creates a retry policy for poll calls to matching service
@@ -312,14 +342,17 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err := err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
-	case *serviceerrors.ShardOwnershipLost:
+	if isSystemResourceExhausted(err) {
 		return true
-	default:
-		return false
 	}
+
+	switch err.(type) {
+	case *serviceerrors.ShardOwnershipLost,
+		*serviceerrors.StalePartitionCounts:
+		return true
+	}
+
+	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
@@ -383,20 +416,14 @@ func ErrorHash(err error) string {
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
+// TODO: rename to BusinessIDToHistoryShard.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
-}
-
-// ShardingKeyToShard is used to map a sharding key to a shardID.
-func ShardingKeyToShard(
-	shardingKey string,
-	numberOfShards int32,
-) int32 {
-	hash := farm.Fingerprint32([]byte(shardingKey))
+	idBytes := []byte(namespaceID + "_" + workflowID)
+	hash := farm.Fingerprint32(idBytes)
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -444,10 +471,7 @@ func VerifyShardIDMapping(
 		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
 			thisShardCount, thatShardCount))
 	}
-	shardCountMin := thisShardCount
-	if shardCountMin > thatShardCount {
-		shardCountMin = thatShardCount
-	}
+	shardCountMin := min(thisShardCount, thatShardCount)
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}
@@ -505,8 +529,8 @@ func GenerateRandomString(n int) string {
 }
 
 // CreateMatchingPollWorkflowTaskQueueResponse create response for matching's PollWorkflowTaskQueue
-func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponse {
-	matchingResp := &matchingservice.PollWorkflowTaskQueueResponse{
+func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
+	matchingResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
 		TaskToken:                  token,
 		WorkflowExecution:          workflowExecution,
 		WorkflowType:               historyResponse.WorkflowType,
@@ -524,6 +548,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		Messages:                   historyResponse.Messages,
 		History:                    historyResponse.History,
 		NextPageToken:              historyResponse.NextPageToken,
+		RawHistory:                 historyResponse.RawHistoryBytes,
 	}
 
 	return matchingResp
@@ -545,16 +570,17 @@ func CreateHistoryStartWorkflowRequest(
 		startRequest = CloneProto(startRequest)
 	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              namespaceID,
-		StartRequest:             startRequest,
-		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
-		Attempt:                  1,
-		ParentExecutionInfo:      parentExecutionInfo,
-		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
-		ContinuedFailure:         startRequest.ContinuedFailure,
-		LastCompletionResult:     startRequest.LastCompletionResult,
-		RootExecutionInfo:        rootExecutionInfo,
-		VersioningOverride:       startRequest.GetVersioningOverride(),
+		NamespaceId:                  namespaceID,
+		StartRequest:                 startRequest,
+		ContinueAsNewInitiator:       enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                      1,
+		ParentExecutionInfo:          parentExecutionInfo,
+		FirstWorkflowTaskBackoff:     durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
+		ContinuedFailure:             startRequest.ContinuedFailure,
+		LastCompletionResult:         startRequest.LastCompletionResult,
+		RootExecutionInfo:            rootExecutionInfo,
+		VersioningOverride:           startRequest.GetVersioningOverride(),
+		TimeSkippingStatePropagation: startRequest.GetTimeSkippingStatePropagation(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -587,10 +613,10 @@ func CheckEventBlobSizeLimit(
 	runID string,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	blobSizeViolationOperationTag tag.ZapTag,
+	operation string,
 ) error {
 
-	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize))
+	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize), metrics.OperationTag(operation))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
@@ -598,10 +624,11 @@ func CheckEventBlobSizeLimit(
 				tag.WorkflowID(workflowID),       // TODO: this should be entity ID and we need an archetype too.
 				tag.WorkflowRunID(runID),         // TODO: not necessarily a workflow run ID, fix the tag.
 				tag.WorkflowSize(int64(actualSize)),
-				blobSizeViolationOperationTag)
+				tag.BlobSizeViolationOperation(operation))
 		}
 
 		if actualSize > errorLimit {
+			metrics.BlobSizeError.With(metricsHandler).Record(1, metrics.OperationTag(operation))
 			return ErrBlobSizeExceedsLimit
 		}
 	}
@@ -667,6 +694,35 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one task.
+func GrantEagerDispatch(
+	ctx context.Context,
+	client matchingservice.MatchingServiceClient,
+	namespaceID string,
+	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
+	priority *commonpb.Priority,
+	version *deploymentspb.WorkerDeploymentVersion,
+) bool {
+	if client == nil {
+		return false
+	}
+
+	response, err := client.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: namespaceID,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     taskQueue,
+			TaskQueueType: taskQueueType,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+			Count:    1,
+			Priority: priority,
+			Version:  version,
+		}},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
+}
+
 func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	if src == nil {
 		return nil
@@ -675,6 +731,19 @@ func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	result := make(map[K]T, len(src))
 	for k, v := range src {
 		result[k] = CloneProto(v)
+	}
+	return result
+}
+
+// CloneProtoSlice returns a new slice containing a clone of each individual proto.
+func CloneProtoSlice[T proto.Message](src []T) []T {
+	if src == nil {
+		return nil
+	}
+
+	result := make([]T, len(src))
+	for i, v := range src {
+		result[i] = CloneProto(v)
 	}
 	return result
 }
@@ -692,7 +761,7 @@ func DiscardUnknownProto(m proto.Message) error {
 
 // MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
 // The fields to exclude are specified as pointers to fields in the target struct.
-func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []any) error {
 	if target == nil || source == nil {
 		return serviceerror.NewInvalidArgument("target and source cannot be nil")
 	}
@@ -727,7 +796,7 @@ func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(
 	return nil
 }
 
-func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	structVal := reflect.ValueOf(structPtr).Elem()
 	for i := 0; i < structVal.NumField(); i++ {
 		field := structVal.Field(i)
@@ -736,4 +805,49 @@ func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string
 		}
 	}
 	return "", serviceerror.NewInternal("field not found in the struct")
+}
+
+// GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
+// error.
+//
+// Wrapped gRPC status errors are supported, but wrapped errors implementing
+// Status() must be unwrapped before calling GetRPCStatus.
+func GetRPCStatus(err error) (*status.Status, bool) {
+	// This isn't correct, but is to maintain existing behavior.
+	//
+	// Exposing gRPC errors via `Status()` was a convention that existed for several years,
+	// but the canonical way to expose error status (from google.golang.org/grpc/status) is
+	// by an `GRPCStatus() *status.Status` method. [status.FromError] below does unwrapping
+	// and checks for that.
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
+// IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// Wrapping is handled exactly as [GetRPCStatus] handles it, which is not the
+// same for both status conventions: a wrapped error carrying a GRPCStatus()
+// method is still recognized, while one implementing only the older Status()
+// method must be unwrapped by the caller first.
+func IsRetryableRPCError(err error) bool {
+	st, ok := GetRPCStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }

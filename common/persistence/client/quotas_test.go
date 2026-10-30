@@ -62,7 +62,7 @@ func (s *quotasSuite) TestBackgroundTypeAPIPriorityOverrideMapping() {
 
 func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	for idx := range RequestPrioritiesOrdered[1:] {
-		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+		s.Less(RequestPrioritiesOrdered[idx], RequestPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -105,7 +105,7 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 	requestTime := time.Now()
 	wasLimited := false
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if !limiter.Allow(requestTime, request) {
 			wasLimited = true
 		}
@@ -140,7 +140,7 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 	requestTime := time.Now()
 	wasLimited := false
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if !limiter.Allow(requestTime, request) {
 			wasLimited = true
 		}
@@ -179,7 +179,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 	requestTime := time.Now()
 	wasLimited := false
 
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		if !limiter.Allow(requestTime, apiRequest) {
 			wasLimited = true
 			s.True(limiter.Allow(requestTime, operatorRequest))

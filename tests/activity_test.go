@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -31,31 +31,30 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type ActivityTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*ActivityTestSuite]
 }
 
 type ActivityClientTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*ActivityClientTestSuite]
 }
 
 func TestActivityTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &ActivityTestSuite{})
+	parallelsuite.Run(t, &ActivityTestSuite{})
 }
 
 func TestActivityClientTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(ActivityClientTestSuite))
+	parallelsuite.Run(t, &ActivityClientTestSuite{})
 }
 
 func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
+	env := testcore.NewEnv(s.T())
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens during that backoff timer.
 	// activity will be scheduled twice. After second failure (that should happen at ~4.2 sec) next retry will not
@@ -88,27 +87,25 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 
 	var out string
-	err = workflowRun.Get(ctx, &out)
+	err = workflowRun.Get(s.Context(), &out)
 
 	s.Error(err)
 	var wfExecutionError *temporal.WorkflowExecutionError
-	s.True(errors.As(err, &wfExecutionError))
+	s.ErrorAs(err, &wfExecutionError)
 	var activityError *temporal.ActivityError
-	s.True(errors.As(wfExecutionError.Unwrap(), &activityError))
+	s.ErrorAs(wfExecutionError, &activityError)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 
 	s.Equal(int32(2), activityCompleted.Load())
@@ -116,6 +113,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 }
 
 func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
+	env := testcore.NewEnv(s.T())
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens while activity is running.
 	// activity will be scheduled twice.
@@ -158,25 +156,23 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name(),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 
 	var out string
-	err = workflowRun.Get(ctx, &out)
+	err = workflowRun.Get(s.Context(), &out)
 	var activityError *temporal.ActivityError
-	s.True(errors.As(err, &activityError))
-	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
+	s.ErrorAs(err, &activityError)
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
-	s.True(errors.As(activityError.Unwrap(), &timeoutError))
+	s.ErrorAs(activityError, &timeoutError)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
 	// schedule to close timeout should fire while last activity is still running.
 	s.Equal(int32(2), activityCompleted.Load())
@@ -189,9 +185,10 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 }
 
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
+	env := testcore.NewEnv(s.T())
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
-		if info.ActivityID == "Heartbeat" {
+		if strings.HasPrefix(info.ActivityID, "Heartbeat") {
 			go func() {
 				// NOTE: due to client side heartbeat batching, heartbeat may be sent
 				// later than expected.
@@ -206,7 +203,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// so here, we reduce the duration between two heartbeats, so that they are
 				// more likely be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					activity.RecordHeartbeat(ctx, i)
 					time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 				}
@@ -217,7 +214,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	var err1, err2, err3, err4, err5, err6 error
+	var err1, err2, err3, err4, err5, err6, err7, err8 error
 	workflowFn := func(ctx workflow.Context) error {
 		noRetryPolicy := &temporal.RetryPolicy{
 			MaximumAttempts: 1, // disable retry
@@ -269,78 +266,83 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		})
 		f6 := workflow.ExecuteActivity(ctx6, activityFn)
 
+		ctx7 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "HeartbeatWithScheduleToClose",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			HeartbeatTimeout:       1 * time.Second,
+		})
+		f7 := workflow.ExecuteActivity(ctx7, activityFn)
+
+		ctx8 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToCloseWithScheduleToClose",
+			ScheduleToCloseTimeout: 3 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: 2 * time.Second,
+			},
+		})
+		f8 := workflow.ExecuteActivity(ctx8, activityFn)
+
 		err1 = f1.Get(ctx1, nil)
 		err2 = f2.Get(ctx2, nil)
 		err3 = f3.Get(ctx3, nil)
 		err4 = f4.Get(ctx4, nil)
 		err5 = f5.Get(ctx5, nil)
 		err6 = f6.Get(ctx6, nil)
-
+		err7 = f7.Get(ctx7, nil)
+		err8 = f8.Get(ctx8, nil)
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 "functional-test-activity-timeouts",
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
-	err = workflowRun.Get(ctx, nil)
+	s.NotEmpty(workflowRun.GetRunID())
+	err = workflowRun.Get(s.Context(), nil)
 	s.NoError(err)
 
 	// verify activity timeout type
-	s.Error(err1)
-	activityErr, ok := err1.(*temporal.ActivityError)
-	s.True(ok)
+	var activityErr *temporal.ActivityError
+	s.ErrorAs(err1, &activityErr)
 	s.Equal("ScheduleToStart", activityErr.ActivityID())
 	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timeoutErr.TimeoutType())
 
-	s.Error(err2)
-	activityErr, ok = err2.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err2, &activityErr)
 	s.Equal("StartToClose", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err3)
-	activityErr, ok = err3.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err3, &activityErr)
 	s.Equal("ScheduleToClose", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err4)
-	activityErr, ok = err4.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err4, &activityErr)
 	s.Equal("ScheduleToCloseNotSet", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err5)
-	activityErr, ok = err5.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err5, &activityErr)
 	s.Equal("StartToCloseNotSet", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err6)
-	activityErr, ok = err6.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err6, &activityErr)
 	s.Equal("Heartbeat", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
@@ -349,9 +351,28 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
+
+	s.ErrorAs(err7, &activityErr)
+	s.Equal("HeartbeatWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	v = 0
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(2, v)
+
+	s.ErrorAs(err8, &activityErr)
+	s.Equal("StartToCloseWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-test"
 	wt := "functional-heartbeat-test-type"
 	tl := "functional-heartbeat-test-taskqueue"
@@ -368,7 +389,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -379,10 +400,10 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -408,7 +429,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 			}}, nil
 		}
 
-		s.Logger.Info("Completing Workflow")
+		env.Logger.Info("Completing Workflow")
 
 		workflowComplete = true
 		return []*commandpb.Command{{
@@ -423,10 +444,10 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
-			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-				Namespace: s.Namespace().String(),
+		for i := range 10 {
+			env.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
+			_, err := env.FrontendClient().RecordActivityTaskHeartbeat(s.Context(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: env.Namespace().String(),
 				TaskToken: task.TaskToken,
 				Details:   payloads.EncodeString("details"),
 			})
@@ -438,13 +459,13 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -454,7 +475,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -463,7 +484,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -483,13 +504,14 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 }
 
 func (s *ActivityTestSuite) TestActivityRetry() {
-	tv := testvars.New(s.T())
+	env := testcore.NewEnv(s.T())
+	tv := env.Tv()
 
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
 		TaskQueue:           tv.TaskQueue(),
@@ -499,10 +521,10 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		Identity:            tv.WorkerIdentity(),
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -570,7 +592,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		}
 
 		if activityAFailed != nil && activityBTimeout != nil {
-			s.Logger.Info("Completing Workflow")
+			env.Logger.Info("Completing Workflow")
 			workflowComplete = true
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -598,19 +620,19 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           tv.TaskQueue(),
 		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+		return env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.RunId,
@@ -621,7 +643,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())
@@ -641,7 +663,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		}
 	}
 
-	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 			s.Equal(activityName, task.ActivityType.GetName())
@@ -652,16 +674,16 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
 	s.Len(descResp.GetPendingActivities(), 1)
-	s.Equal(descResp.GetPendingActivities()[0].GetActivityId(), "B")
+	s.Equal("B", descResp.GetPendingActivities()[0].GetActivityId())
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
-	for i := 0; i < 3; i++ {
+	env.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	for i := range 3 {
 		s.False(workflowComplete)
 
-		s.Logger.Info("Processing workflow task:", tag.Counter(i))
+		env.Logger.Info("Processing workflow task:", tag.Counter(i))
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRetries(1))
 		if err != nil {
-			s.PrintHistoryEvents(s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEvents(env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.GetRunId(),
 			}))
@@ -677,6 +699,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 }
 
 func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -689,7 +712,7 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -699,10 +722,10 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -756,13 +779,13 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -780,6 +803,7 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-timeout-test"
 	wt := "functional-heartbeat-timeout-test-type"
 	tl := "functional-heartbeat-timeout-test-taskqueue"
@@ -792,7 +816,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -802,10 +826,10 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -813,12 +837,12 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
-		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
+		env.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -855,13 +879,13 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -873,7 +897,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.IsType(consts.ErrActivityTaskNotFound, err)
 	s.Equal(consts.ErrActivityTaskNotFound.Error(), err.Error())
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -882,6 +906,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -894,7 +920,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -904,10 +930,10 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
+	env.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCounter := int32(0)
 	scheduleActivity := true
@@ -918,7 +944,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
@@ -945,7 +971,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 			}}, nil
 		}
 
-		s.Logger.Info("Completing Workflow")
+		env.Logger.Info("Completing Workflow")
 
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -955,15 +981,35 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		}}, nil
 	}
 
+	// Hold the activity after it starts so cancellation targets a running task.
+	// Release it only after the cancellation command is recorded, making its next
+	// heartbeat deterministically observe CancelRequested.
+	activityStartedCh := make(chan *workflowservice.PollActivityTaskQueueResponse, 1)
+	continueActivityCh := make(chan struct{})
+	type activityPollResult struct {
+		err      error
+		canceled bool
+	}
+	activityPollResultCh := make(chan activityPollResult, 1)
+	var continueActivityOnce sync.Once
+	continueActivity := func() {
+		continueActivityOnce.Do(func() {
+			close(continueActivityCh)
+		})
+	}
+	defer continueActivity()
+
+	var activityHandlerErr error
 	activityCanceled := false
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
-			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
+		activityStartedCh <- task
+		<-continueActivityCh
+
+		for i := range 10 {
+			env.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
+			response, err := env.FrontendClient().RecordActivityTaskHeartbeat(s.Context(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
-					Namespace: s.Namespace().String(),
+					Namespace: env.Namespace().String(),
 					TaskToken: task.TaskToken,
 					Details:   payloads.EncodeString("details"),
 				})
@@ -971,60 +1017,76 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 				activityCanceled = true
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
-			s.NoError(err)
+			if err != nil {
+				activityHandlerErr = err
+				return nil, false, err
+			}
 			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
-	cancelCh := make(chan struct{})
 	go func() {
-		s.Logger.Info("Trying to cancel the task in a different thread")
-		// Send signal so that worker can send an activity cancel
-		_, err1 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-			SignalName: "my signal",
-			Input:      nil,
-			Identity:   identity,
-		})
-		s.NoError(err1)
-
-		scheduleActivity = false
-		requestCancellation = true
-		_, err2 := poller.PollAndProcessWorkflowTask()
-		s.NoError(err2)
-		close(cancelCh)
+		pollErr := poller.PollAndProcessActivityTask(false)
+		if activityHandlerErr != nil {
+			pollErr = errors.Join(pollErr, activityHandlerErr)
+		}
+		activityPollResultCh <- activityPollResult{err: pollErr, canceled: activityCanceled}
 	}()
 
-	s.Logger.Info("Start activity.")
-	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+	var activityTask *workflowservice.PollActivityTaskQueueResponse
+	ctx := s.Context()
+	select {
+	case activityTask = <-activityStartedCh:
+	case result := <-activityPollResultCh:
+		s.Require().NoError(result.err)
+		s.FailNow("activity poll completed before the activity started")
+	case <-ctx.Done():
+		s.FailNowf("activity poll did not start before the test context ended", "error: %v", ctx.Err())
+	}
+	s.Equal(id, activityTask.WorkflowExecution.GetWorkflowId())
+	s.Equal(activityName, activityTask.ActivityType.GetName())
 
-	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	<-cancelCh
-	s.True(activityCanceled, "Activity was not cancelled.")
-	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+		SignalName: "my signal",
+		Input:      nil,
+		Identity:   identity,
+	})
+	s.Require().NoError(err)
+
+	scheduleActivity = false
+	requestCancellation = true
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Require().NoError(err)
+	continueActivity()
+
+	result := s.Rcv(activityPollResultCh)
+	s.Require().NoError(result.err)
+	s.True(result.canceled, "Activity was not cancelled.")
+	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
 func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-activity-notstarted-cancellation-test"
 	wt := "functional-activity-notstarted-cancellation-test-type"
 	tl := "functional-activity-notstarted-cancellation-test-taskqueue"
@@ -1037,7 +1099,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1047,10 +1109,10 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecutionn", tag.WorkflowRunID(we.GetRunId()))
+	env.Logger.Info("StartWorkflowExecutionn", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCounter := int32(0)
 	scheduleActivity := true
@@ -1061,8 +1123,8 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			s.Logger.Info("Scheduling activity")
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
+			env.Logger.Info("Scheduling activity")
 			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1080,7 +1142,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 		}
 
 		if requestCancellation {
-			s.Logger.Info("Requesting cancellation")
+			env.Logger.Info("Requesting cancellation")
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
@@ -1089,7 +1151,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 			}}, nil
 		}
 
-		s.Logger.Info("Completing Workflow")
+		env.Logger.Info("Completing Workflow")
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -1105,13 +1167,13 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -1121,8 +1183,8 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -1146,6 +1208,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 }
 
 func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
+	env := testcore.NewEnv(s.T())
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
 	// 1. Start workflow with single activity
 	// 2. First invocation of activity sets heartbeat details and times out.
@@ -1205,28 +1268,26 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-during-retry"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	runId := workflowRun.GetRunID()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+		return env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfId,
 				RunId:      runId,
@@ -1250,7 +1311,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 	}
 
-	err = workflowRun.Get(ctx, nil)
+	err = workflowRun.Get(s.Context(), nil)
 	s.NoError(err)
 
 	s.NoError(err1)
@@ -1260,6 +1321,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 // is recorded in pending activity info and returned in describe workflow API response. This happens
 // only when the worker identity is not sent when a poller picks the task.
 func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-identity-record"
 	workerIdentity := "70df788a-b0b2-4113-a0d5-130f13889e35"
 	activityName := "activity_timer"
@@ -1272,7 +1334,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: "functional-heartbeat-identity-record-type"},
 		TaskQueue:           taskQueue,
@@ -1283,7 +1345,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 		Identity:            workerIdentity,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	workflowComplete := false
@@ -1324,8 +1386,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		activityStartedSignal <- true // signal the start of activity task.
 		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
-		_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().RecordActivityTaskHeartbeat(s.Context(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: env.Namespace().String(),
 			TaskToken: task.TaskToken,
 			Details:   payloads.EncodeString("details"),
 			Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
@@ -1338,13 +1400,13 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            "", // Do not send the worker identity.
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -1359,8 +1421,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	}()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+		return env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -1392,61 +1454,63 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
+	env := testcore.NewEnv(s.T())
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, env.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
-	ctx := testcore.NewContext()
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        uuid.NewString(),
 		TaskQueue: taskQueue,
 	}
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = s.SdkClient().CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
+	err = env.SdkClient().CompleteActivityByID(s.Context(), env.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
 
 	// Ensure the activity is completed and the workflow is unblcked.
-	s.NoError(run.Get(ctx, nil))
+	s.NoError(run.Get(s.Context(), nil))
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
+	env := testcore.NewEnv(s.T())
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, s.SdkClient(), taskQueue)
+	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, env.SdkClient(), taskQueue)
 	s.NoError(w.Start())
 	defer w.Stop()
 
-	ctx := testcore.NewContext()
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        uuid.NewString(),
 		TaskQueue: taskQueue,
 	}
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
 
-	err = s.SdkClient().CompleteActivity(ctx, ai.TaskToken, nil, nil)
+	err = env.SdkClient().CompleteActivity(s.Context(), ai.TaskToken, nil, nil)
 	var svcErr *serviceerror.NotFound
 	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
 }
@@ -1480,4 +1544,45 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
+}
+
+func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
+	env := testcore.NewEnv(s.T())
+	activityFunction := func(ctx context.Context) error {
+		return errors.New("non-retryable-error") //nolint:err113
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		}), activityFunction).Get(ctx, nil)
+		return err
+	}
+
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
+
+	wfID := testcore.RandomizeStr(s.T().Name())
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        wfID,
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
+	s.NoError(err)
+
+	err = workflowRun.Get(s.Context(), nil)
+	var wfExecutionError *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wfExecutionError)
+	var activityError *temporal.ActivityError
+	s.ErrorAs(wfExecutionError, &activityError)
+	s.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, activityError.RetryState())
+	var applicationErr *temporal.ApplicationError
+	s.ErrorAs(activityError, &applicationErr)
+	s.Equal("non-retryable-error", applicationErr.Message())
+
+	history := env.GetHistory(string(env.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	s.ContainsHistory(`ActivityTaskFailed`, &historypb.History{Events: history})
 }

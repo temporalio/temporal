@@ -1,53 +1,30 @@
-// Task executors.
 package worker
 
 import (
 	"go.temporal.io/server/chasm"
-	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
-// workerIDTag returns a log tag for the worker ID.
-func workerIDTag(workerID string) tag.ZapTag {
-	return tag.NewStringTag("worker-id", workerID)
+type leaseExpiryTaskExecutor struct {
+	chasm.PureTaskHandlerBase
 }
 
-// LeaseExpiryTaskExecutor handles lease expiry events.
-type LeaseExpiryTaskExecutor struct {
-	logger log.Logger
-}
-
-func NewLeaseExpiryTaskExecutor(logger log.Logger) *LeaseExpiryTaskExecutor {
-	return &LeaseExpiryTaskExecutor{
-		logger: logger,
-	}
-}
-
-// Execute is called when a lease expiry timer fires.
-// Transitions the worker to INACTIVE (terminal state).
-func (e *LeaseExpiryTaskExecutor) Execute(
-	ctx chasm.MutableContext,
-	worker *Worker,
-	attrs chasm.TaskAttributes,
-	task *workerstatepb.LeaseExpiryTask,
-) error {
-	e.logger.Info("Worker lease expired, marking as inactive",
-		workerIDTag(worker.workerID()))
-
-	return TransitionLeaseExpired.Apply(worker, ctx, EventLeaseExpired{})
-}
-
-// Validate checks if the lease expiry task is still valid (implements TaskValidator interface).
-func (e *LeaseExpiryTaskExecutor) Validate(
-	ctx chasm.Context,
-	worker *Worker,
-	attrs chasm.TaskAttributes,
-	task *workerstatepb.LeaseExpiryTask,
+func (e *leaseExpiryTaskExecutor) Validate(
+	_ chasm.Context,
+	group *WorkerGroup,
+	invocation chasm.TaskInvocation,
+	_ *workerpb.LeaseExpiryTask,
 ) (bool, error) {
-	valid, reason := worker.isLeaseExpiryTaskValid(attrs)
-	if !valid && reason != "" {
-		e.logger.Error(reason, workerIDTag(worker.workerID()))
-	}
-	return valid, nil
+	// Renewing the lease makes tasks for earlier deadlines obsolete.
+	return group.Status == workerpb.WORKER_GROUP_STATUS_ACTIVE &&
+		invocation.ScheduledTime.Equal(group.GetLeaseExpirationTime().AsTime()), nil
+}
+
+func (e *leaseExpiryTaskExecutor) Execute(
+	ctx chasm.MutableContext,
+	group *WorkerGroup,
+	_ chasm.TaskAttributes,
+	_ *workerpb.LeaseExpiryTask,
+) error {
+	return transitionLeaseExpired.Apply(group, ctx, eventLeaseExpired{})
 }

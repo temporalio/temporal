@@ -32,7 +32,7 @@ func (q *query) Exec() (retError error) {
 }
 
 func (q *query) Scan(
-	dest ...interface{},
+	dest ...any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
 
@@ -40,7 +40,7 @@ func (q *query) Scan(
 }
 
 func (q *query) ScanCAS(
-	dest ...interface{},
+	dest ...any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
 
@@ -48,7 +48,7 @@ func (q *query) ScanCAS(
 }
 
 func (q *query) MapScan(
-	m map[string]interface{},
+	m map[string]any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
 
@@ -56,7 +56,7 @@ func (q *query) MapScan(
 }
 
 func (q *query) MapScanCAS(
-	dest map[string]interface{},
+	dest map[string]any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
 
@@ -96,7 +96,7 @@ func (q *query) WithContext(ctx context.Context) Query {
 	return newQuery(q.session, q2)
 }
 
-func (q *query) Bind(v ...interface{}) Query {
+func (q *query) Bind(v ...any) Query {
 	q.gocqlQuery.Bind(v...)
 	return newQuery(q.session, q.gocqlQuery)
 }

@@ -111,7 +111,7 @@ func (s *calendarSuite) TestParseCronString() {
 		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	_, _, _, err = parseCronString("0 1 2 3 4 1999")
 	s.ErrorContains(err, "Year is not in range")
@@ -141,7 +141,7 @@ func (s *calendarSuite) TestParseCronString() {
 		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	scs, iv, tz, err = parseCronString("@every 5d")
 	s.NoError(err)
@@ -149,7 +149,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.Equal(&schedulepb.IntervalSpec{
 		Interval: durationpb.New(5 * 24 * time.Hour),
 	}, iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	scs, iv, tz, err = parseCronString("@every 5h/45m")
 	s.NoError(err)
@@ -158,7 +158,7 @@ func (s *calendarSuite) TestParseCronString() {
 		Interval: durationpb.New(5 * time.Hour),
 		Phase:    durationpb.New(45 * time.Minute),
 	}, iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 }
 
 func (s *calendarSuite) TestCalendarNextBasic() {
@@ -297,7 +297,7 @@ func (s *calendarSuite) TestMakeRange() {
 		s.T().Helper()
 		ranges, err := makeRange(str, "Test", "", minVal, maxVal, parseMode)
 		s.NoError(err)
-		s.EqualValues(expected, ranges)
+		s.Equal(expected, ranges)
 	}
 	checkErr := func(str string, minVal, maxVal int, parseMode parseMode, expectedErr string) {
 		s.T().Helper()
@@ -414,7 +414,7 @@ func FuzzCalendar(f *testing.F) {
 			t.Errorf("next %v not before now %v (for %+v)", next, now, cal)
 		}
 		gap := int(next.Sub(now) / time.Second)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			ts1 := now.Add(time.Duration(rand.Intn(gap)) * time.Second)
 			if !cc.next(ts1).Equal(next) {
 				t.Errorf("next(%v) = %v should equal next(%v) = %v (for %+v)", ts1, cc.next(ts1), now, next, cal)

@@ -33,7 +33,7 @@ func newFaultInjectionQueueV2(
 
 // CreateQueue wraps QueueV2.CreateQueue.
 func (d faultInjectionQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
-	err = d.generator.generate("CreateQueue").inject(func() error {
+	err = d.generator.generate("CreateQueue", request).inject(func() error {
 		ip1, err = d.QueueV2.CreateQueue(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionQueueV2) CreateQueue(ctx context.Context, request *_source
 
 // EnqueueMessage wraps QueueV2.EnqueueMessage.
 func (d faultInjectionQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
-	err = d.generator.generate("EnqueueMessage").inject(func() error {
+	err = d.generator.generate("EnqueueMessage", request).inject(func() error {
 		ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionQueueV2) EnqueueMessage(ctx context.Context, request *_sou
 
 // ListQueues wraps QueueV2.ListQueues.
 func (d faultInjectionQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
-	err = d.generator.generate("ListQueues").inject(func() error {
+	err = d.generator.generate("ListQueues", request).inject(func() error {
 		ip1, err = d.QueueV2.ListQueues(ctx, request)
 		return err
 	})
@@ -60,7 +60,7 @@ func (d faultInjectionQueueV2) ListQueues(ctx context.Context, request *_sourceP
 
 // RangeDeleteMessages wraps QueueV2.RangeDeleteMessages.
 func (d faultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
-	err = d.generator.generate("RangeDeleteMessages").inject(func() error {
+	err = d.generator.generate("RangeDeleteMessages", request).inject(func() error {
 		ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
 		return err
 	})
@@ -69,7 +69,7 @@ func (d faultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request 
 
 // ReadMessages wraps QueueV2.ReadMessages.
 func (d faultInjectionQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
-	err = d.generator.generate("ReadMessages").inject(func() error {
+	err = d.generator.generate("ReadMessages", request).inject(func() error {
 		ip1, err = d.QueueV2.ReadMessages(ctx, request)
 		return err
 	})

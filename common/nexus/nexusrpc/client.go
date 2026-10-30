@@ -30,7 +30,7 @@ type HTTPClientOptions struct {
 	Serializer nexus.Serializer
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
-	FailureConverter nexus.FailureConverter
+	FailureConverter FailureConverter
 }
 
 // User-Agent header set on HTTP requests.
@@ -74,6 +74,65 @@ func newUnexpectedResponseError(message string, response *http.Response, body []
 	}
 }
 
+type baseHTTPClient struct {
+	// A function for making HTTP requests.
+	// Defaults to [http.DefaultClient.Do].
+	httpCaller func(*http.Request) (*http.Response, error)
+	// A [serializer] to customize client serialization behavior.
+	// By default the client handles JSONables, byte slices, and nil.
+	serializer nexus.Serializer
+	// A [failureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
+	// [DefaultFailureConverter].
+	failureConverter FailureConverter
+}
+
+func (c *baseHTTPClient) failureFromResponse(response *http.Response, body []byte) (nexus.Failure, error) {
+	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
+		return nexus.Failure{}, newUnexpectedResponseError(fmt.Sprintf("invalid response content type: %q", response.Header.Get("Content-Type")), response, body)
+	}
+	var failure nexus.Failure
+	err := json.Unmarshal(body, &failure)
+	return failure, err
+}
+
+func (c *baseHTTPClient) defaultErrorFromResponse(response *http.Response, body []byte, cause error) error {
+	errorType, err := httpStatusCodeToHandlerErrorType(response)
+	if err != nil {
+		// TODO(bergundy): optimization - use the provided cause, it's already a deserialized failure.
+		return newUnexpectedResponseError(err.Error(), response, body)
+	}
+	handlerErr := &nexus.HandlerError{
+		Type: errorType,
+		// For compatibility with older servers.
+		RetryBehavior: retryBehaviorFromHeader(response.Header),
+		Cause:         cause,
+	}
+
+	// Ensure the original failure is available, the calling code expects it.
+	originalFailure, err := c.failureConverter.ErrorToFailure(handlerErr)
+	if err != nil {
+		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)
+	}
+	handlerErr.OriginalFailure = &originalFailure
+	return handlerErr
+}
+
+// bestEffortHandlerErrorFromResponse attempts to read a handler error from the response, but falls back to an unexpected response error.
+func (c *baseHTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
+	failure, err := c.failureFromResponse(response, body)
+	if err != nil {
+		return c.defaultErrorFromResponse(response, body, nil)
+	}
+	convErr, err := c.failureConverter.FailureToError(failure)
+	if err != nil {
+		return newUnexpectedResponseError(fmt.Sprintf("failed to convert Failure to error: %s", err.Error()), response, body)
+	}
+	if _, ok := convErr.(*nexus.HandlerError); !ok {
+		convErr = c.defaultErrorFromResponse(response, body, convErr)
+	}
+	return convErr
+}
+
 // An HTTPClient makes Nexus service requests as defined in the [Nexus HTTP API].
 //
 // It can start a new operation and get an [OperationHandle] to an existing, asynchronous operation.
@@ -85,8 +144,8 @@ func newUnexpectedResponseError(message string, response *http.Response, body []
 //
 // [Nexus HTTP API]: https://github.com/nexus-rpc/api
 type HTTPClient struct {
-	// The options this client was created with after applying defaults.
-	options        HTTPClientOptions
+	baseHTTPClient
+	service        string
 	serviceBaseURL *url.URL
 }
 
@@ -115,12 +174,16 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 		options.Serializer = nexus.DefaultSerializer()
 	}
 	if options.FailureConverter == nil {
-		options.FailureConverter = nexus.DefaultFailureConverter()
+		options.FailureConverter = DefaultFailureConverter()
 	}
-
 	return &HTTPClient{
-		options:        options,
+		baseHTTPClient: baseHTTPClient{
+			serializer:       options.Serializer,
+			failureConverter: options.FailureConverter,
+			httpCaller:       options.HTTPCaller,
+		},
 		serviceBaseURL: baseURL,
+		service:        options.Service,
 	}, nil
 }
 
@@ -174,7 +237,7 @@ func (c *HTTPClient) StartOperation(
 		content, ok := input.(*nexus.Content)
 		if !ok {
 			var err error
-			content, err = c.options.Serializer.Serialize(input)
+			content, err = c.serializer.Serialize(input)
 			if err != nil {
 				return nil, err
 			}
@@ -192,7 +255,7 @@ func (c *HTTPClient) StartOperation(
 		}
 	}
 
-	url := c.serviceBaseURL.JoinPath(url.PathEscape(c.options.Service), url.PathEscape(operation))
+	url := c.serviceBaseURL.JoinPath(url.PathEscape(c.service), url.PathEscape(operation))
 
 	if options.CallbackURL != "" {
 		q := url.Query()
@@ -220,7 +283,7 @@ func (c *HTTPClient) StartOperation(
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
 
-	response, err := c.options.HTTPCaller(request)
+	response, err := c.httpCaller(request)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +310,7 @@ func (c *HTTPClient) StartOperation(
 	if response.StatusCode == http.StatusOK {
 		return &ClientStartOperationResponse[*nexus.LazyValue]{
 			Successful: nexus.NewLazyValue(
-				c.options.Serializer,
+				c.serializer,
 				&nexus.Reader{
 					ReadCloser: response.Body,
 					Header:     prefixStrippedHTTPHeaderToNexusHeader(response.Header, "content-"),
@@ -280,22 +343,35 @@ func (c *HTTPClient) StartOperation(
 			Pending: handle,
 			Links:   links,
 		}, nil
-	case statusOperationFailed:
-		state, err := getUnsuccessfulStateFromHeader(response, body)
-		if err != nil {
-			return nil, err
-		}
-
+	case statusOperationUnsuccessful:
 		failure, err := c.failureFromResponse(response, body)
 		if err != nil {
 			return nil, err
 		}
 
-		failureErr := c.options.FailureConverter.FailureToError(failure)
-		return nil, &nexus.OperationError{
-			State: state,
-			Cause: failureErr,
+		wireErr, err := c.failureConverter.FailureToError(failure)
+		if err != nil {
+			return nil, err
 		}
+
+		// For compatibility with older servers.
+		if _, ok := wireErr.(*nexus.OperationError); !ok {
+			state, err := getUnsuccessfulStateFromHeader(response, body)
+			if err != nil {
+				return nil, err
+			}
+			opErr := &nexus.OperationError{
+				State:   state,
+				Message: "nexus operation completed unsuccessfully",
+				Cause:   wireErr,
+			}
+			if err := MarkAsWrapperError(c.failureConverter, opErr); err != nil {
+				return nil, fmt.Errorf("failed to mark operation error as wrapper error: %w", err)
+			}
+			wireErr = opErr
+		}
+
+		return nil, wireErr
 	default:
 		return nil, c.bestEffortHandlerErrorFromResponse(response, body)
 	}
@@ -346,99 +422,32 @@ func operationInfoFromResponse(response *http.Response, body []byte) (*nexus.Ope
 	return &info, nil
 }
 
-func (c *HTTPClient) failureFromResponse(response *http.Response, body []byte) (nexus.Failure, error) {
-	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
-		return nexus.Failure{}, newUnexpectedResponseError(fmt.Sprintf("invalid response content type: %q", response.Header.Get("Content-Type")), response, body)
-	}
-	var failure nexus.Failure
-	err := json.Unmarshal(body, &failure)
-	return failure, err
-}
-
-func (c *HTTPClient) failureFromResponseOrDefault(response *http.Response, body []byte, defaultMessage string) nexus.Failure {
-	failure, err := c.failureFromResponse(response, body)
-	if err != nil {
-		failure.Message = defaultMessage
-	}
-	return failure
-}
-
-func (c *HTTPClient) failureErrorFromResponseOrDefault(response *http.Response, body []byte, defaultMessage string) error {
-	failure := c.failureFromResponseOrDefault(response, body, defaultMessage)
-	failureErr := c.options.FailureConverter.FailureToError(failure)
-	return failureErr
-}
-
-func (c *HTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
+func httpStatusCodeToHandlerErrorType(response *http.Response) (nexus.HandlerErrorType, error) {
 	switch response.StatusCode {
 	case http.StatusBadRequest:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeBadRequest,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "bad request"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
-	case http.StatusUnauthorized:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeUnauthenticated,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unauthenticated"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeBadRequest, nil
 	case http.StatusRequestTimeout:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeRequestTimeout,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "request timeout"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeRequestTimeout, nil
 	case http.StatusConflict:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeConflict,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "conflict"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeConflict, nil
+	case http.StatusUnauthorized:
+		return nexus.HandlerErrorTypeUnauthenticated, nil
 	case http.StatusForbidden:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeUnauthorized,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unauthorized"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeUnauthorized, nil
 	case http.StatusNotFound:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeNotFound,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "not found"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeNotFound, nil
 	case http.StatusTooManyRequests:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeResourceExhausted,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "resource exhausted"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeResourceExhausted, nil
 	case http.StatusInternalServerError:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeInternal,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "internal error"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeInternal, nil
 	case http.StatusNotImplemented:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeNotImplemented,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "not implemented"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeNotImplemented, nil
 	case http.StatusServiceUnavailable:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeUnavailable,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unavailable"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeUnavailable, nil
 	case nexus.StatusUpstreamTimeout:
-		return &nexus.HandlerError{
-			Type:          nexus.HandlerErrorTypeUpstreamTimeout,
-			Cause:         c.failureErrorFromResponseOrDefault(response, body, "upstream timeout"),
-			RetryBehavior: retryBehaviorFromHeader(response.Header),
-		}
+		return nexus.HandlerErrorTypeUpstreamTimeout, nil
 	default:
-		return newUnexpectedResponseError(fmt.Sprintf("unexpected response status: %q", response.Status), response, body)
+		return "", fmt.Errorf("unexpected response status: %q", response.Status)
 	}
 }
 

@@ -14,7 +14,7 @@ func TestAbortReasonUpdateStateMatrix(t *testing.T) {
 			// Do not modify the test but make sure to update the reasonStateMatrix.
 			require.True(t, ok, "Missing combination: %v, %v. If new abort reason or state is added make sure to update the reasonStateMatrix", r, st)
 			if fe.f != nil {
-				require.Nil(t, fe.err)
+				require.NoError(t, fe.err)
 			}
 			if fe.err != nil {
 				require.Nil(t, fe.f)
