@@ -28,7 +28,7 @@ const (
 	MaxBackoffDelay = 10 * time.Second
 
 	// MaxHTTPAPIRequestBytes is the maximum number of bytes an HTTP API request
-	// can have. This is currently set to the max gRPC request size.
+	// can have.
 	MaxHTTPAPIRequestBytes = 4 * 1024 * 1024
 
 	// MaxNexusAPIRequestBodyBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
@@ -39,8 +39,8 @@ const (
 	// minConnectTimeout is the minimum amount of time we are willing to give a connection to complete.
 	minConnectTimeout = 20 * time.Second
 
-	// maxInternodeRecvPayloadSize indicates the internode max receive payload size.
-	maxInternodeRecvPayloadSize = 128 * 1024 * 1024 // 128 Mb
+	// maxGRPCRecvPayloadSize is the default receive limit for gRPC clients and servers.
+	maxGRPCRecvPayloadSize = 32 * 1024 * 1024 // 32 MB
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -93,7 +93,7 @@ func Dial(
 	dialOptions := []grpc.DialOption{
 		grpcSecureOpt,
 		grpc.WithContextDialer(contextDialer),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxGRPCRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
 			headersInterceptor,
 			metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
