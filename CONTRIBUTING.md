@@ -8,9 +8,6 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 
 ### Build prerequisites
 
-- [Go Lang](https://go.dev/) (minimum version required listed in `go.mod` [file](go.mod)):
-  - Install on macOS with `brew install go`.
-  - Install on Ubuntu with `sudo apt install golang`.
 - [mise](https://mise.jdx.dev/) 2026.10.9 or newer:
   - Install on macOS with `brew install mise`.
   - See [installing mise](https://mise.jdx.dev/installing-mise.html) for all other platforms.
@@ -49,6 +46,9 @@ Temporal uses go modules, there is no dependency on `$GOPATH` variable. Clone th
 ```bash
 git clone https://github.com/temporalio/temporal.git
 ```
+
+From the repository directory, run `mise install` to install Go, protoc, and the protobuf plugins.
+The Go version comes from [go.mod](go.mod).
 
 ## Build
 
