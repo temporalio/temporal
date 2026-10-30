@@ -324,8 +324,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@$(PROTOC) --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
-	@# protogen runs `protoc` from PATH, so put the pinned one first.
-	@mise exec -- go run ./cmd/tools/protogen \
+	@go run ./cmd/tools/protogen \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
 		-proto-root=$(PROTO_ROOT) \
@@ -333,6 +332,7 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB
 		-protogen-bin=$(PROTOGEN) \
 		-goimports-bin=$(GOIMPORTS) \
 		-mockgen-bin=$(MOCKGEN) \
+		-protoc-path="$(PROTOC)" \
 		-protoc-gen-go-chasm-bin=$(LOCALBIN)/protoc-gen-go-chasm \
 		-protoc-gen-go-bin=$(PROTOC_GEN_GO) \
 		-protoc-gen-go-grpc-bin=$(PROTOC_GEN_GO_GRPC) \
