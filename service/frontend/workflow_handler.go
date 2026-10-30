@@ -6834,6 +6834,8 @@ func (wh *WorkflowHandler) validatePollVersioningInfo(
 }
 
 // classifyDeprecatedWorkerVersioningPoll returns the deprecated feature version and whether the poll uses it.
+// Unversioned workers and workers using GA Worker Deployment versioning
+// (WorkerVersioningMode=VERSIONED) are not classified as deprecated.
 func classifyDeprecatedWorkerVersioningPoll(
 	capabilities *commonpb.WorkerVersionCapabilities,
 	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
