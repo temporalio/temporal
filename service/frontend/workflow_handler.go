@@ -6812,8 +6812,8 @@ func (wh *WorkflowHandler) validatePollVersioningInfo(
 	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
 	tq *taskqueuepb.TaskQueue,
 ) error {
-	featureVersion := deprecatedWorkerVersioningPollVersion(capabilities, deploymentOptions)
-	if featureVersion != "" {
+	featureVersion, isDeprecated := classifyDeprecatedWorkerVersioningPoll(capabilities, deploymentOptions)
+	if isDeprecated {
 		action := deprecatedWorkerVersioningPollAllowed
 		if wh.config.BlockOldVersioningPollers(nsName) {
 			action = deprecatedWorkerVersioningPollBlocked
@@ -6833,20 +6833,19 @@ func (wh *WorkflowHandler) validatePollVersioningInfo(
 	return wh.validateVersioningInfo(nsName, capabilities, deploymentOptions, tq)
 }
 
-// deprecatedWorkerVersioningPollVersion returns the version of the worker-versioning feature that the worker is using.
-// If the worker is not using the worker-versioning feature, it returns an empty string.
-func deprecatedWorkerVersioningPollVersion(
+// classifyDeprecatedWorkerVersioningPoll returns the deprecated feature version and whether the poll uses it.
+func classifyDeprecatedWorkerVersioningPoll(
 	capabilities *commonpb.WorkerVersionCapabilities,
 	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
-) string {
+) (featureVersion string, isDeprecated bool) {
 	if deploymentOptions.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED ||
 		!capabilities.GetUseVersioning() {
-		return ""
+		return "", false
 	}
 	if capabilities.GetDeploymentSeriesName() != "" {
-		return deprecatedWorkerVersioningV3
+		return deprecatedWorkerVersioningV3, true
 	}
-	return deprecatedWorkerVersioningV1OrV2
+	return deprecatedWorkerVersioningV1OrV2, true
 }
 
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {

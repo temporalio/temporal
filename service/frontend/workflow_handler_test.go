@@ -139,6 +139,7 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 		capabilities           *commonpb.WorkerVersionCapabilities
 		deploymentOptions      *deploymentpb.WorkerDeploymentOptions
 		blockOldPollers        bool
+		expectDeprecated       bool
 		expectedVersion        string
 		expectedAction         string
 		expectPermissionDenied bool
@@ -155,8 +156,9 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 				BuildId:       "build-id",
 				UseVersioning: true,
 			},
-			expectedVersion: deprecatedWorkerVersioningV1OrV2,
-			expectedAction:  deprecatedWorkerVersioningPollAllowed,
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV1OrV2,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
 		},
 		{
 			name: "v0.3 poller allowed",
@@ -165,8 +167,9 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 				UseVersioning:        true,
 				DeploymentSeriesName: "deployment-series",
 			},
-			expectedVersion: deprecatedWorkerVersioningV3,
-			expectedAction:  deprecatedWorkerVersioningPollAllowed,
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV3,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
 		},
 		{
 			name: "current versioned poller not classified as deprecated",
@@ -189,6 +192,7 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 				UseVersioning: true,
 			},
 			blockOldPollers:        true,
+			expectDeprecated:       true,
 			expectedVersion:        deprecatedWorkerVersioningV1OrV2,
 			expectedAction:         deprecatedWorkerVersioningPollBlocked,
 			expectPermissionDenied: true,
@@ -201,6 +205,7 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 				DeploymentSeriesName: "deployment-series",
 			},
 			blockOldPollers:        true,
+			expectDeprecated:       true,
 			expectedVersion:        deprecatedWorkerVersioningV3,
 			expectedAction:         deprecatedWorkerVersioningPollBlocked,
 			expectPermissionDenied: true,
@@ -236,7 +241,7 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 			}
 
 			recordings := capture.SnapshotMetric(metrics.DeprecatedWorkerVersioningPollCounter.Name())
-			if tc.expectedVersion == "" {
+			if !tc.expectDeprecated {
 				require.Empty(t, recordings)
 				return
 			}
