@@ -391,11 +391,12 @@ func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
 	task *namespacereplicationpb.ApplyLocalTask,
 	namespaceName namespace.Name,
 ) (*componentTerminalObservation, error) {
-	if fault, ok := testhooks.Get(
+	fault, ok := testhooks.Get(
 		h.testHooks,
 		testhooks.NamespaceReplicationBeforeLocalCommit,
 		namespaceName,
-	); ok {
+	)
+	if ok {
 		if err := fault(ctx); err != nil {
 			return nil, err
 		}

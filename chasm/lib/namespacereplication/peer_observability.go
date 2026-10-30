@@ -45,7 +45,8 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 		metrics.StringTag("mode", mode), metrics.StringTag("apply_stage", "peer"),
 	}
 	if h.metricsHandler != nil {
-		metrics.NamespaceReplicationCHASMApplyOutcomes.With(h.metricsHandler).Record(1, tags...)
+		counterTags := append(tags, metrics.NamespaceTag(request.Detail.GetInfo().GetName()))
+		metrics.NamespaceReplicationCHASMApplyOutcomes.With(h.metricsHandler).Record(1, counterTags...)
 		metrics.NamespaceReplicationCHASMApplyLatency.With(h.metricsHandler).Record(duration, tags...)
 	}
 	pendingAge, endToEndDuration := h.recordPeerDurations(recorded, saveErr, tags)

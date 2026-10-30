@@ -245,6 +245,7 @@ func TestPeerEndToEndRequiresPersistedTerminalOutcome(t *testing.T) {
 						require.Equal(t, time.Minute, samples[0].Value)
 						require.Equal(t, mode, samples[0].Tags["mode"])
 						require.Equal(t, "peer", samples[0].Tags["apply_stage"])
+						require.NotContains(t, samples[0].Tags, "namespace")
 					} else {
 						require.Empty(t, samples)
 					}
