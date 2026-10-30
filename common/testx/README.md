@@ -3,9 +3,12 @@
 Collection of general-purpose Go test helpers.
 
 - `parallelsuite`: isolated parallel test suites with fail-fast assertions.
-- `await`: context-bounded polling assertions and channel operations.
-- `testcontext`: shared test contexts with deadlines and decorators.
 - `freeport`: reserve available ports for tests.
 
-`parallelsuite.Suite` includes testify's require assertions. Server-specific
-protobuf and history assertions remain in `go.temporal.io/server/common/testing/parallelsuite`.
+Extend a suite by embedding exported value structs implementing
+`parallelsuite.Extension[T]` alongside `parallelsuite.Suite[T]`. Each extension's
+`Init(T)` binds it to the fresh suite instance for each test, subtest, or
+`WithAssertions` copy. Initializers run in field order after the base is ready.
+
+The base suite has no context or polling dependencies. Context, wait, protobuf,
+and history helpers remain in `go.temporal.io/server/common/testing/parallelsuite`.
