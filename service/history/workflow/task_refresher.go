@@ -23,7 +23,7 @@ type (
 		Refresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
-			shouldSkipGeneratingCloseTransferTask bool,
+			shouldSkipParentVerification bool,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -39,7 +39,7 @@ type (
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 			previousPendingChildIds map[int64]struct{},
-			shouldSkipGeneratingCloseTransferTask bool,
+			shouldSkipParentVerification bool,
 		) error
 	}
 
@@ -55,29 +55,41 @@ type (
 func NewTaskRefresher(
 	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
-
 	return &TaskRefresherImpl{
-		shard: shard,
-
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:                 shard,
+		taskGeneratorProvider: GetTaskGeneratorProvider(),
 	}
 }
 
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
-	shouldSkipGeneratingCloseTransferTask bool,
+	shouldSkipParentVerification bool,
 ) error {
-	if r.shard.GetConfig().EnableNexus() {
-		// Invalidate all tasks generated for this mutable state before the refresh.
-		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
-	}
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
-	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipParentVerification); err != nil {
 		return err
 	}
 
-	return mutableState.ChasmTree().RefreshTasks()
+	if err := mutableState.ChasmTree().RefreshTasks(); err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflow() && mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
+		if err != nil {
+			return err
+		}
+		taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
+			r.shard,
+			mutableState,
+		)
+		return taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+	}
+
+	return nil
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
@@ -85,7 +97,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
-	shouldSkipGeneratingCloseTransferTask bool,
+	shouldSkipParentVerification bool,
 ) error {
 	// CHASM tasks will be replicated as part of ApplyMutation/ApplySnapshot.
 	// Physical tasks will also be automatically generated upon CloseTransaction.
@@ -113,7 +125,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
-		shouldSkipGeneratingCloseTransferTask,
+		shouldSkipParentVerification,
 	); err != nil {
 		return err
 	}
@@ -186,8 +198,16 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
-	return r.refreshTasksForSubStateMachines(
+	if err := r.refreshTasksForSubStateMachines(
 		mutableState,
+		minVersionedTransition,
+	); err != nil {
+		return err
+	}
+
+	return r.refreshTasksForTimeSkipping(
+		mutableState,
+		taskGenerator,
 		minVersionedTransition,
 	)
 }
@@ -204,11 +224,9 @@ func RefreshTasksForWorkflowStart(
 		return nil
 	}
 
-	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
-		minVersionedTransition,
-	) < 0 {
+	// Workflow start tasks belong only to the first state transition. A transition
+	// count of zero represents a full refresh.
+	if minVersionedTransition.GetTransitionCount() > 1 {
 		return nil
 	}
 
@@ -245,7 +263,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
-	skipCloseTransferTask bool,
+	skipParentVerification bool,
 ) error {
 
 	executionState := mutableState.GetExecutionState()
@@ -267,11 +285,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 		return err
 	}
 
-	return taskGenerator.GenerateWorkflowCloseTasks(
-		closeEventTime,
-		false,
-		skipCloseTransferTask,
-	)
+	return taskGenerator.GenerateWorkflowCloseTasks(closeEventTime, false, skipParentVerification)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
@@ -451,6 +465,39 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	return err
 }
 
+// refreshTasksForTimeSkipping re-stamps pending timer tasks against the current accumulated
+// skip when a time-skipping transition happened within the replicated delta.
+func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
+	mutableState historyi.MutableState,
+	taskGenerator TaskGenerator,
+	minVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+		executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return nil
+	}
+
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return nil
+	}
+
+	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 {
+		// On a full refresh the per-component helpers regenerate timers with correct virtual
+		// time conversion. Full time-skipping task regeneration is not necessary.
+		return taskGenerator.GenerateTimeSkippingFastForwardTimerTask()
+	}
+	if transitionhistory.Compare(
+		tsi.GetLastUpdateVersionedTransition(),
+		minVersionedTransition,
+	) < 0 {
+		return nil
+	}
+
+	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
+}
+
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
@@ -581,10 +628,16 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 		return nil
 	}
 
+	visibilityVersionedTransition := mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition
+	// The first visibility transition is handled by StartExecutionVisibilityTask.
+	// Generating an upsert for it would create a redundant visibility task.
+	if visibilityVersionedTransition.GetTransitionCount() == 1 {
+		return nil
+	}
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
 	if transitionhistory.Compare(
-		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
+		visibilityVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
 		return nil

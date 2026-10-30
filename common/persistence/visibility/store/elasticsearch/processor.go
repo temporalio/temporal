@@ -16,12 +16,12 @@ import (
 	"github.com/olivere/elastic/v7"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -47,17 +47,10 @@ type (
 		shutdownLock            sync.RWMutex
 	}
 
-	// ProcessorConfig contains all configs for processor
-	ProcessorConfig struct {
-		IndexerConcurrency dynamicconfig.IntPropertyFn
-		// TODO: remove ESProcessor prefix
-		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
-		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
-		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
-		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
-
-		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn
-	}
+	// ProcessorConfig is an alias of esconfig.ProcessorConfig.
+	//
+	// Deprecated: use esconfig.ProcessorConfig.
+	ProcessorConfig = esconfig.ProcessorConfig
 
 	ackFuture struct { // value of processorImpl.mapToAckFuture
 		future    *future.FutureImpl[bool]
@@ -79,7 +72,7 @@ var (
 
 // NewProcessor create new processorImpl
 func NewProcessor(
-	cfg *ProcessorConfig,
+	cfg *esconfig.ProcessorConfig,
 	esClient client.Client,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -141,7 +134,7 @@ func (p *processorImpl) Stop() {
 	}
 }
 
-func (p *processorImpl) hashFn(key interface{}) uint32 {
+func (p *processorImpl) hashFn(key any) uint32 {
 	id, ok := key.(string)
 	if !ok {
 		return 0
@@ -164,13 +157,13 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		return newFuture.future
 	}
 
-	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
+	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key any, value any) error {
 		existingFuture, ok := value.(*ackFuture)
 		if !ok {
 			p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.Value(key))
 		}
 
-		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
+		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.Duration("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
 		metrics.ElasticsearchBulkProcessorDuplicateRequest.With(p.metricsHandler).Record(1)
 		newFuture = existingFuture
 		return nil
@@ -193,7 +186,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 		if visibilityTaskKey == "" {
 			continue
 		}
-		_, _, _ = p.mapToAckFuture.GetAndDo(visibilityTaskKey, func(key interface{}, value interface{}) error {
+		_, _, _ = p.mapToAckFuture.GetAndDo(visibilityTaskKey, func(key any, value any) error {
 			ackF, ok := value.(*ackFuture)
 			if !ok {
 				p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.Value(key))
@@ -209,8 +202,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
-		var esErr *elastic.Error
-		if errors.As(err, &esErr) {
+		if esErr, ok := errors.AsType[*elastic.Error](err); ok {
 			httpStatus = esErr.Status
 		}
 
@@ -293,7 +285,7 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 
 func (p *processorImpl) notifyResult(visibilityTaskKey string, ack bool) {
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
-	_ = p.mapToAckFuture.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
+	_ = p.mapToAckFuture.RemoveIf(visibilityTaskKey, func(key any, value any) bool {
 		ackF, ok := value.(*ackFuture)
 		if !ok {
 			p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.ESKey(visibilityTaskKey))
@@ -313,7 +305,7 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 	}
 
 	if len(req) == 2 { // index or update requests
-		var body map[string]interface{}
+		var body map[string]any
 		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
 			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
@@ -341,7 +333,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 		return ""
 	}
 
-	var body map[string]map[string]interface{}
+	var body map[string]map[string]any
 	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
 		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
 		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)

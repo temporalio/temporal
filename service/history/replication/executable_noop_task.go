@@ -9,6 +9,7 @@ import (
 
 type (
 	ExecutableNoopTask struct {
+		ProcessToolBox
 		ExecutableTask
 	}
 )
@@ -28,6 +29,7 @@ func NewExecutableNoopTask(
 	sourceShardKey ClusterShardKey,
 ) *ExecutableNoopTask {
 	return &ExecutableNoopTask{
+		ProcessToolBox: processToolBox,
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -41,15 +43,22 @@ func NewExecutableNoopTask(
 	}
 }
 
-func (e *ExecutableNoopTask) QueueID() interface{} {
+func (e *ExecutableNoopTask) QueueID() any {
 	return noopTaskID
 }
 
 func (e *ExecutableNoopTask) Execute() error {
+	e.MarkExecutionStart()
 	return nil
 }
 
 func (e *ExecutableNoopTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.NoopTaskScope),
+		metrics.NamespaceUnknownTag(),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	return err
 }
 

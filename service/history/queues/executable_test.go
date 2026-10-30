@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
@@ -57,6 +59,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		logger                     log.Logger
 	}
 	option func(*params)
 )
@@ -199,7 +202,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			now = now.Add(scheduleLatency)
 			s.timeSource.Update(now)
 
-			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 				metrics.ContextCounterAdd(
 					ctx,
 					metrics.HistoryWorkflowExecutionCacheLatency.Name(),
@@ -275,7 +278,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 		now = now.Add(scheduleLatencies[i])
 		s.timeSource.Update(now)
 
-		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 			metrics.ContextCounterAdd(
 				ctx,
 				metrics.HistoryWorkflowExecutionCacheLatency.Name(),
@@ -311,6 +314,63 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 			s.Equal(expectedInMemoryNoUserLatency, actualInMemoryNoUserLatency)
 		}
 	}
+}
+
+func (s *executableSuite) TestExecute_InMemoryNoUserLatency_ResetOnStandbyToActiveFlip() {
+	// A task accrues in-memory latency while executing as standby, then the namespace fails
+	// over and the same task completes as active. The standby-accrued latency must be reset on
+	// the standby->active flip so the TaskLatency recorded at Ack reflects only the active
+	// attempt, not the (large) standby wait carried over from before the failover.
+	const standbyScheduleLatency = 500 * time.Millisecond
+	const standbyAttemptLatency = 4 * time.Second
+	const activeScheduleLatency = 10 * time.Millisecond
+	const activeAttemptLatency = 20 * time.Millisecond
+
+	executable := s.newTestExecutable()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	// Standby attempt: not ready (retryable error), accrues ~4.5s.
+	now = now.Add(standbyScheduleLatency)
+	s.timeSource.Update(now)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(_ context.Context, _ any) {
+		now = now.Add(standbyAttemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutedAsActive: false,
+		ExecutionErr:     serviceerror.NewUnavailable("standby task not ready"),
+	})
+	err := executable.Execute()
+	s.Error(err)
+	err = executable.HandleErr(err)
+	s.Error(err)
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	executable.Nack(err) // resets scheduledTime to now; inMemoryNoUserLatency now holds the standby wait
+
+	// Failover: the same task now executes as active and succeeds.
+	now = now.Add(activeScheduleLatency)
+	s.timeSource.Update(now)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(_ context.Context, _ any) {
+		now = now.Add(activeAttemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutedAsActive: true,
+		ExecutionErr:     nil,
+	})
+	s.NoError(executable.Execute())
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+
+	recordings := snapshot[metrics.TaskLatency.Name()]
+	s.Len(recordings, 1)
+	got, ok := recordings[0].Value.(time.Duration)
+	s.True(ok)
+	// Only the active attempt should be counted; the ~4.5s standby accrual must have been reset.
+	s.Equal(activeScheduleLatency+activeAttemptLatency, got)
 }
 
 func (s *executableSuite) TestExecute_CapturePanic() {
@@ -370,6 +430,75 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	s.NoError(executable.Execute())
 }
 
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_RecordedWhenPersistenceInContext() {
+	scheduleLatency := 100 * time.Millisecond
+	persistenceDuration := 50 * time.Millisecond
+	attemptLatency := 200 * time.Millisecond
+	expectedNoPersistence := attemptLatency - persistenceDuration
+
+	executable := s.newTestExecutable()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	capture := s.metricsHandler.StartCapture()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, _ any) {
+		metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), int64(persistenceDuration))
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	s.NoError(executable.Execute())
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
+	s.Require().Len(recordings, 1)
+	actualNoPersistence, ok := recordings[0].Value.(time.Duration)
+	s.Require().True(ok)
+	s.Equal(expectedNoPersistence, actualNoPersistence)
+}
+
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_NotRecordedWhenNoPersistence() {
+	scheduleLatency := 100 * time.Millisecond
+	attemptLatency := 200 * time.Millisecond
+
+	executable := s.newTestExecutable()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	capture := s.metricsHandler.StartCapture()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, _ any) {
+		// Do not add TaskPersistenceLatency to context (simulates transfer/timer task that never calls visibility).
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	s.NoError(executable.Execute())
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
+	s.Empty(recordings)
+}
+
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	testCases := []struct {
 		name            string
@@ -417,10 +546,227 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	}
 }
 
+// Expected-retryable errors skip the DLQ threshold entirely, but should still behave like any
+// other attempt otherwise.
+func (s *executableSuite) TestHandleErr_ExpectedRetryableError_AttemptAndMetricsUnaffected() {
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{
+			name: "SystemScopedResourceExhausted",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "test",
+			},
+		},
+		{
+			name:    "BusyWorkflow",
+			taskErr: consts.ErrResourceExhaustedBusyWorkflow,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// attempt starts at 1, so 30 HandleErr calls land it at exactly 31 - one past
+			// taskCriticalLogMetricAttempts (30).
+			const numAttempts = 30
+			const finalAttempt = numAttempts + 1
+
+			queueWriter := &queuestest.FakeQueueWriter{}
+			executable := s.newTestExecutable(func(p *params) {
+				p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
+				p.dlqEnabled = func() bool { return true }
+				p.maxUnexpectedErrorAttempts = func() int { return 1 }
+			})
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        tc.taskErr,
+			}).Times(numAttempts)
+
+			capture := s.metricsHandler.StartCapture()
+			for range numAttempts {
+				err := executable.Execute()
+				s.Error(err)
+				handledErr := executable.HandleErr(err)
+				s.Error(handledErr)
+				s.NotErrorIs(handledErr, queues.ErrTerminalTaskFailure)
+			}
+
+			// unexpectedErrorAttempts never climbed: no DLQ write despite maxUnexpectedErrorAttempts == 1.
+			s.Empty(queueWriter.EnqueueTaskRequests)
+
+			// attempt still climbs, and TaskAttempt still records once it crosses the floor.
+			inFlight := capture.Snapshot()[metrics.TaskAttempt.Name()]
+			s.Len(inFlight, 1)
+			s.EqualValues(finalAttempt, inFlight[0].Value)
+
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			s.metricsHandler.StopCapture(capture)
+			terminal := snapshot[metrics.TaskAttempt.Name()]
+			s.Len(terminal, 2)
+			s.EqualValues(finalAttempt, terminal[1].Value)
+		})
+	}
+}
+
+func (s *executableSuite) TestHandleErr_IsAlertableError() {
+	testCases := []struct {
+		name                  string
+		taskErr               error
+		expectedAlertable     bool
+		expectedCauseTagValue string
+	}{
+		{
+			name:              "ResourceExhausted_NamespaceScoped_NotBusyWorkflow",
+			taskErr:           consts.ErrResourceExhaustedAPSLimit,
+			expectedAlertable: false,
+		},
+		{
+			name:                  "ResourceExhausted_BusyWorkflow",
+			taskErr:               consts.ErrResourceExhaustedBusyWorkflow,
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW.String(),
+		},
+		{
+			name: "ResourceExhausted_SystemScoped",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "test",
+			},
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED.String(),
+		},
+		{
+			name: "ResourceExhausted_ScopeUnspecified",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Message: "test",
+			},
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN.String(),
+		},
+		{
+			name:                  "UnclassifiedCatchall",
+			taskErr:               errors.New("some random error"),
+			expectedAlertable:     true,
+			expectedCauseTagValue: util.ErrorType(errors.New("some random error")),
+		},
+		{
+			name:              "NamespaceNotActive",
+			taskErr:           serviceerror.NewNamespaceNotActive("", "", ""),
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrDependencyTaskNotCompleted",
+			taskErr:           consts.ErrDependencyTaskNotCompleted,
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrTaskRetry",
+			taskErr:           consts.ErrTaskRetry,
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrNamespaceHandover",
+			taskErr:           consts.ErrNamespaceHandover,
+			expectedAlertable: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        tc.taskErr,
+			})
+
+			err := executable.Execute()
+			s.Error(err)
+			s.Error(executable.HandleErr(err))
+
+			capture := s.metricsHandler.StartCapture()
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			s.metricsHandler.StopCapture(capture)
+			recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+			isAlertable := recording.Value == int64(1)
+			s.Equal(tc.expectedAlertable, isAlertable, "isAlertableError(%v)", tc.taskErr)
+			if tc.expectedAlertable {
+				s.Equal(tc.expectedCauseTagValue, recording.Tags[metrics.LastAttemptCauseTagName], "cause tag for %v", tc.taskErr)
+			}
+		})
+	}
+}
+
+func (s *executableSuite) TestAck_AlertableAttemptStageTag_Terminal() {
+	executable := s.newTestExecutable()
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        consts.ErrResourceExhaustedBusyWorkflow,
+	})
+
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+	s.Equal(metrics.AttemptStageTerminal, recording.Tags[metrics.AttemptStageTagName])
+}
+
+// Guards against a zero-value (empty) cause tag when no alertable error ever occurred.
+func (s *executableSuite) TestAck_AlertableAttemptCauseTag_NoAlertableError() {
+	executable := s.newTestExecutable()
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+	s.Contains(recording.Tags, metrics.LastAttemptCauseTagName)
+	s.NotEmpty(recording.Tags[metrics.LastAttemptCauseTagName])
+}
+
+func (s *executableSuite) TestHandleErr_AlertableAttemptStageTag_InFlight() {
+	executable := s.newTestExecutable()
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        consts.ErrResourceExhaustedBusyWorkflow,
+	}).Times(30) // attempt starts at 1; 30 HandleErr calls land it at 31, crossing the floor (30) once.
+
+	capture := s.metricsHandler.StartCapture()
+	for range 30 {
+		err := executable.Execute()
+		s.Error(err)
+		s.Error(executable.HandleErr(err))
+	}
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recordings := snapshot[metrics.TaskAlertableAttempt.Name()]
+	s.Len(recordings, 1)
+	s.Equal(metrics.AttemptStageInFlight, recordings[0].Tags[metrics.AttemptStageTagName])
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW.String(), recordings[0].Tags[metrics.LastAttemptCauseTagName])
+}
+
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -440,7 +786,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -469,7 +815,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttempts() {
 func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -497,7 +843,7 @@ func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsDLQDisabled()
 func (s *executableSuite) TestExecute_DontSendToDLQAfterMaxAttemptsExpectedError() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -530,7 +876,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisableDropCo
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -560,7 +906,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -596,7 +942,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -620,7 +966,7 @@ func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
 func (s *executableSuite) TestExecute_DoesntSendInternalErrorsToDLQ_WhenDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -650,7 +996,7 @@ func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -677,7 +1023,7 @@ func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 func (s *executableSuite) TestExecute_DLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -699,7 +1045,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -721,7 +1067,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -789,6 +1135,30 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 	executable := s.newTestExecutable()
 
 	s.Error(executable.HandleErr(errors.New("random error")))
+}
+
+// The failure log reports the attempt that failed, not the one that will run next.
+func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
+	const numAttempts = 3
+
+	var loggedAttempts []int32
+	logger := log.NewMockLogger(s.controller)
+	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
+		for _, t := range tags {
+			if t.Key() == "attempt" {
+				loggedAttempts = append(loggedAttempts, t.Value().(int32))
+			}
+		}
+	}).Times(numAttempts)
+
+	executable := s.newTestExecutable(func(p *params) {
+		p.logger = logger
+	})
+	for range numAttempts {
+		s.Error(executable.HandleErr(errors.New("random error")))
+	}
+
+	s.Equal([]int32{1, 2, 3}, loggedAttempts)
 }
 
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
@@ -959,7 +1329,7 @@ func (s *executableSuite) TestTaskCancellation() {
 func (s *executableSuite) TestExecute_SendToDLQErrPatternDoesNotMatch() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -990,7 +1360,7 @@ func (s *executableSuite) TestExecute_SendToDLQErrPatternDoesNotMatch() {
 func (s *executableSuite) TestExecute_SendToDLQErrPatternEmptyString() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -1021,7 +1391,7 @@ func (s *executableSuite) TestExecute_SendToDLQErrPatternEmptyString() {
 func (s *executableSuite) TestExecute_SendToDLQErrPatternMatchesMultiple() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable1 := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -1037,7 +1407,7 @@ func (s *executableSuite) TestExecute_SendToDLQErrPatternMatchesMultiple() {
 	}).Times(1)
 
 	executable2 := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -1074,7 +1444,7 @@ func (s *executableSuite) TestExecute_SendToDLQErrPatternMatchesMultiple() {
 func (s *executableSuite) TestExecute_ErrPatternIfDLQDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -1106,7 +1476,7 @@ func (s *executableSuite) TestExecute_ErrorErrPatternThenDisableDLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -1155,6 +1525,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqErrorPattern: func() string {
 			return ""
 		},
+		logger: log.NewTestLogger(),
 	}
 	for _, opt := range opts {
 		opt(&p)
@@ -1179,7 +1550,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
-		log.NewTestLogger(),
+		p.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {
@@ -1190,6 +1561,121 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.DLQErrorPattern = p.dlqErrorPattern
 		},
 	)
+}
+
+// mockSchedulerWithBusyHandler is a mock scheduler that also implements BusyWorkflowHandler
+type mockSchedulerWithBusyHandler struct {
+	*queues.MockScheduler
+	handleBusyWorkflowCalled bool
+	handleBusyWorkflowReturn bool
+}
+
+func (m *mockSchedulerWithBusyHandler) HandleBusyWorkflow(executable queues.Executable) bool {
+	m.handleBusyWorkflowCalled = true
+	return m.handleBusyWorkflowReturn
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_HandledByBusyWorkflowHandler() {
+	// Create a mock scheduler that implements BusyWorkflowHandler
+	mockScheduler := &mockSchedulerWithBusyHandler{
+		MockScheduler:            queues.NewMockScheduler(s.controller),
+		handleBusyWorkflowReturn: true, // Handler successfully handles the task
+	}
+
+	executable := queues.NewExecutable(
+		queues.DefaultReaderId,
+		tasks.NewFakeTask(
+			definition.NewWorkflowKey(
+				tests.NamespaceID.String(),
+				tests.WorkflowID,
+				tests.RunID,
+			),
+			tasks.CategoryTransfer,
+			s.timeSource.Now(),
+		),
+		s.mockExecutor,
+		mockScheduler,
+		s.mockRescheduler,
+		queues.NewNoopPriorityAssigner(),
+		s.timeSource,
+		s.mockNamespaceRegistry,
+		s.mockClusterMetadata,
+		s.chasmRegistry,
+		queues.GetTaskTypeTagValue,
+		log.NewTestLogger(),
+		s.metricsHandler,
+		telemetry.NoopTracer,
+		func(params *queues.ExecutableParams) {
+			params.DLQEnabled = func() bool { return false }
+		},
+	)
+
+	// Nack with ErrResourceExhaustedBusyWorkflow should trigger HandleBusyWorkflow
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
+
+	// Verify HandleBusyWorkflow was called
+	s.True(mockScheduler.handleBusyWorkflowCalled, "HandleBusyWorkflow should be called for busy workflow errors")
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_FallbackToReschedule() {
+	// Create a mock scheduler that implements BusyWorkflowHandler but returns false
+	mockScheduler := &mockSchedulerWithBusyHandler{
+		MockScheduler:            queues.NewMockScheduler(s.controller),
+		handleBusyWorkflowReturn: false, // Handler does not handle the task
+	}
+
+	executable := queues.NewExecutable(
+		queues.DefaultReaderId,
+		tasks.NewFakeTask(
+			definition.NewWorkflowKey(
+				tests.NamespaceID.String(),
+				tests.WorkflowID,
+				tests.RunID,
+			),
+			tasks.CategoryTransfer,
+			s.timeSource.Now(),
+		),
+		s.mockExecutor,
+		mockScheduler,
+		s.mockRescheduler,
+		queues.NewNoopPriorityAssigner(),
+		s.timeSource,
+		s.mockNamespaceRegistry,
+		s.mockClusterMetadata,
+		s.chasmRegistry,
+		queues.GetTaskTypeTagValue,
+		log.NewTestLogger(),
+		s.metricsHandler,
+		telemetry.NoopTracer,
+		func(params *queues.ExecutableParams) {
+			params.DLQEnabled = func() bool { return false }
+		},
+	)
+
+	// When HandleBusyWorkflow returns false, normal Nack logic kicks in.
+	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
+	// If TrySubmit fails (returns false), then rescheduler.Add is called.
+	mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
+
+	// Verify HandleBusyWorkflow was called first
+	s.True(mockScheduler.handleBusyWorkflowCalled, "HandleBusyWorkflow should be called for busy workflow errors")
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_NoHandlerFallsBackToReschedule() {
+	// Test that when scheduler does not implement BusyWorkflowHandler,
+	// busy workflow errors fall back to normal Nack path (TrySubmit then reschedule)
+	executable := s.newTestExecutable()
+
+	// When scheduler doesn't implement BusyWorkflowHandler, normal Nack flow is used.
+	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
+	// If TrySubmit fails (returns false), then rescheduler.Add is called.
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
 }
 
 func (s *executableSuite) accessInternalState(executable queues.Executable) {

@@ -50,7 +50,12 @@ func (s *UpdateSchemaTestSuite) SetupSuite() {
 	if err != nil {
 		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
 	}
-	s.SetupSuiteBase(conn, s.pluginName)
+	s.SetupSuiteBase(conn, s.pluginName, test.ConnectParams{
+		Host:     s.host,
+		Port:     s.port,
+		User:     testUser,
+		Password: testPassword,
+	})
 }
 
 // TearDownSuite tear down test suite
@@ -61,7 +66,7 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 // TestUpdateSchema test
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
-	s.Nil(err)
+	s.NoError(err)
 	defer conn.Close()
 	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", s.sqlQuery, []string{"executions", "current_executions"})
 }

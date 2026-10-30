@@ -11,11 +11,12 @@ var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
 		ConfigProvider,
-		newActivityDispatchTaskExecutor,
-		newScheduleToStartTimeoutTaskExecutor,
-		newScheduleToCloseTimeoutTaskExecutor,
-		newStartToCloseTimeoutTaskExecutor,
-		newHeartbeatTimeoutTaskExecutor,
+		linkValidatorProvider,
+		newActivityDispatchTaskHandler,
+		newScheduleToStartTimeoutTaskHandler,
+		newScheduleToCloseTimeoutTaskHandler,
+		newStartToCloseTimeoutTaskHandler,
+		newHeartbeatTimeoutTaskHandler,
 		newHandler,
 		newLibrary,
 	),
@@ -27,12 +28,14 @@ var HistoryModule = fx.Module(
 var FrontendModule = fx.Module(
 	"activity-frontend",
 	fx.Provide(ConfigProvider),
+	fx.Provide(linkValidatorProvider),
 	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),
-	fx.Invoke(func(registry *chasm.Registry) error {
+	fx.Provide(newComponentOnlyLibrary),
+	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
 		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
-		// need task executors.
-		return registry.Register(newComponentOnlyLibrary())
+		// need task handlers.
+		return registry.Register(l)
 	}),
 )

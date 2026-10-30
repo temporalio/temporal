@@ -889,6 +889,22 @@ func (p *metadataPersistenceClient) GetMetadata(
 	return p.persistence.GetMetadata(ctx)
 }
 
+func (p *metadataPersistenceClient) WatchNamespaces(ctx context.Context) (_ <-chan *NamespaceWatchEvent, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		metricErr := retErr
+		// WatchNotSupported isn't really a persistence error. It's just a signal that persistence doesn't support watching.
+		if errors.Is(metricErr, ErrWatchNotSupported) {
+			metricErr = nil
+		}
+		p.healthSignals.Record(CallerSegmentMissing, time.Since(startTime), metricErr)
+		p.recordRequestMetrics(metrics.PersistenceWatchNamespacesScope, caller, time.Since(startTime), metricErr)
+		p.recordDataLossMetrics(metrics.PersistenceWatchNamespacesScope, caller, metricErr, "", "")
+	}()
+	return p.persistence.WatchNamespaces(ctx)
+}
+
 func (p *metadataPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -1409,8 +1425,7 @@ func (p *metricEmitter) recordRequestMetrics(operation string, caller string, la
 
 func (p *metricEmitter) recordDataLossMetrics(operation string, caller string, err error, workflowID, runID string) {
 	// Emit data loss metrics if enabled and error is DataLoss
-	var dataLoss *serviceerror.DataLoss
-	if errors.As(err, &dataLoss) {
+	if _, ok := errors.AsType[*serviceerror.DataLoss](err); ok {
 		if p.enableDataLossMetrics() {
 			EmitDataLossMetric(p.metricsHandler, caller, workflowID, runID, operation, err)
 		}
@@ -1430,6 +1445,7 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			*AppendHistoryTimeoutError,
 			*CurrentWorkflowConditionFailedError,
 			*WorkflowConditionFailedError,
+			*WorkflowRunAlreadyExistsError,
 			*ConditionFailedError,
 			*TimeoutError,
 			*serviceerror.InvalidArgument,

@@ -165,7 +165,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 		s.lock.UnlockHigh()
 		endWaitGroup.Done()
 	}
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go lowFn()
 		go highFn()
 	}
@@ -179,7 +179,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 	for result := range resultChan {
 		results = append(results, result)
 	}
-	s.Equal(2*concurrency, len(results))
+	s.Len(results, 2*concurrency)
 
 	zeros := float64(0)
 	totalZeros := float64(concurrency)
@@ -197,5 +197,5 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 
 	overallPossibility := possibility / float64(concurrency)
 	fmt.Printf("overall possibility: %.2f\n", overallPossibility)
-	s.True(overallPossibility >= 0.5)
+	s.GreaterOrEqual(overallPossibility, 0.5)
 }

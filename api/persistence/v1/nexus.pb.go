@@ -187,8 +187,7 @@ type NexusEndpoint struct {
 	Spec *NexusEndpointSpec `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
 	// The date and time when the endpoint was created.
 	// (-- api-linter: core::0142::time-field-names=disabled
-	//
-	//	aip.dev/not-precedent: Not following linter rules. --)
+	//     aip.dev/not-precedent: Not following linter rules. --)
 	CreatedTime   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_time,json=createdTime,proto3" json:"created_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -368,8 +367,7 @@ type NexusEndpointTarget_External struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// URL to call.
 	// (-- api-linter: core::0140::uri=disabled
-	//
-	//	aip.dev/not-precedent: Not following linter rules. --)
+	//     aip.dev/not-precedent: Not following linter rules. --)
 	Url           string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

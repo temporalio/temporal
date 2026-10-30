@@ -2,28 +2,52 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
 
-	logger log.Logger
+	logger      log.Logger
+	specBuilder *legacyscheduler.SpecBuilder
 }
 
-func newHandler(logger log.Logger) *handler {
+func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *handler {
 	return &handler{
-		logger: logger,
+		logger:      logger,
+		specBuilder: specBuilder,
 	}
+}
+
+func isSchedulerSentinel(ctx context.Context, namespaceID, scheduleID string) (bool, error) {
+	return chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID,
+				BusinessID:  scheduleID,
+			},
+		),
+		func(s *Scheduler, _ chasm.Context, _ *struct{}) (bool, error) {
+			return s.IsSentinel(), nil
+		},
+		(*struct{})(nil),
+	)
 }
 
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	resp, _, _, err = chasm.NewExecution(
+	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -33,7 +57,105 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		req,
 		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
-	return resp, err
+
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+		// Check if the existing schedule is a sentinel.
+		//
+		// TODO lina@ - this can be removed (as well as all other sentinel business)
+		// after fully migrated to CHASM schedulers.
+		isSentinel, readErr := isSchedulerSentinel(ctx, req.NamespaceId, req.FrontendRequest.ScheduleId)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if isSentinel {
+			return nil, ErrSentinel
+		}
+		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
+	}
+
+	return &schedulerpb.CreateScheduleResponse{
+		FrontendResponse: &workflowservice.CreateScheduleResponse{
+			ConflictToken: initialSerializedConflictToken,
+		},
+	}, err
+}
+
+// CreateFromMigrationState creates a CHASM schedule from migrated V1 state.
+// Used during migration from workflow-backed schedules to CHASM schedules.
+func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (resp *schedulerpb.CreateFromMigrationStateResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	scheduleID := req.GetState().GetSchedulerState().GetScheduleId()
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  scheduleID,
+		},
+		CreateSchedulerFromMigration,
+		req,
+	)
+
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+		// Check if the existing schedule is a sentinel. Sentinels are
+		// auto-deleted SentinelIdleTime after schedule creation; the
+		// V1 schedule will keep retrying migration until it expires.
+		isSentinel, readErr := isSchedulerSentinel(ctx, req.NamespaceId, scheduleID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if isSentinel {
+			h.logger.Warn(
+				fmt.Sprintf("Migration blocked by sentinel schedule; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
+				tag.NewStringTag("schedule-id", scheduleID),
+			)
+			return nil, ErrSentinelBlocked
+		}
+		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
+	}
+
+	return &schedulerpb.CreateFromMigrationStateResponse{}, err
+}
+
+func (h *handler) CreateSentinel(ctx context.Context, req *schedulerpb.CreateSentinelRequest) (resp *schedulerpb.CreateSentinelResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  req.ScheduleId,
+		},
+		CreateSentinelFn,
+		req,
+	)
+
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+		// If a sentinel already exists, succeed idempotently.
+		// If a real scheduler exists, fail.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  req.ScheduleId,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, nil
+				}
+				return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.ScheduleId)
+			},
+			(*struct{})(nil),
+		)
+		return &schedulerpb.CreateSentinelResponse{}, readErr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulerpb.CreateSentinelResponse{}, nil
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
@@ -87,10 +209,32 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 	return resp, err
 }
 
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.ScheduleId,
+			},
+		),
+		func(s *Scheduler, ctx chasm.MutableContext, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			if s.IsSentinel() {
+				return nil, ErrSentinelBlocked
+			}
+			return s.MigrateToWorkflow(ctx, req)
+		},
+		req,
+	)
+	return resp, err
+}
+
 func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (resp *schedulerpb.DescribeScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	return chasm.ReadComponent(
+	resp, err = chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
@@ -98,7 +242,29 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
 		),
-		(*Scheduler).Describe,
+		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.DescribeScheduleRequest) (*schedulerpb.DescribeScheduleResponse, error) {
+			return s.Describe(ctx, req, h.specBuilder)
+		},
 		req,
 	)
+	return resp, err
+}
+
+func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (resp *schedulerpb.ListScheduleMatchingTimesResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, err = chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.FrontendRequest.ScheduleId,
+			},
+		),
+		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+			return s.ListMatchingTimes(ctx, req, h.specBuilder)
+		},
+		req,
+	)
+	return resp, err
 }

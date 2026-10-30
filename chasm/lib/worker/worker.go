@@ -1,155 +1,145 @@
-// Package worker provides a CHASM component for tracking worker heartbeats and lifecycle.
-// See README.md for more details.
+// Package worker tracks grouped worker heartbeats and lease expiry in CHASM.
 package worker
 
 import (
-	"encoding/binary"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"go.temporal.io/server/common"
 )
 
 const (
-	Archetype chasm.Archetype = "Worker"
-
-	// Default duration for worker leases if not specified in the request.
-	defaultLeaseDuration = 1 * time.Minute
+	libraryName         = "worker"
+	groupComponentName  = "group"
+	workerComponentName = "worker"
 )
 
-// WorkerInactiveError is returned when a heartbeat is received for an inactive worker.
-// Client should re-register with a new WorkerInstanceKey.
-type WorkerInactiveError struct{}
+var (
+	Archetype                     = chasm.FullyQualifiedName(libraryName, groupComponentName)
+	_         chasm.RootComponent = (*WorkerGroup)(nil)
+)
 
-func (e *WorkerInactiveError) Error() string {
-	return "worker is inactive: re-register with new WorkerInstanceKey"
+// WorkerGroup is a CHASM root whose Business ID is the SDK's worker grouping key.
+// All workers in the group share one lease.
+type WorkerGroup struct {
+	chasm.UnimplementedComponent
+	*workerstatepb.WorkerGroupState
+
+	Workers chasm.Map[string, *Worker]
 }
 
-// TokenMismatchError is returned when the conflict token doesn't match.
-// Client should use the token from the error response and resend heartbeat.
-type TokenMismatchError struct {
-	CurrentToken []byte
-}
-
-func (e *TokenMismatchError) Error() string {
-	return "conflict token mismatch: use token from error response"
-}
-
-// Worker is a Chasm component that tracks worker heartbeats and manages worker lifecycle.
+// Worker stores one worker's metadata. Its liveness is governed by its group's lease.
 type Worker struct {
 	chasm.UnimplementedComponent
-
-	// Persisted state.
 	*workerstatepb.WorkerState
 }
 
-// NewWorker creates a new Worker component with ACTIVE status.
-func NewWorker() *Worker {
-	return &Worker{
-		WorkerState: &workerstatepb.WorkerState{
-			Status: workerstatepb.WORKER_STATUS_ACTIVE,
-		},
-	}
-}
-
-// LifecycleState returns the current lifecycle state of the worker.
+// LifecycleState leaves liveness to the group root. Closing the root prevents
+// further progress on its children.
 func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	switch w.Status {
-	case workerstatepb.WORKER_STATUS_INACTIVE:
-		// INACTIVE is the terminal state - CHASM will delete the entity.
-		return chasm.LifecycleStateCompleted
-	default:
-		return chasm.LifecycleStateRunning
+	return chasm.LifecycleStateRunning
+}
+
+// newWorkerGroup applies the first heartbeat so successful creation includes
+// the initial lease and its expiry task.
+func newWorkerGroup(
+	ctx chasm.MutableContext,
+	groupingKey string,
+	heartbeats []*workerpb.WorkerHeartbeat,
+	leaseDuration time.Duration,
+) (*WorkerGroup, error) {
+	if groupingKey == "" {
+		return nil, serviceerror.NewInvalidArgument("worker grouping key is required")
 	}
-}
-
-// StateMachineState returns the current status.
-func (w *Worker) StateMachineState() workerstatepb.WorkerStatus {
-	return w.Status
-}
-
-// SetStateMachineState sets the status.
-func (w *Worker) SetStateMachineState(status workerstatepb.WorkerStatus) {
-	w.Status = status
-}
-
-// workerID returns the unique identifier for this worker.
-func (w *Worker) workerID() string {
-	if w.GetWorkerHeartbeat() == nil {
-		return ""
+	group := &WorkerGroup{
+		WorkerGroupState: &workerstatepb.WorkerGroupState{
+			WorkerGroupingKey: groupingKey,
+			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
+		},
+		Workers: make(chasm.Map[string, *Worker]),
 	}
-	return w.GetWorkerHeartbeat().GetWorkerInstanceKey()
-}
-
-// recordHeartbeat processes a heartbeat, updating worker state and extending the lease.
-// Returns WorkerInactiveError if the worker is inactive (client must re-register).
-// Returns TokenMismatchError if the token doesn't match. Client should use the token
-// from the error response and resend heartbeat.
-func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) (*workerstatepb.RecordHeartbeatResponse, error) {
-	// Extract worker heartbeat from request
-	frontendReq := req.GetFrontendRequest()
-	workerHeartbeat := frontendReq.GetWorkerHeartbeat()[0]
-
-	// TODO: Honor the lease duration from the request.
-	leaseDuration := defaultLeaseDuration
-
-	// Check if worker is inactive (terminal state)
-	if w.Status == workerstatepb.WORKER_STATUS_INACTIVE {
-		return nil, &WorkerInactiveError{}
-	}
-
-	// TODO: Validate token from request once the request proto includes it.
-	// For now, skip token validation.
-
-	// Update worker state
-	w.WorkerHeartbeat = workerHeartbeat
-
-	// Increment conflict token
-	w.ConflictToken++
-
-	// Calculate lease deadline and apply transition
-	leaseDeadline := ctx.Now(w).Add(leaseDuration)
-	err := TransitionActiveHeartbeat.Apply(w, ctx, EventHeartbeatReceived{
-		LeaseDeadline: leaseDeadline,
-	})
-	if err != nil {
+	if err := group.recordHeartbeat(ctx, heartbeats, leaseDuration); err != nil {
 		return nil, err
 	}
-
-	return &workerstatepb.RecordHeartbeatResponse{}, nil
+	return group, nil
 }
 
-// encodeConflictToken encodes the conflict token as bytes for the client.
-func (w *Worker) encodeConflictToken() []byte {
-	token := make([]byte, 8)
-	binary.LittleEndian.PutUint64(token, uint64(w.ConflictToken))
-	return token
+func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	if g.Status == workerstatepb.WORKER_GROUP_STATUS_INACTIVE {
+		return chasm.LifecycleStateCompleted
+	}
+	return chasm.LifecycleStateRunning
 }
 
-// validateConflictToken checks if the provided token matches the current conflict token.
-func (w *Worker) validateConflictToken(token []byte) bool {
-	if len(token) != 8 {
-		return false
-	}
-	provided := binary.LittleEndian.Uint64(token)
-	return provided == uint64(w.ConflictToken)
+func (g *WorkerGroup) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
 }
 
-// isLeaseExpiryTaskValid checks if this lease expiry task is valid or if the lease has been renewed.
-// Returns (valid, errorReason) where errorReason is non-empty if there's a bug in state machine.
-func (w *Worker) isLeaseExpiryTaskValid(attrs chasm.TaskAttributes) (bool, string) {
-	// If worker is not active, no point in processing the lease expiry task.
-	// A previous lease expiry must have already transitioned it to inactive.
-	if w.GetStatus() != workerstatepb.WORKER_STATUS_ACTIVE {
-		return false, ""
-	}
+func (g *WorkerGroup) Terminate(
+	ctx chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, transitionLeaseExpired.Apply(g, ctx, eventLeaseExpired{})
+}
 
-	// A nil means bug in the state machine.
-	if w.GetLeaseExpirationTime() == nil {
-		return false, "Lease expiration time is nil"
-	}
+func (g *WorkerGroup) StateMachineState() workerstatepb.WorkerGroupStatus {
+	return g.Status
+}
 
-	// The lease expiry task is valid only if it matches the scheduled lease expiration time.
-	// Otherwise, the lease expiry task has been rescheduled.
-	return attrs.ScheduledTime.Equal(w.GetLeaseExpirationTime().AsTime()), ""
+func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatus) {
+	g.Status = status
+}
+
+// recordHeartbeat updates the reported workers and renews their shared lease.
+// Workers omitted from the batch remain registered.
+// TODO: Add run-scoped heartbeat tokens and retry deduplication with RPC integration,
+// before accepting activity binding deltas.
+func (g *WorkerGroup) recordHeartbeat(
+	ctx chasm.MutableContext,
+	heartbeats []*workerpb.WorkerHeartbeat,
+	leaseDuration time.Duration,
+) error {
+	if !transitionActiveHeartbeat.Possible(g) {
+		return serviceerror.NewFailedPrecondition("worker group is inactive")
+	}
+	if leaseDuration <= 0 {
+		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
+	}
+	if len(heartbeats) == 0 {
+		return serviceerror.NewInvalidArgument("at least one worker heartbeat is required")
+	}
+	// Validate the entire batch before changing membership or renewing the lease.
+	for _, heartbeat := range heartbeats {
+		key := heartbeat.GetWorkerInstanceKey()
+		if key == "" {
+			return serviceerror.NewInvalidArgument("worker instance key is required")
+		}
+		if heartbeat.GetHostInfo().GetWorkerGroupingKey() != g.WorkerGroupingKey {
+			return serviceerror.NewInvalidArgument("worker heartbeat grouping key does not match the group")
+		}
+	}
+	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
+		heartbeats:    heartbeats,
+		leaseDuration: leaseDuration,
+	})
+}
+
+func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
+	// TODO: Handle individual worker shutdown while other workers keep the group alive.
+	// Tolerate repeated worker keys from the SDK; the last entry in the batch wins.
+	for _, heartbeat := range heartbeats {
+		key := heartbeat.GetWorkerInstanceKey()
+		if field, ok := g.Workers[key]; ok {
+			field.Get(ctx).WorkerHeartbeat = common.CloneProto(heartbeat)
+		} else {
+			g.Workers[key] = chasm.NewComponentField(ctx, &Worker{
+				WorkerState: &workerstatepb.WorkerState{
+					WorkerHeartbeat: common.CloneProto(heartbeat),
+				},
+			})
+		}
+	}
 }

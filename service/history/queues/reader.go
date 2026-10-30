@@ -276,6 +276,10 @@ func (r *ReaderImpl) AppendSlices(incomingSlices ...Slice) {
 	}
 
 	validateSlicesOrderedDisjoint(incomingSlices)
+
+	r.Lock()
+	defer r.Unlock()
+
 	if back := r.slices.Back(); back != nil {
 		lastSliceRange := back.Value.(Slice).Scope().Range
 		firstIncomingRange := incomingSlices[0].Scope().Range
@@ -287,9 +291,6 @@ func (r *ReaderImpl) AppendSlices(incomingSlices ...Slice) {
 			))
 		}
 	}
-
-	r.Lock()
-	defer r.Unlock()
 
 	for _, incomingSlice := range incomingSlices {
 		if scope := incomingSlice.Scope(); scope.IsEmpty() {
@@ -431,6 +432,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 		// this should never happen
 		r.logger.Error("Queue reader rate limiter burst size is smaller than required token count")
+		return
 	}
 
 	r.Lock()
@@ -462,14 +464,15 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 	r.retrier.Reset()
 
+	moreTasks := loadSlice.MoreTasks()
 	if len(tasks) != 0 {
 		for _, task := range tasks {
 			r.submit(task)
 		}
-		r.monitor.SetReaderWatermark(r.readerID, tasks[len(tasks)-1].GetKey())
+		r.monitor.SetReaderWatermark(r.readerID, tasks[len(tasks)-1].GetKey(), moreTasks)
 	}
 
-	if loadSlice.MoreTasks() {
+	if moreTasks {
 		r.notify()
 		return
 	}

@@ -6,13 +6,13 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -32,34 +32,6 @@ func Invoke(
 		return nil, consts.ErrDeserializingToken
 	}
 
-	// Handle standalone activity if component ref is present in the token
-	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
-		namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.ActivityId)
-		if err != nil {
-			return nil, err
-		}
-		response, _, err := chasm.UpdateComponent(
-			ctx,
-			componentRef,
-			(*activity.Activity).HandleCompleted,
-			activity.RespondCompletedEvent{
-				Request: req,
-				Token:   token,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     shard.GetMetricsHandler(),
-					NamespaceName:               namespaceEntry.Name().String(),
-					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
-				},
-			},
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
-	}
-
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -74,6 +46,7 @@ func Invoke(
 	var taskQueue string
 	var workflowTypeName string
 	var fabricateStartedEvent bool
+	var hasTimeSkippingClockOffset bool
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -128,6 +101,8 @@ func Invoke(
 					// TODO (shahab): do we need to do anything with wf redirect in this case or any
 					// other case where an activity starts?
 					nil,
+					"",  // workerControlTaskQueue not available for force complete
+					nil, // startedClock not needed for force complete
 				)
 				if err != nil {
 					return nil, err
@@ -141,9 +116,10 @@ func Invoke(
 			}
 			if !fabricateStartedEvent {
 				// leave it zero if the event is fabricated so the latency metrics are not emitted
-				attemptStartedTime = ai.StartedTime.AsTime()
+				attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			}
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
+			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			hasTimeSkippingClockOffset = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset()
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
@@ -162,15 +138,19 @@ func Invoke(
 			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
-				AttemptStartedTime: attemptStartedTime,
-				FirstScheduledTime: firstScheduledTime,
-				Status:             workflow.ActivityStatusSucceeded,
-				Closed:             true,
+				AttemptStartedTime:         attemptStartedTime,
+				FirstScheduledTime:         firstScheduledTime,
+				HasTimeSkippingClockOffset: hasTimeSkippingClockOffset,
+				Status:                     workflow.ActivityStatusSucceeded,
+				Closed:                     true,
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          versioningBehavior,
+					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
+				},
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
 			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.VersioningBehaviorTag(versioningBehavior),
 		)
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, err

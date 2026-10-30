@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
@@ -19,6 +19,7 @@ const (
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerRateLimited)(nil)
+var _ manager.AdminVisibilityManager = (*visibilityManagerRateLimited)(nil)
 
 type visibilityManagerRateLimited struct {
 	delegate         manager.VisibilityManager
@@ -120,8 +121,8 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 
 func (m *visibilityManagerRateLimited) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	if ok := allow(ctx, "ListChasmExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
@@ -140,8 +141,8 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 
 func (m *visibilityManagerRateLimited) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	if ok := allow(ctx, "CountChasmExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
@@ -162,10 +163,40 @@ func (m *visibilityManagerRateLimited) AddSearchAttributes(
 	ctx context.Context,
 	request *manager.AddSearchAttributesRequest,
 ) error {
-	if ok := allow(ctx, "AddSearchAttributes", m.readRateLimiter); !ok {
+	if ok := allow(ctx, "AddSearchAttributes", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.AddSearchAttributes(ctx, request)
+}
+
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (*adminservice.ListExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "ListExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.AdminListExecutions(ctx, request)
+}
+
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminCountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (*adminservice.CountExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "CountExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.AdminCountExecutions(ctx, request)
 }
 
 func allow(

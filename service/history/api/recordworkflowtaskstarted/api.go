@@ -165,10 +165,12 @@ func Invoke(
 				requestID,
 				pollerTaskQueue,
 				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions), //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				req.TargetDeploymentVersion,
+				req.TaskDispatchRevisionNumber,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -176,11 +178,14 @@ func Invoke(
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				updateAction.Noop = true
+				// A speculative workflow task can remain in memory only if starting it did not
+				// produce changes that need to be persisted. Otherwise, closing the transaction
+				// converts it to a normal workflow task and persists all of the changes.
+				updateAction.Noop = !mutableState.IsDirty()
 			} else {
-				// If the wft is speculative MS changes are not persisted, so the possibly started
-				// transition by the StartDeploymentTransition call above won't be persisted. This is OK
-				// because once the speculative task completes the transition will be applied
+				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
+				// even when dirty mutable state causes the start to be persisted, the transition can
+				// wait because once the speculative task completes it will be applied
 				// automatically based on wft completion info. If the speculative task fails or times
 				// out, future wft will be redirected by matching again and the transition will
 				// eventually happen. If an activity starts while the speculative is also started on the
@@ -206,6 +211,11 @@ func Invoke(
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			breakdownMetricsByBuildID := config.BreakdownMetricsByBuildID(
+				namespaceName.String(),
+				tqPartition.TaskQueue().Name(),
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			)
 			metrics.TaskScheduleToStartLatency.With(
 				metrics.GetPerTaskQueuePartitionTypeScope(
 					metricsScope,
@@ -213,7 +223,11 @@ func Invoke(
 					tqPartition,
 					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 				),
-			).Record(workflowScheduleToStartLatency)
+			).Record(
+				workflowScheduleToStartLatency,
+				metrics.WorkerDeploymentNameTag(pollerDeployment.GetSeriesName(), breakdownMetricsByBuildID),
+				metrics.WorkerDeploymentBuildIDTag(pollerDeployment.GetBuildId(), breakdownMetricsByBuildID),
+			)
 
 			resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 				ctx,
@@ -279,8 +293,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	//  when data inconsistency occurs
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
@@ -335,12 +348,11 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
+			RunId:            workflowKey.GetRunID(),
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
+			PersistenceToken: persistenceToken,
+			BranchToken:      response.GetBranchToken(),
 		})
 		if err != nil {
 			return err
@@ -351,7 +363,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
-		response.RawHistory = historyBlobs
+		if shardContext.GetConfig().SendRawHistoryBytesToMatchingService() {
+			response.RawHistoryBytes = historyBlobs
+		} else {
+			response.RawHistory = historyBlobs //nolint:staticcheck // SA1019: Using deprecated field for backwards compatibility during rollout
+		}
 	} else {
 		response.History = history
 	}
@@ -371,7 +387,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
+	return &historyservice.RecordWorkflowTaskStartedResponse{
 		WorkflowType:               rawResp.WorkflowType,
 		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
 		ScheduledEventId:           rawResp.ScheduledEventId,
@@ -389,8 +405,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
-	}
-	return resp, nil
+	}, nil
 }
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(

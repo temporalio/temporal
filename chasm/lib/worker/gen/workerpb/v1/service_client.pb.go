@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +29,7 @@ type WorkerServiceLayeredClient struct {
 
 // NewWorkerServiceLayeredClient initializes a new WorkerServiceLayeredClient.
 func NewWorkerServiceLayeredClient(
+	lc fx.Lifecycle,
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
@@ -39,7 +41,7 @@ func NewWorkerServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewWorkerServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewWorkerServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[WorkerServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
@@ -51,12 +53,17 @@ func NewWorkerServiceLayeredClient(
 	} else {
 		redirector = history.NewBasicRedirector(connections, resolver)
 	}
-	return &WorkerServiceLayeredClient{
+	client := &WorkerServiceLayeredClient{
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
-		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
-	}, nil
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
+	}
+	lc.Append(fx.StopHook(client.Stop))
+	return client, nil
+}
+func (c *WorkerServiceLayeredClient) Stop() {
+	c.redirector.Close()
 }
 func (c *WorkerServiceLayeredClient) callRecordHeartbeatNoRetry(
 	ctx context.Context,
@@ -80,7 +87,7 @@ func (c *WorkerServiceLayeredClient) callRecordHeartbeatNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetWorkerInstanceKey(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetWorkerGroupingKey(), c.numShards)
 	op := func(ctx context.Context, client WorkerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)

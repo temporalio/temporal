@@ -23,6 +23,6 @@ func init() {
 //
 //	var shardInfo persistencespb.ShardInfo
 //	_ = fakedata.FakeStruct(&shardInfo)
-func FakeStruct(a interface{}) error {
+func FakeStruct(a any) error {
 	return faker.FakeData(a)
 }

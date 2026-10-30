@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
+// extraSkipForThrottleLogger is the number of extra stack trace frames to skip when SkipLogger is used
 const extraSkipForThrottleLogger = 3
 
 type throttledLogger struct {
@@ -18,7 +19,7 @@ var _ Logger = (*throttledLogger)(nil)
 // log messages being emitted. The underlying implementation uses a token bucket
 // rate limiter and stops emitting logs once the bucket runs out of tokens
 //
-// Fatal/Panic logs are always emitted without any throttling
+// Fatal/Panic/DPanic logs are always emitted without any throttling
 func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
 	if sl, ok := logger.(SkipLogger); ok {
 		logger = sl.Skip(extraSkipForThrottleLogger)
@@ -57,19 +58,23 @@ func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
 }
 
 func (tl *throttledLogger) DPanic(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
+	// DPanic logs are always emitted without any throttling. Call bypassRateLimit
+	// to maintain the same number of stack trace frames (see extraSkipForThrottleLogger)
+	tl.bypassRateLimit(func() {
 		tl.logger.DPanic(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Panic(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
+	// Panic logs are always emitted without any throttling
+	tl.bypassRateLimit(func() {
 		tl.logger.Panic(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
+	// Fatal logs are always emitted without any throttling
+	tl.bypassRateLimit(func() {
 		tl.logger.Fatal(msg, tags...)
 	})
 }
@@ -84,7 +89,13 @@ func (tl *throttledLogger) With(tags ...tag.Tag) Logger {
 }
 
 func (tl *throttledLogger) rateLimit(f func()) {
-	if ok := tl.limiter.Allow(); ok {
+	if tl.limiter.Allow() {
 		f()
 	}
+}
+
+// bypassRateLimit bypasses the rate limit and calls the function directly. It exists to maintain the same
+// number of stack trace frames as when rateLimit is called (see extraSkipForThrottleLogger)
+func (tl *throttledLogger) bypassRateLimit(f func()) {
+	f()
 }

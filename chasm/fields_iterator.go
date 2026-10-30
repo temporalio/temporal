@@ -106,8 +106,8 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 		if valueT.Kind() == reflect.Pointer {
 			valueT = valueT.Elem()
 		}
-		for i := range valueT.NumField() {
-			fieldT := valueT.Field(i).Type
+		for field := range valueT.Fields() {
+			fieldT := field.Type
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
@@ -117,7 +117,7 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 				continue
 			}
 
-			fieldN := fieldName(valueT.Field(i))
+			fieldN := fieldName(field)
 			prefix := genericTypePrefix(fieldT)
 			switch prefix {
 			case chasmFieldTypePrefix,
@@ -151,4 +151,27 @@ func fieldName(f reflect.StructField) string {
 		return tagName
 	}
 	return f.Name
+}
+
+// visibilityFieldT is the reflect.Type for Field[*Visibility], used to detect
+// components that use Visibility at registration time.
+var visibilityFieldT = reflect.TypeFor[Field[*Visibility]]()
+
+// hasVisibilityField returns true if the given component type has a Field[*Visibility].
+// This is used at registration time to validate that archetypes using Visibility
+// have configured a businessID alias.
+func hasVisibilityField(componentT reflect.Type) bool {
+	if componentT.Kind() == reflect.Pointer {
+		componentT = componentT.Elem()
+	}
+	if componentT.Kind() != reflect.Struct {
+		return false
+	}
+	for field := range componentT.Fields() {
+		fieldT := field.Type
+		if fieldT == visibilityFieldT {
+			return true
+		}
+	}
+	return false
 }

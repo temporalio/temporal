@@ -33,11 +33,27 @@ linters:
     forbidigo:
       forbid:
         - pattern: time.Sleep
-          msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-        - pattern: panic
+          msg: "Please use await.Require / s.Await unless there's no better option"
+        - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
+        - pattern: "^Unix$"
+          msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: "^UnixMilli$"
+          msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
+        - pattern: "^UnixNano$"
+          msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: context\.Background\(\)
+          msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
+        - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)(\(|$)'
+          msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
+        - pattern: 'assert\.\w+'
+          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
+        - pattern: 'temporalproto\.DeepEqual'
+          msg: "temporalproto.DeepEqual treats any two values of the same plain struct type as equal. Use protorequire.DeepEqual (or protodiff.Equal) instead."
+        - pattern: '\bActiveInCluster\b'
+          msg: "ActiveInCluster is not businessID-aware. For any decision tied to a workflow / businessID, use ns.ActiveClusterName(routingKey) instead. For genuine namespace-level checks (no workflow context), suppress with //nolint:forbidigo // <justification>."
     depguard:
       rules:
         main:
@@ -59,6 +75,9 @@ linters:
         # internal server pbs have their own suffix to avoid naming conflicts
         - pkg: go.temporal.io/server/api/(\w+)/v1
           alias: ${1}spb
+    testifylint:
+      disable:
+        - suite-method-signature # parallelsuite.Run supports extra args passed to Test* methods
     exhaustive:
       # Presence of "default" case in switch statements satisfies exhaustiveness,
       # even if all enum members are not listed.
@@ -165,8 +184,43 @@ linters:
         text: "time.Now"
         linters:
           - forbidigo
+      # Cassandra timestamp rules only apply to cassandra persistence package
+      - path-except: common/persistence/cassandra/.*\.go$
+        text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
+      # Allow in tests
+      - path: _test\.go$
+        text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
         text: "panic"
+        linters:
+          - forbidigo
+      - path: chasm/lib/activity/model/.*\.go$ # the activity model transition function deliberately panics if it can't accept an event
+        text: "panic"
+        linters:
+          - forbidigo
+      - path: common/namespace/(namespace|replication_resolver)(_test)?\.go$ # ActiveInCluster definition and direct unit tests
+        text: "ActiveInCluster"
+        linters:
+          - forbidigo
+      - path-except: tests/.+_test\.go # only enforce in test files
+        text: "context.Background"
+        linters:
+          - forbidigo
+      # Existing legacy call sites are tracked separately; keep this PR scoped
+      # to preventing new usage while migrating touched tests.
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
+        text: "Eventually"
+        linters:
+          - forbidigo
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
+        text: "assert\\.CollectT"
+        linters:
+          - forbidigo
+      - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
@@ -180,6 +234,15 @@ linters:
       - path: ^tools\/.+\.go
         linters:
           - revive
+      # These packages remain imported to read and maintain persisted HSM state.
+      - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
+        linters:
+          - staticcheck
+      # Underscores in method names are allowed in test code.
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "ST1003: should not use underscores in Go names; (func|method) "
+        linters:
+          - staticcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

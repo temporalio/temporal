@@ -124,7 +124,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var requestCancels []sqlplugin.RequestCancelInfoMapsRow
-	for i := 0; i < numRequestCancels; i++ {
+	for range numRequestCancels {
 		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		requestCancels = append(requestCancels, requestCancel)
 	}
@@ -291,7 +291,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_Multiple() 
 
 	var requestCancels []sqlplugin.RequestCancelInfoMapsRow
 	var requestCancelInitiatedIDs []int64
-	for i := 0; i < numRequestCancels; i++ {
+	for range numRequestCancels {
 		requestCancelInitiatedID := rand.Int63()
 		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, requestCancelInitiatedID)
 		requestCancelInitiatedIDs = append(requestCancelInitiatedIDs, requestCancelInitiatedID)
@@ -336,7 +336,7 @@ func (s *historyExecutionRequestCancelSuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var requestCancels []sqlplugin.RequestCancelInfoMapsRow
-	for i := 0; i < numRequestCancels; i++ {
+	for range numRequestCancels {
 		requestCancel := s.newRandomExecutionRequestCancelRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		requestCancels = append(requestCancels, requestCancel)
 	}

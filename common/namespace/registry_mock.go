@@ -40,6 +40,20 @@ func (m *MockRegistry) EXPECT() *MockRegistryMockRecorder {
 	return m.recorder
 }
 
+// GetAllNamespaces mocks base method.
+func (m *MockRegistry) GetAllNamespaces() []*Namespace {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllNamespaces")
+	ret0, _ := ret[0].([]*Namespace)
+	return ret0
+}
+
+// GetAllNamespaces indicates an expected call of GetAllNamespaces.
+func (mr *MockRegistryMockRecorder) GetAllNamespaces() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNamespaces", reflect.TypeOf((*MockRegistry)(nil).GetAllNamespaces))
+}
+
 // GetCustomSearchAttributesMapper mocks base method.
 func (m *MockRegistry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error) {
 	m.ctrl.T.Helper()

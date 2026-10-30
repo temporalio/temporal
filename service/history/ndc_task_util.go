@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -34,7 +35,7 @@ func CheckTaskVersion(
 	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
-	task interface{},
+	task any,
 ) error {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -193,7 +194,12 @@ func loadMutableStateForTask(
 	// After reloading mutable state from a database, task's event ID is still not valid,
 	// means that task is obsolete and can be safely skipped.
 	getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID())
-	metrics.TaskSkipped.With(metricsHandler).Record(1, getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID()), metrics.TaskTypeTag(taskTypeTag))
+	metrics.TaskSkipped.With(metricsHandler).Record(
+		1,
+		getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskTypeTag),
+		metrics.ArchetypeTag(chasm.WorkflowComponentName),
+	)
 	logger.Info("Task processor skipping task: task event ID >= MS NextEventID.",
 		tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 	)
@@ -314,11 +320,12 @@ func getNamespaceTagByID(
 func getNamespaceTagAndReplicationStateByID(
 	registry namespace.Registry,
 	namespaceID string,
+	businessID string,
 ) (metrics.Tag, enumspb.ReplicationState) {
 	namespaceName, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
 
-	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState()
+	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState(businessID)
 }

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -31,9 +32,10 @@ type (
 func NewSqlNexusEndpointStore(
 	db sqlplugin.DB,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (p.NexusEndpointStore, error) {
 	return &sqlNexusEndpointStore{
-		SqlStore: NewSqlStore(db, logger),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}, nil
 }
 

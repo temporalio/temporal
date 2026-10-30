@@ -97,7 +97,7 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 	lastRefresh := h.lastRefresh
 	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
-			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
+			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
 		metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
 		return nil
@@ -172,19 +172,19 @@ func (invalidConn) Rebind(query string) string {
 	return query
 }
 
-func (invalidConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (invalidConn) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return nil, DatabaseUnavailableError
 }
 
-func (invalidConn) NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error) {
+func (invalidConn) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
 	return nil, DatabaseUnavailableError
 }
 
-func (invalidConn) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (invalidConn) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	return DatabaseUnavailableError
 }
 
-func (invalidConn) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (invalidConn) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	return DatabaseUnavailableError
 }
 

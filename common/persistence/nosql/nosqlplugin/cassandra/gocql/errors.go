@@ -27,13 +27,11 @@ func ConvertError(
 		return serviceerror.NewNotFoundf("operation %v encountered %v", operation, err.Error())
 	}
 
-	var cqlTimeoutErr *gocql.RequestErrWriteTimeout
-	if errors.As(err, &cqlTimeoutErr) {
+	if cqlTimeoutErr, ok := errors.AsType[*gocql.RequestErrWriteTimeout](err); ok {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, cqlTimeoutErr.Error())}
 	}
 
-	var cqlRequestErr gocql.RequestError
-	if errors.As(err, &cqlRequestErr) {
+	if cqlRequestErr, ok := errors.AsType[gocql.RequestError](err); ok {
 		if cqlRequestErr.Code() == gocql.ErrCodeOverloaded {
 			return &serviceerror.ResourceExhausted{
 				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
@@ -54,6 +52,10 @@ func ConvertError(
 
 			return serviceerror.NewUnavailablef("operation %v encountered %v", operation, cqlRequestErr.Error())
 		}
+	}
+
+	if e, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		return e
 	}
 
 	return serviceerror.NewUnavailablef("operation %v encountered %v", operation, err.Error())

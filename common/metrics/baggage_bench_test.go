@@ -97,13 +97,13 @@ func testMapBaggage(createTestObj func() testBaggage) {
 	keys := []string{"k1", "k2", "k3", "k4", "k5"}
 	start := time.Now()
 	sum := int64(0)
-	for bag := 0; bag < baggageCount; bag++ {
+	for range baggageCount {
 		testObj := createTestObj()
 		wg := sync.WaitGroup{}
 		wg.Add(threadCount)
-		for th := 0; th < threadCount; th++ {
+		for th := range threadCount {
 			go func(key string) {
-				for upd := 0; upd < updatesPerThread; upd++ {
+				for range updatesPerThread {
 					testObj.Add(key, rand.Int63())
 				}
 				wg.Done()

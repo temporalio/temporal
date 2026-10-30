@@ -1,13 +1,14 @@
 package tests
 
 import (
+	"math"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -18,6 +19,7 @@ import (
 )
 
 func TestMySQLShardStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -36,6 +38,7 @@ func TestMySQLShardStoreSuite(t *testing.T) {
 }
 
 func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -47,19 +50,25 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, testData.Cfg, resolver.NewNoopResolver(), testData.Logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	s := NewExecutionMutableStateSuite(
 		t,
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		testData.Logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
 func TestMySQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -83,6 +92,7 @@ func TestMySQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -96,6 +106,7 @@ func TestMySQLHistoryStoreSuite(t *testing.T) {
 }
 
 func TestMySQLTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -113,6 +124,7 @@ func TestMySQLTaskQueueSuite(t *testing.T) {
 }
 
 func TestMySQLFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -130,6 +142,7 @@ func TestMySQLFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestMySQLTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -143,6 +156,7 @@ func TestMySQLTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestMySQLTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -156,6 +170,7 @@ func TestMySQLTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestMySQLTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -169,6 +184,7 @@ func TestMySQLTaskQueueUserDataSuite(t *testing.T) {
 }
 
 func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := &VisibilityPersistenceSuite{
 		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption()),
 	}
@@ -178,36 +194,41 @@ func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestMySQLHistoryV2PersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLMetadataPersistenceSuiteV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 // SQL Store tests
 
 func TestMySQLNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -225,6 +246,7 @@ func TestMySQLNamespaceSuite(t *testing.T) {
 }
 
 func TestMySQLQueueMessageSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -242,6 +264,7 @@ func TestMySQLQueueMessageSuite(t *testing.T) {
 }
 
 func TestMySQLQueueMetadataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -259,6 +282,7 @@ func TestMySQLQueueMetadataSuite(t *testing.T) {
 }
 
 func TestMySQLMatchingTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -276,6 +300,7 @@ func TestMySQLMatchingTaskSuite(t *testing.T) {
 }
 
 func TestMySQLMatchingTaskV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -293,6 +318,7 @@ func TestMySQLMatchingTaskV2Suite(t *testing.T) {
 }
 
 func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -310,6 +336,7 @@ func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 }
 
 func TestMySQLMatchingFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -327,6 +354,7 @@ func TestMySQLMatchingFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryShardSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -344,6 +372,7 @@ func TestMySQLHistoryShardSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryNodeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -361,6 +390,7 @@ func TestMySQLHistoryNodeSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryTreeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -378,6 +408,7 @@ func TestMySQLHistoryTreeSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -390,11 +421,30 @@ func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
 		TearDownMySQLDatabase(t, cfg)
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	t.Parallel()
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(t, cfg)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
 func TestMySQLHistoryExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -412,6 +462,7 @@ func TestMySQLHistoryExecutionSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -429,6 +480,7 @@ func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryTimerTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -446,6 +498,7 @@ func TestMySQLHistoryTimerTaskSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryReplicationTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -463,6 +516,7 @@ func TestMySQLHistoryReplicationTaskSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryVisibilityTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -480,6 +534,7 @@ func TestMySQLHistoryVisibilityTaskSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryReplicationDLQTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -497,6 +552,7 @@ func TestMySQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -514,6 +570,7 @@ func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -531,6 +588,7 @@ func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -548,6 +606,7 @@ func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -565,6 +624,7 @@ func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionChasmSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -582,6 +642,7 @@ func TestMySQLHistoryExecutionChasmSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionRequestCancelSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -599,6 +660,7 @@ func TestMySQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionSignalSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -616,6 +678,7 @@ func TestMySQLHistoryExecutionSignalSuite(t *testing.T) {
 }
 
 func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -633,6 +696,7 @@ func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 }
 
 func TestMySQLVisibilitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
 	SetupMySQLSchema(t, cfg)
@@ -650,6 +714,7 @@ func TestMySQLVisibilitySuite(t *testing.T) {
 }
 
 func TestMySQLClosedConnectionError(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
@@ -658,12 +723,14 @@ func TestMySQLClosedConnectionError(t *testing.T) {
 }
 
 func TestMySQLQueueV2(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	t.Cleanup(tearDown)
 	RunQueueV2TestSuiteForSQL(t, testData.Factory)
 }
 
 func TestMySQLNexusEndpointPersistence(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 

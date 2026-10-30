@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -29,6 +30,12 @@ type (
 )
 
 const (
+	// maxListQueuesPages limits the number of CQL round-trips in ListQueues. With
+	// ALLOW FILTERING, Cassandra may return under-filled pages, so we may need
+	// multiple fetches. This cap prevents unbounded queries when most partitions
+	// don't match the queue_type filter.
+	maxListQueuesPages = 10
+
 	TemplateEnqueueMessageQuery      = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES (?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	TemplateGetMessagesQuery         = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? ORDER BY message_id ASC LIMIT ?`
 	TemplateGetMaxMessageIDQuery     = `SELECT message_id FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? ORDER BY message_id DESC LIMIT 1`
@@ -36,8 +43,8 @@ const (
 	TemplateGetQueueQuery            = `SELECT metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? AND queue_name = ?`
 	TemplateRangeDeleteMessagesQuery = `DELETE FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? AND message_id <= ?`
 	TemplateUpdateQueueMetadataQuery = `UPDATE queues SET metadata_payload = ?, metadata_encoding = ?, version = ? WHERE queue_type = ? AND queue_name = ? IF version = ?`
-	// We will have to ALLOW FILTERING for this query since partition key consists of both queue_type and queue_name.
-	templateGetQueueNamesQuery = `SELECT queue_name, metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? ALLOW FILTERING`
+	// TemplateGetQueueNamesQuery uses ALLOW FILTERING since the partition key consists of both queue_type and queue_name.
+	TemplateGetQueueNamesQuery = `SELECT queue_name, metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? ALLOW FILTERING`
 )
 
 var (
@@ -160,7 +167,7 @@ func (s *queueV2Store) ReadMessages(
 		0,
 		int(minMessageID),
 		request.PageSize,
-	).WithContext(ctx).Iter()
+	).WithContext(ctx).PageSize(request.PageSize).Iter()
 
 	var (
 		messages []persistence.QueueV2Message
@@ -225,7 +232,7 @@ func (s *queueV2Store) CreateQueue(
 		bytes,
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		0,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2CreateQueue", err)
 	}
@@ -320,7 +327,7 @@ func (s *queueV2Store) updateQueue(
 		queueType,
 		queueName,
 		version,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2UpdateQueueMetadata", err)
 	}
@@ -350,7 +357,7 @@ func (s *queueV2Store) tryInsert(
 		messageID,
 		blob.Data,
 		blob.EncodingType.String(),
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
 	}
@@ -471,45 +478,60 @@ func (s *queueV2Store) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	iter := s.session.Query(
-		templateGetQueueNamesQuery,
-		request.QueueType,
-	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
 
-	var queues []persistence.QueueInfo
-	for {
-		var (
-			queueName        string
-			metadataBytes    []byte
-			metadataEncoding string
-			version          int64
-		)
-		if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+	queues := make([]persistence.QueueInfo, 0, request.PageSize)
+	pageToken := request.NextPageToken
+
+	// CQL queries with ALLOW FILTERING may return under-filled pages because Cassandra
+	// scans a fixed number of partitions per page and then post-filters. We loop over
+	// CQL pages until we have enough results or exhaust all pages, with an upper bound
+	// on round-trips to avoid unbounded queries when most partitions don't match.
+	for pages := 0; len(queues) < request.PageSize && pages < maxListQueuesPages; pages++ {
+		iter := s.session.Query(
+			TemplateGetQueueNamesQuery,
+			request.QueueType,
+		).PageSize(request.PageSize - len(queues)).PageState(pageToken).WithContext(ctx).Iter()
+
+		for {
+			var (
+				queueName        string
+				metadataBytes    []byte
+				metadataEncoding string
+				version          int64
+			)
+			if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+				break
+			}
+			q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
+			if err != nil {
+				return nil, errors.Join(err, iter.Close())
+			}
+			partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
+			if err != nil {
+				return nil, errors.Join(err, iter.Close())
+			}
+			messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
+			if err != nil {
+				return nil, errors.Join(err, iter.Close())
+			}
+			queues = append(queues, persistence.QueueInfo{
+				QueueName:     queueName,
+				MessageCount:  messageCount,
+				LastMessageID: lastMessageID,
+			})
+		}
+
+		pageToken = iter.PageState()
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("QueueV2ListQueues", err)
+		}
+		if len(pageToken) == 0 {
 			break
 		}
-		q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
-		if err != nil {
-			return nil, err
-		}
-		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
-		if err != nil {
-			return nil, err
-		}
-		messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
-		if err != nil {
-			return nil, err
-		}
-		queues = append(queues, persistence.QueueInfo{
-			QueueName:     queueName,
-			MessageCount:  messageCount,
-			LastMessageID: lastMessageID,
-		})
 	}
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("QueueV2ListQueues", err)
-	}
+
 	return &persistence.InternalListQueuesResponse{
 		Queues:        queues,
-		NextPageToken: iter.PageState(),
+		NextPageToken: pageToken,
 	}, nil
 }

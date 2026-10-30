@@ -15,8 +15,9 @@ type (
 	// ArchiveFeatureCatalog is a collection features for the Archive method of
 	// History/Visibility Archiver
 	ArchiveFeatureCatalog struct {
-		ProgressManager   ProgressManager
-		NonRetryableError NonRetryableError
+		ProgressManager                       ProgressManager
+		NonRetryableError                     NonRetryableError
+		VisibilityArchivalRecordDeduplication bool
 	}
 
 	// NonRetryableError returns an error indicating archiver has encountered an non-retryable error
@@ -24,8 +25,8 @@ type (
 
 	// ProgressManager is used to record and load archive progress
 	ProgressManager interface {
-		RecordProgress(ctx context.Context, progress interface{}) error
-		LoadProgress(ctx context.Context, valuePtr interface{}) error
+		RecordProgress(ctx context.Context, progress any) error
+		LoadProgress(ctx context.Context, valuePtr any) error
 		HasProgress(ctx context.Context) bool
 	}
 )
@@ -50,12 +51,12 @@ func GetHeartbeatArchiveOption() ArchiveOption {
 
 type heartbeatProgressManager struct{}
 
-func (h *heartbeatProgressManager) RecordProgress(ctx context.Context, progress interface{}) error {
+func (h *heartbeatProgressManager) RecordProgress(ctx context.Context, progress any) error {
 	activity.RecordHeartbeat(ctx, progress)
 	return nil
 }
 
-func (h *heartbeatProgressManager) LoadProgress(ctx context.Context, valuePtr interface{}) error {
+func (h *heartbeatProgressManager) LoadProgress(ctx context.Context, valuePtr any) error {
 	if !h.HasProgress(ctx) {
 		return errors.New("no progress information in the context")
 	}
@@ -73,5 +74,13 @@ func GetNonRetryableErrorOption(nonRetryableErr error) ArchiveOption {
 		catalog.NonRetryableError = func() error {
 			return nonRetryableErr
 		}
+	}
+}
+
+// GetVisibilityArchivalRecordDeduplicationOption returns an ArchiveOption for enabling
+// content-aware visibility archival deduplication.
+func GetVisibilityArchivalRecordDeduplicationOption() ArchiveOption {
+	return func(catalog *ArchiveFeatureCatalog) {
+		catalog.VisibilityArchivalRecordDeduplication = true
 	}
 }

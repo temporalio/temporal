@@ -1,31 +1,8 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package workflow
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"time"
 
@@ -60,6 +37,26 @@ func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivitySt
 	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 }
 
+// activityPendingRetry returns true if an activity has failed
+// and retry has scheduled but not yet started
+func activityPendingRetry(ai *persistencespb.ActivityInfo) bool {
+	return GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
+		!ai.Paused &&
+		ai.HasRetryPolicy &&
+		ai.Attempt > 1
+}
+
+// ClearActivityStartedState resets the per-attempt "started" fields on an ActivityInfo.
+// Called when an activity leaves the started state (retry, pause, etc.) so that stale
+// values from the previous attempt don't leak into the next one.
+func ClearActivityStartedState(ai *persistencespb.ActivityInfo) {
+	ai.StartedEventId = common.EmptyEventID
+	ai.StartVersion = common.EmptyVersion
+	ai.RequestId = ""
+	ai.StartedTime = nil
+	ai.StartedClock = nil
+}
+
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -67,16 +64,14 @@ func UpdateActivityInfoForRetries(
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
 	isActivityRetryStampIncrementEnabled bool,
-) *persistencespb.ActivityInfo {
+) {
 	previousAttempt := ai.Attempt
 	ai.Attempt = attempt
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
-	ai.StartedEventId = common.EmptyEventID
-	ai.StartVersion = common.EmptyVersion
-	ai.RequestId = ""
-	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
+	ClearActivityStartedState(ai)
+	// Mark per-attempt timers for recreation.
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedPerAttempt
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -93,8 +88,6 @@ func UpdateActivityInfoForRetries(
 	if isActivityRetryStampIncrementEnabled && attempt > previousAttempt {
 		ai.Stamp++
 	}
-
-	return ai
 }
 
 func GetPendingActivityInfo(
@@ -128,17 +121,15 @@ func GetPendingActivityInfo(
 		p.Attempt = ai.Attempt
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			scheduledTime := ai.ScheduledTime.AsTime()
-			if now.Before(scheduledTime) {
-				// in this case activity is waiting for a retry
+			if now.Before(scheduledTime) && !ai.Paused {
+				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
 				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
 				p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
 			} else {
-				// in this case activity is at least scheduled
+				// retry has been dispatched to Matching, or the activity is paused so no dispatch will occur
 				p.NextAttemptScheduleTime = nil
-				// we rely on the fact that ExponentialBackoffAlgorithm is deterministic, and  there's no random jitter
-				interval := backoff.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
-				p.CurrentRetryInterval = durationpb.New(interval)
+				p.CurrentRetryInterval = nil
 			}
 		}
 	}
@@ -268,8 +259,10 @@ func PauseActivity(
 	}
 
 	if ai.Paused {
-		// do nothing
-		return nil
+		if ai.GetPauseInfo().GetRequestId() == pauseInfo.GetRequestId() {
+			return nil
+		}
+		return serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
@@ -307,7 +300,10 @@ func ResetActivity(
 	if resetOptions {
 		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			if errors.Is(err, ErrMissingActivityScheduledEvent) {
+				return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			}
+			return err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {
@@ -321,6 +317,8 @@ func ResetActivity(
 	}
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
+		wasPaused := activityInfo.Paused
+
 		// reset the number of attempts
 		activityInfo.Attempt = 1
 		activityInfo.ActivityReset = true
@@ -347,14 +345,18 @@ func ResetActivity(
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
-		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
+		if wasPaused && !keepPaused {
+			unpauseActivityInfo(activityInfo)
+		}
+
+		// if activity is running, or it remains paused, we don't need to schedule a new run
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
 			return nil
 		}
 
-		activityInfo.Stamp++
-		if activityInfo.Paused && !keepPaused {
-			activityInfo.Paused = false
+		// unpauseActivityInfo already incremented the activity stamp.
+		if !wasPaused {
+			activityInfo.Stamp++
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
@@ -384,6 +386,10 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 	ai.PauseInfo = nil
 	ai.Stamp++
 
+	// Timer tasks can be dropped while paused without clearing this mask. Clear all
+	// bits so transaction close recreates the earliest timer. This can create duplicate
+	// timer tasks, but after one processes the timeout, the others become no-ops.
+	ai.TimerTaskStatus = TimerTaskStatusNone
 }
 
 func UnpauseActivity(

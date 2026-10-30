@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
@@ -47,7 +48,7 @@ func (s *processorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	cfg := &ProcessorConfig{
+	cfg := &esconfig.ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
@@ -73,7 +74,7 @@ func (s *processorSuite) TearDownTest() {
 }
 
 func (s *processorSuite) TestNewESProcessorAndStartStop() {
-	config := &ProcessorConfig{
+	config := &esconfig.ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
@@ -143,7 +144,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	wg.Add(parallelFactor)
 	s.mockBulkProcessor.EXPECT().Add(request).Times(docsCount)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.Name()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
-	for i := 0; i < parallelFactor; i++ {
+	for i := range parallelFactor {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
 				futures[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
@@ -154,7 +155,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	wg.Wait()
 	s.Equal(docsCount, s.esProcessor.mapToAckFuture.Len())
 
-	for i := 0; i < docsCount; i++ {
+	for i := range docsCount {
 		if futures[i].Ready() {
 			s.Fail("all request must be in the bulk")
 		}
@@ -176,7 +177,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	wg := sync.WaitGroup{}
 	wg.Add(duplicates)
 	s.mockBulkProcessor.EXPECT().Add(request)
-	for i := 0; i < duplicates; i++ {
+	for i := range duplicates {
 		go func(i int) {
 			futures[i] = s.esProcessor.Add(request, key)
 			wg.Done()
@@ -184,7 +185,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	}
 	wg.Wait()
 	pendingRequestsCount := 0
-	for i := 0; i < duplicates; i++ {
+	for i := range duplicates {
 		if futures[i].Ready() {
 			s.Fail("all request must be in the bulk")
 		} else {
@@ -210,7 +211,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
 
 	wg := sync.WaitGroup{}
 	wg.Add(parallelFactor + 1) // +1 for separate shutdown goroutine
-	for i := 0; i < parallelFactor; i++ {
+	for i := range parallelFactor {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
 				futures[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
@@ -240,7 +241,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
+		Doc(map[string]any{sadefs.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mSuccess := map[string]*elastic.BulkResponseItem{
@@ -285,7 +286,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{
+		Doc(map[string]any{
 			sadefs.VisibilityTaskKey: testKey,
 			sadefs.NamespaceID:       namespaceID,
 			sadefs.WorkflowID:        wid,
@@ -329,7 +330,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 
 func (s *processorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
-	doc := map[string]interface{}{
+	doc := map[string]any{
 		sadefs.VisibilityTaskKey: "str",
 	}
 
@@ -367,7 +368,7 @@ func (s *processorSuite) TestBulkBeforeAction() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
+		Doc(map[string]any{sadefs.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	counterMetric := metrics.NewMockCounterIface(s.controller)
@@ -436,9 +437,9 @@ func (s *processorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Return(metrics.NoopCounterMetricFunc)
 	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
-	s.Equal("", visibilityTaskKey)
+	s.Empty(visibilityTaskKey)
 
-	m := map[string]interface{}{
+	m := map[string]any{
 		sadefs.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
@@ -456,8 +457,8 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 	// ensure compatible with dependency
 	source, err := request.Source()
 	s.NoError(err)
-	s.Equal(1, len(source))
-	var body map[string]map[string]interface{}
+	s.Len(source, 1)
+	var body map[string]map[string]any
 	err = json.Unmarshal([]byte(source[0]), &body)
 	s.NoError(err)
 	_, ok := body["delete"]
@@ -465,7 +466,7 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Return(metrics.NoopCounterMetricFunc)
 	key := s.esProcessor.extractVisibilityTaskKey(request)
-	s.Equal("", key)
+	s.Empty(key)
 
 	id := "id"
 	request.Id(id)
@@ -497,7 +498,7 @@ func (s *processorSuite) TestIsResponseSuccess() {
 func (s *processorSuite) TestErrorReasonFromResponse() {
 	reason := "error reason"
 	resp := &elastic.BulkResponseItem{Status: 400}
-	s.Equal("", extractErrorReason(resp))
+	s.Empty(extractErrorReason(resp))
 	resp.Error = &elastic.ErrorDetails{Reason: reason}
 	s.Equal(reason, extractErrorReason(resp))
 }
@@ -523,7 +524,7 @@ func (s *processorSuite) Test_End2End() {
 	s.mockMetricHandler.EXPECT().
 		Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.Name()).
 		Return(metrics.NoopTimerMetricFunc).Times(docsCount)
-	for i := 0; i < parallelFactor; i++ {
+	for i := range parallelFactor {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
 				docIndex := i*docsCount/parallelFactor + j
@@ -534,7 +535,7 @@ func (s *processorSuite) Test_End2End() {
 					Index(testIndex).
 					Id(docId).
 					Version(version).
-					Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
+					Doc(map[string]any{sadefs.VisibilityTaskKey: testKey})
 
 				mSuccess := map[string]*elastic.BulkResponseItem{
 					"index": {
@@ -577,7 +578,7 @@ func (s *processorSuite) Test_End2End() {
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorCommitLatency.Name()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.esProcessor.bulkAfterAction(0, bulkIndexRequests, bulkIndexResponse, nil)
 
-	for i := 0; i < docsCount; i++ {
+	for i := range docsCount {
 		result, err := futures[i].Get(context.Background())
 		s.NoError(err)
 		s.True(result)

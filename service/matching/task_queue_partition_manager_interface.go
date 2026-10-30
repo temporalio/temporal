@@ -25,18 +25,11 @@ type (
 		// Returns the build ID assigned to the task according to the assignment rules (if any),
 		// and a boolean indicating if sync-match happened or not.
 		AddTask(ctx context.Context, params addTaskParams) (buildId string, syncMatch bool, err error)
+		GrantEagerDispatch(ctx context.Context, items []*matchingservice.GrantEagerDispatchRequest_Item) ([]*matchingservice.GrantEagerDispatchResponse_Item, error)
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
-		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		// TODO(pri): old matcher cleanup
-		ProcessSpooledTask(
-			ctx context.Context,
-			task *internalTask,
-			backlogQueue *PhysicalTaskQueueKey,
-		) error
 		// AddSpooledTask passes a task to the matcher to make it eligible for matching and
 		// returns immediately. (New matcher only)
 		AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error
@@ -50,13 +43,15 @@ type (
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
+		// RemovePoller eagerly removes a poller from history (for graceful shutdown).
+		RemovePoller(identity pollerIdentity)
 		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error)
-		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		Partition() tqid.Partition
 		PartitionCount() int
 		LongPollExpirationInterval() time.Duration

@@ -6,37 +6,59 @@ import (
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
 )
 
-type queryConverter struct{}
+type esQueryConverter struct{}
 
-var _ query.StoreQueryConverter[elastic.Query] = (*queryConverter)(nil)
+var _ query.StoreQueryConverter[elastic.Query] = (*esQueryConverter)(nil)
 
-func (c *queryConverter) GetDatetimeFormat() string {
+func (c *esQueryConverter) GetDatetimeFormat() string {
 	return time.RFC3339Nano
 }
 
-func (c *queryConverter) BuildParenExpr(expr elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildParenExpr(expr elastic.Query) (elastic.Query, error) {
 	if expr == nil {
 		return nil, nil
 	}
 	return expr, nil
 }
 
-func (c *queryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error) {
 	if expr == nil {
 		return nil, nil
 	}
-	return elastic.NewBoolQuery().MustNot(expr), nil
+	if bq, ok := expr.(*boolQuery); ok && len(bq.shouldClauses) > 0 {
+		// !(a || b) == !a && !b
+		ret := newBoolQuery()
+		ret.mustNotClauses = bq.shouldClauses
+		return ret, nil
+	}
+	return newBoolQuery().MustNot(expr), nil
 }
 
-func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, error) {
+	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
-		if e != nil {
-			validExprs = append(validExprs, e)
+		if e == nil {
+			continue
 		}
+		if bq, ok := e.(*boolQuery); !ok || len(bq.filterClauses)+len(bq.mustNotClauses) == 0 {
+			validExprs = append(validExprs, e)
+		} else if reusableBoolQuery == nil {
+			reusableBoolQuery = bq
+		} else {
+			reusableBoolQuery.Filter(bq.filterClauses...).MustNot(bq.mustNotClauses...)
+		}
+	}
+	if reusableBoolQuery != nil {
+		reusableBoolQuery.Filter(validExprs...)
+		return reusableBoolQuery, nil
 	}
 	if len(validExprs) == 0 {
 		return nil, nil
@@ -44,15 +66,27 @@ func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, er
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return elastic.NewBoolQuery().Filter(validExprs...), nil
+	return newBoolQuery().Filter(validExprs...), nil
 }
 
-func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, error) {
+	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
-		if e != nil {
-			validExprs = append(validExprs, e)
+		if e == nil {
+			continue
 		}
+		if bq, ok := e.(*boolQuery); !ok || len(bq.shouldClauses) == 0 {
+			validExprs = append(validExprs, e)
+		} else if reusableBoolQuery == nil {
+			reusableBoolQuery = bq
+		} else {
+			reusableBoolQuery.Should(bq.shouldClauses...)
+		}
+	}
+	if reusableBoolQuery != nil {
+		reusableBoolQuery.Should(validExprs...)
+		return reusableBoolQuery, nil
 	}
 	if len(validExprs) == 0 {
 		return nil, nil
@@ -60,10 +94,10 @@ func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, err
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return elastic.NewBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
+	return newBoolQuery().Should(validExprs...), nil
 }
 
-func (c *queryConverter) ConvertComparisonExpr(
+func (c *esQueryConverter) ConvertComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -72,19 +106,27 @@ func (c *queryConverter) ConvertComparisonExpr(
 	negate := false
 	colName := col.FieldName
 	switch operator {
-	case sqlparser.GreaterEqualStr:
-		res = elastic.NewRangeQuery(colName).Gte(value)
-	case sqlparser.LessEqualStr:
-		res = elastic.NewRangeQuery(colName).Lte(value)
-	case sqlparser.GreaterThanStr:
-		res = elastic.NewRangeQuery(colName).Gt(value)
-	case sqlparser.LessThanStr:
-		res = elastic.NewRangeQuery(colName).Lt(value)
+	case sqlparser.GreaterEqualStr, sqlparser.GreaterThanStr:
+		res = &rangeQuery{
+			field: colName,
+			lower: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.GreaterEqualStr,
+			},
+		}
+	case sqlparser.LessEqualStr, sqlparser.LessThanStr:
+		res = &rangeQuery{
+			field: colName,
+			upper: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.LessEqualStr,
+			},
+		}
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		res = elastic.NewTermQuery(colName, value)
+		res = newTermQuery(colName, value)
 		negate = operator == sqlparser.NotEqualStr
 	case sqlparser.InStr, sqlparser.NotInStr:
-		res = elastic.NewTermsQuery(colName, value.([]any)...)
+		res = newTermsQuery(colName, value.([]any)...)
 		negate = operator == sqlparser.NotInStr
 	default:
 		return nil, query.NewOperatorNotSupportedError(col.Alias, col.ValueType, operator)
@@ -96,7 +138,7 @@ func (c *queryConverter) ConvertComparisonExpr(
 	return res, nil
 }
 
-func (c *queryConverter) ConvertKeywordComparisonExpr(
+func (c *esQueryConverter) ConvertKeywordComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -122,7 +164,7 @@ func (c *queryConverter) ConvertKeywordComparisonExpr(
 	}
 }
 
-func (c *queryConverter) ConvertKeywordListComparisonExpr(
+func (c *esQueryConverter) ConvertKeywordListComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -130,7 +172,7 @@ func (c *queryConverter) ConvertKeywordListComparisonExpr(
 	return c.ConvertKeywordComparisonExpr(operator, col, value)
 }
 
-func (c *queryConverter) ConvertTextComparisonExpr(
+func (c *esQueryConverter) ConvertTextComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -140,23 +182,28 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 	case sqlparser.EqualStr:
 		return elastic.NewMatchQuery(colName, value), nil
 	case sqlparser.NotEqualStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, value)), nil
+		return newBoolQuery().MustNot(elastic.NewMatchQuery(colName, value)), nil
 	default:
 		return nil, query.NewOperatorNotSupportedError(col.Alias, col.ValueType, operator)
 	}
 }
 
-func (c *queryConverter) ConvertRangeExpr(
+func (c *esQueryConverter) ConvertRangeExpr(
 	operator string,
 	col *query.SAColumn,
 	from, to any,
 ) (elastic.Query, error) {
 	colName := col.FieldName
+	rq := &rangeQuery{
+		field: colName,
+		lower: &rangeQueryBound{value: from, inclusive: true},
+		upper: &rangeQueryBound{value: to, inclusive: true},
+	}
 	switch operator {
 	case sqlparser.BetweenStr:
-		return elastic.NewRangeQuery(colName).Gte(from).Lte(to), nil
+		return rq, nil
 	case sqlparser.NotBetweenStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(from).Lte(to)), nil
+		return newBoolQuery().MustNot(rq), nil
 	default:
 		// This should be impossible since the query parser only calls this function with one of those
 		// operators strings.
@@ -168,14 +215,14 @@ func (c *queryConverter) ConvertRangeExpr(
 	}
 }
 
-func (c *queryConverter) ConvertIsExpr(
+func (c *esQueryConverter) ConvertIsExpr(
 	operator string,
 	col *query.SAColumn,
 ) (elastic.Query, error) {
 	colName := col.FieldName
 	switch operator {
 	case sqlparser.IsNullStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName)), nil
+		return newBoolQuery().MustNot(elastic.NewExistsQuery(colName)), nil
 	case sqlparser.IsNotNullStr:
 		return elastic.NewExistsQuery(colName), nil
 	default:
@@ -186,4 +233,21 @@ func (c *queryConverter) ConvertIsExpr(
 			query.InvalidExpressionErrMessage,
 		)
 	}
+}
+
+func NewQueryConverter(
+	namespaceName namespace.Name,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *query.QueryConverter[elastic.Query] {
+	return query.NewQueryConverter(
+		&esQueryConverter{},
+		namespaceName,
+		saTypeMap,
+		saMapper,
+		metricsHandler,
+		logger,
+	)
 }

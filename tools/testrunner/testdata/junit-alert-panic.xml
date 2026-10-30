@@ -1,0 +1,7 @@
+<testsuites tests="1" failures="1">
+    <testsuite name="ALERTS" tests="1" failures="1" errors="0" id="0" time="">
+        <testcase name="panic test">
+            <failure message="PANIC" type="PANIC"><![CDATA[panic: boom]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

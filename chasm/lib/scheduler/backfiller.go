@@ -1,13 +1,13 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 )
 
 // The Backfiller component is responsible for buffering manually
@@ -18,6 +18,8 @@ type Backfiller struct {
 	*schedulerpb.BackfillerState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 type BackfillRequestType int
@@ -27,24 +29,50 @@ const (
 	RequestTypeBackfill
 )
 
-// newBackfiller returns an initialized backfiller without a request set or tasks
-// created.
-func newBackfiller(
+// addBackfiller returns an initialized backfiller, adding it to the scheduler's
+// Backfillers.
+func addBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 ) *Backfiller {
-	id := uuid.NewString()
-	backfiller := &Backfiller{
-		BackfillerState: &schedulerpb.BackfillerState{
-			BackfillId:        id,
-			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
-		},
-	}
+	id := schedulerinternal.GenerateBackfillerID()
+	// LastProcessedTime is intentionally left unset here. For range backfills it
+	// is the "progress recorded" signal and must stay zero until a batch is
+	// actually processed (see processBackfill). Trigger backfills, which use it as
+	// their fire time, set it explicitly in NewImmediateBackfiller.
+	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
+		BackfillId:        id,
+		LastProcessedTime: nil,
+	})
 
-	// Immediately schedule the first backfiller task.
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	if scheduler.Backfillers == nil {
+		scheduler.Backfillers = make(chasm.Map[string, *Backfiller])
+	}
+	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
+	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("added backfiller: %s", id))
 
 	return backfiller
+}
+
+func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.BackfillerState) *Backfiller {
+	backfiller := &Backfiller{
+		BackfillerState: state,
+		EventLog:        chasm.NewComponentField(ctx, NewEventLog(ctx)),
+	}
+	backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
+	return backfiller
+}
+
+// scheduleTask advances the stamp for the initial task or a successor.
+func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	b.TaskStamp++
+	b.getOrCreateEventLog(ctx).LogEvent(ctx,
+		fmt.Sprintf("scheduled backfillerTask for %s (stamp %d)", scheduledTime.Format(time.RFC3339), b.TaskStamp))
+	ctx.AddTask(b, chasm.TaskAttributes{
+		ScheduledTime: scheduledTime,
+	}, &schedulerpb.BackfillerTask{
+		Stamp: b.TaskStamp,
+	})
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

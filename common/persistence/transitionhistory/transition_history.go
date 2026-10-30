@@ -89,15 +89,37 @@ func StalenessCheck(
 	if idx == -1 {
 		lastItem := history[len(history)-1]
 		if lastItem.NamespaceFailoverVersion < refVersionedTransition.NamespaceFailoverVersion {
-			return fmt.Errorf("%w: state namespace failover version < ref namespace failover version", consts.ErrStaleState)
+			return fmt.Errorf(
+				"%w: state namespace failover version < ref namespace failover version: %v < %v",
+				consts.ErrStaleState,
+				lastItem.NamespaceFailoverVersion,
+				refVersionedTransition.NamespaceFailoverVersion,
+			)
 		}
-		return fmt.Errorf("%w: state namespace failover version > ref namespace failover version", consts.ErrStaleReference)
+		return fmt.Errorf(
+			"%w: state namespace failover version > ref namespace failover version: %v > %v",
+			consts.ErrStaleReference,
+			lastItem.NamespaceFailoverVersion,
+			refVersionedTransition.NamespaceFailoverVersion,
+		)
 	}
-	if idx == len(history)-1 && refVersionedTransition.TransitionCount > maxTransitionCount {
-		return fmt.Errorf("%w: state transition count < ref transition count", consts.ErrStaleState)
+	if idx == len(history)-1 && maxTransitionCount < refVersionedTransition.TransitionCount {
+		return fmt.Errorf(
+			"%w: state transition count < ref transition count: %v < %v",
+			consts.ErrStaleState,
+			maxTransitionCount,
+			refVersionedTransition.TransitionCount,
+		)
 	}
 	if minTransitionCount > refVersionedTransition.TransitionCount || maxTransitionCount < refVersionedTransition.TransitionCount {
-		return fmt.Errorf("%w: ref transition count out of range for version %v", consts.ErrStaleReference, refVersionedTransition.NamespaceFailoverVersion)
+		return fmt.Errorf(
+			"%w: ref transition count out of range for version %v: %v not in [%v, %v]",
+			consts.ErrStaleReference,
+			refVersionedTransition.NamespaceFailoverVersion,
+			refVersionedTransition.TransitionCount,
+			minTransitionCount,
+			maxTransitionCount,
+		)
 	}
 	return nil
 }

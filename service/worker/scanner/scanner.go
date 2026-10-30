@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -24,9 +25,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
 )
 
 type (
@@ -70,6 +73,10 @@ type (
 		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
 		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
+
+		// ScheduleInvariantsScannerOptions configures the schedule-invariants scanners. Each
+		// invariant check runs as an independent cron workflow.
+		ScheduleInvariantsScannerOptions dynamicconfig.TypedPropertyFn[dynamicconfig.ScheduleInvariantsScannerParams]
 	}
 
 	// scannerContext is the context object that gets
@@ -89,6 +96,7 @@ type (
 		namespaceRegistry  namespace.Registry
 		currentClusterName string
 		hostInfo           membership.HostInfo
+		serializer         serialization.Serializer
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -98,6 +106,7 @@ type (
 		context         scannerContext
 		wg              sync.WaitGroup
 		lifecycleCancel context.CancelFunc
+		workers         []worker.Worker
 	}
 )
 
@@ -121,6 +130,7 @@ func New(
 	registry namespace.Registry,
 	currentClusterName string,
 	hostInfo membership.HostInfo,
+	serializer serialization.Serializer,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -138,6 +148,7 @@ func New(
 			namespaceRegistry:  registry,
 			currentClusterName: currentClusterName,
 			hostInfo:           hostInfo,
+			serializer:         serializer,
 		},
 	}
 }
@@ -199,9 +210,61 @@ func (s *Scanner) Start() error {
 		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
 		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-		if err := work.Start(); err != nil {
+		if err := s.startWorker(work); err != nil {
 			return err
+		}
+	}
+
+	siOpts := s.context.cfg.ScheduleInvariantsScannerOptions()
+	if siOpts.OverdueNextActionTimeEnabled || siOpts.StuckOpenEnabled || siOpts.UnknownStateEnabled {
+		scheduleActivities := scheduleinvariants.NewActivities(
+			s.context.logger,
+			s.context.metricsHandler,
+			s.context.visibilityManager,
+			s.context.namespaceRegistry,
+			s.context.sdkClientFactory,
+			s.context.currentClusterName,
+			clock.NewRealTimeSource(),
+			s.context.cfg.ScheduleInvariantsScannerOptions,
+		)
+
+		if siOpts.OverdueNextActionTimeEnabled {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.OverdueNextActionTimeWFStartOptions, scheduleinvariants.OverdueNextActionTimeWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.OverdueNextActionTimeTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeActivityName})
+
+			if err := s.startWorker(work); err != nil {
+				return err
+			}
+		}
+
+		if siOpts.StuckOpenEnabled {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StuckOpenWFStartOptions, scheduleinvariants.StuckOpenWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.StuckOpenTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.StuckOpenWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: scheduleinvariants.StuckOpenActivityName})
+
+			if err := s.startWorker(work); err != nil {
+				return err
+			}
+		}
+
+		if siOpts.UnknownStateEnabled {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.UnknownStateWFStartOptions, scheduleinvariants.UnknownStateWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.UnknownStateTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.UnknownStateWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: scheduleinvariants.UnknownStateActivityName})
+
+			if err := s.startWorker(work); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -216,8 +279,7 @@ func (s *Scanner) Start() error {
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-		if err := work.Start(); err != nil {
+		if err := s.startWorker(work); err != nil {
 			return err
 		}
 	}
@@ -228,9 +290,24 @@ func (s *Scanner) Start() error {
 func (s *Scanner) Stop() {
 	s.lifecycleCancel()
 	s.wg.Wait()
+	for _, w := range s.workers {
+		w.Stop()
+	}
 }
 
-func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...interface{}) {
+// TODO: Nothing is listening for fatal errors from these workers.
+func (s *Scanner) startWorker(work worker.Worker) error {
+	if err := work.Start(); err != nil {
+		return err
+	}
+	s.workers = append(s.workers, work)
+	return nil
+}
+
+// startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the
+// scanner shuts down. workflowType may be either a registered type-name string or the
+// workflow function itself (registered under its Go function name).
+func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...any) {
 	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
@@ -258,7 +335,7 @@ func (s *Scanner) startWorkflow(
 	client sdkclient.Client,
 	options sdkclient.StartWorkflowOptions,
 	workflowType string,
-	workflowArgs ...interface{},
+	workflowArgs ...any,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)

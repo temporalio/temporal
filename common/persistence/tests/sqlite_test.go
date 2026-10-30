@@ -3,13 +3,20 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"errors"
+	"fmt"
+	"math"
 	"os"
 	"path"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -51,7 +58,7 @@ func NewSQLiteFileConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		DatabaseName:      persistencetests.GenerateRandomDBName(),
 		ConnectAttributes: map[string]string{"cache": "private"},
 	}
 }
@@ -78,6 +85,10 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 		t.Fatalf("Unable to load schema: %s", err)
 	}
 
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
+	}
+
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
 			t.Fatalf("Unable to load schema: %s", err)
@@ -86,6 +97,7 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 }
 
 func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -94,6 +106,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -103,7 +116,12 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -112,13 +130,79 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
+// TestSQLiteMutableStateTableConformance fails if a mutable-state table is added
+// without a matching delete in DeleteWorkflowExecution: it discovers every table
+// keyed by (shard_id, namespace_id, workflow_id, run_id, +>=1 more) — the shape
+// unique to mutable-state child tables — and asserts it matches what
+// sqlMutableStateTableCounts accounts for.
+func TestSQLiteMutableStateTableConformance(t *testing.T) {
+	t.Parallel()
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	t.Cleanup(func() { _ = os.Remove(cfg.DatabaseName) })
+
+	// Known set = the reader's map keys (single source of truth). The run need not
+	// exist; each covered table still yields a zero-count key.
+	mdb, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mdb.Close() })
+	counts, err := sqlMutableStateTableCounts(mdb)(context.Background(), 1, uuid.NewString(), "conformance-wf", uuid.NewString())
+	require.NoError(t, err)
+	var known []string
+	for table := range counts {
+		known = append(known, table)
+	}
+
+	discovered := discoverMutableStateTables(t, cfg)
+
+	require.ElementsMatch(t, known, discovered,
+		"mutable-state tables in the schema don't match the set DeleteWorkflowExecution accounts for; "+
+			"a table with a (shard_id, namespace_id, workflow_id, run_id, ...) primary key was likely added or removed "+
+			"without updating DeleteWorkflowExecution and sqlMutableStateTableCounts")
+}
+
+// discoverMutableStateTables returns the tables in the SQLite schema whose
+// primary key begins with (shard_id, namespace_id, workflow_id, run_id) and has at
+// least one further column.
+func discoverMutableStateTables(t *testing.T, cfg *config.SQL) []string {
+	t.Helper()
+	xdb, err := sqlx.Open("sqlite", cfg.DatabaseName)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = xdb.Close() })
+
+	var tableNames []string
+	require.NoError(t, xdb.Select(&tableNames,
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`))
+
+	keyPrefix := []string{"shard_id", "namespace_id", "workflow_id", "run_id"}
+	var discovered []string
+	for _, name := range tableNames {
+		pk := sqlitePrimaryKeyColumns(t, xdb, name)
+		if len(pk) > len(keyPrefix) && slices.Equal(pk[:len(keyPrefix)], keyPrefix) {
+			discovered = append(discovered, name)
+		}
+	}
+	return discovered
+}
+
+// sqlitePrimaryKeyColumns returns a table's primary-key columns in key order.
+func sqlitePrimaryKeyColumns(t *testing.T, xdb *sqlx.DB, table string) []string {
+	t.Helper()
+	var pk []string
+	// table name comes from sqlite_master (trusted); a pragma argument can't be bound.
+	require.NoError(t, xdb.Select(&pk,
+		fmt.Sprintf("SELECT name FROM pragma_table_info('%s') WHERE pk > 0 ORDER BY pk", table)))
+	return pk
+}
+
 func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -127,6 +211,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -151,6 +236,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -159,6 +245,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	store, err := factory.NewExecutionStore()
 	if err != nil {
@@ -173,6 +260,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -181,6 +269,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -195,6 +284,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -203,6 +293,7 @@ func TestSQLiteFairTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -217,6 +308,7 @@ func TestSQLiteFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -225,6 +317,7 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -239,6 +332,7 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -247,6 +341,7 @@ func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -261,6 +356,7 @@ func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -269,6 +365,7 @@ func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -283,6 +380,7 @@ func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
 }
 
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -295,6 +393,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -304,7 +403,12 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -313,13 +417,14 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -332,6 +437,7 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -356,6 +462,7 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -368,6 +475,7 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	store, err := factory.NewExecutionStore()
 	if err != nil {
@@ -382,6 +490,7 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -394,6 +503,7 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -408,6 +518,7 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -420,6 +531,7 @@ func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -434,6 +546,7 @@ func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -446,6 +559,7 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -460,6 +574,7 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -472,6 +587,7 @@ func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -486,6 +602,7 @@ func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -498,6 +615,7 @@ func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -514,70 +632,80 @@ func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestSQLiteVisibilityPersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(VisibilityPersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	suite.Run(t, s)
 }
 
 func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
 // SQL store tests
 
 func TestSQLiteNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -592,6 +720,7 @@ func TestSQLiteNamespaceSuite(t *testing.T) {
 }
 
 func TestSQLiteQueueMessageSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -606,6 +735,7 @@ func TestSQLiteQueueMessageSuite(t *testing.T) {
 }
 
 func TestSQLiteQueueMetadataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -620,6 +750,7 @@ func TestSQLiteQueueMetadataSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -634,6 +765,7 @@ func TestSQLiteMatchingTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -648,6 +780,7 @@ func TestSQLiteMatchingTaskV2Suite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -662,6 +795,7 @@ func TestSQLiteMatchingTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskQueueV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -676,6 +810,7 @@ func TestSQLiteMatchingTaskQueueV2Suite(t *testing.T) {
 }
 
 func TestSQLiteHistoryShardSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -690,6 +825,7 @@ func TestSQLiteHistoryShardSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryNodeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -704,6 +840,7 @@ func TestSQLiteHistoryNodeSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTreeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -718,6 +855,7 @@ func TestSQLiteHistoryTreeSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -727,11 +865,27 @@ func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
 		_ = store.Close()
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	t.Parallel()
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
 func TestSQLiteHistoryExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -746,6 +900,7 @@ func TestSQLiteHistoryExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTransferTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -760,6 +915,7 @@ func TestSQLiteHistoryTransferTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTimerTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -774,6 +930,7 @@ func TestSQLiteHistoryTimerTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryReplicationTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -788,6 +945,7 @@ func TestSQLiteHistoryReplicationTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryVisibilityTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -802,6 +960,7 @@ func TestSQLiteHistoryVisibilityTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryReplicationDLQTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -816,6 +975,7 @@ func TestSQLiteHistoryReplicationDLQTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionBufferSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -830,6 +990,7 @@ func TestSQLiteHistoryExecutionBufferSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionActivitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -844,6 +1005,7 @@ func TestSQLiteHistoryExecutionActivitySuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -858,6 +1020,7 @@ func TestSQLiteHistoryExecutionChildWorkflowSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -872,6 +1035,7 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -886,6 +1050,7 @@ func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -900,6 +1065,7 @@ func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionSignalSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -914,6 +1080,7 @@ func TestSQLiteHistoryExecutionSignalSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionSignalRequestSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -928,6 +1095,7 @@ func TestSQLiteHistoryExecutionSignalRequestSuite(t *testing.T) {
 }
 
 func TestSQLiteVisibilitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -942,331 +1110,423 @@ func TestSQLiteVisibilitySuite(t *testing.T) {
 }
 
 func TestSQLiteFileNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewNamespaceSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileQueueMessageSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewQueueMessageSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileQueueMetadataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewQueueMetadataSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileMatchingTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileMatchingTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store, sqlplugin.MatchingTaskVersion1)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileMatchingTaskQueueV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store, sqlplugin.MatchingTaskVersion2)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryShardSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryShardSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryNodeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryNodeSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryTreeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTreeSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	t.Parallel()
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryTransferTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTransferTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryTimerTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTimerTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryReplicationTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryReplicationTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryVisibilityTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryVisibilityTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryReplicationDLQTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryReplicationDLQTaskSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionBufferSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionBufferSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionActivitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionActivitySuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionChildWorkflowSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionRequestCancelSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionSignalSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSignalSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileHistoryExecutionSignalRequestSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSignalRequestSuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteFileVisibilitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
 }
 
 func TestSQLiteQueueV2(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	logger := log.NewNoopLogger()
@@ -1276,6 +1536,7 @@ func TestSQLiteQueueV2(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	t.Cleanup(func() {
 		factory.Close()
@@ -1285,6 +1546,7 @@ func TestSQLiteQueueV2(t *testing.T) {
 }
 
 func TestSQLiteNexusEndpointPersistence(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	logger := log.NewNoopLogger()
@@ -1294,6 +1556,7 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	t.Cleanup(func() {
 		factory.Close()
@@ -1306,6 +1569,7 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 // connection to the sqlite database, we will lose the db in this case. We fixed this by extending the driver in
 // modernc.org/sqlite. This test verifies that fix.
 func TestSQLiteTransactionContextCancellation(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	db, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -1326,14 +1590,14 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	// Cancel the context before the transaction has finished.
 	cancel()
 
+	// database/sql rolls back asynchronously on cancel, so Commit may observe either error.
 	err = tx.Commit()
-	assert.ErrorIs(t, err, context.Canceled)
+	require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, gosql.ErrTxDone), "unexpected error: %v", err)
 
 	// Check if we still have a connection to the db.
 	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{
 		RangeHash:   0,
 		TaskQueueID: []byte("test-queue"),
 	}, sqlplugin.MatchingTaskVersion1)
-	assert.NotContains(t, err.Error(), "no such table")
-	assert.ErrorAs(t, err, &gosql.ErrNoRows)
+	require.ErrorIs(t, err, gosql.ErrNoRows)
 }

@@ -15,6 +15,8 @@ import (
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type (
@@ -32,10 +34,15 @@ type mockConnectionPool[C any] struct {
 	connectionPool[C]
 	client     C
 	resetCalls int
+	conn       *grpc.ClientConn
 }
 
 func (m *mockConnectionPool[C]) getOrCreateClientConn(testAddr rpcAddress) clientConnection[C] {
-	return clientConnection[C]{grpcClient: m.client}
+	if m.conn == nil {
+		m.conn, _ = grpc.NewClient("passthrough:///unused",
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+	return clientConnection[C]{grpcClient: m.client, grpcConn: m.conn}
 }
 
 func (m *mockConnectionPool[C]) resetConnectBackoff(clientConnection[C]) {

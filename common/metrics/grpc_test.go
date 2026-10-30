@@ -45,16 +45,16 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 	s.NotNil(smcii)
 	res, err := smcii(
 		ctx, nil, nil,
-		func(ctx context.Context, req interface{}) (interface{}, error) {
+		func(ctx context.Context, req any) (any, error) {
 			res, err := NewServerMetricsTrailerPropagatorInterceptor(logger)(
 				ctx, req, nil,
-				func(ctx context.Context, req interface{}) (interface{}, error) {
+				func(ctx context.Context, req any) (any, error) {
 					cmtpi := NewClientMetricsTrailerPropagatorInterceptor(logger)
 					s.NotNil(cmtpi)
 					cmtpi(
 						ctx, "any_value", nil, nil, nil,
 						func(
-							ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn,
+							ctx context.Context, method string, req, reply any, cc *grpc.ClientConn,
 							opts ...grpc.CallOption,
 						) error {
 							trailer := opts[0].(grpc.TrailerCallOption)
@@ -73,21 +73,21 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 				},
 			)
 
-			s.Nil(err)
+			s.NoError(err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			s.Len(trailers, 1)
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			s.Len(propagationContextBlobs, 1)
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(int64(1234), baggage.CountersInt[anyMetricName])
 			return res, err
 		},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(10, res)
 	s.Assert()
 }
@@ -102,16 +102,16 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 	s.NotNil(smcii)
 	res, err := smcii(
 		ctx, nil, nil,
-		func(ctx context.Context, req interface{}) (interface{}, error) {
+		func(ctx context.Context, req any) (any, error) {
 			res, err := NewServerMetricsTrailerPropagatorInterceptor(logger)(
 				ctx, req, nil,
-				func(ctx context.Context, req interface{}) (interface{}, error) {
+				func(ctx context.Context, req any) (any, error) {
 					cmtpi := NewClientMetricsTrailerPropagatorInterceptor(logger)
 					s.NotNil(cmtpi)
 					cmtpi(
 						ctx, "any_value", nil, nil, nil,
 						func(
-							ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn,
+							ctx context.Context, method string, req, reply any, cc *grpc.ClientConn,
 							opts ...grpc.CallOption,
 						) error {
 							trailer := opts[0].(grpc.TrailerCallOption)
@@ -129,21 +129,21 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 				},
 			)
 
-			s.Nil(err)
+			s.NoError(err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			s.Len(trailers, 1)
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			s.Len(propagationContextBlobs, 1)
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
+			s.NoError(err)
 			s.Nil(baggage.CountersInt)
 			return res, err
 		},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(10, res)
 	s.Assert()
 }

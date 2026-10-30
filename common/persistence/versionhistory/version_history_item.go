@@ -30,7 +30,7 @@ func IsEqualVersionHistoryItems(items1 []*historyspb.VersionHistoryItem, items2 
 	if len(items1) != len(items2) {
 		return false
 	}
-	for i := 0; i < len(items1); i++ {
+	for i := range items1 {
 		if !IsEqualVersionHistoryItem(items1[i], items2[i]) {
 			return false
 		}

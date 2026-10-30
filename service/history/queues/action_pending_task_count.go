@@ -1,6 +1,7 @@
 package queues
 
 import (
+	"maps"
 	"slices"
 	"time"
 
@@ -96,7 +97,7 @@ func (a *actionQueuePendingTask) gatherStatistics(
 	//    reversely ordered by slice range. Upon unloading, first unload newer slices.
 	for _, reader := range readers {
 		reader.WalkSlices(func(s Slice) {
-			pendingPerKey := s.TaskStats().PendingPerKey
+			pendingPerKey := maps.Clone(s.TaskStats().PendingPerKey)
 			a.pendingTasksPerKeyPerSlice[s] = pendingPerKey
 			for key, pendingTaskCount := range pendingPerKey {
 				a.tasksPerKey[key] += pendingTaskCount

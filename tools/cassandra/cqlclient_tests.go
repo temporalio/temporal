@@ -38,7 +38,7 @@ func (s *CQLClientTestSuite) TestParseCQLFile() {
 
 func (s *CQLClientTestSuite) TestCQLClient() {
 	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
+	s.NoError(err)
 	s.RunCreateTest(client)
 	s.RunUpdateTest(client)
 	s.RunDropTest(client)

@@ -18,6 +18,7 @@ ci-build-misc: \
 	shell-check \
 	goimports \
 	gomodtidy \
+	build-tags-check \
 	ensure-no-changes
 
 # Delete all build artifacts
@@ -45,12 +46,14 @@ TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
-# reducing binary size by 16MB since we only use the REST client (storage.NewClient), not the
+# reducing binary size since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
+MINIMAL_TEST_TAGS = $(ALL_TEST_TAGS),temporal_minimal
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
+
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -60,6 +63,7 @@ TEST_TIMEOUT ?= 35m
 
 # Number of retries for *-coverage targets.
 MAX_TEST_ATTEMPTS ?= 3
+TEST_RUNNER_TIMEOUT_ARG := $(if $(TEST_RUNNER_TIMEOUT),--total-timeout=$(TEST_RUNNER_TIMEOUT),)
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -87,6 +91,7 @@ ifeq ($(OTEL),true)
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
+	export TEMPORAL_TEST_DATA_ENCODING=json
 endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -116,16 +121,26 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+TEST_DIRS       			  := $(filter-out ./common/testx/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
+MIXED_BRAIN_TEST_ROOT         := ./tests/mixedbrain
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
+TESTCORE_UNITTESTS := ./tests/testcore
 ifeq ($(UNIT_TEST_DIRS),)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(MIXED_BRAIN_TEST_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+
+# Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
+UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
+
+# Packages with a file built only with temporal_minimal.
+MINIMAL_VARIANT_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep --untracked -l '^//go:build.*[^!]temporal_minimal' -- '*.go'))))
+# The unit test packages among MINIMAL_VARIANT_DIRS.
+MINIMAL_VARIANT_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_VARIANT_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 PINNED_DEPENDENCIES := \
@@ -134,7 +149,7 @@ PINNED_DEPENDENCIES := \
 TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
-COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
+COVERPKG_FLAG 		    = -coverpkg=./...
 
 # DB
 SQL_USER ?= temporal
@@ -165,11 +180,11 @@ $(STAMPDIR):
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-# When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
+LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v2.5.0
+GOLANGCI_LINT_VERSION := v2.14.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
@@ -211,7 +226,18 @@ WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
 	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
-GOIMPORTS_VER := v0.36.0
+# NilAway has no tagged releases; pin the pseudo-version for reproducible CI.
+NILAWAY_VER := v0.0.0-20260717164209-b48ebb193579
+NILAWAY := $(LOCALBIN)/nilaway-$(NILAWAY_VER)
+$(NILAWAY): | $(LOCALBIN)
+	$(call go-install-tool,$(NILAWAY),go.uber.org/nilaway/cmd/nilaway,$(NILAWAY_VER))
+
+YAMLFMT_VER := v0.16.0
+YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
+$(YAMLFMT): | $(LOCALBIN)
+	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
+
+GOIMPORTS_VER := v0.49.0
 GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
@@ -245,7 +271,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.36.0
+STRINGER_VER := v0.49.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -325,6 +351,8 @@ proto-codegen:
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
 	@go generate ./common/rpc/interceptor/logtags/...
+	@printf $(COLOR) "Generate routing key extractor..."
+	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 
@@ -339,6 +367,7 @@ clean-bins:
 	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
+	@rm -f fairsim
 	@rm -f temporal-sql-tool
 	@rm -f temporal-elasticsearch-tool
 
@@ -349,6 +378,10 @@ temporal-server: $(ALL_SRC)
 tdbg: $(ALL_SRC)
 	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o tdbg ./cmd/tools/tdbg
+
+fairsim: $(ALL_SRC)
+	@printf $(COLOR) "Build fairsim with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o fairsim ./cmd/tools/fairsim
 
 temporal-cassandra-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
@@ -372,21 +405,70 @@ goimports: fmt-imports $(GOIMPORTS)
 	@UNGENERATED_FILES=$$(find . -type f -name '*.go' -print0 | xargs -0 grep -L -e "Code generated by .* DO NOT EDIT." || true) && \
 		$(GOIMPORTS) -w $$UNGENERATED_FILES
 
+lint: lint-code lint-actions lint-api lint-protos lint-yaml
+	@printf $(COLOR) "Run linters..."
+
 lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
+.PHONY: lint-code lint-code-fast
+# --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
+lint-code-fast:
+	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
+		printf $(RED) "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+		exit 1; \
+	fi
+	@base=$$(git merge-base HEAD "$(GOLANGCI_LINT_BASE_REV)"); \
+	targets=$$({ \
+		git diff --no-renames --name-only "$$base" -- '*.go'; \
+		git ls-files --others --exclude-standard -- '*.go'; \
+	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | grep -v "^\./common/testx/" \
+	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
+	if [ -z "$$targets" ]; then \
+		printf $(COLOR) "No changed Go packages to lint."; \
+	else \
+		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
+	fi
+
+# Lints the Go packages $(2) with the build tags $(1).
+define lint-go
+	@$(GOLANGCI_LINT) run \
+		--verbose \
+		--build-tags $(1) \
+		--timeout 10m \
+		--fix=$(GOLANGCI_LINT_FIX) \
+		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
+		--config=.github/.golangci.yml \
+		$(2)
+	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
+endef
+
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
+	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
+	@printf $(COLOR) "Linting code with temporal_minimal..."
+	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
 
-fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-	@printf $(COLOR) "Formatting imports..."
-	@$(GCI) write --skip-generated -s standard -s default ./*
+lint-yaml: $(YAMLFMT)
+	@printf $(COLOR) "Checking YAML formatting..."
+	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
 
-lint: lint-code lint-actions lint-api lint-protos
-	@printf $(COLOR) "Run linters..."
+# Nil-safety analysis. Override NILAWAY_SCOPE to widen coverage as more packages
+# are made nil-clean; every path below is derived from it. -include-pkgs restricts
+# the expensive inference to our own packages; without it nilaway analyzes the
+# entire transitive dependency graph and OOMs CI runners.
+.PHONY: lint-nilaway
+NILAWAY_SCOPE ?= chasm/lib/scheduler
+lint-nilaway: $(NILAWAY)
+	@printf $(COLOR) "Running nilaway..."
+	@$(NILAWAY) \
+		-include-pkgs $(MODULE_ROOT)/$(NILAWAY_SCOPE) \
+		-include-errors-in-files $(ROOT)/$(NILAWAY_SCOPE) \
+		-exclude-test-files \
+		-exclude-file-docstrings "Code generated by" \
+		./$(NILAWAY_SCOPE)/...
 
 lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
@@ -396,6 +478,47 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
+
+fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
+
+# Some fixes enable others (e.g. rangeint may expose minmax opportunities),
+# so - as recommended by the Go team - we run go fix in a loop until it reaches
+# a fixed point. We check for "files updated" in the output rather than relying
+# on the exit code alone, since go fix can exit non-zero without actually
+# modifying any files (see https://github.com/golang/go/issues/77482).
+#
+# Note: go fix automatically skips generated files.
+#
+# embedlit is disabled because it rewrites large parts of the codebase.
+GOFIX_FLAGS ?= -embedlit=false
+GOFIX_MAX_ITERATIONS ?= 5
+fmt-gofix:
+	@printf $(COLOR) "Run go fix..."
+	@n=0; while [ $$n -lt $(GOFIX_MAX_ITERATIONS) ]; do \
+		output=$$(go fix $(GOFIX_FLAGS) ./... 2>&1); \
+		echo "$$output"; \
+		if ! echo "$$output" | grep -q "files updated"; then break; fi; \
+		n=$$((n + 1)); \
+		printf $(COLOR) "Re-running go fix..."; \
+	done; \
+	if [ $$n -ge $(GOFIX_MAX_ITERATIONS) ]; then echo "ERROR: go fix did not converge after $(GOFIX_MAX_ITERATIONS) iterations"; exit 1; fi
+
+fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
+	@printf $(COLOR) "Formatting imports..."
+	@$(GCI) write --skip-generated -s standard -s default ./*
+
+parallelize-tests:
+	@printf $(COLOR) "Add t.Parallel() to tests..."
+	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+
+fmt-protos: $(BUF)
+	@printf $(COLOR) "Formatting proto files..."
+	@$(BUF) format -w $(PROTO_ROOT)/internal
+	@$(BUF) format -w --config chasm/lib/buf.yaml chasm/lib
+
+fmt-yaml: $(YAMLFMT)
+	@printf $(COLOR) "Formatting YAML files..."
+	@$(YAMLFMT) -conf .github/.yamlfmt .
 
 # Edit proto/internal/buf.yaml to exclude specific files from this check.
 # TODO: buf breaking check for CHASM protos.
@@ -415,6 +538,40 @@ workflowcheck: $(WORKFLOWCHECK)
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
 
+comma := ,
+
+# Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
+# end of the variable name is set. Each temporal_with_* tag needs one.
+EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
+EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
+
+# $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
+server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
+
+# $(call expect-deps,<tags>,<packages>): fails unless the server built with <tags> depends on all <packages>.
+expect-deps = $(if $(filter-out $(call server-deps,$(1)),$(2)),\
+	$(error Server built with tags "$(1)" doesn't depend on: $(filter-out $(call server-deps,$(1)),$(2))))
+
+# $(call reject-deps,<tags>,<packages>): fails if the server built with <tags> depends on any of <packages>.
+reject-deps = $(if $(filter $(2),$(call server-deps,$(1))),\
+	$(error Server built with tags "$(1)" depends on: $(filter $(2),$(call server-deps,$(1)))))
+
+# $(call check-build-tag,<tag>): temporal_minimal must compile the packages of <tag> out of the server,
+# and adding <tag> must bring them back.
+define check-build-tag
+$(if $(EXCLUDED_PACKAGES_$(1)),,$(error EXCLUDED_PACKAGES_$(1) is not set))
+$(call expect-deps,,$(EXCLUDED_PACKAGES_$(1)))
+$(call reject-deps,temporal_minimal,$(EXCLUDED_PACKAGES_$(1)))
+$(call expect-deps,temporal_minimal$(comma)$(1),$(EXCLUDED_PACKAGES_$(1)))
+endef
+
+# Compiles every package with temporal_minimal, and checks the packages each temporal_with_* tag
+# compiles out of the server.
+build-tags-check:
+	@printf $(COLOR) "Check build tags..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
+	$(foreach tag,$(sort $(shell git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go')),$(call check-build-tag,$(tag)))
+
 check: lint shell-check
 
 ##### Tests #####
@@ -430,26 +587,52 @@ build-tests:
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
-	@! grep -q "^--- FAIL" test.log
+	@$(MAKE) verify-test-log
 
 integration-test: clean-test-output
 	@printf $(COLOR) "Run integration tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
-	@! grep -q "^--- FAIL" test.log
+	@$(MAKE) verify-test-log
 
 functional-test: clean-test-output
 	@printf $(COLOR) "Run functional tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@! grep -q "^--- FAIL" test.log
+	@$(MAKE) verify-test-log
 
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@! grep -q "^--- FAIL" test.log
+	@$(MAKE) verify-test-log
+
+mixed-brain-test: clean-test-output
+	@printf $(COLOR) "Run mixed brain tests..."
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
+	@$(MAKE) verify-test-log
+
+LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS             ?= 15
+LEAK_ITERS_WARMUP      ?= 3
+LEAK_GC_SETTLE_TIMEOUT ?= 10s
+LEAK_TIMEOUT           ?= 5m
+leak-test:
+	@printf $(COLOR) "Run goroutine-leak regression test..."
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
+		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
+		LEAK_GC_SETTLE_TIMEOUT=$(LEAK_GC_SETTLE_TIMEOUT) \
+		go test -run TestClusterShutdownLeak -count=1 -v \
+			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \
+			./tests/leakcheck/ -args -persistenceType=sql -persistenceDriver=sqlite
+
+verify-test-log:
+	@test -s test.log || (echo "TEST FAILURE: test.log is missing or empty" && exit 1)
+	@grep -q "^ok" test.log || (echo "TEST FAILURE: no passing test found in test.log" && exit 1)
+	@! grep -q "^--- FAIL" test.log || (echo "TEST FAILURE: failing test found in test.log" && exit 1)
 
 test: unit-test integration-test functional-test
 
@@ -461,33 +644,38 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
+
+# Runs the unit tests of MINIMAL_VARIANT_UNIT_TEST_DIRS with temporal_minimal.
+unit-test-build-tags:
+	$(if $(MINIMAL_VARIANT_UNIT_TEST_DIRS),,$(error No package has a temporal_minimal variant))
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_VARIANT_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
-# This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
+# MUST use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
+	go test -c -cover -o /dev/null $(COMPILED_TEST_ARGS) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
@@ -496,6 +684,11 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
+
+generate-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner generate-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
+		--summary-output-dir=$(TEST_OUTPUT_ROOT)
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
@@ -597,6 +790,9 @@ start: start-sqlite
 start-cass-es: temporal-server
 	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
 
+start-cass-archival: temporal-server
+	./temporal-server --config-file config/development-cass-archival.yaml --allow-no-auth start
+
 start-cass-es-dual: temporal-server
 	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
 
@@ -634,6 +830,10 @@ start-xdc-cluster-b: temporal-server
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
 
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
+
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
@@ -665,4 +865,4 @@ ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
 	@git status --porcelain
-	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; git diff HEAD ; exit 1)

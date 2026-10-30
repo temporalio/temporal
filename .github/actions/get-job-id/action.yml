@@ -30,28 +30,44 @@ runs:
         # The script will first try to match by (name, runner_name), then fall back to name-only.
       run: |
         set -euo pipefail
+
         job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
-        json=$(curl -sSL \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer $GITHUB_TOKEN" \
-          "$job_url")
+        max_retries=6
+        job_id=""
+        json=""
 
-        # Prefer matching both job name and the current runner name to disambiguate matrix jobs
-        job_id=$(jq -r --arg name "$JOB_NAME" --arg runner "$RUNNER_NAME" '
-          (.jobs // [])
-          | map(select(.name == $name and (.runner_name // "") == $runner))
-          | (.[0].id // empty)
-        ' <<< "$json" )
+        for ((attempt = 1; attempt <= max_retries; attempt++)); do
+          json=$(curl -sSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "$job_url")
 
-        # Fallback: match by name only
-        if [ -z "${job_id:-}" ]; then
-          job_id=$(jq -r --arg name "$JOB_NAME" '
-            (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+          # Prefer matching both job name and the current runner name to disambiguate matrix jobs
+          job_id=$(jq -r --arg name "$JOB_NAME" --arg runner "$RUNNER_NAME" '
+            (.jobs // [])
+            | map(select(.name == $name and (.runner_name // "") == $runner))
+            | (.[0].id // empty)
           ' <<< "$json" )
-        fi
+
+          # Fallback: match by name only
+          if [ -z "${job_id:-}" ]; then
+            job_id=$(jq -r --arg name "$JOB_NAME" '
+              (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+            ' <<< "$json" )
+          fi
+
+          if [ -n "${job_id:-}" ] && [ "$job_id" != "null" ]; then
+            break
+          fi
+
+          if [ "$attempt" -lt "$max_retries" ]; then
+            echo "::notice::Job ID for '$JOB_NAME' not visible yet (attempt $attempt/$max_retries); retrying in 5s"
+            sleep 5
+          fi
+        done
 
         if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
-          echo "::error::Failed to resolve job ID for name '$JOB_NAME' on runner '$RUNNER_NAME' in run '$RUN_ID'" >&2
+          echo "::error::Failed to resolve job ID for name '$JOB_NAME' on runner '$RUNNER_NAME' in run '$RUN_ID' after retries" >&2
           exit 1
         fi
         echo "job_id=$job_id" >> "$GITHUB_OUTPUT"

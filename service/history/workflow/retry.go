@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,7 +40,7 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	if !isRetryable(failure, nonRetryableTypes) {
+	if !retrypolicy.IsRetryableFailure(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
@@ -110,45 +109,6 @@ func nextBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
-}
-
-func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
-	if failure == nil {
-		return true
-	}
-
-	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
-		return false
-	}
-
-	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
-	}
-
-	if failure.GetServerFailureInfo() != nil {
-		return !failure.GetServerFailureInfo().GetNonRetryable()
-	}
-
-	if failure.GetApplicationFailureInfo() != nil {
-		if failure.GetApplicationFailureInfo().GetNonRetryable() {
-			return false
-		}
-
-		return !slices.Contains(
-			nonRetryableTypes,
-			failure.GetApplicationFailureInfo().GetType(),
-		)
-	}
-	return true
 }
 
 // Helpers for creating new retry/cron workflows:
@@ -255,43 +215,57 @@ func SetupNewWorkflowForRetryOrCron(
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 
-		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		prevEffectiveVersioningBehavior := GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo())
+		if prevEffectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 			startAttr.GetInheritedPinnedVersion() != nil {
 			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
-		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		} else if prevEffectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
 			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+				// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
+				// retry run also receives the same InitialVersioningBehavior. Per the API spec, this
+				// behavior is scoped to the initial task of this run and of any retries.
+				// Note: GetShouldUseRampingVersion() gates the policy on LastCompletedWorkflowTaskStartedEventId
+				// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
+				// field remains stored in VersioningInfo for the lifetime of that run.
+				sourceCaNInitialVersioningBehavior := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior()
+
 				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-					SourceDeploymentVersion:        sourceDeploymentVersion,
-					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+					SourceDeploymentVersion:                sourceDeploymentVersion,
+					SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+					ContinueAsNewInitialVersioningBehavior: sourceCaNInitialVersioningBehavior,
 				}
 			}
 		}
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.NewString(),
-		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
-		WorkflowId:               newExecution.WorkflowId,
-		TaskQueue:                tq,
-		WorkflowType:             wType,
-		WorkflowExecutionTimeout: previousExecutionInfo.WorkflowExecutionTimeout,
-		WorkflowRunTimeout:       runTimeout,
-		WorkflowTaskTimeout:      taskTimeout,
-		Input:                    startAttr.Input,
-		Header:                   startAttr.Header,
-		RetryPolicy:              startAttr.RetryPolicy,
-		CronSchedule:             startAttr.CronSchedule,
-		Memo:                     startAttr.Memo,
-		SearchAttributes:         startAttr.SearchAttributes,
-		CompletionCallbacks:      completionCallbacks,
-		Links:                    startLinks,
-		Priority:                 startAttr.Priority,
-		VersioningOverride:       pinnedOverride,
+		RequestId:                           uuid.NewString(),
+		Namespace:                           newMutableState.GetNamespaceEntry().Name().String(),
+		WorkflowId:                          newExecution.WorkflowId,
+		TaskQueue:                           tq,
+		WorkflowType:                        wType,
+		WorkflowExecutionTimeout:            previousExecutionInfo.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:                  runTimeout,
+		WorkflowTaskTimeout:                 taskTimeout,
+		Input:                               startAttr.Input,
+		Header:                              startAttr.Header,
+		RetryPolicy:                         startAttr.RetryPolicy,
+		CronSchedule:                        startAttr.CronSchedule,
+		Memo:                                startAttr.Memo,
+		SearchAttributes:                    startAttr.SearchAttributes,
+		CompletionCallbacks:                 completionCallbacks,
+		Links:                               startLinks,
+		Priority:                            startAttr.Priority,
+		VersioningOverride:                  pinnedOverride,
+		PropagatedNexusSerializationContext: startAttr.GetPropagatedNexusSerializationContext(),
 	}
+
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo.GetTimeSkippingInfo())
+	createRequest.TimeSkippingConfig = tsc
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -321,9 +295,13 @@ func SetupNewWorkflowForRetryOrCron(
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
-		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedBuildId:         startAttr.InheritedBuildId, //nolint:staticcheck
 		InheritedPinnedVersion:   inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
+		// For retries, pass through the declined value from the started event directly.
+		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
+		// Carry the previous run's accumulated skip and fast-forward target forward.
+		TimeSkippingStatePropagation: stateProp,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

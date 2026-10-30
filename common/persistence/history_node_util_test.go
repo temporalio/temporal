@@ -50,7 +50,7 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	transactionIDToNode := map[int64]historyNodeMetadata{}
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		var nextTransactionID *int64
-		for i := 0; i < nodePerNodeID; i++ {
+		for range nodePerNodeID {
 			transactionID := rand.Int63()
 			if nextTransactionID == nil || *nextTransactionID < transactionID {
 				nextTransactionID = &transactionID
@@ -65,7 +65,7 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		nodes := nodeIDToNode[int64(nodeID)]
 		for i := 1; i < nodePerNodeID; i++ {
-			s.True(nodes[i-1].transactionID >= nodes[i].transactionID)
+			s.GreaterOrEqual(nodes[i-1].transactionID, nodes[i].transactionID)
 		}
 	}
 }
@@ -83,7 +83,7 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 	transactionIDToNode := map[int64]historyNodeMetadata{}
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		var nextTransactionID *int64
-		for i := 0; i < nodePerNodeID; i++ {
+		for range nodePerNodeID {
 			transactionID := rand.Int63()
 			if nextTransactionID == nil || *nextTransactionID < transactionID {
 				nextTransactionID = &transactionID

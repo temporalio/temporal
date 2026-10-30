@@ -119,7 +119,7 @@ func prettyPrintPointer(b *strings.Builder, v reflect.Value, depth int) {
 
 func indent(b *strings.Builder, depth int) {
 	b.WriteByte('\n')
-	for i := 0; i < depth; i++ {
+	for range depth {
 		b.WriteString("  ")
 	}
 }

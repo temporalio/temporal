@@ -14,7 +14,7 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "mysql8"
+	PluginName = sqlplugin.PluginNameMySQL
 )
 
 type plugin struct {
@@ -48,7 +48,7 @@ func (p *plugin) CreateDB(
 		return p.createDBConnection(dbKind, cfg, r)
 	}
 	handle := sqlplugin.NewDatabaseHandle(dbKind, connect, isConnNeedsRefreshError, logger, metricsHandler, clock.NewRealTimeSource())
-	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
+	db := newDB(dbKind, cfg.DatabaseName, handle, nil, logger)
 	return db, nil
 }
 

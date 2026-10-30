@@ -122,7 +122,7 @@ func runTestServerMultipleDials(
 	server, port := startTestServiceServer(s, serverFactory)
 	defer server.Stop()
 
-	for i := 0; i < nDials; i++ {
+	for range nDials {
 		tlsInfo, err := dialTestServiceAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
 		validator(tlsInfo, err)
 	}
@@ -170,7 +170,7 @@ func dialTestServiceAndGetTLSInfo(
 
 	if err == nil {
 		s.NotNil(reply)
-		s.True(strings.Contains(reply.Message, request.Name))
+		s.Contains(reply.Message, request.Name)
 	}
 
 	_ = clientConn.Close()

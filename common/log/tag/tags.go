@@ -66,6 +66,16 @@ func RequestID(requestID string) ZapTag {
 	return NewStringTag("request-id", requestID)
 }
 
+// NextPageToken returns tag for NextPageToken
+func NextPageToken(nextPageToken []byte) ZapTag {
+	return NewBinaryTag("next-page-token", nextPageToken)
+}
+
+// PageSize returns tag for PageSize
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -106,6 +116,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 }
 
 // WorkflowID returns tag for WorkflowID
+// TODO: Rename to BusinessID.
 func WorkflowID(workflowID string) ZapTag {
 	return NewStringTag(WorkflowIDKey, workflowID)
 }
@@ -121,6 +132,7 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
+// TODO: Rename to RunID
 func WorkflowRunID(runID string) ZapTag {
 	return NewStringTag(WorkflowRunIDKey, runID)
 }
@@ -143,11 +155,6 @@ func WorkflowResetNewRunID(runID string) ZapTag {
 // WorkflowBinaryChecksum returns tag for WorkflowBinaryChecksum
 func WorkflowBinaryChecksum(cs string) ZapTag {
 	return NewStringTag("wf-binary-checksum", cs)
-}
-
-// WorkflowActivityID returns tag for WorkflowActivityID
-func WorkflowActivityID(id string) ZapTag {
-	return NewStringTag("wf-activity-id", id)
 }
 
 // WorkflowTimerID returns tag for WorkflowTimerID
@@ -188,8 +195,14 @@ func BlobSizeViolationOperation(operation string) ZapTag {
 // namespace related
 
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
+// TODO: Rename to NamespaceID
 func WorkflowNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("wf-namespace-id", namespaceID)
+}
+
+// TargetNamespaceID returns tag for a target namespace ID, e.g. the namespace a request is routed to.
+func TargetNamespaceID(namespaceID string) ZapTag {
+	return NewStringTag("target-namespace-id", namespaceID)
 }
 
 // WorkflowNamespace returns tag for WorkflowNamespace
@@ -261,6 +274,11 @@ func WorkflowBranchToken(branchToken []byte) ZapTag {
 	return NewBinaryTag("wf-branch-token", branchToken)
 }
 
+// WorkflowRequestBranchToken returns tag for a branch token supplied by the caller
+func WorkflowRequestBranchToken(branchToken []byte) ZapTag {
+	return NewBinaryTag("wf-request-branch-token", branchToken)
+}
+
 // WorkflowTreeID returns tag for WorkflowTreeID
 func WorkflowTreeID(treeID string) ZapTag {
 	return NewStringTag("wf-tree-id", treeID)
@@ -298,12 +316,12 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("wf-task-queue-name", taskQueueName)
 }
 
-// WorkerBuildId returns tag for worker build ID
-func WorkerBuildId(buildId string) ZapTag {
-	if buildId == "" {
-		buildId = "_unversioned_"
+// WorkerVersion returns tag for worker build ID
+func WorkerVersion(version string) ZapTag {
+	if version == "" {
+		version = "_unversioned_"
 	}
-	return NewStringTag("worker-build-id", buildId)
+	return NewStringTag("worker-version", version)
 }
 
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint
@@ -379,6 +397,10 @@ func ScheduleID(scheduleID string) ZapTag {
 // Component returns tag for Component
 func component(component string) ZapTag {
 	return NewStringTag("component", component)
+}
+
+func nexusStage(stage string) ZapTag {
+	return NewStringTag("nexus-stage", stage)
 }
 
 // Lifecycle returns tag for Lifecycle
@@ -460,22 +482,22 @@ func Name(k string) ZapTag {
 }
 
 // Value returns tag for Value
-func Value(v interface{}) ZapTag {
+func Value(v any) ZapTag {
 	return NewAnyTag("value", v)
 }
 
 // ValueType returns tag for ValueType
-func ValueType(v interface{}) ZapTag {
+func ValueType(v any) ZapTag {
 	return NewStringTag("value-type", fmt.Sprintf("%T", v))
 }
 
 // DefaultValue returns tag for DefaultValue
-func DefaultValue(v interface{}) ZapTag {
+func DefaultValue(v any) ZapTag {
 	return NewAnyTag("default-value", v)
 }
 
 // IgnoredValue returns tag for IgnoredValue
-func IgnoredValue(v interface{}) ZapTag {
+func IgnoredValue(v any) ZapTag {
 	return NewAnyTag("ignored-value", v)
 }
 
@@ -534,11 +556,6 @@ func NextNumber(n int64) ZapTag {
 	return NewInt64("next-number", n)
 }
 
-// Bool returns tag for Bool
-func Bool(b bool) ZapTag {
-	return NewBoolTag("bool", b)
-}
-
 // ServerName returns tag for ServerName
 func ServerName(serverName string) ZapTag {
 	return NewStringTag("server-name", serverName)
@@ -549,7 +566,7 @@ func CertThumbprint(thumbprint string) ZapTag {
 	return NewStringTag("cert-thumbprint", thumbprint)
 }
 
-func WorkerComponent(v interface{}) ZapTag {
+func WorkerComponent(v any) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
 
@@ -564,7 +581,7 @@ func ShardID(shardID int32) ZapTag {
 }
 
 // ShardTime returns tag for ShardTime
-func ShardTime(shardTime interface{}) ZapTag {
+func ShardTime(shardTime any) ZapTag {
 	return NewAnyTag("shard-time", shardTime)
 }
 
@@ -604,7 +621,7 @@ func MaxLevel(lv int64) ZapTag {
 }
 
 // ShardQueueAcks returns tag for shard queue ack levels
-func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
+func ShardQueueAcks(categoryName string, ackLevel any) ZapTag {
 	return NewAnyTag("shard-"+categoryName+"-queue-acks", ackLevel)
 }
 
@@ -616,12 +633,12 @@ func QueueReaderID(readerID int64) ZapTag {
 }
 
 // QueueAlert returns tag for queue alert
-func QueueAlert(alert interface{}) ZapTag {
+func QueueAlert(alert any) ZapTag {
 	return NewAnyTag("queue-alert", alert)
 }
 
 // Task returns tag for Task
-func Task(task interface{}) ZapTag {
+func Task(task any) ZapTag {
 	return NewAnyTag("queue-task", task)
 }
 
@@ -631,7 +648,7 @@ func TaskID(taskID int64) ZapTag {
 }
 
 // TaskKey returns tag for TaskKey
-func TaskKey(key interface{}) ZapTag {
+func TaskKey(key any) ZapTag {
 	return NewAnyTag("queue-task-key", key)
 }
 
@@ -742,7 +759,7 @@ func ESValue(ESValue []byte) ZapTag {
 }
 
 // ESConfig returns tag for ESConfig
-func ESConfig(c interface{}) ZapTag {
+func ESConfig(c any) ZapTag {
 	return NewAnyTag("es-config", c)
 }
 
@@ -797,7 +814,8 @@ func SourceShardID(shardID int32) ZapTag {
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
 }
-func ReplicationTask(replicationTask interface{}) ZapTag {
+
+func ReplicationTask(replicationTask any) ZapTag {
 	return NewAnyTag("xdc-replication-task", replicationTask)
 }
 
@@ -915,13 +933,23 @@ func TransportType(transportType string) ZapTag {
 }
 
 // ActivityInfo returns tag for activity info
-func ActivityInfo(activityInfo interface{}) ZapTag {
+func ActivityInfo(activityInfo any) ZapTag {
 	return NewAnyTag("activity-info", activityInfo)
 }
 
-// ActivityID returns tag for a standalone activity ID
+// ActivityID returns tag for an activity ID
 func ActivityID(id string) ZapTag {
 	return NewStringTag("activity-id", id)
+}
+
+// OperationID returns tag for a nexus operation ID
+func OperationID(id string) ZapTag {
+	return NewStringTag("operation-id", id)
+}
+
+// ChasmRunID returns tag for an entity run ID
+func ChasmRunID(id string) ZapTag {
+	return NewStringTag("run-id", id)
 }
 
 // ActivitySize returns a tag for a standalone activity size
@@ -935,7 +963,7 @@ func WorkflowTaskRequestId(s string) ZapTag {
 }
 
 // AckLevel returns tag for ack level
-func AckLevel(s interface{}) ZapTag {
+func AckLevel(s any) ZapTag {
 	return NewAnyTag("ack-level", s)
 }
 
@@ -986,6 +1014,11 @@ func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
 }
 
+// Destination returns a tag for an outbound task's destination.
+func Destination(destination string) ZapTag {
+	return NewStringTag("destination", destination)
+}
+
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
@@ -1010,9 +1043,23 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
-// NexusTaskQueueName returns tag for NexusTaskQueueName
-func NexusTaskQueueName(taskQueueName string) ZapTag {
-	return NewStringTag("nexus-task-queue-name", taskQueueName)
+// NexusCompletionSource retuns a tag for the source of the Nexus completion callback.
+func NexusCompletionSource(source string) ZapTag {
+	return NewStringTag("nexus-completion-source", source)
+}
+
+func NexusService(service string) ZapTag {
+	return NewStringTag("nexus-service", service)
+}
+
+// NexusEndpointTargetNamespaceID returns a tag for the namespace ID targeted by a Nexus endpoint's worker target.
+func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
+	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)
+}
+
+// NexusEndpointID returns a tag for a Nexus endpoint's ID, all that is known if its lookup failed.
+func NexusEndpointID(endpointID string) ZapTag {
+	return NewStringTag("nexus-endpoint-id", endpointID)
 }
 
 // WorkflowRuleID returns tag for WorkflowRuleID

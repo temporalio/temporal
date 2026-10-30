@@ -26,7 +26,7 @@ var (
 
 const (
 	// URIScheme is the scheme for the gcloud storage implementation
-	URIScheme = "gs"
+	URIScheme = archiver.URISchemeGstorage
 
 	targetHistoryBlobSize = 2 * 1024 * 1024 // 2MB
 	errEncodeHistory      = "failed to encode history batches"

@@ -49,12 +49,14 @@ a special [in-memory-queue](./in-memory-queue.md) is used for speculative Workfl
 > #### TODO
 > It is important to point out that the `WorkflowTaskScheduled` and `WorkflowTaskStarted` events
 > for transient and speculative Workflow Task are only added to the `PollWorkflowTask` response - and
-> not to the `GetWorkflowExecutionHistory` response. This has an unfortunate consequence: when the 
+> not to the `GetWorkflowExecutionHistory` response. This has an unfortunate consequence: when the
 > worker receives a speculative Workflow Task on a sticky task queue, but the Workflow is already
-> evicted from its cache, it issues a `GetWorkflowExecutionHistory` request, which returns the 
-> history *without* speculative events. This leads to a `premature end of stream` error on the 
+> evicted from its cache, it issues a `GetWorkflowExecutionHistory` request, which returns the
+> history *without* speculative events. This leads to a `premature end of stream` error on the
 > worker side. The worker fails the Workflow Task, clears stickiness, and everything works fine
 > after that - but a failed Workflow Task appears in the history. Fortunately, it doesn't happen often.
+>
+> See PR #9325 for related work on ensuring transient events are not incorrectly returned to CLI/UI clients.
 
 ## Speculative Workflow Task & Workflow Update
 Speculative Workflow Task was introduced to make it possible for Workflow Update to have zero writes

@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -81,7 +82,7 @@ func (s *activityReplicatorStateSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -562,7 +563,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
@@ -600,7 +601,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
@@ -1037,7 +1038,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie() {
@@ -1143,7 +1144,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie() {
@@ -1245,7 +1246,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombie() {
@@ -1351,5 +1352,5 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }

@@ -7,10 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -23,10 +21,10 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -42,6 +40,7 @@ type visibilityArchiverSuite struct {
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
+	fsEmulation     *s3FsEmulation
 }
 
 func TestVisibilityArchiverSuite(t *testing.T) {
@@ -75,10 +74,10 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 		},
 	}
 
-	s.s3cli.EXPECT().HeadBucketWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx aws.Context, input *s3.HeadBucketInput, options ...request.Option) (*s3.HeadBucketOutput, error) {
+	s.s3cli.EXPECT().HeadBucket(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *s3.HeadBucketInput, options ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
 			if *input.Bucket != s.testArchivalURI.Hostname() {
-				return nil, awserr.New("NotFound", "", nil)
+				return nil, &smithy.GenericAPIError{Code: "NotFound", Message: ""}
 			}
 
 			return &s3.HeadBucketOutput{}, nil
@@ -122,7 +121,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.s3cli = mocks.NewMockS3API(s.controller)
-	setupFsEmulation(s.s3cli)
+	s.fsEmulation = setupFsEmulation(s.s3cli)
 	s.setupVisibilityDirectory()
 }
 
@@ -209,6 +208,61 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	s.Equal(request, archivedRecord)
 }
 
+func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	visibilityArchiver.metricsHandler = metricsHandler
+	closeTimestamp := timestamp.TimeNowPtrUtc()
+	request := &archiverspb.VisibilityRecord{
+		NamespaceId:      testNamespaceID,
+		Namespace:        testNamespace,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
+		CloseTime:        closeTimestamp,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		HistoryLength:    100,
+	}
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	initialPutCount := s.fsEmulation.putCount
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+4, s.fsEmulation.putCount)
+
+	deduplicationOption := archiver.GetVisibilityArchivalRecordDeduplicationOption()
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	request.HistoryLength++
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+12, s.fsEmulation.putCount)
+	s.Require().Len(capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()], 4)
+}
+
+func (s *visibilityArchiverSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
+	s3cli := mocks.NewMockS3API(s.controller)
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	accessErr := errors.New("access denied")
+
+	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, accessErr)
+
+	uploaded, err := UploadIfHashChanged(context.Background(), s3cli, URI, "test-key", []byte("{}"), "test-hash")
+	s.Require().ErrorIs(err, accessErr)
+	s.Require().False(uploaded)
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
@@ -247,9 +301,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowID:      util.Ptr(testWorkflowID),
+		workflowID:      new(testWorkflowID),
 		closeTime:       &time.Time{},
-		searchPrecision: util.Ptr(PrecisionSecond),
+		searchPrecision: new(PrecisionSecond),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -268,9 +322,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       util.Ptr(time.Unix(0, int64(1*time.Hour)).UTC()),
-		searchPrecision: util.Ptr(PrecisionHour),
-		workflowID:      util.Ptr(testWorkflowID),
+		closeTime:       new(time.Unix(0, int64(1*time.Hour)).UTC()),
+		searchPrecision: new(PrecisionHour),
+		workflowID:      new(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -294,9 +348,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       util.Ptr(time.Unix(0, 0).UTC()),
-		searchPrecision: util.Ptr(PrecisionDay),
-		workflowID:      util.Ptr(testWorkflowID),
+		closeTime:       new(time.Unix(0, 0).UTC()),
+		searchPrecision: new(PrecisionDay),
+		workflowID:      new(testWorkflowID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -510,9 +564,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 	for i, testData := range precisionTests {
 		mockParser := NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:       util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision: util.Ptr(testData.precision),
-			workflowID:      util.Ptr(testWorkflowID),
+			closeTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowID:      new(testWorkflowID),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -523,9 +577,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:       util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision: util.Ptr(testData.precision),
-			workflowID:      util.Ptr(testWorkflowID),
+			startTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowID:      new(testWorkflowID),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -536,9 +590,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:        util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  util.Ptr(testData.precision),
-			workflowTypeName: util.Ptr(testWorkflowTypeName),
+			closeTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -549,9 +603,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:        util.Ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  util.Ptr(testData.precision),
-			workflowTypeName: util.Ptr(testWorkflowTypeName),
+			startTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -573,7 +627,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowID: util.Ptr(testWorkflowID),
+		workflowID: new(testWorkflowID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -604,7 +658,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser = NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowTypeName: util.Ptr(testWorkflowTypeName),
+		workflowType: new(testWorkflowTypeName),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request = &archiver.QueryVisibilityRequest{

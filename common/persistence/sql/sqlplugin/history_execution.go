@@ -7,6 +7,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -26,6 +27,14 @@ type (
 		DBRecordVersion  int64
 	}
 
+	// ExecutionsUpdate contains a row and the condition expected by its update.
+	// A non-zero DBRecordVersion expects the stored version to be one less;
+	// otherwise Condition is the expected next event ID.
+	ExecutionsUpdate struct {
+		ExecutionsRow
+		Condition int64
+	}
+
 	// ExecutionsFilter contains the column names within executions table that
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
@@ -41,6 +50,7 @@ type (
 		NamespaceID      primitives.UUID
 		WorkflowID       string
 		RunID            primitives.UUID
+		ArchetypeID      chasm.ArchetypeID
 		CreateRequestID  string
 		StartTime        *time.Time
 		LastWriteVersion int64
@@ -57,6 +67,7 @@ type (
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// TODO remove this block in 1.12.x
@@ -79,14 +90,20 @@ type (
 		InsertIntoCurrentExecutions(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error)
 		UpdateCurrentExecutions(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error)
 		// SelectFromCurrentExecutions returns one or more rows from current_executions table
-		// Required params - {shardID, namespaceID, workflowID}
+		// Required params - {shardID, namespaceID, workflowID, archetypeID}
 		SelectFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
 		// DeleteFromCurrentExecutions deletes a single row that matches the filter criteria
 		// If a row exist, that row will be deleted and this method will return success
 		// If there is no row matching the filter criteria, this method will still return success
 		// Callers can check the output of Result.RowsAffected() to see if a row was deleted or not
-		// Required params - {shardID, namespaceID, workflowID, runID}
+		// Required params - {shardID, namespaceID, workflowID, runID, archetypeID}
 		DeleteFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (sql.Result, error)
 		LockCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
+	}
+
+	// HistoryExecutionConditionalUpdater lets SQL plugins condition an execution
+	// update on the previously stored record version or next event ID.
+	HistoryExecutionConditionalUpdater interface {
+		UpdateExecutionsWithCondition(ctx context.Context, update *ExecutionsUpdate) (sql.Result, error)
 	}
 )

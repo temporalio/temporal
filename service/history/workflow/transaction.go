@@ -46,6 +46,8 @@ type (
 			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			// checkRunAlreadyExists applies to newWorkflowSnapshot only.
+			checkRunAlreadyExists bool,
 			isWorkflow bool,
 		) (int64, int64, error)
 

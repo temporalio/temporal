@@ -2,10 +2,14 @@ package chasm
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -13,15 +17,21 @@ type (
 		componentType string
 		goType        reflect.Type
 
-		// Those two fields are initialized when the component is registered to a library.
+		// Following three fields are initialized when the component is registered to a library.
 		library     namer
 		componentID uint32
+		fqn         string
 
-		ephemeral     bool
-		singleCluster bool
-		shardingFn    func(ExecutionKey) string
+		ephemeral        bool
+		singleCluster    bool
+		detached         bool
+		recordPrincipals bool
+		executionType    enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
+		retention        func(*namespace.Namespace) time.Duration
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
+
+		contextValues map[any]any
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -34,7 +44,6 @@ func NewRegistrableComponent[C Component](
 	rc := &RegistrableComponent{
 		componentType: componentType,
 		goType:        reflect.TypeFor[C](),
-		shardingFn:    defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
@@ -55,15 +64,93 @@ func WithSingleCluster() RegistrableComponentOption {
 	}
 }
 
-// WithShardingFn allows specifying a custom sharding key function for the component.
-// TODO: remove WithShardingFn, we don't need this functionality.
-func WithShardingFn(
-	shardingFn func(ExecutionKey) string,
+// WithDetached marks the registrable component as detached. Detached components ignore
+// parent lifecycle validation, allowing them to continue operating when their
+// parent is closed/terminated.
+// If a registrable component is not detached by default, a component definition
+// can specify its child as detached via ComponentFieldDetached() option.
+func WithDetached() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.detached = true
+	}
+}
+
+// IsDetached returns true if the component type is registered as detached.
+func (rc *RegistrableComponent) IsDetached() bool {
+	return rc.detached
+}
+
+// WithRecordPrincipals records, on the root component, the principal of the caller that
+// creates an execution and of the caller that closes it. It only has an effect on a component
+// registered as the root of an execution. Archetypes opt in because the principals are stored
+// on every execution; workflows record principals on their history events instead.
+func WithRecordPrincipals() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.recordPrincipals = true
+	}
+}
+
+// WithExecutionType declares how executions of this archetype are named outside of CHASM, e.g. in
+// the links that address them. It only has an effect on a component registered as the root of an
+// execution; components nested inside an execution are named by their path within it.
+//
+// An archetype registered without this option has no external representation, and reports
+// [enumspb.EXECUTION_TYPE_UNSPECIFIED].
+func WithExecutionType(
+	executionType enumspb.ExecutionType,
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
-		if shardingFn != nil {
-			rc.shardingFn = shardingFn
+		rc.executionType = executionType
+	}
+}
+
+// WithRetention overrides how long closed executions of this archetype are kept before deletion.
+// The function is evaluated when an execution closes. It only has an effect on a component registered
+// as the root of an execution.
+//
+// The returned value replaces the namespace retention and may be shorter or longer than it, but is
+// floored at the namespace min retention. A non-positive value falls back to the namespace retention.
+func WithRetention(
+	retention func(*namespace.Namespace) time.Duration,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.retention = retention
+	}
+}
+
+// Retention returns the retention registered via WithRetention for the given namespace, and
+// whether one is registered and positive.
+func (rc *RegistrableComponent) Retention(ns *namespace.Namespace) (time.Duration, bool) {
+	if rc.retention == nil {
+		return 0, false
+	}
+	retention := rc.retention(ns)
+	if retention <= 0 {
+		return 0, false
+	}
+	return retention, true
+}
+
+// WithBusinessIDAlias allows specifying the business ID alias of the component.
+// This option must be specified if the archetype uses the Visibility component.
+func WithBusinessIDAlias(
+	alias string,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.searchAttributesMapper == nil {
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
+		if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
+			//nolint:forbidigo
+			panic(fmt.Sprintf("registrable component validation error: business ID alias %q is already defined as a search attribute", alias))
+		}
+		if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {
+			//nolint:forbidigo
+			panic(fmt.Sprintf("registrable component validation error: business ID alias %q is already defined as a system search attribute", alias))
+		}
+		rc.searchAttributesMapper.systemAliasToField[alias] = sadefs.WorkflowID
+		rc.searchAttributesMapper.fieldToAlias[sadefs.WorkflowID] = alias
+		rc.searchAttributesMapper.saTypeMap[sadefs.WorkflowID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	}
 }
 
@@ -74,10 +161,9 @@ func WithSearchAttributes(
 		if len(searchAttributes) == 0 {
 			return
 		}
-		rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-			aliasToField: make(map[string]string, len(searchAttributes)),
-			fieldToAlias: make(map[string]string, len(searchAttributes)),
-			saTypeMap:    make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
+
+		if rc.searchAttributesMapper == nil {
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 
 		for _, sa := range searchAttributes {
@@ -85,6 +171,35 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
+			// An identity-mapped system search attribute (alias == field, e.g. TaskQueue,
+			// ExecutionTime) overrides that system column directly, so it is recorded only in
+			// overriddenSystemFields; queries resolve via the system column.
+			if field == alias && sadefs.IsSystem(field) {
+				if !sadefs.IsChasmOverridableSystem(field) {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute %q cannot be overridden by a CHASM component", field))
+				}
+				if _, ok := rc.searchAttributesMapper.overriddenSystemFields[field]; ok {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute override %q is already defined", field))
+				}
+				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
+				continue
+			}
+
+			if sadefs.IsChasmSystem(alias) {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a CHASM system search attribute", alias))
+			}
+			if !sadefs.IsSystem(alias) && sadefs.IsReserved(alias) {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a reserved search attribute", alias))
+			}
+
+			if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is already defined as a system search attribute alias", alias))
+			}
 			if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 				//nolint:forbidigo
 				panic(fmt.Sprintf("registrable component validation error: search attribute alias %q is already defined", alias))
@@ -101,6 +216,27 @@ func WithSearchAttributes(
 	}
 }
 
+// WithContextValues allows specifying key-value pairs that will be available in the Context
+// via the Value() method whenever the chasm framework starts, updates, reads, polls, executes or
+// validates tasks on a component.
+//
+// This is useful for propagating values needed for those processing logic but are not avaiable via the
+// component's struct definition, such as configurations.
+//
+// Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
+//
+// Manually added key-value pairs via ContextWithValue() will take precedence over registered context values.
+func WithContextValues(
+	keyVals map[any]any,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.contextValues == nil {
+			rc.contextValues = make(map[any]any, len(keyVals))
+		}
+		maps.Copy(rc.contextValues, keyVals)
+	}
+}
+
 func (rc *RegistrableComponent) registerToLibrary(
 	library namer,
 ) (string, uint32, error) {
@@ -109,10 +245,9 @@ func (rc *RegistrableComponent) registerToLibrary(
 	}
 
 	rc.library = library
-
-	fqn := rc.fqType()
-	rc.componentID = generateTypeID(fqn)
-	return fqn, rc.componentID, nil
+	rc.fqn = FullyQualifiedName(rc.library.Name(), rc.componentType)
+	rc.componentID = GenerateTypeID(rc.fqn)
+	return rc.fqn, rc.componentID, nil
 }
 
 // SearchAttributesMapper returns the search attributes mapper for this component.
@@ -120,17 +255,35 @@ func (rc *RegistrableComponent) SearchAttributesMapper() *VisibilitySearchAttrib
 	return rc.searchAttributesMapper
 }
 
+// GenerateTypeID generates a unique 32-bit identifier from a fully qualified name (FQN).
+// The generated ID is used to uniquely identify components and tasks within the CHASM framework. The same FQN will
+// always produce the same ID.
+func GenerateTypeID(fqn string) uint32 {
+	return farm.Fingerprint32([]byte(fqn))
+}
+
+// hasBusinessIDAlias returns true if the component has a businessID alias configured
+// via WithBusinessIDAlias option.
+func (rc *RegistrableComponent) hasBusinessIDAlias() bool {
+	if rc.searchAttributesMapper == nil {
+		return false
+	}
+	_, ok := rc.searchAttributesMapper.fieldToAlias[sadefs.WorkflowID]
+	return ok
+}
+
+// GoType returns the reflect.Type of the component's Go struct.
+func (rc *RegistrableComponent) GoType() reflect.Type {
+	return rc.goType
+}
+
 // fqType returns the fully qualified name of the component, which is a combination of
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
 func (rc *RegistrableComponent) fqType() string {
-	if rc.library == nil {
+	if rc.fqn == "" {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")
 	}
-	return fullyQualifiedName(rc.library.Name(), rc.componentType)
-}
-
-func generateTypeID(fqn string) uint32 {
-	return farm.Fingerprint32([]byte(fqn))
+	return rc.fqn
 }

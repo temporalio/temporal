@@ -1,6 +1,7 @@
 package ringpop
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -8,8 +9,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/util"
 	expmaps "golang.org/x/exp/maps"
 )
@@ -30,7 +33,7 @@ func (s *RpoSuite) SetupTest() {
 
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, true)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, true)
 	s.NotNil(testService, "Failed to create test service")
 
 	rpm := testService.rings[0]
@@ -41,10 +44,10 @@ func (s *RpoSuite) TestMonitor() {
 	r, err := rpm.GetResolver(serviceName)
 	s.NoError(err)
 	err = r.AddListener("test-listener", listenCh)
-	s.Nil(err, "AddListener failed")
+	s.NoError(err, "AddListener failed")
 
 	host, err := r.Lookup("key")
-	s.Nil(err, "Ringpop monitor failed to find host for key")
+	s.NoError(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
 	s.Eventually(func() bool {
@@ -65,7 +68,7 @@ func (s *RpoSuite) TestMonitor() {
 	select {
 	case e := <-listenCh:
 		s.T().Log("Got update")
-		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
+		s.Len(e.HostsRemoved, 1, "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
 		s.Nil(e.HostsChanged, "Unexpected host reported to be changed by ringpop monitor")
@@ -73,13 +76,18 @@ func (s *RpoSuite) TestMonitor() {
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	for k := 0; k < 10; k++ {
+	for k := range 10 {
 		host, err = r.Lookup(fmt.Sprintf("key%d", k))
-		s.Nil(err, "Ringpop monitor failed to find host for key")
+		s.NoError(err, "Ringpop monitor failed to find host for key")
 		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
+
+		// check that LookupN[0] is the same as Lookup
+		hosts := r.LookupN(fmt.Sprintf("key%d", k), 1)
+		s.Len(hosts, 1)
+		s.Equal(host.GetAddress(), hosts[0].GetAddress())
 	}
-	s.Equal(2, len(r.Members()))
-	s.Equal(2, len(r.AvailableMembers()))
+	s.Len(r.Members(), 2)
+	s.Len(r.AvailableMembers(), 2)
 
 	s.T().Log("Draining host 2")
 	testService.DrainHost(testService.hostUUIDs[2])
@@ -89,17 +97,17 @@ func (s *RpoSuite) TestMonitor() {
 		s.T().Log("Got update")
 		s.Nil(e.HostsRemoved)
 		s.Nil(e.HostsAdded)
-		s.Equal(1, len(e.HostsChanged))
+		s.Len(e.HostsChanged, 1)
 		s.Equal(testService.hostAddrs[2], e.HostsChanged[0].GetAddress())
 	case <-timer.C:
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	s.Equal(2, len(r.Members()))
-	s.Equal(1, len(r.AvailableMembers()))
+	s.Len(r.Members(), 2)
+	s.Len(r.AvailableMembers(), 1)
 
 	err = r.RemoveListener("test-listener")
-	s.Nil(err, "RemoveListener() failed")
+	s.NoError(err, "RemoveListener() failed")
 
 	testService.Stop()
 }
@@ -114,7 +122,7 @@ func (s *RpoSuite) TestScheduledUpdates() {
 		time.Time{},
 		start.Add(4 * time.Second),
 	}
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, false)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, nil, false)
 	s.NotNil(testService, "Failed to create test service")
 
 	observer := rand.Intn(3)
@@ -157,6 +165,123 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.Greater(time.Since(start), 3*time.Second)
 
 	testService.Stop()
+}
+
+func (s *RpoSuite) TestEvictBeforeStart() {
+	serviceName := primitives.HistoryService
+	// Host 2 is evicted (e.g. its process began shutting down) before its membership monitor started.
+	evictBeforeStart := []bool{false, false, true}
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, evictBeforeStart, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 2
+	}, 10*time.Second, 100*time.Millisecond)
+	// We're asserting that host 2 never shows up, so there's no condition to wait for. Give its
+	// labels time to propagate if it (incorrectly) joined.
+	time.Sleep(2 * time.Second) //nolint:forbidigo
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.ElementsMatch([]string{testService.hostAddrs[0], testService.hostAddrs[1]}, addrs)
+
+	// The evicted monitor never finishes initializing.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	s.ErrorIs(testService.rings[2].WaitUntilInitialized(ctx), context.DeadlineExceeded)
+
+	// Evicting again is still a no-op success.
+	s.NoError(testService.rings[2].EvictSelf())
+	waitTime, err := testService.rings[2].EvictSelfAt(time.Now().Add(5 * time.Second))
+	s.NoError(err)
+	s.Zero(waitTime)
+}
+
+func (s *RpoSuite) TestEvictDuringBootstrap() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 2, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	logger := &fatalRecordingLogger{Logger: log.NewTestLogger()}
+	m := newGatedTestMonitor(s.T(), "rpm-test", testService.GetSeedNode(), serviceName, logger)
+	startDone := make(chan struct{})
+	go func() {
+		defer close(startDone)
+		m.Start()
+	}()
+
+	// Evict while Start is bootstrapping, then let bootstrap finish.
+	s.waitForChannel(m.entered, "Start never reached bootstrap")
+	evictErr := m.EvictSelf()
+	m.release()
+	s.waitForChannel(startDone, "Start did not return")
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+	// We're asserting that the evicted host never shows up, so there's no condition to wait for.
+	// Give its labels time to propagate if it (incorrectly) joined.
+	time.Sleep(2 * time.Second) //nolint:forbidigo
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.ElementsMatch(testService.hostAddrs, addrs)
+	s.NotContains(addrs, m.addr)
+
+	s.NoError(evictErr)
+	s.Zero(logger.fatals.Load())
+}
+
+func (s *RpoSuite) TestStopDuringBootstrap() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 2, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	logger := &fatalRecordingLogger{Logger: log.NewTestLogger()}
+	m := newGatedTestMonitor(s.T(), "rpm-test", testService.GetSeedNode(), serviceName, logger)
+	startDone := make(chan struct{})
+	go func() {
+		defer close(startDone)
+		m.Start()
+	}()
+
+	// Stop while Start is bootstrapping. Start should return promptly and cleanly, rather than
+	// retrying bootstrap and then crashing the process.
+	s.waitForChannel(m.entered, "Start never reached bootstrap")
+	m.Stop()
+	s.waitForChannel(startDone, "Start did not return after Stop")
+	s.Zero(logger.fatals.Load())
+}
+
+func (s *RpoSuite) TestStopEvictsSelf() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 3
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Stop host 2 without calling EvictSelf first. Peers should drop it via its self-eviction
+	// gossip, well before failure detection (ping + ping-req + suspect timeouts, >10s) would.
+	testService.rings[2].Stop()
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 2
+	}, 3*time.Second, 100*time.Millisecond)
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.NotContains(addrs, testService.hostAddrs[2])
+}
+
+func (s *RpoSuite) waitForChannel(ch <-chan struct{}, msg string) {
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		s.FailNow(msg)
+	}
 }
 
 func (s *RpoSuite) TestCompareMembers() {
@@ -213,8 +338,8 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 	resolver.ringAndHosts.Store(ringAndHosts{
 		hosts: newMembers,
 	})
-	s.Equal(3, len(resolver.Members()))
-	s.Equal(2, len(resolver.AvailableMembers()))
+	s.Len(resolver.Members(), 3)
+	s.Len(resolver.AvailableMembers(), 2)
 }
 
 func eventToString(event *membership.ChangedEvent) []string {

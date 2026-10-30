@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertPathToCamel(t *testing.T) {
@@ -51,4 +52,30 @@ func TestConvertPathToCamel(t *testing.T) {
 			assert.Equal(t, tc.expectedOutput, actualOutput)
 		})
 	}
+}
+
+func TestFieldMaskHasSubPath(t *testing.T) {
+	fieldMaskPaths := map[string]struct{}{
+		"retryPolicy":                 {},
+		"retryPolicy.initialInterval": {},
+		"retryPolicy.maximumAttempts": {},
+		"retryPolicyExtra.field":      {},
+	}
+
+	require.True(t, FieldMaskHasSubPath(fieldMaskPaths, "retryPolicy"))
+	require.False(t, FieldMaskHasSubPath(map[string]struct{}{"retryPolicy": {}}, "retryPolicy"))
+	require.False(t, FieldMaskHasSubPath(fieldMaskPaths, "retryPolicy.initialInterval"))
+	require.False(t, FieldMaskHasSubPath(map[string]struct{}{"retryPolicyExtra.field": {}}, "retryPolicy"))
+}
+
+func TestFieldMaskHasPathOrSubPath(t *testing.T) {
+	fieldMaskPaths := map[string]struct{}{
+		"retryPolicy":          {},
+		"priority.fairnessKey": {},
+		"taskQueue.name":       {},
+	}
+
+	require.True(t, FieldMaskHasPathOrSubPath(fieldMaskPaths, "retryPolicy"))
+	require.True(t, FieldMaskHasPathOrSubPath(fieldMaskPaths, "priority"))
+	require.False(t, FieldMaskHasPathOrSubPath(fieldMaskPaths, "retryPolicy.initialInterval"))
 }

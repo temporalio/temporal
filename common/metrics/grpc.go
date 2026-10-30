@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	metricsspb "go.temporal.io/server/api/metrics/v1"
@@ -33,10 +34,10 @@ var (
 func NewServerMetricsContextInjectorInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
-		req interface{},
+		req any,
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	) (any, error) {
 		ctxWithMetricsBaggage := AddMetricsContext(ctx)
 		return handler(ctxWithMetricsBaggage, req)
 	}
@@ -46,7 +47,7 @@ func NewServerMetricsContextInjectorInterceptor() grpc.UnaryServerInterceptor {
 // into metrics context.
 func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryClientInterceptor {
 	return func(
-		ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
+		ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
 		var trailer metadata.MD
@@ -80,10 +81,10 @@ func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryC
 func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
-		req interface{},
+		req any,
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	) (any, error) {
 		// we want to return original handler response, so don't override err
 		resp, err := handler(ctx, req)
 
@@ -101,9 +102,7 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 
 		metricsCtx.Lock()
-		for k, v := range metricsCtx.CountersInt {
-			metricsBaggage.CountersInt[k] = v
-		}
+		maps.Copy(metricsBaggage.CountersInt, metricsCtx.CountersInt)
 		metricsCtx.Unlock()
 
 		bytes, marshalErr := metricsBaggage.Marshal()
@@ -174,6 +173,6 @@ func ContextCounterGet(ctx context.Context, name string) (int64, bool) {
 		return 0, false
 	}
 
-	result := metricsCtx.CountersInt[name]
-	return result, true
+	result, ok := metricsCtx.CountersInt[name]
+	return result, ok
 }

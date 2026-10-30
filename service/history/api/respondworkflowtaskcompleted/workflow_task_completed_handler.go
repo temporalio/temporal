@@ -12,14 +12,19 @@ import (
 	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -53,18 +58,22 @@ type (
 
 	workflowTaskCompletedHandler struct {
 		identity                string
+		workerControlTaskQueue  string
 		workflowTaskCompletedID int64
+		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
-		hasBufferedEventsOrMessages     bool
-		workflowTaskFailedCause         *workflowTaskFailedCause
-		activityNotStartedCancelled     bool
-		newMutableState                 historyi.MutableState
-		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    historyi.MutableState
-		effects                         effect.Controller
-		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
-		updateRegistry                  update.Registry
+		hasBufferedEventsOrMessages         bool
+		workflowTaskFailedCause             *workflowTaskFailedCause
+		activityNotStartedCancelled         bool
+		newMutableState                     historyi.MutableState
+		stopProcessing                      bool // should stop processing any more commands
+		mutableState                        historyi.MutableState
+		effects                             effect.Controller
+		initiatedChildExecutionsInBatch     map[string]struct{} // Set of initiated child executions in the workflow task
+		updateRegistry                      update.Registry
+		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
+		eagerActivityCandidates             []eagerActivityCandidate
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -78,7 +87,9 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		chasmWorkflowRegistry  *chasmworkflow.Registry
 		matchingClient         matchingservice.MatchingServiceClient
+		versionCache           worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -91,19 +102,23 @@ type (
 		resp *historyservice.RespondWorkflowTaskCompletedResponse,
 	) error
 
-	commandPostAction func(
-		ctx context.Context,
-	) (workflowTaskResponseMutation, error)
-
 	handleCommandResponse struct {
 		workflowTaskResponseMutation workflowTaskResponseMutation
-		commandPostAction            commandPostAction
+	}
+
+	eagerActivityCandidate struct {
+		scheduledEventID int64
+		attr             *commandpb.ScheduleActivityTaskCommandAttributes
+		activityInfo     *persistencespb.ActivityInfo
+		granted          bool
 	}
 )
 
 func newWorkflowTaskCompletedHandler(
 	identity string,
+	workerControlTaskQueue string,
 	workflowTaskCompletedID int64,
+	workflowTaskDeployment *deploymentpb.Deployment,
 	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
@@ -117,11 +132,15 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
+		workerControlTaskQueue:  workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
+		workflowTaskDeployment:  workflowTaskDeployment,
 
 		// internal state
 		hasBufferedEventsOrMessages:     hasBufferedEventsOrMessages,
@@ -149,7 +168,9 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		chasmWorkflowRegistry:  chasmWorkflowRegistry,
 		matchingClient:         matchingClient,
+		versionCache:           versionCache,
 	}
 }
 
@@ -165,7 +186,6 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 	}
 
 	var mutations []workflowTaskResponseMutation
-	var postActions []commandPostAction
 	for _, command := range commands {
 		response, err := handler.handleCommand(ctx, command, msgs)
 		if err != nil || handler.stopProcessing {
@@ -174,9 +194,6 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		if response != nil {
 			if response.workflowTaskResponseMutation != nil {
 				mutations = append(mutations, response.workflowTaskResponseMutation)
-			}
-			if response.commandPostAction != nil {
-				postActions = append(postActions, response.commandPostAction)
 			}
 		}
 	}
@@ -194,14 +211,14 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		}
 	}
 
-	for _, postAction := range postActions {
-		mutation, err := postAction(ctx)
-		if err != nil || handler.stopProcessing {
-			return nil, err
-		}
-		if mutation != nil {
-			mutations = append(mutations, mutation)
-		}
+	eagerActivityMutations, err := handler.handleEagerActivityCandidates(ctx)
+	if err != nil || handler.stopProcessing {
+		return nil, err
+	}
+	mutations = append(mutations, eagerActivityMutations...)
+
+	if err := handler.flushWorkerCommandsTasks(); err != nil {
+		return nil, err
 	}
 
 	return mutations, nil
@@ -245,9 +262,9 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringTag("worker-identity", workerIdentity),
-			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
-			tag.NewInt("rejected-count", len(rejectedUpdateIDs)),
+			tag.String("worker-identity", workerIdentity),
+			tag.Strings("update-ids", rejectedUpdateIDs),
+			tag.Int("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 
@@ -317,15 +334,38 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
-		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
-		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
-		if !ok {
-			return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+		// TODO: need to handle migration between HSM and CHASM
+
+		handlerOpts := chasmworkflow.CommandHandlerOptions{
+			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
-		var failWFTErr workflow.FailWorkflowTaskError
-		if errors.As(err, &failWFTErr) {
+
+		// Try CHASM command handler first, fall back to HSM if not supported.
+		handledByCHASM := false
+		if handler.mutableState.ChasmEnabled() {
+			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
+				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
+				if chasmErr != nil {
+					return nil, chasmErr
+				}
+				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
+				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
+				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
+				// scheduled in HSM before the flag was flipped on).
+				handledByCHASM = !errors.Is(err, chasmworkflow.ErrCommandNotSupported) &&
+					!errors.Is(err, chasmworkflow.ErrCommandTargetNotFound)
+			}
+		}
+		if !handledByCHASM {
+			hsmHandler, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+			}
+			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
+		}
+
+		if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
 			}
@@ -340,6 +380,9 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 
 	if historyEvent != nil && command.UserMetadata != nil {
 		historyEvent.UserMetadata = command.UserMetadata
+	}
+	if historyEvent != nil && len(command.EventGroupMarkers) > 0 {
+		historyEvent.EventGroupMarkers = command.EventGroupMarkers
 	}
 	return response, nil
 }
@@ -421,7 +464,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -430,11 +473,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// TODO(fairness): remove this again once the SDK allows setting the fairness key
 	const fairnessKeyPrefix = "x-temporal-internal-fairness-key["
 	if after, ok := strings.CutPrefix(attr.GetActivityId(), fairnessKeyPrefix); ok {
-		if endIndex := strings.Index(after, "]"); endIndex != -1 {
-			keyAndWeight := after[:endIndex]
-			if colonIndex := strings.Index(keyAndWeight, ":"); colonIndex != -1 {
-				key := keyAndWeight[:colonIndex]
-				if weight, err := strconv.ParseFloat(keyAndWeight[colonIndex+1:], 32); err == nil {
+		if before, _, ok0 := strings.Cut(after, "]"); ok0 {
+			keyAndWeight := before
+			if before, after0, ok0 := strings.Cut(keyAndWeight, ":"); ok0 {
+				key := before
+				if weight, err := strconv.ParseFloat(after0, 32); err == nil {
 					attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
 					attr.Priority.FairnessKey = key
 					attr.Priority.FairnessWeight = float32(weight)
@@ -449,6 +492,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 				namespaceID,
 				attr,
 				executionInfo.WorkflowRunTimeout,
+				executionInfo.TaskQueue,
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -478,7 +522,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
-	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
 
 	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
 	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
@@ -494,7 +538,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// newer "default" compatible version).
 	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
-	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
+	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespaceName) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
 
 	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
@@ -517,36 +561,145 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return event, &handleCommandResponse{}, nil
 	}
 
-	return event,
-		&handleCommandResponse{
-			commandPostAction: func(ctx context.Context) (workflowTaskResponseMutation, error) {
-				return handler.handlePostCommandEagerExecuteActivity(ctx, attr)
-			},
+	handler.eagerActivityCandidates = append(handler.eagerActivityCandidates, eagerActivityCandidate{
+		scheduledEventID: event.GetEventId(),
+		attr:             attr,
+	})
+	return event, &handleCommandResponse{}, nil
+}
+
+func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
+	ctx context.Context,
+) ([]workflowTaskResponseMutation, error) {
+	if len(handler.eagerActivityCandidates) == 0 || !handler.mutableState.IsWorkflowExecutionRunning() {
+		return nil, nil
+	}
+
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
+	checkEnabled := handler.config.EnableActivityEagerDispatchCheck(namespaceName)
+	candidateIndexesByTaskQueue := make(map[string][]int)
+	for index := range handler.eagerActivityCandidates {
+		candidate := &handler.eagerActivityCandidates[index]
+		activityInfo, ok := handler.mutableState.GetActivityInfo(candidate.scheduledEventID)
+		if !ok {
+			// The activity was cancelled by a later command in this workflow task.
+			continue
+		}
+
+		candidate.activityInfo = activityInfo
+		if !checkEnabled {
+			candidate.granted = true
+			continue
+		}
+		candidateIndexesByTaskQueue[candidate.attr.GetTaskQueue().GetName()] = append(
+			candidateIndexesByTaskQueue[candidate.attr.GetTaskQueue().GetName()],
+			index,
+		)
+	}
+
+	for taskQueue, candidateIndexes := range candidateIndexesByTaskQueue {
+		handler.grantEagerActivityDispatchBatch(ctx, taskQueue, candidateIndexes)
+	}
+
+	var mutations []workflowTaskResponseMutation
+	for index := range handler.eagerActivityCandidates {
+		candidate := &handler.eagerActivityCandidates[index]
+		if candidate.activityInfo == nil {
+			continue
+		}
+		if !candidate.granted {
+			// Matching grants are best-effort. On a denial or any matching failure, generate the
+			// activity task normally instead of failing workflow task completion.
+			if err := handler.mutableState.GenerateActivityTask(candidate.activityInfo.GetScheduledEventId()); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		mutation, err := handler.handlePostCommandEagerExecuteActivity(candidate.attr, candidate.activityInfo)
+		if err != nil {
+			return nil, err
+		}
+		if mutation != nil {
+			mutations = append(mutations, mutation)
+		}
+	}
+	return mutations, nil
+}
+
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
+	ctx context.Context,
+	taskQueue string,
+	candidateIndexes []int,
+) {
+	if handler.matchingClient == nil {
+		return
+	}
+
+	items := make([]*matchingservice.GrantEagerDispatchRequest_Item, len(candidateIndexes))
+	for index, candidateIndex := range candidateIndexes {
+		candidate := handler.eagerActivityCandidates[candidateIndex]
+		items[index] = &matchingservice.GrantEagerDispatchRequest_Item{
+			Count:    1,
+			Priority: candidate.attr.GetPriority(),
+			// As of Sep 2026 SDKs do not ask for Eager cross-TQ. So we can assume activity's version
+			// Is always the same as workflow's, Once/If SDK starts requesting Eager for other task queues,
+			// we should decide if different Deployment Versions are qualified for eager or not, and if so,
+			// how should they be handled.
+			Version: worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+		}
+	}
+
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
+	metrics.EagerDispatchRequestsSent.With(
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			namespaceName,
+			taskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
+	).Record(eagerDispatchRequestCount(items))
+	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: executionInfo.GetNamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		},
-		nil
+		Items: items,
+	})
+	if err != nil || len(response.GetItems()) != len(items) {
+		return
+	}
+	for index, item := range response.GetItems() {
+		handler.eagerActivityCandidates[candidateIndexes[index]].granted = item.GetGrantedCount() == 1
+	}
+}
+
+func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
+	var count int64
+	for _, item := range items {
+		if itemCount := item.GetCount(); itemCount > 0 {
+			count += int64(itemCount)
+		}
+	}
+	return count
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
-	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+	ai *persistencespb.ActivityInfo,
 ) (workflowTaskResponseMutation, error) {
-	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		// workflow closed in the same workflow task
-		// this function is executed as a callback after all workflow commands
-		// are handled, so need to check for workflow completion case.
-		return nil, nil
-	}
-
-	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
-	if !ok {
-		// activity cancelled in the same worflow task
-		return nil, nil
-	}
-
 	var stamp *commonpb.WorkerVersionStamp
 	// eager activity always uses workflow's build ID
 	buildId := handler.mutableState.GetAssignedBuildId()
 	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
+
+	shardClock, err := handler.shard.NewVectorClock()
+	if err != nil {
+		return nil, err
+	}
 
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
@@ -554,8 +707,10 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.NewString(),
 		handler.identity,
 		stamp,
+		handler.workflowTaskDeployment,
 		nil,
-		nil,
+		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
+		shardClock,
 	); err != nil {
 		return nil, err
 	}
@@ -563,11 +718,6 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	runID := handler.mutableState.GetExecutionState().RunId
-
-	shardClock, err := handler.shard.NewVectorClock()
-	if err != nil {
-		return nil, err
-	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),
@@ -581,6 +731,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -607,9 +758,27 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		HeartbeatDetails:            ai.LastHeartbeatDetails,
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
+		Priority:                    ai.Priority,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			handler.mutableState.GetNamespaceEntry().Name().String(),
+			ai.TaskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(
+				handler.mutableState.GetNamespaceEntry().Name().String(),
+				ai.TaskQueue,
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
@@ -642,7 +811,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 	if ai != nil {
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
-
 		if ai.StartedEventId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
@@ -657,9 +825,67 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
+		} else if ai.WorkerControlTaskQueue != "" {
+			if ai.StartedClock == nil {
+				// StartedClock is nil when the activity is not currently running on a worker
+				// (e.g., in retry backoff, or started before this feature was deployed).
+				// Skip cancel command; the activity will time out normally.
+				handler.logger.Info("Skipping worker cancel command: activity not currently started",
+					tag.WorkflowNamespaceID(handler.mutableState.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(handler.mutableState.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(handler.mutableState.GetWorkflowKey().RunID),
+					tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+				)
+			} else {
+				// Activity has started and worker supports Nexus control tasks - collect for batched dispatch.
+				taskToken, err := handler.tokenSerializer.Serialize(tasktoken.NewActivityTaskToken(
+					handler.mutableState.GetNamespaceEntry().ID().String(),
+					handler.mutableState.GetWorkflowKey().WorkflowID,
+					handler.mutableState.GetWorkflowKey().RunID,
+					ai.ScheduledEventId,
+					ai.ActivityId,
+					ai.ActivityType.GetName(),
+					ai.Attempt,
+					ai.StartedClock,
+					ai.Version,
+					ai.StartVersion,
+					nil,
+					0,
+				))
+				if err != nil {
+					return nil, err
+				}
+				if handler.pendingWorkerCommandsByControlQueue == nil {
+					handler.pendingWorkerCommandsByControlQueue = make(map[string][]*workerpb.WorkerCommand)
+				}
+				handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue] = append(
+					handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue],
+					&workerpb.WorkerCommand{
+						Type: &workerpb.WorkerCommand_CancelActivity{
+							CancelActivity: &workerpb.CancelActivityCommand{
+								TaskToken: taskToken,
+							},
+						},
+					},
+				)
+			}
 		}
 	}
 	return actCancelReqEvent, nil
+}
+
+// flushWorkerCommandsTasks creates WorkerCommandsTasks for all collected worker commands,
+// batched by control queue.
+func (handler *workflowTaskCompletedHandler) flushWorkerCommandsTasks() error {
+	for controlQueue, commands := range handler.pendingWorkerCommandsByControlQueue {
+		if err := handler.mutableState.AddWorkerCommandsTasks(
+			commands,
+			controlQueue,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandStartTimer(
@@ -1024,10 +1250,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,
-		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
 	)
 	if err != nil {
 		return nil, err
@@ -1086,6 +1311,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
+	}
+
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
@@ -1339,7 +1569,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1399,7 +1629,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1446,13 +1676,10 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(
@@ -1505,7 +1732,7 @@ func (c *workflowTaskFailedCause) Message() string {
 	return fmt.Sprintf("%v: %v", c.failedCause, c.causeErr.Error())
 }
 
-// commandValidator implements [workflow.CommandValidator] for use in registered command handlers.
+// commandValidator implements [chasmworkflow.Validator] for use in registered command handlers.
 type commandValidator struct {
 	sizeChecker *workflowSizeChecker
 	commandType enumspb.CommandType

@@ -106,7 +106,7 @@ func TestHistoryManager_InvalidBranchToken_ReturnsInvalidArgument(t *testing.T) 
 
 			store := mock.NewMockExecutionStore(ctrl)
 			// Return a real HistoryBranchUtil that will parse the branch token
-			store.EXPECT().GetHistoryBranchUtil().AnyTimes().Return(&p.HistoryBranchUtilImpl{})
+			store.EXPECT().GetHistoryBranchUtil().AnyTimes().Return(p.NewHistoryBranchUtil(serialization.NewSerializer()))
 
 			em := p.NewExecutionManager(
 				store,

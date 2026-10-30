@@ -124,7 +124,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var signals []sqlplugin.SignalInfoMapsRow
-	for i := 0; i < numSignals; i++ {
+	for range numSignals {
 		signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		signals = append(signals, signal)
 	}
@@ -291,7 +291,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 
 	var signals []sqlplugin.SignalInfoMapsRow
 	var signalInitiatedIDs []int64
-	for i := 0; i < numSignals; i++ {
+	for range numSignals {
 		signalInitiatedID := rand.Int63()
 		signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, signalInitiatedID)
 		signalInitiatedIDs = append(signalInitiatedIDs, signalInitiatedID)
@@ -336,7 +336,7 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var signals []sqlplugin.SignalInfoMapsRow
-	for i := 0; i < numSignals; i++ {
+	for range numSignals {
 		signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		signals = append(signals, signal)
 	}

@@ -44,6 +44,7 @@ type (
 		Cancel context.CancelFunc
 	}
 
+	// testSerializer wraps a serializer to add support for fake tasks used in tests
 	testSerializer struct {
 		serialization.Serializer
 	}
@@ -52,15 +53,6 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
-
-	taskCategories = []tasks.Category{
-		tasks.CategoryTransfer,
-		tasks.CategoryTimer,
-		tasks.CategoryReplication,
-		tasks.CategoryVisibility,
-		fakeImmediateTaskCategory,
-		fakeScheduledTaskCategory,
-	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -70,16 +62,16 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	serializer = newTestSerializer(serializer)
+	testSer := &testSerializer{Serializer: serializer}
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serializer,
+			testSer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serializer,
+			testSer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
@@ -482,7 +474,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		10,
 	)
 	s.Len(loadedTasks, 2)
-	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+	s.Negative(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()))
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
@@ -524,7 +516,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		10,
 	)
 	s.Len(loadedTasks, 2)
-	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+	s.Negative(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()))
 
 	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -592,7 +584,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	for {
 		response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, request)
 		s.NoError(err)
-		s.True(len(response.Tasks) <= batchSize)
+		s.LessOrEqual(len(response.Tasks), batchSize)
 		loadedTasks = append(loadedTasks, response.Tasks...)
 		if len(response.NextPageToken) == 0 {
 			break
@@ -662,22 +654,14 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	s.Empty(historyTasks)
 }
 
-func newTestSerializer(
-	serializer serialization.Serializer,
-) serialization.Serializer {
-	return &testSerializer{
-		Serializer: serializer,
-	}
-}
-
 func (s *testSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
 		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
-			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
-			WorkflowId:     fakeTask.WorkflowKey.WorkflowID,
-			RunId:          fakeTask.WorkflowKey.RunID,
+			NamespaceId:    fakeTask.NamespaceID,
+			WorkflowId:     fakeTask.WorkflowID,
+			RunId:          fakeTask.RunID,
 			TaskType:       fakeTask.GetType(),
 			Version:        fakeTask.Version,
 			TaskId:         fakeTask.TaskID,
@@ -691,7 +675,6 @@ func (s *testSerializer) SerializeTask(
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
 	}
-
 	return s.Serializer.SerializeTask(task)
 }
 

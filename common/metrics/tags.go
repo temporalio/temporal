@@ -20,44 +20,61 @@ const (
 	buildPlatformTag = "build_platform"
 	goVersionTag     = "go_version"
 
-	instance       = "instance"
-	namespace      = "namespace"
-	namespaceID    = "namespace_id"
-	namespaceState = "namespace_state"
-	sourceCluster  = "source_cluster"
-	targetCluster  = "target_cluster"
-	fromCluster    = "from_cluster"
-	toCluster      = "to_cluster"
-	taskQueue      = "taskqueue"
-	workflowType   = "workflowType"
-	activityType   = "activityType"
-	commandType    = "commandType"
-	serviceName    = "service_name"
-	actionType     = "action_type"
-	workerBuildId  = "worker-build-id"
-	destination    = "destination"
+	instance                = "instance"
+	namespace               = "namespace"
+	namespaceID             = "namespace_id"
+	namespaceState          = "namespace_state"
+	sourceCluster           = "source_cluster"
+	targetCluster           = "target_cluster"
+	transport               = "transport"
+	taskSourceTag           = "source"
+	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
+	pollerScaleDecisionTag  = "decision"
+	fromCluster             = "from_cluster"
+	toCluster               = "to_cluster"
+	taskQueue               = "taskqueue"
+	workflowType            = "workflowType"
+	activityType            = "activityType"
+	commandType             = "commandType"
+	serviceName             = "service_name"
+	concurrencyLimitGroup   = "concurrency_limit_group"
+	actionType              = "action_type"
+	workerVersion           = "worker_version"
+	workerDeploymentName    = "worker_deployment_name"
+	workerDeploymentBuildID = "worker_build_id"
+	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+
+	nexusSerializationContextMatch = "context_match"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType     = "replicationTaskType"
-	replicationTaskPriority = "replicationTaskPriority"
-	taskExpireStage         = "task_expire_stage"
-	versioningBehavior      = "versioning_behavior"
-	isFirstAttempt          = "first-attempt"
-	workflowStatus          = "workflow_status"
-	behaviorBefore          = "behavior_before"
-	behaviorAfter           = "behavior_after"
-	runInitiator            = "run_initiator"
-	fromUnversioned         = "from_unversioned"
-	toUnversioned           = "to_unversioned"
-	queryTypeTag            = "query_type"
-	namespaceAllValue       = "all"
-	unknownValue            = "_unknown_"
-	totalMetricSuffix       = "_total"
-	tagExcludedValue        = "_tag_excluded_"
-	falseValue              = "false"
-	trueValue               = "true"
-	errorPrefix             = "*"
+	replicationTaskType                            = "replicationTaskType"
+	replicationTaskPriority                        = "replicationTaskPriority"
+	taskAddResult                                  = "task_add_result"
+	versioningBehavior                             = "versioning_behavior"
+	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
+	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
+	suggestContinueAsNewReasonTooManyHistoryEvents = "suggest_continue_as_new_reason_too_many_history_events"
+	suggestContinueAsNewReasonHistorySizeTooLarge  = "suggest_continue_as_new_reason_history_size_too_large"
+	isFirstAttempt                                 = "first-attempt"
+	workflowStatus                                 = "workflow_status"
+	behaviorBefore                                 = "behavior_before"
+	behaviorAfter                                  = "behavior_after"
+	runInitiator                                   = "run_initiator"
+	fromUnversioned                                = "from_unversioned"
+	toUnversioned                                  = "to_unversioned"
+	queryTypeTag                                   = "query_type"
+	namespaceAllValue                              = "all"
+	clientName                                     = "client_name"
+	isInternal                                     = "is_internal"
+	unknownValue                                   = "_unknown_"
+	totalMetricSuffix                              = "_total"
+	tagExcludedValue                               = "_tag_excluded_"
+	falseValue                                     = "false"
+	trueValue                                      = "true"
+	errorPrefix                                    = "*"
+	ScalerShadowModeTagName                        = "scaler_shadow_mode"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -144,6 +161,14 @@ func TargetClusterTag(value string) Tag {
 	return Tag{Key: targetCluster, Value: value}
 }
 
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
+}
+
 // FromClusterIDTag returns a new from cluster tag.
 func FromClusterIDTag(value int32) Tag {
 	return Tag{Key: fromCluster, Value: strconv.FormatInt(int64(value), 10)}
@@ -152,6 +177,22 @@ func FromClusterIDTag(value int32) Tag {
 // ToClusterIDTag returns a new to cluster tag.
 func ToClusterIDTag(value int32) Tag {
 	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
+}
+
+// FromClusterTag returns a new from cluster tag keyed by cluster name.
+func FromClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: fromCluster, Value: value}
+}
+
+// ToClusterTag returns a new to cluster tag keyed by cluster name.
+func ToClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: toCluster, Value: value}
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
@@ -174,13 +215,27 @@ func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 }
 
 // Consider passing the value of "metrics.breakdownByBuildID" dynamic config to this function.
-func WorkerBuildIdTag(buildId string, buildIdBreakdown bool) Tag {
-	if buildId == "" {
-		buildId = "__unversioned__"
-	} else if !buildIdBreakdown {
-		buildId = "__versioned__"
+func WorkerVersionTag(version string, versionBreakdown bool) Tag {
+	if version == "" {
+		version = "__unversioned__"
+	} else if !versionBreakdown {
+		version = "__versioned__"
 	}
-	return Tag{Key: workerBuildId, Value: buildId}
+	return Tag{Key: workerVersion, Value: version}
+}
+
+func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
+	if !versionBreakdown {
+		deploymentName = ""
+	}
+	return Tag{Key: workerDeploymentName, Value: deploymentName}
+}
+
+func WorkerDeploymentBuildIDTag(buildID string, versionBreakdown bool) Tag {
+	if !versionBreakdown {
+		buildID = ""
+	}
+	return Tag{Key: workerDeploymentBuildID, Value: buildID}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.
@@ -252,6 +307,20 @@ func TaskTypeTag(value string) Tag {
 	return Tag{Key: TaskTypeTagName, Value: value}
 }
 
+func ArchetypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ArchetypeTagName, Value: value}
+}
+
+func ChasmTaskTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ChasmTaskTypeTagName, Value: value}
+}
+
 func PartitionTag(partition string) Tag {
 	return Tag{Key: PartitionTagName, Value: partition}
 }
@@ -261,6 +330,58 @@ func TaskPriorityTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: TaskPriorityTagName, Value: value}
+}
+
+func TaskSourceTag(source enumsspb.TaskSource) Tag {
+	return Tag{Key: taskSourceTag, Value: source.String()}
+}
+
+func ForwardedTag(forwarded bool) Tag {
+	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
+}
+
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
+}
+
+const (
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
+)
+
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
+}
+
+const (
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
+)
+
+const (
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
+)
+
+// Reasons for WorkflowTaskCompletionBufferLost.
+const (
+	BufferLostReasonNewPaginationLimit ReasonString = "new_pagination_limit"
+	BufferLostReasonMemoryLimit        ReasonString = "memory_limit"
+	BufferLostReasonMissingBuffer      ReasonString = "missing_buffer"
+	BufferLostReasonMissingPage        ReasonString = "missing_page"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
@@ -307,6 +428,10 @@ func WorkerPluginNameTag(value string) Tag {
 	return Tag{Key: WorkerPluginNameTagName, Value: value}
 }
 
+func WorkerStorageDriverTypeTag(value string) Tag {
+	return Tag{Key: WorkerStorageDriverTypeTagName, Value: value}
+}
+
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.
 func VersionedTag(versioned string) Tag {
 	return Tag{Key: versionedTagName, Value: versioned}
@@ -339,6 +464,14 @@ func NexusOperationTag(value string) Tag {
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
+func NexusOperationBackendTag(value string) Tag {
+	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
+func NexusSerializationContextMatchTag(value ReasonString) Tag {
+	return Tag{Key: nexusSerializationContextMatch, Value: string(value)}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}
@@ -351,6 +484,29 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
+
+func ConcurrencyLimitGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = "not_applicable"
+	}
+	return Tag{Key: concurrencyLimitGroup, Value: value}
+}
+
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
 
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
@@ -383,6 +539,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 
@@ -401,8 +560,46 @@ func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
 }
 
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
+}
+
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return Tag{Key: versioningBehavior, Value: behavior.String()}
+}
+
+func ContinueAsNewVersioningBehaviorTag(canBehavior enumspb.ContinueAsNewVersioningBehavior) Tag {
+	return Tag{Key: continueAsNewVersioningBehavior, Value: canBehavior.String()}
+}
+
+func SuggestContinueAsNewReasonTooManyUpdatesTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTooManyUpdates, Value: v}
+}
+
+func SuggestContinueAsNewReasonTooManyHistoryEventsTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTooManyHistoryEvents, Value: v}
+}
+
+func SuggestContinueAsNewReasonHistorySizeTooLargeTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonHistorySizeTooLarge, Value: v}
 }
 
 func WorkflowStatusTag(status string) Tag {
@@ -464,9 +661,17 @@ func ToUnversionedTag(version string) Tag {
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
 
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
+// ClientNameTag returns a new client_name tag for the SDK client name.
+func ClientNameTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: clientName, Value: value}
+}
+
+func IsInternalTag(internal bool) Tag {
+	return Tag{Key: isInternal, Value: strconv.FormatBool(internal)}
+}
 
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}
@@ -474,4 +679,16 @@ func PersistenceDBKindTag(kind string) Tag {
 
 func HeaderCallsiteTag(kind string) Tag {
 	return Tag{Key: headerCallsiteTagName, Value: kind}
+}
+
+func TimeoutTypeTag(timeoutType string) Tag {
+	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}
+
+func ScalerShadowModeTag(enabled bool) Tag {
+	v := falseValue
+	if enabled {
+		v = trueValue
+	}
+	return Tag{Key: ScalerShadowModeTagName, Value: v}
 }

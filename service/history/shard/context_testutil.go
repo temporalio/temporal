@@ -5,19 +5,28 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/softassert"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -41,8 +50,9 @@ func NewTestContextWithTimeSource(
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 	timeSource clock.TimeSource,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
-	result := NewTestContext(ctrl, shardInfo, config)
+	result := NewTestContext(ctrl, shardInfo, config, eventLogger...)
 	result.timeSource = timeSource
 	result.taskKeyManager.generator.timeSource = timeSource
 	result.Resource.TimeSource = timeSource
@@ -53,15 +63,21 @@ func NewTestContext(
 	ctrl *gomock.Controller,
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
+	var logger otellog.Logger
+	if len(eventLogger) > 0 {
+		logger = eventLogger[0]
+	}
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
 		ContextConfigOverrides{
-			ShardInfo: shardInfo,
-			Config:    config,
+			ShardInfo:   shardInfo,
+			Config:      config,
+			EventLogger: logger,
 		},
 	)
 	return &ContextTest{
@@ -77,6 +93,7 @@ type ContextConfigOverrides struct {
 	Registry         namespace.Registry
 	ClusterMetadata  cluster.Metadata
 	ExecutionManager persistence.ExecutionManager
+	EventLogger      otellog.Logger
 }
 
 type StubContext struct {
@@ -125,9 +142,23 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
+	// A real shard context always has an owner unique to that instance.
+	owner := fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
+	if configured := config.ShardInfo.GetOwner(); configured != "" {
+		owner = configured
+	}
+
+	// Tests that attach completion callbacks need the shard to hand out a validator. The
+	// shared test limits apply; tests needing their own call SetCallbackValidator. Building
+	// only fails when a limit getter is unset, which the shared config never leaves nil.
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
+	if err != nil {
+		softassert.Fail(t.GetLogger(), "failed to build a callbacks validator for the test shard context", tag.Error(err))
+	}
+
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),
-		owner:               config.ShardInfo.GetOwner(),
+		owner:               owner,
 		stringRepr:          fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
 		executionManager:    executionManager,
 		metricsHandler:      t.MetricsHandler,
@@ -138,18 +169,23 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 		queueMetricEmitter:  sync.Once{},
+		eventLogger:         config.EventLogger,
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[historyi.Engine](),
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
-		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
 
-		clusterMetadata:         clusterMetadata,
-		timeSource:              t.TimeSource,
-		namespaceRegistry:       registry,
-		stateMachineRegistry:    hsm.NewRegistry(),
-		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
+		clusterMetadata:      clusterMetadata,
+		timeSource:           t.TimeSource,
+		namespaceRegistry:    registry,
+		stateMachineRegistry: hsm.NewRegistry(),
+		chasmRegistry:        chasm.NewRegistry(t.GetLogger()),
+		callbackValidator:    callbackValidator,
+		businessIDRateLimiters: cache.New(
+			config.Config.BusinessIDReuseLimiterCacheSize(),
+			&cache.Options{TTL: config.Config.BusinessIDReuseLimiterCacheTTL()},
+		),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),
@@ -171,6 +207,14 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		},
 	)
 	ctx.taskKeyManager.setRangeID(config.ShardInfo.RangeId)
+	ctx.handoverTracker = NewDefaultHandoverTrackerFactory()(HandoverTrackerParams{
+		ClusterMetadata:         clusterMetadata,
+		GetMaxReplicationTaskID: ctx.getMaxReplicationTaskID,
+		ErrorByStateFn:          ctx.errorByState,
+		NotifyReplicationFn:     ctx.notifyReplicationQueueProcessor,
+		NamespaceRegistry:       registry,
+		Logger:                  ctx.contextTaggedLogger,
+	})
 	return ctx
 }
 
@@ -210,6 +254,15 @@ func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 	s.chasmRegistry = reg
 }
 
+func (s *ContextTest) SetChasmWorkflowRegistry(reg *chasmworkflow.Registry) {
+	s.chasmWorkflowRegistry = reg
+}
+
+// SetCallbackValidator sets s.callbackValidator. Only used by tests.
+func (s *ContextTest) SetCallbackValidator(v callbacks.Validator) {
+	s.callbackValidator = v
+}
+
 func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
 	s.clusterMetadata = metadata
 }
@@ -219,6 +272,12 @@ func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
 // background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
 	s.FinishStop()
+}
+
+// SetFinalizerForTest overrides the shard's finalizer. Production shards always have one, so
+// tests that exercise cache paths gated on a finalizer being present must set it explicitly.
+func (s *ContextTest) SetFinalizerForTest(f *finalizer.Finalizer) {
+	s.finalizer = f
 }
 
 func (s *StubContext) GetEngine(_ context.Context) (historyi.Engine, error) {

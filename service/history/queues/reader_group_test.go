@@ -71,7 +71,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	s.False(ok)
 	s.Nil(r)
 
-	for i := int64(0); i < 3; i++ {
+	for i := range int64(3) {
 		r := s.readerGroup.NewReader(i)
 
 		readers := s.readerGroup.Readers()
@@ -98,7 +98,7 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	s.readerGroup.RemoveReader(readerID)
 
 	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
-	s.Len(s.readerGroup.Readers(), 0)
+	s.Empty(s.readerGroup.Readers())
 }
 
 func (s *readerGroupSuite) TestForEach() {

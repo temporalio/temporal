@@ -12,8 +12,8 @@ func TestImmediate(t *testing.T) {
 	var i int
 	immediate := effect.Immediate(context.TODO())
 	immediate.OnAfterCommit(func(context.Context) { i = 1 })
-	require.Equal(t, i, 1, "commit func should have run")
+	require.Equal(t, 1, i, "commit func should have run")
 
 	immediate.OnAfterRollback(func(context.Context) { i = 2 })
-	require.Equal(t, i, 1, "rollback func should not run")
+	require.Equal(t, 1, i, "rollback func should not run")
 }

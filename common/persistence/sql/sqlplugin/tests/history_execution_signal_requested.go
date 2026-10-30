@@ -120,7 +120,7 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var signalRequests []sqlplugin.SignalsRequestedSetsRow
-	for i := 0; i < numSignalRequests; i++ {
+	for range numSignalRequests {
 		signalRequest := s.newRandomExecutionSignalRequestRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionSignalID))
 		signalRequests = append(signalRequests, signalRequest)
 	}
@@ -287,7 +287,7 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceDeleteSelect_Multiple() 
 
 	var signalRequests []sqlplugin.SignalsRequestedSetsRow
 	var signalRequestIDs []string
-	for i := 0; i < numSignalRequests; i++ {
+	for range numSignalRequests {
 		signalRequestID := shuffle.String(testHistoryExecutionSignalID)
 		signalRequest := s.newRandomExecutionSignalRequestRow(shardID, namespaceID, workflowID, runID, signalRequestID)
 		signalRequestIDs = append(signalRequestIDs, signalRequestID)
@@ -332,7 +332,7 @@ func (s *historyExecutionSignalRequestSuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var signalRequests []sqlplugin.SignalsRequestedSetsRow
-	for i := 0; i < numSignalRequests; i++ {
+	for range numSignalRequests {
 		signalRequest := s.newRandomExecutionSignalRequestRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionSignalID))
 		signalRequests = append(signalRequests, signalRequest)
 	}

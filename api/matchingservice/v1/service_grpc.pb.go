@@ -24,6 +24,7 @@ const (
 	MatchingService_PollActivityTaskQueue_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue"
 	MatchingService_AddWorkflowTask_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask"
 	MatchingService_AddActivityTask_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask"
+	MatchingService_GrantEagerDispatch_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/GrantEagerDispatch"
 	MatchingService_QueryWorkflow_FullMethodName                          = "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow"
 	MatchingService_RespondQueryTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondQueryTaskCompleted"
 	MatchingService_DispatchNexusTask_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask"
@@ -31,6 +32,8 @@ const (
 	MatchingService_RespondNexusTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted"
 	MatchingService_RespondNexusTaskFailed_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
+	MatchingService_CancelOutstandingWorkerPolls_FullMethodName           = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls"
+	MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPollsPartition"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
 	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
 	MatchingService_DescribeVersionedTaskQueues_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeVersionedTaskQueues"
@@ -55,8 +58,10 @@ const (
 	MatchingService_ListNexusEndpoints_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusEndpoints"
 	MatchingService_RecordWorkerHeartbeat_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat"
 	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
+	MatchingService_CountWorkers_FullMethodName                           = "/temporal.server.api.matchingservice.v1.MatchingService/CountWorkers"
 	MatchingService_UpdateTaskQueueConfig_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig"
 	MatchingService_DescribeWorker_FullMethodName                         = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker"
+	MatchingService_UpdateFairnessState_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState"
 	MatchingService_CheckTaskQueueVersionMembership_FullMethodName        = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership"
 )
 
@@ -76,6 +81,22 @@ type MatchingServiceClient interface {
 	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(ctx context.Context, in *AddActivityTaskRequest, opts ...grpc.CallOption) (*AddActivityTaskResponse, error)
+	// GrantEagerDispatch is called by the history service to ask a task queue partition whether tasks may be
+	// dispatched eagerly, meaning returned inline to the worker that is already making a call, instead of going
+	// through Add{Workflow,Activity}Task and matching's dispatch path. It covers activity tasks dispatched in a
+	// RespondWorkflowTaskCompleted response and the first workflow task dispatched in a StartWorkflowExecution
+	// response; task_queue_partition.task_queue_type distinguishes them.
+	//
+	// This RPC persists nothing and enqueues nothing: it reads the partition's state and answers per item. For each
+	// item it grants, the partition debits its whole-queue and per-fairness-key rate limiters, since the eagerly
+	// dispatched task will never reach matching again. Items it does not grant are not charged; history sends those
+	// through Add{Workflow,Activity}Task as usual, and they are limited normally at dispatch time.
+	//
+	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
+	// history ends up not using is not refunded.
+	//
+	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(ctx context.Context, in *QueryWorkflowRequest, opts ...grpc.CallOption) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
@@ -96,6 +117,14 @@ type MatchingServiceClient interface {
 	// api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
 	// to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
 	CancelOutstandingPoll(ctx context.Context, in *CancelOutstandingPollRequest, opts ...grpc.CallOption) (*CancelOutstandingPollResponse, error)
+	// CancelOutstandingWorkerPolls cancels any outstanding polls for a given worker instance key.
+	// These polls could be waiting on different partitions of the task queue.
+	// This is called during worker shutdown to eagerly cancel polls and avoid giving out tasks to workers that are shutting down.
+	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
+	// are issued after calling this RPC, otherwise those polls will not be cancelled.
+	CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the specified partitions.
+	CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
@@ -107,33 +136,24 @@ type MatchingServiceClient interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(ctx context.Context, in *UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	UpdateWorkerVersioningRules(ctx context.Context, in *UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*UpdateWorkerVersioningRulesResponse, error)
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
-	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0131::http-uri-name=disabled
-	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error)
 	// This request should always be routed to the node holding the root partition of the workflow task queue.
 	SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error)
@@ -155,12 +175,9 @@ type MatchingServiceClient interface {
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
@@ -170,31 +187,21 @@ type MatchingServiceClient interface {
 	CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0133::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0133::http-uri-parent=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	CreateNexusEndpoint(ctx context.Context, in *CreateNexusEndpointRequest, opts ...grpc.CallOption) (*CreateNexusEndpointResponse, error)
 	// Optimistically update a Nexus endpoint based on provided version.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	UpdateNexusEndpoint(ctx context.Context, in *UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*UpdateNexusEndpointResponse, error)
 	// Delete a service by its name.
 	DeleteNexusEndpoint(ctx context.Context, in *DeleteNexusEndpointRequest, opts ...grpc.CallOption) (*DeleteNexusEndpointResponse, error)
@@ -206,22 +213,28 @@ type MatchingServiceClient interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
+	// CountWorkers counts workers in the specified namespace that match the provided query.
+	CountWorkers(ctx context.Context, in *CountWorkersRequest, opts ...grpc.CallOption) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error)
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(ctx context.Context, in *DescribeWorkerRequest, opts ...grpc.CallOption) (*DescribeWorkerResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated. Fairness selection is controlled by dynamic configuration.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error)
 }
@@ -264,6 +277,15 @@ func (c *matchingServiceClient) AddWorkflowTask(ctx context.Context, in *AddWork
 func (c *matchingServiceClient) AddActivityTask(ctx context.Context, in *AddActivityTaskRequest, opts ...grpc.CallOption) (*AddActivityTaskResponse, error) {
 	out := new(AddActivityTaskResponse)
 	err := c.cc.Invoke(ctx, MatchingService_AddActivityTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error) {
+	out := new(GrantEagerDispatchResponse)
+	err := c.cc.Invoke(ctx, MatchingService_GrantEagerDispatch_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -327,6 +349,24 @@ func (c *matchingServiceClient) RespondNexusTaskFailed(ctx context.Context, in *
 func (c *matchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *CancelOutstandingPollRequest, opts ...grpc.CallOption) (*CancelOutstandingPollResponse, error) {
 	out := new(CancelOutstandingPollResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingPoll_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error) {
+	out := new(CancelOutstandingWorkerPollsResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPolls_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	out := new(CancelOutstandingWorkerPollsPartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -549,6 +589,15 @@ func (c *matchingServiceClient) ListWorkers(ctx context.Context, in *ListWorkers
 	return out, nil
 }
 
+func (c *matchingServiceClient) CountWorkers(ctx context.Context, in *CountWorkersRequest, opts ...grpc.CallOption) (*CountWorkersResponse, error) {
+	out := new(CountWorkersResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CountWorkers_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error) {
 	out := new(UpdateTaskQueueConfigResponse)
 	err := c.cc.Invoke(ctx, MatchingService_UpdateTaskQueueConfig_FullMethodName, in, out, opts...)
@@ -561,6 +610,16 @@ func (c *matchingServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *U
 func (c *matchingServiceClient) DescribeWorker(ctx context.Context, in *DescribeWorkerRequest, opts ...grpc.CallOption) (*DescribeWorkerResponse, error) {
 	out := new(DescribeWorkerResponse)
 	err := c.cc.Invoke(ctx, MatchingService_DescribeWorker_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Deprecated: Do not use.
+func (c *matchingServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
+	out := new(UpdateFairnessStateResponse)
+	err := c.cc.Invoke(ctx, MatchingService_UpdateFairnessState_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +641,7 @@ func (c *matchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Cont
 type MatchingServiceServer interface {
 	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
 	// WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
-	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error)
+	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponseWithRawHistory, error)
 	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 	PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error)
@@ -592,6 +651,22 @@ type MatchingServiceServer interface {
 	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(context.Context, *AddActivityTaskRequest) (*AddActivityTaskResponse, error)
+	// GrantEagerDispatch is called by the history service to ask a task queue partition whether tasks may be
+	// dispatched eagerly, meaning returned inline to the worker that is already making a call, instead of going
+	// through Add{Workflow,Activity}Task and matching's dispatch path. It covers activity tasks dispatched in a
+	// RespondWorkflowTaskCompleted response and the first workflow task dispatched in a StartWorkflowExecution
+	// response; task_queue_partition.task_queue_type distinguishes them.
+	//
+	// This RPC persists nothing and enqueues nothing: it reads the partition's state and answers per item. For each
+	// item it grants, the partition debits its whole-queue and per-fairness-key rate limiters, since the eagerly
+	// dispatched task will never reach matching again. Items it does not grant are not charged; history sends those
+	// through Add{Workflow,Activity}Task as usual, and they are limited normally at dispatch time.
+	//
+	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
+	// history ends up not using is not refunded.
+	//
+	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
@@ -612,6 +687,14 @@ type MatchingServiceServer interface {
 	// api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
 	// to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
 	CancelOutstandingPoll(context.Context, *CancelOutstandingPollRequest) (*CancelOutstandingPollResponse, error)
+	// CancelOutstandingWorkerPolls cancels any outstanding polls for a given worker instance key.
+	// These polls could be waiting on different partitions of the task queue.
+	// This is called during worker shutdown to eagerly cancel polls and avoid giving out tasks to workers that are shutting down.
+	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
+	// are issued after calling this RPC, otherwise those polls will not be cancelled.
+	CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the specified partitions.
+	CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
@@ -623,33 +706,24 @@ type MatchingServiceServer interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(context.Context, *UpdateWorkerBuildIdCompatibilityRequest) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	UpdateWorkerVersioningRules(context.Context, *UpdateWorkerVersioningRulesRequest) (*UpdateWorkerVersioningRulesResponse, error)
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
-	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0131::http-uri-name=disabled
-	//
-	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error)
 	// This request should always be routed to the node holding the root partition of the workflow task queue.
 	SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error)
@@ -671,12 +745,9 @@ type MatchingServiceServer interface {
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
@@ -686,31 +757,21 @@ type MatchingServiceServer interface {
 	CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0133::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0133::http-uri-parent=disabled
-	//
-	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	CreateNexusEndpoint(context.Context, *CreateNexusEndpointRequest) (*CreateNexusEndpointResponse, error)
 	// Optimistically update a Nexus endpoint based on provided version.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	UpdateNexusEndpoint(context.Context, *UpdateNexusEndpointRequest) (*UpdateNexusEndpointResponse, error)
 	// Delete a service by its name.
 	DeleteNexusEndpoint(context.Context, *DeleteNexusEndpointRequest) (*DeleteNexusEndpointResponse, error)
@@ -722,22 +783,28 @@ type MatchingServiceServer interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
+	// CountWorkers counts workers in the specified namespace that match the provided query.
+	CountWorkers(context.Context, *CountWorkersRequest) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-	//
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//
-	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error)
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error)
+	// Deprecated: Do not use.
+	// Deprecated. Fairness selection is controlled by dynamic configuration.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
@@ -747,7 +814,7 @@ type MatchingServiceServer interface {
 type UnimplementedMatchingServiceServer struct {
 }
 
-func (UnimplementedMatchingServiceServer) PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error) {
+func (UnimplementedMatchingServiceServer) PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponseWithRawHistory, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTaskQueue not implemented")
 }
 func (UnimplementedMatchingServiceServer) PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error) {
@@ -758,6 +825,9 @@ func (UnimplementedMatchingServiceServer) AddWorkflowTask(context.Context, *AddW
 }
 func (UnimplementedMatchingServiceServer) AddActivityTask(context.Context, *AddActivityTaskRequest) (*AddActivityTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddActivityTask not implemented")
+}
+func (UnimplementedMatchingServiceServer) GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GrantEagerDispatch not implemented")
 }
 func (UnimplementedMatchingServiceServer) QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryWorkflow not implemented")
@@ -779,6 +849,12 @@ func (UnimplementedMatchingServiceServer) RespondNexusTaskFailed(context.Context
 }
 func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context, *CancelOutstandingPollRequest) (*CancelOutstandingPollResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingPoll not implemented")
+}
+func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPolls not implemented")
+}
+func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPollsPartition not implemented")
 }
 func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueue not implemented")
@@ -852,11 +928,17 @@ func (UnimplementedMatchingServiceServer) RecordWorkerHeartbeat(context.Context,
 func (UnimplementedMatchingServiceServer) ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
 }
+func (UnimplementedMatchingServiceServer) CountWorkers(context.Context, *CountWorkersRequest) (*CountWorkersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CountWorkers not implemented")
+}
 func (UnimplementedMatchingServiceServer) UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueConfig not implemented")
 }
 func (UnimplementedMatchingServiceServer) DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorker not implemented")
+}
+func (UnimplementedMatchingServiceServer) UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateFairnessState not implemented")
 }
 func (UnimplementedMatchingServiceServer) CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueVersionMembership not implemented")
@@ -942,6 +1024,24 @@ func _MatchingService_AddActivityTask_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).AddActivityTask(ctx, req.(*AddActivityTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_GrantEagerDispatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GrantEagerDispatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).GrantEagerDispatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_GrantEagerDispatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).GrantEagerDispatch(ctx, req.(*GrantEagerDispatchRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1068,6 +1168,42 @@ func _MatchingService_CancelOutstandingPoll_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).CancelOutstandingPoll(ctx, req.(*CancelOutstandingPollRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_CancelOutstandingWorkerPolls_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelOutstandingWorkerPollsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPolls(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CancelOutstandingWorkerPolls_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPolls(ctx, req.(*CancelOutstandingWorkerPollsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_CancelOutstandingWorkerPollsPartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelOutstandingWorkerPollsPartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, req.(*CancelOutstandingWorkerPollsPartitionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1504,6 +1640,24 @@ func _MatchingService_ListWorkers_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_CountWorkers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountWorkersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CountWorkers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CountWorkers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CountWorkers(ctx, req.(*CountWorkersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_UpdateTaskQueueConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateTaskQueueConfigRequest)
 	if err := dec(in); err != nil {
@@ -1536,6 +1690,24 @@ func _MatchingService_DescribeWorker_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).DescribeWorker(ctx, req.(*DescribeWorkerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_UpdateFairnessState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFairnessStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_UpdateFairnessState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, req.(*UpdateFairnessStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1582,6 +1754,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_AddActivityTask_Handler,
 		},
 		{
+			MethodName: "GrantEagerDispatch",
+			Handler:    _MatchingService_GrantEagerDispatch_Handler,
+		},
+		{
 			MethodName: "QueryWorkflow",
 			Handler:    _MatchingService_QueryWorkflow_Handler,
 		},
@@ -1608,6 +1784,14 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelOutstandingPoll",
 			Handler:    _MatchingService_CancelOutstandingPoll_Handler,
+		},
+		{
+			MethodName: "CancelOutstandingWorkerPolls",
+			Handler:    _MatchingService_CancelOutstandingWorkerPolls_Handler,
+		},
+		{
+			MethodName: "CancelOutstandingWorkerPollsPartition",
+			Handler:    _MatchingService_CancelOutstandingWorkerPollsPartition_Handler,
 		},
 		{
 			MethodName: "DescribeTaskQueue",
@@ -1706,12 +1890,20 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_ListWorkers_Handler,
 		},
 		{
+			MethodName: "CountWorkers",
+			Handler:    _MatchingService_CountWorkers_Handler,
+		},
+		{
 			MethodName: "UpdateTaskQueueConfig",
 			Handler:    _MatchingService_UpdateTaskQueueConfig_Handler,
 		},
 		{
 			MethodName: "DescribeWorker",
 			Handler:    _MatchingService_DescribeWorker_Handler,
+		},
+		{
+			MethodName: "UpdateFairnessState",
+			Handler:    _MatchingService_UpdateFairnessState_Handler,
 		},
 		{
 			MethodName: "CheckTaskQueueVersionMembership",

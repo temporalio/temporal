@@ -50,7 +50,7 @@ type (
 		contextTaggedLogger  log.Logger
 		hostInfoProvider     membership.HostInfoProvider
 		ownership            *ownership
-		status               int32
+		status               atomic.Int32
 		taggedMetricsHandler metrics.Handler
 		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
 		// shards that this controller owns changes.
@@ -103,11 +103,7 @@ func ControllerProvider(
 }
 
 func (c *ControllerImpl) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&c.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !c.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -117,11 +113,7 @@ func (c *ControllerImpl) Start() {
 }
 
 func (c *ControllerImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&c.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !c.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
@@ -153,7 +145,7 @@ func (c *ControllerImpl) GetPingChecks() []pingable.Check {
 }
 
 func (c *ControllerImpl) Status() int32 {
-	return atomic.LoadInt32(&c.status)
+	return c.status.Load()
 }
 
 func (c *ControllerImpl) InitialShardsAcquired(ctx context.Context) error {
@@ -259,7 +251,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.Contro
 		return nil, err
 	}
 
-	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+	if c.status.Load() == common.DaemonStatusStopped {
 		hostInfo := c.hostInfoProvider.HostInfo()
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
@@ -366,7 +358,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.Controllab
 		if err := limiter.Wait(ctx); err != nil {
 			c.contextTaggedLogger.Info("shardLinger: wait timed out",
 				tag.ShardID(shard.GetShardID()),
-				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
+				tag.Duration("duration", time.Since(startTime)),
 			)
 			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
 			break
@@ -513,10 +505,10 @@ func (c *ControllerImpl) checkShardReadiness(
 
 	if ready.Load() != int32(len(shards)) {
 		c.contextTaggedLogger.Info("initial shards not ready",
-			tag.NewInt32("ready", ready.Load()), tag.NewInt("total", len(shards)))
+			tag.Int32("ready", ready.Load()), tag.Int("total", len(shards)))
 		return false
 	}
-	c.contextTaggedLogger.Info("initial shards ready", tag.NewInt("total", len(shards)))
+	c.contextTaggedLogger.Info("initial shards ready", tag.Int("total", len(shards)))
 	return true
 }
 
@@ -594,5 +586,5 @@ func IsShardOwnershipLostError(err error) bool {
 }
 
 func numShardsTag(n int) tag.ZapTag {
-	return tag.NewInt("numShards", n)
+	return tag.Int("numShards", n)
 }

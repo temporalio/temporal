@@ -57,7 +57,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 		lastMessageID = common.EndMessageID
 	}
 
-	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+	paginationFunc := func(paginationToken []byte) ([]any, []byte, error) {
 		t, err := toQueueType(dlqType)
 		if err != nil {
 			return nil, nil, err
@@ -73,7 +73,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		var paginateItems []interface{}
+		var paginateItems []any
 		for _, item := range resp.GetReplicationTasks() {
 			paginateItems = append(paginateItems, item)
 		}
@@ -97,7 +97,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 
 		lastReadMessageID = int(task.SourceTaskId)
 		remainingMessageCount--
-		_, err = outputFile.Write([]byte(fmt.Sprintf("%v\n", string(taskStr))))
+		_, err = outputFile.Write(fmt.Appendf(nil, "%v\n", string(taskStr)))
 		if err != nil {
 			return fmt.Errorf("fail to print dlq messages.: %s", err)
 		}

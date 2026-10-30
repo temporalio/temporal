@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -40,20 +41,54 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 	UnversionedVersionId       = "__unversioned__"
 
+	// ErrPinnedVersionNotInTaskQueueSubstring is the key substring used to identify
+	// when a pinned version is not present in a task queue. This is used for error
+	// classification in batch operations.
+	ErrPinnedVersionNotInTaskQueueSubstring = "is not present in task queue"
+
 	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
 	WorkerDeploymentVersionIDDelimiterV31   = "."
+	WorkerDeploymentVersionDelimiter        = ":"
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
 	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionDelimiter) // 39
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
+
+	// SignalSyncValidationStatus is sent by the WCI workflow to the version workflow
+	// when ValidationStatus changes, so the deployment workflow can maintain an
+	// up-to-date connectivity summary in its memo.
+	SignalSyncValidationStatus = "sync-validation-status"
 )
+
+// FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
+// is not present in a task queue.
+func FormatPinnedVersionNotInTaskQueueError(deploymentName, buildID, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
+	var tqType string
+	switch taskQueueType {
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		tqType = "Workflow"
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+		tqType = "Activity"
+	case enumspb.TASK_QUEUE_TYPE_NEXUS:
+		tqType = "Nexus"
+	default:
+		tqType = "Unknown"
+	}
+	return fmt.Sprintf("Pinned version '%s:%s' %s '%s' of type '%s'",
+		deploymentName, buildID, ErrPinnedVersionNotInTaskQueueSubstring, taskQueue, tqType)
+}
+
+func IsPinnedVersionNotInTaskQueueError(err error) bool {
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	return errors.As(err, &failedPreconditionErr) &&
+		strings.Contains(err.Error(), ErrPinnedVersionNotInTaskQueueSubstring)
+}
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
@@ -164,9 +199,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 		if b == "" {
 			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
 		}
-		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
+		if strings.Contains(d, WorkerDeploymentVersionDelimiter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
 			// TODO: allow '.' once we get rid of v31 stuff
-			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31)
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31)
 		}
 		return &deploymentpb.Deployment{
 			SeriesName: d,
@@ -238,12 +273,14 @@ func MakeDirectiveForWorkflowTask(
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	revisionNumber int64,
+	useRampingVersion bool,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return &taskqueuespb.TaskVersionDirective{
 			Behavior:          behavior,
 			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
 			RevisionNumber:    revisionNumber,
+			UseRampingVersion: useRampingVersion,
 		}
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
@@ -262,24 +299,95 @@ func MakeDirectiveForWorkflowTask(
 
 type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
 
-func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsWFTaskQueueInVersionDetector {
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionCache VersionMembershipAndReactivationStatusCache) IsWFTaskQueueInVersionDetector {
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
-		})
+
+		// Check cache first.
+		if isMember, _, _, ok := versionCache.Get(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+		); ok {
+			return isMember, nil
+		}
+
+		// Cache miss — resolve via matching RPC.
+		isMember, shouldSkipReactivation, revisionNumber, err := checkVersionMembershipAndReactivationEligibility(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
 		if err != nil {
 			return false, err
 		}
-		return resp.GetIsMember(), nil
+
+		// Add result to cache
+		versionCache.Put(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+			isMember, shouldSkipReactivation, revisionNumber,
+		)
+		return isMember, nil
 	}
 }
 
-func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+// checkVersionMembershipAndReactivationEligibility calls matching to check if a task queue belongs to a version
+// and whether the version is currently active-or-draining (see ShouldSkipReactivation for the
+// exact status set). Falls back to fetching the full user data if the CheckTaskQueueVersionMembership
+// RPC is not implemented (this can happen during rolling upgrades where history is on a higher
+// version than matching).
+func checkVersionMembershipAndReactivationEligibility(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID, tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, err error) {
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+	})
+	if err != nil {
+		// If matching is on an older version that doesn't have this RPC,
+		// fall back to fetching full user data and checking version membership based on the received information.
+		if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
+			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
+		}
+		return false, false, 0, err
+	}
+	return resp.GetIsMember(), resp.GetShouldSkipReactivation(), resp.GetRevisionNumber(), nil
+}
+
+// checkVersionMembershipViaUserData is the fallback for when matching doesn't support
+// CheckTaskQueueVersionMembership (e.g. during rolling deployments). It fetches the full
+// Task Queue User Data and checks version membership based on the receieved information.
+func checkVersionMembershipViaUserData(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID string,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, err error) {
+	resp, err := matchingClient.GetTaskQueueUserData(ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: tqType,
+		})
+	if err != nil {
+		return false, false, 0, err
+	}
+	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(tqType)]
+	if !ok {
+		return false, false, 0, nil
+	}
+	deploymentData := tqData.GetDeploymentData()
+	isMember = HasDeploymentVersion(deploymentData, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)))
+	shouldSkipReactivation, revisionNumber = ShouldSkipReactivation(deploymentData, version.GetDeploymentName(), version.GetBuildId())
+	return isMember, shouldSkipReactivation, revisionNumber, nil
+}
+
+func FindOldDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
 	for i, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return i
@@ -308,6 +416,46 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	}
 
 	return false
+}
+
+// ShouldSkipReactivation reports whether a reactivation signal to the given version would
+// be redundant. Returns true when the version's status is CURRENT, RAMPING, or DRAINING.
+// Returns false for DRAINED and INACTIVE (the two statuses the reactivation handler in
+// version_workflow.go acts on) and when the version is not present in the deployment data.
+// (UNSPECIFIED also yields false; in practice the deployment workflow sets a status at
+// construction so this branch should not trigger.)
+//
+// The returned revisionNumber is the version's revision as tracked in the new deployment
+// data format (WorkerDeploymentVersionData.revision_number). It is 0 for the legacy
+// DeploymentVersionData format (which does not carry a revision number) and when the
+// version is not found at all.
+//
+//nolint:staticcheck
+func ShouldSkipReactivation(
+	deployments *persistencespb.DeploymentData,
+	deploymentName string,
+	buildID string,
+) (bool, int64) {
+	// Check old format first (deprecated versions list).
+	for _, vd := range deployments.GetVersions() {
+		if vd.GetVersion().GetDeploymentName() == deploymentName && vd.GetVersion().GetBuildId() == buildID {
+			return isStatusSkippableFromReactivation(vd.GetStatus()), 0
+		}
+	}
+
+	// Check new format (deployments_data map).
+	deploymentData := deployments.GetDeploymentsData()[deploymentName]
+	versionData := deploymentData.GetVersions()[buildID]
+	if versionData == nil || versionData.GetDeleted() {
+		return false, 0
+	}
+	return isStatusSkippableFromReactivation(versionData.GetStatus()), versionData.GetRevisionNumber()
+}
+
+func isStatusSkippableFromReactivation(s enumspb.WorkerDeploymentVersionStatus) bool {
+	return s == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT ||
+		s == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING ||
+		s == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
 }
 
 func CountDeploymentVersions(deployments *persistencespb.DeploymentData) int {
@@ -394,16 +542,20 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
 }
 
-func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
-	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
+func StampFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *commonpb.WorkerVersionStamp {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED && options.GetDeploymentName() != "" {
 		// Versioning 3, do not return stamp.
 		return nil
 	}
-	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
+	// TODO: remove `capabilities.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
-	if cap.GetBuildId() != "" {
-		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
+	if capabilities.GetBuildId() != "" {
+		return &commonpb.WorkerVersionStamp{UseVersioning: capabilities.UseVersioning, BuildId: capabilities.BuildId}
 	}
 	return nil
 }
@@ -423,8 +575,8 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	}
 	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
 	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIDDelimiterV31) ||
-		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
+		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionDelimiter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -473,8 +625,8 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIDDelimiterV31)
 	}
 	// deploymentName cannot have ":"
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionWorkflowIDDelimeter)
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
@@ -515,10 +667,31 @@ func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deployme
 	}
 	return nil
 }
+
+func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	return override.GetOneTime().GetTargetDeploymentVersion()
+}
+
+func GetOverrideTargetDeploymentVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
+		return GetOverridePinnedVersion(override)
+	case *workflowpb.VersioningOverride_OneTime:
+		return o.OneTime.GetTargetDeploymentVersion()
+	case *workflowpb.VersioningOverride_AutoUpgrade:
+		// Auto-upgrade has no stored target version; the version is chosen by matching at task dispatch time
+		return nil
+	default:
+		// Deprecated v0.30/v0.31 pinned override fields.
+		return GetOverridePinnedVersion(override)
+	}
+}
+
 func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
 	if override.GetAutoUpgrade() {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	} else if override.GetPinned() != nil {
+	} else if override.GetPinned() != nil || override.GetOneTime() != nil {
+		// A pending one-time override routes like pinned; unlike pinned, it clears after a WFT completes on its target.
 		return enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
@@ -526,16 +699,16 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func validatePinnedVersionInTaskQueue(ctx context.Context,
+func validateVersionAndGetReactivationEligibility(ctx context.Context,
 	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
-	versionMembershipCache VersionMembershipCache,
+	versionCache VersionMembershipAndReactivationStatusCache,
 	tq string,
 	tqType enumspb.TaskQueueType,
-	namespaceID string) error {
+	namespaceID string) (shouldSkipReactivation bool, revisionNumber int64, err error) {
 
 	// Check if we have recently queried matching to validate if this version exists in the task queue.
-	if isMember, ok := versionMembershipCache.Get(
+	if isMember, cachedActiveOrDraining, cachedRevision, ok := versionCache.Get(
 		namespaceID,
 		tq,
 		tqType,
@@ -543,61 +716,64 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		pinnedVersion.BuildId,
 	); ok {
 		if isMember {
-			return nil
+			return cachedActiveOrDraining, cachedRevision, nil
 		}
-		return serviceerror.NewFailedPrecondition(
-			"Pinned version is not present in the task queue",
+		return false, 0, serviceerror.NewFailedPrecondition(
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 
-	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
-		NamespaceId:   namespaceID,
-		TaskQueue:     tq,
-		TaskQueueType: tqType,
-		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
-	})
+	isMember, shouldSkipReactivation, revisionNumber, err := checkVersionMembershipAndReactivationEligibility(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
 	if err != nil {
-		return err
+		return false, 0, err
 	}
 
 	// Add result to cache
-	versionMembershipCache.Put(
+	versionCache.Put(
 		namespaceID,
 		tq,
 		tqType,
 		pinnedVersion.DeploymentName,
 		pinnedVersion.BuildId,
-		resp.GetIsMember(),
+		isMember,
+		shouldSkipReactivation,
+		revisionNumber,
 	)
-	if !resp.GetIsMember() {
-		return serviceerror.NewFailedPrecondition(
-			"Pinned version is not present in the task queue",
+	if !isMember {
+		return false, 0, serviceerror.NewFailedPrecondition(
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
-	return nil
+	return shouldSkipReactivation, revisionNumber, nil
 }
 
-func ValidateVersioningOverride(ctx context.Context,
-	override *workflowpb.VersioningOverride,
-	matchingClient resource.MatchingClient,
-	versionMembershipCache VersionMembershipCache,
-	tq string,
-	tqType enumspb.TaskQueueType,
-	namespaceID string) error {
+func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
 	}
 
-	if override.GetAutoUpgrade() { // v0.32
+	switch o := override.GetOverride().(type) { // v0.32
+	case *workflowpb.VersioningOverride_AutoUpgrade:
+		if !o.AutoUpgrade {
+			return serviceerror.NewInvalidArgument("auto-upgrade override must be true")
+		}
 		return nil
-	} else if p := override.GetPinned(); p != nil {
+	case *workflowpb.VersioningOverride_Pinned:
+		p := o.Pinned
 		if p.GetVersion() == nil {
 			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
 		}
+		// CONSIDER(Shivam): Reject unknown pinned override behavior values after aligning this validation across all VersioningOverride callers.
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+		return nil
+	case *workflowpb.VersioningOverride_OneTime:
+		oneTime := o.OneTime
+		if oneTime.GetTargetDeploymentVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide target deployment version if override is one-time.")
+		}
+		return nil
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -607,12 +783,7 @@ func ValidateVersioningOverride(ctx context.Context,
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			if err != nil {
-				return err
-			}
-
-			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
-
+			return err
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
@@ -632,6 +803,63 @@ func ValidateVersioningOverride(ctx context.Context,
 	return nil
 }
 
+// ValidateVersioningOverride validates both the override structure and its v0.32 deployment version fields.
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride, maxIDLengthLimit int) error {
+	if err := ValidateVersioningOverrideStructure(override); err != nil {
+		return err
+	}
+
+	var version *deploymentpb.WorkerDeploymentVersion
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
+		version = o.Pinned.GetVersion()
+	case *workflowpb.VersioningOverride_OneTime:
+		version = o.OneTime.GetTargetDeploymentVersion()
+	default:
+		return nil
+	}
+
+	if err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), maxIDLengthLimit); err != nil {
+		return err
+	}
+	return ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), maxIDLengthLimit)
+}
+
+func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context,
+	override *workflowpb.VersioningOverride,
+	matchingClient resource.MatchingClient,
+	versionCache VersionMembershipAndReactivationStatusCache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) (shouldSkipReactivation bool, revisionNumber int64, err error) {
+	if err := ValidateVersioningOverrideStructure(override); err != nil {
+		return false, 0, err
+	}
+	if override == nil {
+		return false, 0, nil
+	}
+
+	// The following checks are for v0.32 protos of worker-versioning which may/may not require reactivation checks
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_AutoUpgrade:
+		return false, 0, nil
+	case *workflowpb.VersioningOverride_Pinned:
+		return validateVersionAndGetReactivationEligibility(ctx, o.Pinned.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	case *workflowpb.VersioningOverride_OneTime:
+		return validateVersionAndGetReactivationEligibility(ctx, o.OneTime.GetTargetDeploymentVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	}
+
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if override.GetDeployment() != nil {
+			return false, 0, nil
+		} else if override.GetPinnedVersion() != "" {
+			return validateVersionAndGetReactivationEligibility(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
+		}
+	}
+	return false, 0, nil
+}
+
 // FindTargetDeploymentVersionAndRevisionNumberForWorkflowID returns the deployment version and revision number (if applicable) for
 // the particular workflow ID based on the versioning info of the task queue. Nil means unversioned.
 func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
@@ -641,7 +869,11 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	rampingPercentage float32,
 	rampingRevisionNumber int64,
 	workflowId string,
+	useRampingVersion bool,
 ) (*deploymentspb.WorkerDeploymentVersion, int64) {
+	if useRampingVersion && ramping != nil {
+		return ramping, rampingRevisionNumber
+	}
 
 	// Apply ramp logic using final values
 	if rampingPercentage <= 0 {
@@ -785,42 +1017,55 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	var routingConfigLatestCurrentVersion *deploymentpb.RoutingConfig
 	var routingConfigLatestRampingVersion *deploymentpb.RoutingConfig
 
-	isPartOfSomeCurrentVersion := false
-	isPartOfSomeRampingVersion := false
+	// Track the latest "versioned and TQ is a member" and "unversioned" routing configs
+	// separately so a versioned current/ramping always wins over an unversioned-but-newer
+	// entry in another deployment bucket, independent of map iteration order.
+	//
+	// Only chose those RoutingConfigs which pass the HasDeploymentVersion check due to the following example case:
+	// t0: TQ "foo" is in current version A with other TQ's
+	// t1: All other TQ's are moved to new version B except for "foo".
+	// t2: New version B is set as the current version.
+	//
+	// When this happens, we sync to "foo" that A is no longer the current version by passing in the new routing config. However,
+	// version B should not be considered as the current version for "foo" because the task-queue is not part of version B.
+	var latestVersionedCurrent, latestUnversionedCurrent *deploymentpb.RoutingConfig
+	var latestVersionedRamping, latestUnversionedRamping *deploymentpb.RoutingConfig
 
-	if deployments.GetDeploymentsData() != nil {
+	for _, deploymentInfo := range deployments.GetDeploymentsData() {
+		rc := deploymentInfo.GetRoutingConfig()
 
-		for _, deploymentInfo := range deployments.GetDeploymentsData() {
-			routingConfig := deploymentInfo.GetRoutingConfig()
-			if routingConfig == nil {
-				continue
+		tCurrent := rc.GetCurrentVersionChangedTime().AsTime()
+		if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rc.GetCurrentDeploymentVersion()))) {
+			if tCurrent.After(latestVersionedCurrent.GetCurrentVersionChangedTime().AsTime()) {
+				latestVersionedCurrent = rc
 			}
-
-			// Only chose those RoutingConfigs which pass the HasDeploymentVersion check due to the following example case:
-			// t0: TQ "foo" is in current version A with other TQ's
-			// t1: All other TQ's are moved to new version B except for "foo".
-			// t2: New version B is set as the current version.
-			//
-			// When this happens, we sync to "foo" that A is no longer the current version by passing in the new routing config. However,
-			// version B should not be considered as the current version for "foo" because the task-queue is not part of version B.
-			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
-				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
-					routingConfigLatestCurrentVersion = routingConfig
-					isPartOfSomeCurrentVersion = true
-				} else if !isPartOfSomeCurrentVersion && routingConfig.GetCurrentDeploymentVersion() == nil {
-					routingConfigLatestCurrentVersion = routingConfig
-				}
-			}
-
-			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
-				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
-					routingConfigLatestRampingVersion = routingConfig
-					isPartOfSomeRampingVersion = true
-				} else if !isPartOfSomeRampingVersion && routingConfig.GetRampingDeploymentVersion() == nil {
-					routingConfigLatestRampingVersion = routingConfig
-				}
+		} else if rc.GetCurrentDeploymentVersion() == nil {
+			if tCurrent.After(latestUnversionedCurrent.GetCurrentVersionChangedTime().AsTime()) {
+				latestUnversionedCurrent = rc
 			}
 		}
+
+		tRamping := rc.GetRampingVersionPercentageChangedTime().AsTime()
+		if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rc.GetRampingDeploymentVersion()))) {
+			if tRamping.After(latestVersionedRamping.GetRampingVersionPercentageChangedTime().AsTime()) {
+				latestVersionedRamping = rc
+			}
+		} else if rc.GetRampingDeploymentVersion() == nil {
+			if tRamping.After(latestUnversionedRamping.GetRampingVersionPercentageChangedTime().AsTime()) {
+				latestUnversionedRamping = rc
+			}
+		}
+	}
+
+	if latestVersionedCurrent != nil {
+		routingConfigLatestCurrentVersion = latestVersionedCurrent
+	} else {
+		routingConfigLatestCurrentVersion = latestUnversionedCurrent
+	}
+	if latestVersionedRamping != nil {
+		routingConfigLatestRampingVersion = latestVersionedRamping
+	} else {
+		routingConfigLatestRampingVersion = latestUnversionedRamping
 	}
 
 	if routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion() == nil && current.GetVersion() != nil {
@@ -969,18 +1214,18 @@ func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func BuildIDToStringV32(deploymentName, buildID string) string {
-	return deploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + buildID
+	return deploymentName + WorkerDeploymentVersionDelimiter + buildID
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
@@ -1010,9 +1255,9 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIDDelimiterV31)
 	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
-	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found && !found32 {
-		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31, s)
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31, s)
 	}
 	if found && found32 && len(before32) < len(before) {
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
@@ -1035,9 +1280,9 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found {
-		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, s)
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, s)
 	}
 	if len(before) == 0 {
 		return nil, fmt.Errorf("deployment name is empty in version string %s", s)
@@ -1053,6 +1298,8 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 
 // CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
 // the limit is being exceeded. Never removes undeleted versions.
+// Deprecated. Versions now are deleted serially without using the deleted flag in versionData.
+// TODO: remove this cleanup logic after next major release.
 func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
 	now := time.Now()
 	aWeekAgo := now.Add(-time.Hour * 24 * 7)

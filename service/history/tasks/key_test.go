@@ -70,12 +70,12 @@ func (s *taskKeySuite) TestMinMaxKey() {
 	thatKey := NewKey(time.Unix(0, rand.Int63()), rand.Int63())
 
 	minKey := MinKey(thisKey, thatKey)
-	s.True(minKey.CompareTo(thisKey) <= 0)
-	s.True(minKey.CompareTo(thatKey) <= 0)
+	s.LessOrEqual(minKey.CompareTo(thisKey), 0)
+	s.LessOrEqual(minKey.CompareTo(thatKey), 0)
 
 	maxKey := MaxKey(thisKey, thatKey)
-	s.True(maxKey.CompareTo(thisKey) >= 0)
-	s.True(maxKey.CompareTo(thisKey) >= 0)
+	s.GreaterOrEqual(maxKey.CompareTo(thisKey), 0)
+	s.GreaterOrEqual(maxKey.CompareTo(thisKey), 0)
 }
 
 func (s *taskKeySuite) TestSort() {
@@ -83,9 +83,9 @@ func (s *taskKeySuite) TestSort() {
 	numTaskPerInstant := 16
 
 	taskKeys := Keys{}
-	for i := 0; i < numInstant; i++ {
+	for range numInstant {
 		fireTime := time.Unix(0, rand.Int63())
-		for j := 0; j < numTaskPerInstant; j++ {
+		for range numTaskPerInstant {
 			taskKeys = append(taskKeys, NewKey(fireTime, rand.Int63()))
 		}
 	}
@@ -98,7 +98,7 @@ func (s *taskKeySuite) TestSort() {
 		if prev.FireTime.Before(next.FireTime) {
 			// noop
 		} else if prev.FireTime.Equal(next.FireTime) {
-			s.True(prev.TaskID <= next.TaskID)
+			s.LessOrEqual(prev.TaskID, next.TaskID)
 		} else {
 			s.Fail("task keys are not sorted prev: %v, next: %v", prev, next)
 		}

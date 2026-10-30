@@ -91,20 +91,20 @@ func (mdb *db) RangeSelectFromHistoryNode(
 		query = getHistoryNodesQuery
 	}
 
-	var args []interface{}
+	var args []any
 	if filter.ReverseOrder {
-		args = []interface{}{
+		args = []any{
 			filter.ShardID,
 			filter.TreeID,
 			filter.BranchID,
 			filter.MinNodeID,
-			filter.MaxTxnID,
-			-filter.MaxTxnID,
+			filter.MaxNodeID,
+			-filter.MaxTxnID, // NOTE: transaction ID is *= -1 when stored
 			filter.MaxNodeID,
 			filter.PageSize,
 		}
 	} else {
-		args = []interface{}{
+		args = []any{
 			filter.ShardID,
 			filter.TreeID,
 			filter.BranchID,

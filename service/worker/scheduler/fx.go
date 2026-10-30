@@ -5,12 +5,12 @@ import (
 	"math"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -27,33 +27,48 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
-// VisibilityBaseListQuery will select schedules handled by both V1 scheduler and
-// V2 CHASM scheduler.
-var VisibilityBaseListQuery = fmt.Sprintf(
-	"%s IN ('%s', '%d') AND %s = '%s'",
+// VisibilityListQueryV1 selects only V1 scheduler workflows.
+// Used by listSchedulesWorkflow which calls ListWorkflowExecutions without archetype ID.
+var VisibilityListQueryV1 = fmt.Sprintf(
+	"%s = '%s' AND %s = 'Running'",
 	sadefs.TemporalNamespaceDivision,
 	NamespaceDivision,
-	chasm.SchedulerArchetypeID,
 	sadefs.ExecutionStatus,
-	enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+)
+
+// VisibilityListQueryChasm selects both V1 scheduler and CHASM scheduler.
+// Used by listSchedulesChasm which calls chasm.ListExecutions with archetype ID set,
+// allowing TemporalSystemExecutionStatus to be translated to ExecutionStatus.
+var VisibilityListQueryChasm = fmt.Sprintf(
+	"((%s = '%s' AND TemporalSystemExecutionStatus = 'Running') OR (%s = '%d' AND ExecutionStatus = 'Running'))",
+	sadefs.TemporalNamespaceDivision,
+	NamespaceDivision,
+	sadefs.TemporalNamespaceDivision,
+	chasm.SchedulerArchetypeID,
 )
 
 type (
 	workerComponent struct {
-		specBuilder              *SpecBuilder // workflow dep
-		activityDeps             activityDeps
-		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
-		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		specBuilder                  *SpecBuilder // workflow dep
+		activityDeps                 activityDeps
+		enabledForNs                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableCHASMMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		schedulerV1VersionCeiling    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		schedulerV1VersionOverride   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
+		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		HistoryClient  resource.HistoryClient
-		FrontendClient workflowservice.WorkflowServiceClient
+		MetricsHandler  metrics.Handler
+		Logger          log.Logger
+		HistoryClient   resource.HistoryClient
+		FrontendClient  workflowservice.WorkflowServiceClient
+		SchedulerClient schedulerpb.SchedulerServiceClient
 	}
 
 	fxResult struct {
@@ -74,12 +89,17 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:              specBuilder,
-			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
-			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
-			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
+			specBuilder:                  specBuilder,
+			activityDeps:                 params,
+			enabledForNs:                 dynamicconfig.WorkerEnableScheduler.Get(dc),
+			enableCHASMMigration:         dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
+			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
+			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
+			schedulerV1VersionCeiling:    dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+			schedulerV1VersionOverride:   dynamicconfig.SchedulerV1VersionOverride.Get(dc),
+			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
+			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
+			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
 	}
 }
@@ -91,8 +111,28 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
+	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
+		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
+		enableMigration := func() bool {
+			return s.enableCHASMMigration(nsName) &&
+				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+		}
+		migrateWithRunningWorkflows := func() bool {
+			return s.migrateWithRunningWorkflows(nsName)
+		}
+		versionCeiling := func() int {
+			return s.schedulerV1VersionCeiling(nsName)
+		}
+		versionOverride := func() int {
+			return s.schedulerV1VersionOverride(nsName)
+		}
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, schedulerDynamicConfig{
+			enableCHASMMigration:        enableMigration,
+			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+			versionCeiling:              versionCeiling,
+			versionOverride:             versionOverride,
+		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 
@@ -120,5 +160,6 @@ func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, de
 		startWorkflowRateLimiter: lim,
 		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
 		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
+		migrationEnabled:         func() bool { return s.enableCHASMMigration(name.String()) },
 	}, cancel
 }

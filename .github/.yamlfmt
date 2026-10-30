@@ -1,0 +1,18 @@
+# Config for yamlfmt
+# see https://github.com/google/yamlfmt/blob/main/docs/config-file.md
+
+# No need to format untracked files
+gitignore_excludes: true
+
+exclude:
+  # Go template files
+  - common/config/config_template_embedded.yaml
+  - config/docker.yaml
+  - docker/config_template.yaml
+
+formatter:
+  # allow newlines
+  retain_line_breaks: true
+  # requires for GitHub Actions files
+  scan_folded_as_literal: true
+  force_quote_style: double

@@ -1,0 +1,889 @@
+package callback
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/resource"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type mockNexusCompletionGetterComponent struct {
+	chasm.UnimplementedComponent
+
+	Empty *emptypb.Empty
+
+	completion nexusrpc.CompleteOperationOptions
+	err        error
+
+	Callback chasm.Field[*Callback]
+}
+
+func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
+	return m.completion, m.err
+}
+
+func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+func (m *mockNexusCompletionGetterComponent) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+func (m *mockNexusCompletionGetterComponent) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
+type mockNexusCompletionGetterLibrary struct {
+	chasm.UnimplementedLibrary
+}
+
+const testCompletionSourceFqn = "mock.nexusCompletionGetter"
+
+func (l *mockNexusCompletionGetterLibrary) Name() string {
+	return "mock"
+}
+
+func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent](
+			"nexusCompletionGetter",
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+		),
+	}
+}
+
+// newInvocationTaskTest builds a CHASM tree holding cb underneath a completion source that returns the
+// given completion, and returns an engine context plus a ref to the callback to invoke task handlers with.
+func newInvocationTaskTest(
+	t *testing.T,
+	handler *invocationTaskHandler,
+	cb *Callback,
+	completion nexusrpc.CompleteOperationOptions,
+) (context.Context, chasm.ComponentRef) {
+	t.Helper()
+
+	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, chasmRegistry.Register(&Library{InvocationTaskHandler: handler}))
+	require.NoError(t, chasmRegistry.Register(&mockNexusCompletionGetterLibrary{}))
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: "namespace-id",
+		BusinessID:  "workflow-id",
+		RunID:       "run-id",
+	}
+	engineCtx := chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, chasmRegistry))
+	_, err := chasm.StartExecution(
+		engineCtx,
+		executionKey,
+		func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
+			return &mockNexusCompletionGetterComponent{
+				completion: completion,
+				Callback:   chasm.NewComponentField(ctx, cb),
+			}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
+	callbackRef, err := chasm.ReadComponent(
+		engineCtx,
+		rootRef,
+		func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
+			serialized, err := chasmCtx.Ref(cb)
+			if err != nil {
+				return chasm.ComponentRef{}, err
+			}
+			return chasm.DeserializeComponentRef(serialized)
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+	return engineCtx, callbackRef
+}
+
+// readCallbackState runs assert against the persisted callback state, so that assertions see what the task
+// handler committed rather than the in-memory component it was handed.
+func readCallbackState(
+	engineCtx context.Context,
+	t *testing.T,
+	ref chasm.ComponentRef,
+	assert func(chasm.Context, *Callback),
+) {
+	t.Helper()
+
+	_, err := chasm.ReadComponent(
+		engineCtx,
+		ref,
+		func(c *Callback, chasmCtx chasm.Context, _ struct{}) (struct{}, error) {
+			assert(chasmCtx, c)
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+}
+
+// Test the full executeInvocationTask flow with direct handler calls
+func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
+	cases := []struct {
+		name                  string
+		caller                HTTPCaller
+		expectedMetricOutcome string
+		// expectedEvent is the outcome tag on callback_invocation_events, which is
+		// recorded for the outbound path as well as the internal one.
+		expectedEvent string
+		assertOutcome func(*testing.T, *Callback, error)
+	}{
+		{
+			name: "success",
+			caller: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+			},
+			expectedMetricOutcome: "success",
+			expectedEvent:         "success",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+		},
+		{
+			name: "network-error-retry",
+			caller: func(r *http.Request) (*http.Response, error) {
+				return nil, errors.New("fake failure")
+			},
+			expectedMetricOutcome: "unknown-error",
+			expectedEvent:         "retryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				var destDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destDownErr)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+			},
+		},
+		{
+			name: "retryable-http-error",
+			caller: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+			},
+			expectedMetricOutcome: "handler-error:INTERNAL",
+			expectedEvent:         "retryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				var destDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destDownErr)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+			},
+		},
+		{
+			name: "non-retryable-http-error",
+			caller: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
+			},
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			expectedEvent:         "nonretryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			// A destination naming its own handler error type must not reach the tag.
+			name: "off-spec-handler-error-type",
+			caller: func(r *http.Request) (*http.Response, error) {
+				body := `{"message":"boom","metadata":{"type":"nexus.HandlerError"},` +
+					`"details":{"type":"MINTED_BY_THE_DESTINATION","retryableOverride":false}}`
+				return &http.Response{
+					StatusCode: 500,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			},
+			expectedMetricOutcome: "handler-error:UNKNOWN",
+			expectedEvent:         "nonretryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			ns := test.NewNamespace(t)
+
+			// Setup metrics expectations
+			metricsHandler := metrics.NewMockHandler(ctrl)
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).AnyTimes()
+			counter := metrics.NewMockCounterIface(ctrl)
+			timer := metrics.NewMockTimerIface(ctrl)
+			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
+			counter.EXPECT().Record(int64(1),
+				metrics.NamespaceTag(ns.Name().String()),
+				metrics.DestinationTag("http://localhost"),
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
+			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
+			timer.EXPECT().Record(gomock.Any(),
+				metrics.NamespaceTag(ns.Name().String()),
+				metrics.DestinationTag("http://localhost"),
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
+
+			// The committed event is recorded for the outbound path too, not just the
+			// internal one, so a permanently dropped external callback is also visible.
+			eventTags := []metrics.Tag{
+				metrics.NamespaceTag(ns.Name().String()),
+				metrics.DestinationTag("http://localhost"),
+				metrics.OutcomeTag(tc.expectedEvent),
+			}
+			eventCounter := metrics.NewMockCounterIface(ctrl)
+			metricsHandler.EXPECT().Counter(InvocationEventCounter.Name()).Return(eventCounter)
+			eventCounter.EXPECT().Record(int64(1), eventTags)
+			if tc.expectedEvent != string(outcomeEventRetryableError) {
+				attemptHistogram := metrics.NewMockHistogramIface(ctrl)
+				metricsHandler.EXPECT().
+					Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
+					Return(attemptHistogram)
+				attemptHistogram.EXPECT().Record(int64(1), eventTags)
+			}
+
+			// Setup logger
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
+
+			// Create task handler with mock namespace registry
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			handler := newInvocationTaskHandler(invocationTaskHandlerOptions{
+				Config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+				NamespaceRegistry: nsRegistry,
+				MetricsHandler:    metricsHandler,
+				Logger:            logger,
+				HTTPCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+					return tc.caller
+				},
+			})
+
+			callback := &Callback{
+				CallbackState: &callbackspb.CallbackState{
+					RequestId:        "request-id",
+					RegistrationTime: timestamppb.New(time.Now()),
+					Callback: &callbackspb.Callback{
+						Variant: &callbackspb.Callback_Nexus_{
+							Nexus: &callbackspb.Callback_Nexus{
+								Url: "http://localhost",
+							},
+						},
+					},
+					Status:  callbackspb.CALLBACK_STATUS_SCHEDULED,
+					Attempt: 0,
+				},
+			}
+
+			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, nexusrpc.CompleteOperationOptions{})
+
+			executeErr := handler.Execute(
+				engineCtx,
+				callbackRef,
+				chasm.TaskAttributes{Destination: "http://localhost"},
+				&callbackspb.InvocationTask{Attempt: 0},
+			)
+
+			// Verify outcome by reading component state directly.
+			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
+				tc.assertOutcome(t, c, executeErr)
+			})
+
+			if tc.expectedEvent != "success" {
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            ns.Name().String(),
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": testCompletionSourceFqn,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.expectedEvent == "retryable-error",
+					},
+				})
+			}
+		})
+	}
+}
+
+// TestProcessBackoffTask tests the backoff task execution that transitions
+// a callback from BACKING_OFF to SCHEDULED state and adds an invocation task.
+func TestProcessBackoffTask(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+
+	// Create callback in BACKING_OFF state
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			RequestId: "request-id",
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{
+						Url: "http://localhost",
+					},
+				},
+			},
+			Status:                  callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			Attempt:                 1,
+			NextAttemptScheduleTime: timestamppb.New(timeSource.Now().Add(time.Minute)),
+		},
+	}
+
+	// Create mock mutable context
+	mockCtx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(component chasm.Component) time.Time {
+				return timeSource.Now()
+			},
+			HandleRef: func(component chasm.Component) ([]byte, error) {
+				return []byte{}, nil
+			},
+		},
+	}
+
+	handler := backoffTaskHandler{}
+
+	// Execute the backoff task
+	task := &callbackspb.BackoffTask{Attempt: 1}
+	attrs := chasm.TaskAttributes{Destination: "http://localhost"}
+	err := handler.Execute(mockCtx, callback, attrs, task)
+
+	// Verify no error
+	require.NoError(t, err)
+
+	// Verify callback transitioned to SCHEDULED state
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.Status)
+	require.Nil(t, callback.NextAttemptScheduleTime)
+
+	// Verify an invocation task was added
+	require.Len(t, mockCtx.Tasks, 1)
+	require.IsType(t, &callbackspb.InvocationTask{}, mockCtx.Tasks[0].Payload)
+	invTask := mockCtx.Tasks[0].Payload.(*callbackspb.InvocationTask)
+	require.Equal(t, int32(1), invTask.Attempt)
+}
+
+func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
+	dummyRef := persistencespb.ChasmComponentRef{
+		NamespaceId: "namespace-id",
+		BusinessId:  "business-id",
+		RunId:       "run-id",
+		ArchetypeId: 1234,
+	}
+
+	serializedRef, err := dummyRef.Marshal()
+	require.NoError(t, err)
+	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+	dummyTime := time.Now().UTC()
+
+	createPayloadBytes := func(data []byte) *commonpb.Payload {
+		return &commonpb.Payload{Data: data}
+	}
+
+	cases := []struct {
+		name               string
+		setupHistoryClient func(*testing.T, *gomock.Controller) resource.HistoryClient
+		completion         nexusrpc.CompleteOperationOptions
+		headerValue        string
+		assertOutcome      func(*testing.T, *Callback, error)
+		// wantDeliveryOutcome is the outcome tag expected on callback_internal_requests.
+		// Every path through Invoke must record exactly one sample: this counter is the only
+		// evidence the delivery was attempted at all.
+		wantDeliveryOutcome string
+		// wantEvent is the outcome tag expected on callback_invocation_events.
+		wantEvent string
+		// wantAttemptSample is whether callback_invocation_attempts should be recorded, which
+		// happens only on a terminal disposition.
+		wantAttemptSample bool
+	}{
+		{
+			name: "success-with-successful-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					// Verify completion token
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.Completion.ComponentRef)
+					require.Equal(t, "request-id", req.Completion.RequestId)
+
+					// Verify successful operation data
+					require.NotNil(t, req.GetSuccess())
+					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result:    createPayloadBytes([]byte("result-data")),
+					CloseTime: dummyTime,
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+			wantDeliveryOutcome: "success",
+			wantEvent:           "success",
+			wantAttemptSample:   true,
+		},
+		{
+			name: "success-with-failed-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.GetFailure())
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Error: &nexus.OperationError{
+						State: nexus.OperationStateFailed,
+						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
+					},
+					CloseTime: dummyTime,
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+			wantDeliveryOutcome: "success",
+			wantEvent:           "success",
+			wantAttemptSample:   true,
+		},
+		{
+			name: "retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, serviceerror.NewUnavailable("service unavailable"))
+				return client
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+			},
+			wantDeliveryOutcome: "error:Unavailable",
+			wantEvent:           "retryable-error",
+			wantAttemptSample:   false,
+		},
+		{
+			name: "non-retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, serviceerror.NewInvalidArgument("invalid request"))
+				return client
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "error:InvalidArgument",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			// The failure mode this instrumentation exists for: the target component is gone
+			// (deleted scheduler, or a ref gone stale after a reset). NotFound is
+			// non-retryable, so the callback is dropped permanently here rather than retried.
+			name: "target-gone-not-found",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, serviceerror.NewNotFound("chasm component not found"))
+				return client
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "error:NotFound",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			// The harness only sets CallbackTokenHeader when headerValue is non-empty.
+			name: "missing-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: "",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "missing-token",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			// getHistoryRequest rejects a Result that isn't a *commonpb.Payload.
+			name: "request-build-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: "not-a-payload",
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "request-build-error",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			name: "invalid-base64-header",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: "invalid-base64!!!",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "token-decode-error",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			name: "invalid-protobuf-in-ref",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "invalid-ref",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Setup namespace
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
+
+			// Setup history client
+			historyClient := tc.setupHistoryClient(t, ctrl)
+
+			// Setup logger, metricsHandler, and time source
+			logger := log.NewTestLogger()
+			capturingHandler := metricstest.NewCaptureHandler()
+			capture := capturingHandler.StartCapture()
+			defer capturingHandler.StopCapture(capture)
+			var metricsHandler metrics.Handler = capturingHandler
+			timeSource := clock.NewEventTimeSource()
+			timeSource.Update(time.Now())
+
+			// Create mock namespace registry
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			// Create mock engine and setup expectations
+			mockEngine := chasm.NewMockEngine(ctrl)
+			handler := &invocationTaskHandler{
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metricsHandler,
+				logger:            logger,
+				historyClient:     historyClient,
+			}
+
+			chasmRegistry := chasm.NewRegistry(logger)
+			err = chasmRegistry.Register(&Library{
+				InvocationTaskHandler: handler,
+			})
+			require.NoError(t, err)
+			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
+			require.NoError(t, err)
+
+			nodeBackend := &chasm.MockNodeBackend{}
+			root := chasm.NewEmptyTree(chasmRegistry, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
+
+			// Create headers
+			headers := nexus.Header{}
+			if tc.headerValue != "" {
+				headers.Set(commonnexus.CallbackTokenHeader, tc.headerValue)
+			}
+
+			// Create callback with chasm internal URL
+			callback := &Callback{
+				CallbackState: &callbackspb.CallbackState{
+					RequestId:        "request-id",
+					RegistrationTime: timestamppb.New(timeSource.Now()),
+					Callback: &callbackspb.Callback{
+						Variant: &callbackspb.Callback_Nexus_{
+							Nexus: &callbackspb.Callback_Nexus{
+								Url:    chasm.NexusCompletionHandlerURL,
+								Header: headers,
+							},
+						},
+					},
+					Status:  callbackspb.CALLBACK_STATUS_SCHEDULED,
+					Attempt: 1,
+				},
+			}
+
+			// Set up the CompletionSource field to return our mock completion
+			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
+				completion: tc.completion,
+				// Create callback in SCHEDULED state
+				Callback: chasm.NewComponentField(
+					chasm.NewMutableContext(context.Background(), root),
+					callback,
+				),
+			}))
+			_, err = root.CloseTransaction(context.Background(), true)
+			require.NoError(t, err)
+
+			mockEngine.EXPECT().ReadComponent(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
+				// Create a mock context
+				mockCtx := &chasm.MockContext{
+					HandleNow: func(component chasm.Component) time.Time {
+						return timeSource.Now()
+					},
+					HandleRef: func(component chasm.Component) ([]byte, error) {
+						return []byte{}, nil
+					},
+					HandleExecutionKey: func() chasm.ExecutionKey {
+						return chasm.ExecutionKey{
+							NamespaceID: "namespace-id",
+							BusinessID:  "workflow-id",
+							RunID:       "run-id",
+						}
+					},
+				}
+
+				// Call the readFn with our callback
+				return readFn(mockCtx, callback)
+			})
+
+			mockEngine.EXPECT().UpdateComponent(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
+				// Create a mock mutable context
+				mockCtx := &chasm.MockMutableContext{
+					MockContext: chasm.MockContext{
+						HandleNow: func(component chasm.Component) time.Time {
+							return timeSource.Now()
+						},
+						HandleRef: func(component chasm.Component) ([]byte, error) {
+							return []byte{}, nil
+						},
+					},
+				}
+
+				// Call the updateFn with our callback
+				err := updateFn(mockCtx, callback)
+				return nil, err
+			})
+
+			// Create ComponentRef
+			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{
+				NamespaceID: "namespace-id",
+				BusinessID:  "workflow-id",
+				RunID:       "run-id",
+			})
+
+			// Create context with engine
+			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
+
+			// Execute the invocation task
+			task := &callbackspb.InvocationTask{Attempt: 1}
+			err = handler.Execute(
+				ctx,
+				ref,
+				chasm.TaskAttributes{},
+				task,
+			)
+
+			tc.assertOutcome(t, callback, err)
+
+			snapshot := capture.Snapshot()
+
+			delivery := snapshot[InternalRequestCounter.Name()]
+			require.Len(t, delivery, 1,
+				"every path through Invoke must record exactly one callback_internal_requests sample")
+			require.Equal(t, tc.wantDeliveryOutcome, delivery[0].Tags["outcome"])
+			require.Equal(t, "namespace-name", delivery[0].Tags["namespace"])
+			require.Len(t, snapshot[InternalRequestLatencyHistogram.Name()], 1,
+				"latency must be recorded alongside the request counter")
+
+			results := snapshot[InvocationEventCounter.Name()]
+			require.Len(t, results, 1)
+			require.Equal(t, tc.wantEvent, results[0].Tags["outcome"])
+
+			attempts := snapshot[InvocationAttemptsHistogram.Name()]
+			if tc.wantAttemptSample {
+				require.Len(t, attempts, 1,
+					"a terminal disposition must record the attempt count")
+				require.Equal(t, tc.wantEvent, attempts[0].Tags["outcome"])
+				// task.Attempt is 0-based, and the task below is built with Attempt: 1.
+				require.Equal(t, int64(2), attempts[0].Value)
+			} else {
+				require.Empty(t, attempts,
+					"a retrying disposition is not terminal, so the attempt count is not final")
+			}
+		})
+	}
+}
+
+// tasks.Tags can't import this package, so it repeats InvocationTaskGroup as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestInvocationTaskGroupTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+	task.SetOutboundTaskGroup(InvocationTaskGroup)
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
+}

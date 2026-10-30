@@ -41,7 +41,7 @@ func TestMaskStruct_Nil(t *testing.T) {
 	maskedS1 := MaskStruct(nil, DefaultFieldNames)
 	assert.Nil(maskedS1)
 
-	var nilInterface interface{}
+	var nilInterface any
 	maskedS2 := MaskStruct(nilInterface, DefaultFieldNames)
 	assert.Nil(maskedS2)
 

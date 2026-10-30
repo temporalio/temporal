@@ -1,18 +1,14 @@
 package testcore
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"maps"
 	"os"
 	"regexp"
-	"strconv"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -28,6 +24,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -35,25 +32,27 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
-	"go.temporal.io/server/components/nexusoperations"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
+	"go.temporal.io/server/temporal"
 )
 
 type (
-	FunctionalTestBase struct {
+	functionalTestBase struct {
 		suite.Suite
 
 		// `suite.Suite` embeds `*assert.Assertions` which, by default, makes all asserts (like `s.NoError(err)`)
@@ -70,6 +69,8 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 
+		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
+
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
@@ -80,22 +81,34 @@ type (
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
-		worker    sdkworker.Worker
+		sdkWorker sdkworker.Worker
 		taskQueue string
 
 		// TODO (alex): replace with v2
 		taskPoller *taskpoller.TaskPoller
+
+		// isShared indicates whether this cluster is shared between multiple tests.
+		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
+		// and will panic if called.
+		isShared bool
 	}
-	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
-	TestClusterParams struct {
-		ServiceOptions         map[primitives.ServiceName][]fx.Option
-		DynamicConfigOverrides map[dynamicconfig.Key]any
-		ArchivalEnabled        bool
-		EnableMTLS             bool
-		FaultInjectionConfig   *config.FaultInjection
-		NumHistoryShards       int32
+	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
+	testClusterParams struct {
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableWorkerService       bool
+		FaultInjectionConfig      *config.FaultInjection
+		NumHistoryShards          int32
+		Logger                    log.Logger
+		SharedCluster             bool
+		EnableHistoryTaskRecorder bool
+		EnableReplicationRecorder bool
+		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
+		AdditionalServerOptions   []temporal.ServerOption
 	}
-	TestClusterOption func(params *TestClusterParams)
+	TestClusterOption func(params *testClusterParams)
 )
 
 func init() {
@@ -105,25 +118,14 @@ func init() {
 	sdkworker.SetBinaryChecksum("oss-server-test")
 }
 
-// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
-// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
-// obtain the shard controller for the history service, you can do this:
-//
-//	var shardController shard.Controller
-//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
-//	// now you can use shardController during your test
-//
-// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
-// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
-// each one.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.DCRedirectionPolicy = policy
 	}
 }
 
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		if params.DynamicConfigOverrides == nil {
 			params.DynamicConfigOverrides = overrides
 		} else {
@@ -132,91 +134,140 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
-func WithArchivalEnabled() TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ArchivalEnabled = true
+// WithAdditionalServerOptions adds server options to each test cluster.
+func WithAdditionalServerOptions(options ...temporal.ServerOption) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.AdditionalServerOptions = append(params.AdditionalServerOptions, options...)
 	}
 }
 
-func WithMTLS() TestClusterOption {
-	return func(params *TestClusterParams) {
+func withArchivalConfig() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableArchival = true
+	}
+}
+
+func withMTLS() TestClusterOption {
+	return func(params *testClusterParams) {
 		params.EnableMTLS = true
 	}
 }
 
+func withWorkerService(enabled bool) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableWorkerService = enabled
+	}
+}
+
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
 	}
 }
 
 func WithNumHistoryShards(n int32) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.NumHistoryShards = n
 	}
 }
 
-func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
+// WithClusterLogger sets a custom logger for the test cluster, used instead of
+// the default test logger. Useful for intercepting server log output.
+func WithClusterLogger(logger log.Logger) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.Logger = logger
+	}
+}
+
+func WithClusterHistoryTaskRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableHistoryTaskRecorder = true
+	}
+}
+
+func WithReplicationStreamRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
+	}
+}
+
+func WithSharedCluster() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SharedCluster = true
+	}
+}
+
+func (s *functionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
 
-func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
+func (s *functionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
 }
 
-func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
+func (s *functionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
 	return s.testCluster.FrontendClient()
 }
 
-func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
+func (s *functionalTestBase) AdminClient() adminservice.AdminServiceClient {
 	return s.testCluster.AdminClient()
 }
 
-func (s *FunctionalTestBase) OperatorClient() operatorservice.OperatorServiceClient {
+func (s *functionalTestBase) OperatorClient() operatorservice.OperatorServiceClient {
 	return s.testCluster.OperatorClient()
 }
 
-func (s *FunctionalTestBase) HttpAPIAddress() string {
+func (s *functionalTestBase) HttpAPIAddress() string { //nolint:staticcheck // ST1003: preserve the existing TestEnv method name.
 	return s.testCluster.Host().FrontendHTTPAddress()
 }
 
-func (s *FunctionalTestBase) Namespace() namespace.Name {
+func (s *functionalTestBase) Namespace() namespace.Name {
 	return s.namespace
 }
 
-func (s *FunctionalTestBase) NamespaceID() namespace.ID {
+func (s *functionalTestBase) NamespaceID() namespace.ID {
 	return s.namespaceID
 }
 
-func (s *FunctionalTestBase) ExternalNamespace() namespace.Name {
+func (s *functionalTestBase) ExternalNamespace() namespace.Name {
 	return s.externalNamespace
 }
 
-func (s *FunctionalTestBase) FrontendGRPCAddress() string {
+func (s *functionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
-func (s *FunctionalTestBase) Worker() sdkworker.Worker {
-	return s.worker
+func (s *functionalTestBase) WorkerGRPCAddress() string {
+	return s.GetTestCluster().WorkerGRPCAddress()
 }
 
-func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
+func (s *functionalTestBase) SdkWorker() sdkworker.Worker {
+	return s.sdkWorker
+}
+
+func (s *functionalTestBase) SdkClient() sdkclient.Client {
 	return s.sdkClient
 }
 
-func (s *FunctionalTestBase) TaskQueue() string {
+func (s *functionalTestBase) TaskQueue() string {
 	return s.taskQueue
 }
 
-func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
+func (s *functionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
 }
 
-func (s *FunctionalTestBase) SetupSuite() {
+func (s *functionalTestBase) SetupSuite() {
 	s.SetupSuiteWithCluster()
 }
 
-func (s *FunctionalTestBase) TearDownSuite() {
+func (s *functionalTestBase) TearDownSuite() {
 	// NOTE: We can't make s.Logger a testlogger.TestLogger because of AcquireShardSuiteBase.
 	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
 		// Before we tear down the cluster, we disable the test logger.
@@ -227,17 +278,35 @@ func (s *FunctionalTestBase) TearDownSuite() {
 	s.TearDownCluster()
 }
 
-func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
+func (s *functionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
+	// Reserve a slot from the dedicated test cluster pool.
+	testClusterRouter.dedicated.reserveSlot(s.T())
+	s.setupCluster(options...)
+	clusterRequest{
+		kind:              clusterKindDedicated,
+		dedicatedReason:   "legacy-suite",
+		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+	}.recordCreation(s.T())
+}
+
+func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
+
+	// A custom logger supplied via WithClusterLogger takes precedence.
+	if params.Logger != nil {
+		s.Logger = params.Logger
+	}
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
-		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
-		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
-		// after each test completed. This is better since otherwise is would fail inside
-		// the server and not the test, creating a lot of noise and possibly stuck tests.
-		testlogger.DontFailOnError(tl)
-		// Fail test when an assertion fails (see `softassert` package).
+		// The cluster outlives any single test and s.T() changes as different tests use it,
+		// but the proxy T's Name() must be stable, so this is never updated.
+		s.t = &sharedClusterT{
+			name:      s.T().Name(),
+			logFanout: os.Getenv("CI") != "",
+		}
+		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
+		// Fail tests when a soft assertion fires (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 		s.Logger = tl
 	}
@@ -247,11 +316,24 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DynamicConfigOverrides: params.DynamicConfigOverrides,
-		ServiceFxOptions:       params.ServiceOptions,
-		EnableMetricsCapture:   true,
-		EnableArchival:         params.ArchivalEnabled,
-		EnableMTLS:             params.EnableMTLS,
+		DCRedirectionPolicy:       params.DCRedirectionPolicy,
+		DynamicConfigOverrides:    params.DynamicConfigOverrides,
+		EnableMetricsCapture:      true,
+		EnableMTLS:                params.EnableMTLS,
+		EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+		EnableReplicationRecorder: params.EnableReplicationRecorder,
+		EnableArchival:            params.EnableArchival,
+		AdditionalServerOptions:   params.AdditionalServerOptions,
+		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
+	}
+	if params.SpanExporter != nil {
+		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
+	}
+
+	// Apply configuration for shared clusters.
+	if params.SharedCluster {
+		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
+		s.isShared = true
 	}
 
 	// Initialize the OTEL collector if OTEL is enabled.
@@ -261,9 +343,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
 
 		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+		setSpanExporter(s.testClusterConfig, telemetry.OtelTracesOtlpExporterType, s.otelExporter)
 	}
 
 	var err error
@@ -272,36 +352,48 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
-	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = s.RegisterNamespace(ctx, s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 }
 
-// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
-// call this testcore FunctionalTestBase.SetupTest function to distribute the tests
+func setSpanExporter(clusterConfig *TestClusterConfig, exporterType telemetry.SpanExporterType, exporter sdktrace.SpanExporter) {
+	if clusterConfig.SpanExporters == nil {
+		clusterConfig.SpanExporters = make(map[telemetry.SpanExporterType]sdktrace.SpanExporter)
+	}
+	clusterConfig.SpanExporters[exporterType] = exporter
+}
+
+func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
+	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		return *persistencetests.GetSQLiteFileTestClusterOption()
+	}
+	return defaults
+}
+
+// All test suites that inherit functionalTestBase and overwrite SetupTest must
+// call this testcore functionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
-func (s *FunctionalTestBase) SetupTest() {
+func (s *functionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
-		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
-	})
 }
 
-func (s *FunctionalTestBase) SetupSubTest() {
+func (s *functionalTestBase) SetupSubTest() {
 	s.initAssertions()
 }
 
-func (s *FunctionalTestBase) initAssertions() {
+// TODO: remove once `parallelsuite` and testEnv is rolled out everywhere
+func (s *functionalTestBase) initAssertions() {
 	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
 	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
 	//
@@ -315,37 +407,13 @@ func (s *FunctionalTestBase) initAssertions() {
 }
 
 // checkTestShard supports test sharding based on environment variables.
-func (s *FunctionalTestBase) checkTestShard() {
-	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	if totalStr == "" || indexStr == "" {
-		return
-	}
-	total, err := strconv.Atoi(totalStr)
-	if err != nil || total < 1 {
-		s.T().Fatal("Couldn't convert TEST_TOTAL_SHARDS")
-	}
-	index, err := strconv.Atoi(indexStr)
-	if err != nil || index < 0 || index >= total {
-		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
-	}
-
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
-
-	nameToHash := s.T().Name() + salt
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
-	if testIndex != index {
-		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
-	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
+func (s *functionalTestBase) checkTestShard() {
+	checkTestShard(s.T())
 }
 
-func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
-	params := TestClusterParams{
-		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
+func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
+	params := testClusterParams{
+		EnableWorkerService: true,
 	}
 	for _, opt := range options {
 		opt(&params)
@@ -353,7 +421,7 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	return params
 }
 
-func (s *FunctionalTestBase) setupSdk() {
+func (s *functionalTestBase) setupSdk() {
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
 	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
@@ -369,13 +437,6 @@ func (s *FunctionalTestBase) setupSdk() {
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 	}
 
-	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
-	}
-
 	var err error
 	s.sdkClient, err = sdkclient.Dial(clientOptions)
 	s.NoError(err)
@@ -383,12 +444,12 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.taskQueue = RandomizeStr("tq")
 
 	workerOptions := sdkworker.Options{}
-	s.worker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
-	err = s.worker.Start()
+	s.sdkWorker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
+	err = s.sdkWorker.Start()
 	s.NoError(err)
 }
 
-func (s *FunctionalTestBase) exportOTELTraces() {
+func (s *functionalTestBase) exportOTELTraces() {
 	if s.otelExporter == nil {
 		return
 	}
@@ -406,30 +467,43 @@ func (s *FunctionalTestBase) exportOTELTraces() {
 	_ = s.otelExporter.Shutdown(NewContext())
 }
 
-func (s *FunctionalTestBase) TearDownCluster() {
+func (s *functionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
-
-	if s.testCluster != nil {
-		s.Require().NoError(s.testCluster.TearDownCluster())
-	}
+	s.Require().NoError(s.tearDownTestCluster())
 }
 
-// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
-func (s *FunctionalTestBase) TearDownTest() {
+// tearDownTestCluster tears down the underlying TestCluster and runs the proxy
+// T's queued cleanups (notably tl.Close). Cleanups run via defer so they
+// execute even when teardown errors.
+func (s *functionalTestBase) tearDownTestCluster() error {
+	defer func() {
+		if s.t != nil {
+			s.t.doCleanups()
+		}
+	}()
+	if s.testCluster == nil {
+		return nil
+	}
+	err := s.testCluster.TearDownCluster()
+	s.testCluster = nil
+	return err
+}
+
+// **IMPORTANT**: When overridding this, make sure to invoke `s.functionalTestBase.TearDownTest()`.
+func (s *functionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
-	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
-// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
-func (s *FunctionalTestBase) TearDownSubTest() {
+// **IMPORTANT**: When overridding this, make sure to invoke `s.functionalTestBase.TearDownSubTest()`.
+func (s *functionalTestBase) TearDownSubTest() {
 	s.exportOTELTraces()
 }
 
-func (s *FunctionalTestBase) tearDownSdk() {
-	if s.worker != nil {
-		s.worker.Stop()
+func (s *functionalTestBase) tearDownSdk() {
+	if s.sdkWorker != nil {
+		s.sdkWorker.Stop()
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
@@ -440,7 +514,8 @@ func (s *FunctionalTestBase) tearDownSdk() {
 //  1. The Retention period is set to 0 for archival tests, and this can't be done through FE,
 //  2. Update search attributes would require an extra API call,
 //  3. One more extra API call would be necessary to get namespace.ID.
-func (s *FunctionalTestBase) RegisterNamespace(
+func (s *functionalTestBase) RegisterNamespace(
+	ctx context.Context,
 	nsName namespace.Name,
 	retentionDays int32,
 	archivalState enumspb.ArchivalState,
@@ -449,6 +524,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 ) (namespace.ID, error) {
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	nsID := namespace.ID(uuid.NewString())
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -464,14 +540,6 @@ func (s *FunctionalTestBase) RegisterNamespace(
 				VisibilityArchivalState: archivalState,
 				VisibilityArchivalUri:   visibilityArchivalURI,
 				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-				CustomSearchAttributeAliases: map[string]string{
-					"Bool01":     "CustomBoolField",
-					"Datetime01": "CustomDatetimeField",
-					"Double01":   "CustomDoubleField",
-					"Int01":      "CustomIntField",
-					"Keyword01":  "CustomKeywordField",
-					"Text01":     "CustomTextField",
-				},
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
@@ -484,10 +552,69 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		},
 		IsGlobalNamespace: false,
 	}
-	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
+
+	// Parallel namespace creation can exhaust the normal retry budget, so test setup uses a larger
+	// budget for transient errors across all persistence backends.
+	metadataMgr := persistence.NewMetadataPersistenceRetryableClient(
+		s.testCluster.testBase.MetadataManager,
+		backoff.NewExponentialRetryPolicy(100*time.Millisecond).
+			WithMaximumInterval(time.Second).
+			WithMaximumAttempts(10).
+			WithExpirationInterval(10*time.Second),
+		persistenceclient.IsPersistenceTransientError,
+	)
+	_, err := metadataMgr.CreateNamespace(ctx, namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err
+	}
+
+	namespaceCacheDeadline := time.Now().Add(5 * NamespaceCacheRefreshInterval)
+	ticker := time.NewTicker(NamespaceCacheRefreshInterval / 2)
+	defer ticker.Stop()
+	for {
+		_, describeErr := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: nsName.String(),
+		})
+		if describeErr == nil {
+			break
+		}
+		if time.Now().After(namespaceCacheDeadline) {
+			return namespace.EmptyID, fmt.Errorf("namespace cache did not refresh for %q before deadline", nsName.String())
+		}
+		<-ticker.C
+	}
+
+	_, err = s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		Namespace:        nsName.String(),
+		SearchAttributes: expectedSearchAttributes,
+	})
+	if err != nil {
+		return namespace.EmptyID, err
+	}
+
+	namespaceCacheDeadline = time.Now().Add(5 * NamespaceCacheRefreshInterval)
+	for {
+		listResp, listErr := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+			Namespace: nsName.String(),
+		})
+		if listErr == nil {
+			customAttrs := listResp.GetCustomAttributes()
+			allFound := true
+			for saName := range expectedSearchAttributes {
+				if _, ok := customAttrs[saName]; !ok {
+					allFound = false
+					break
+				}
+			}
+			if allFound {
+				break
+			}
+		}
+		if time.Now().After(namespaceCacheDeadline) {
+			return namespace.EmptyID, fmt.Errorf("search attributes were not ready for %q before deadline", nsName.String())
+		}
+		<-ticker.C
 	}
 
 	s.Logger.Info("Register namespace succeeded",
@@ -497,7 +624,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	return nsID, nil
 }
 
-func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
+func (s *functionalTestBase) MarkNamespaceAsDeleted(
 	nsName namespace.Name,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
@@ -512,23 +639,23 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 	return err
 }
 
-func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+func (s *functionalTestBase) GetHistoryFunc(nsName string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       namespace,
+			Namespace:       nsName,
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		require.NoError(s.T(), err)
+		s.Require().NoError(err)
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
 			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:     namespace,
+				Namespace:     nsName,
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
 			})
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			events = append(events, historyResponse.History.Events...)
 		}
 
@@ -536,116 +663,75 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 	}
 }
 
-func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	return s.GetHistoryFunc(namespace, execution)()
+func (s *functionalTestBase) GetHistory(nsName string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	return s.GetHistoryFunc(nsName, execution)()
 }
 
-func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {
-	s.T().Helper()
-	var r string
-	s.NoError(payloads.Decode(ps, &r))
-	return r
-}
-
-func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
+func (s *functionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
 	s.NoError(payloads.Decode(ps, &r))
 	return r
 }
 
-func (s *FunctionalTestBase) DecodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
-	s.T().Helper()
-	var buf []byte
-	s.NoError(payloads.Decode(ps, &buf))
-	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
-	return
+func (s *functionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
 
-func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
-	s.T().Helper()
-	s.Greater(value, target-tolerance)
-	s.Less(value, target+tolerance)
+// InjectHook sets a test hook inside the cluster.
+func (s *functionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
+	var scope any
+	switch hook.Scope() {
+	case testhooks.ScopeNamespace:
+		scope = s.NamespaceID()
+	case testhooks.ScopeGlobal:
+		scope = testhooks.GlobalScope
+	default:
+		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
+	}
+	return s.testCluster.host.injectHook(s.T(), hook, scope)
 }
 
-// Overrides one dynamic config setting for the duration of this test (or sub-test). The change
-// will automatically be reverted at the end of the test (using t.Cleanup). The cleanup
-// function is also returned if you want to revert the change before the end of the test.
-func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
+// CloseShard closes the shard that contains the given workflow.
+// This is a cluster-global operation and cannot be called on shared clusters.
+func (s *functionalTestBase) CloseShard(namespaceID string, workflowID string) {
+	if s.isShared {
+		s.T().Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.testClusterConfig.HistoryConfig.NumHistoryShards)
+	_, err := s.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
+		ShardId: shardID,
+	})
+	s.Require().NoError(err)
 }
 
-func (s *FunctionalTestBase) InjectHook(key testhooks.Key, value any) (cleanup func()) {
-	return s.testCluster.host.injectHook(s.T(), key, value)
-}
-
-func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
+func (s *functionalTestBase) GetNamespaceID(nsName string) string {
 	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName,
 	})
 	s.NoError(err)
 	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
-				name := "NoTaskForward"
-				if forceTaskForward {
-					// force two levels of forwarding
-					name = "ForceTaskForward"
-				}
-				if forcePollForward {
-					name += "ForcePollForward"
-				} else {
-					name += "NoPollForward"
-				}
-				if forceAsync {
-					name += "ForceAsync"
-				} else {
-					name += "AllowSync"
-				}
-
-				s.Run(
-					name, func() {
-						if forceTaskForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-						}
-						if forcePollForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-						}
-						if forceAsync {
-							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
-						} else {
-							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
-						}
-
-						subtest()
-					},
-				)
+func (s *functionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
+	for _, behavior := range AllMatchingBehaviors() {
+		s.Run(behavior.Name(), func() {
+			s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
+			if behavior.ForceTaskForward || behavior.ForcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 			}
-		}
-	}
-}
-
-func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout while waiting for channel")
+			behavior.InjectHooks(s)
+			subtest()
+		})
 	}
 }
 
 // TODO (alex): change to nsName namespace.Name
-func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *functionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         nsName,
@@ -656,4 +742,33 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	})
 
 	return err
+}
+
+// RegisterTest records t as currently using this cluster. At t's Cleanup it
+// fails t if the cluster was poisoned during t's window. This fails all active tests
+// currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
+// The cluster pool's slot reference is replaced as soon as poison is observed.
+func (s *functionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
+	if s.t != nil {
+		s.t.addTest(t)
+	}
+
+	t.Cleanup(func() {
+		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+			if f := tl.Failure(); f != nil {
+				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
+			}
+		}
+		wasLast := s.t != nil && s.t.removeTest(t)
+		if wasLast && s.Poisoned() {
+			if err := s.tearDownTestCluster(); err != nil {
+				t.Logf("Failed to tear down poisoned cluster: %v", err)
+			}
+		}
+	})
+}
+
+// Poisoned reports whether the cluster's logger has recorded a failing log.
+func (s *functionalTestBase) Poisoned() bool {
+	return s.t != nil && s.t.Failed()
 }

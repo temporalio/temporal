@@ -25,42 +25,42 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Status of a worker.
-type WorkerStatus int32
+// WorkerGroupStatus describes the lifecycle of a worker group run.
+type WorkerGroupStatus int32
 
 const (
-	WORKER_STATUS_UNSPECIFIED WorkerStatus = 0
-	WORKER_STATUS_ACTIVE      WorkerStatus = 1 // Worker is actively sending heartbeats
-	WORKER_STATUS_INACTIVE    WorkerStatus = 2 // Worker lease has expired. Terminal state.
+	WORKER_GROUP_STATUS_UNSPECIFIED WorkerGroupStatus = 0
+	WORKER_GROUP_STATUS_ACTIVE      WorkerGroupStatus = 1
+	WORKER_GROUP_STATUS_INACTIVE    WorkerGroupStatus = 2
 )
 
-// Enum value maps for WorkerStatus.
+// Enum value maps for WorkerGroupStatus.
 var (
-	WorkerStatus_name = map[int32]string{
-		0: "WORKER_STATUS_UNSPECIFIED",
-		1: "WORKER_STATUS_ACTIVE",
-		2: "WORKER_STATUS_INACTIVE",
+	WorkerGroupStatus_name = map[int32]string{
+		0: "WORKER_GROUP_STATUS_UNSPECIFIED",
+		1: "WORKER_GROUP_STATUS_ACTIVE",
+		2: "WORKER_GROUP_STATUS_INACTIVE",
 	}
-	WorkerStatus_value = map[string]int32{
-		"WORKER_STATUS_UNSPECIFIED": 0,
-		"WORKER_STATUS_ACTIVE":      1,
-		"WORKER_STATUS_INACTIVE":    2,
+	WorkerGroupStatus_value = map[string]int32{
+		"WORKER_GROUP_STATUS_UNSPECIFIED": 0,
+		"WORKER_GROUP_STATUS_ACTIVE":      1,
+		"WORKER_GROUP_STATUS_INACTIVE":    2,
 	}
 )
 
-func (x WorkerStatus) Enum() *WorkerStatus {
-	p := new(WorkerStatus)
+func (x WorkerGroupStatus) Enum() *WorkerGroupStatus {
+	p := new(WorkerGroupStatus)
 	*p = x
 	return p
 }
 
-func (x WorkerStatus) String() string {
+func (x WorkerGroupStatus) String() string {
 	switch x {
-	case WORKER_STATUS_UNSPECIFIED:
+	case WORKER_GROUP_STATUS_UNSPECIFIED:
 		return "Unspecified"
-	case WORKER_STATUS_ACTIVE:
+	case WORKER_GROUP_STATUS_ACTIVE:
 		return "Active"
-	case WORKER_STATUS_INACTIVE:
+	case WORKER_GROUP_STATUS_INACTIVE:
 		return "Inactive"
 	default:
 		return strconv.Itoa(int(x))
@@ -68,42 +68,99 @@ func (x WorkerStatus) String() string {
 
 }
 
-func (WorkerStatus) Descriptor() protoreflect.EnumDescriptor {
+func (WorkerGroupStatus) Descriptor() protoreflect.EnumDescriptor {
 	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes[0].Descriptor()
 }
 
-func (WorkerStatus) Type() protoreflect.EnumType {
+func (WorkerGroupStatus) Type() protoreflect.EnumType {
 	return &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes[0]
 }
 
-func (x WorkerStatus) Number() protoreflect.EnumNumber {
+func (x WorkerGroupStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use WorkerStatus.Descriptor instead.
-func (WorkerStatus) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use WorkerGroupStatus.Descriptor instead.
+func (WorkerGroupStatus) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-// Metadata about the worker.
+// WorkerGroupState owns the shared lease for workers heartbeating together.
+type WorkerGroupState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SDK-generated grouping key, also used as the CHASM Business ID.
+	WorkerGroupingKey string `protobuf:"bytes,1,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
+	// Lifecycle of the group run. Individual workers may stop while the group stays active.
+	Status WorkerGroupStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus" json:"status,omitempty"`
+	// Deadline computed from CHASM time and the effective lease duration.
+	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *WorkerGroupState) Reset() {
+	*x = WorkerGroupState{}
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerGroupState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerGroupState) ProtoMessage() {}
+
+func (x *WorkerGroupState) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerGroupState.ProtoReflect.Descriptor instead.
+func (*WorkerGroupState) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WorkerGroupState) GetWorkerGroupingKey() string {
+	if x != nil {
+		return x.WorkerGroupingKey
+	}
+	return ""
+}
+
+func (x *WorkerGroupState) GetStatus() WorkerGroupStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WORKER_GROUP_STATUS_UNSPECIFIED
+}
+
+func (x *WorkerGroupState) GetLeaseExpirationTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LeaseExpirationTime
+	}
+	return nil
+}
+
+// WorkerState stores metadata for one worker within a group.
 type WorkerState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Current status of the worker.
-	Status WorkerStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerStatus" json:"status,omitempty"`
-	// Worker heartbeat information including metadata and capabilities.
-	WorkerHeartbeat *v1.WorkerHeartbeat `protobuf:"bytes,2,opt,name=worker_heartbeat,json=workerHeartbeat,proto3" json:"worker_heartbeat,omitempty"`
-	// Time when the lease expires. (Active to Inactive state transition).
-	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
-	// Sequence number for optimistic locking. Client must echo this in subsequent heartbeats.
-	// Used to recover from lost responses (server succeeded but client didn't receive new token).
-	ConflictToken int64 `protobuf:"varint,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Last reported heartbeat, including the worker instance key and runtime metadata.
+	WorkerHeartbeat *v1.WorkerHeartbeat `protobuf:"bytes,1,opt,name=worker_heartbeat,json=workerHeartbeat,proto3" json:"worker_heartbeat,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkerState) Reset() {
 	*x = WorkerState{}
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -115,7 +172,7 @@ func (x *WorkerState) String() string {
 func (*WorkerState) ProtoMessage() {}
 
 func (x *WorkerState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -128,14 +185,7 @@ func (x *WorkerState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerState.ProtoReflect.Descriptor instead.
 func (*WorkerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *WorkerState) GetStatus() WorkerStatus {
-	if x != nil {
-		return x.Status
-	}
-	return WORKER_STATUS_UNSPECIFIED
+	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *WorkerState) GetWorkerHeartbeat() *v1.WorkerHeartbeat {
@@ -145,34 +195,21 @@ func (x *WorkerState) GetWorkerHeartbeat() *v1.WorkerHeartbeat {
 	return nil
 }
 
-func (x *WorkerState) GetLeaseExpirationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LeaseExpirationTime
-	}
-	return nil
-}
-
-func (x *WorkerState) GetConflictToken() int64 {
-	if x != nil {
-		return x.ConflictToken
-	}
-	return 0
-}
-
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xa9\x02\n" +
-	"\vWorkerState\x12O\n" +
-	"\x06status\x18\x01 \x01(\x0e27.temporal.server.chasm.lib.worker.proto.v1.WorkerStatusR\x06status\x12R\n" +
-	"\x10worker_heartbeat\x18\x02 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat\x12N\n" +
-	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\x12%\n" +
-	"\x0econflict_token\x18\x04 \x01(\x03R\rconflictToken*c\n" +
-	"\fWorkerStatus\x12\x1d\n" +
-	"\x19WORKER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14WORKER_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
-	"\x16WORKER_STATUS_INACTIVE\x10\x02B>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xe8\x01\n" +
+	"\x10WorkerGroupState\x12.\n" +
+	"\x13worker_grouping_key\x18\x01 \x01(\tR\x11workerGroupingKey\x12T\n" +
+	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status\x12N\n" +
+	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\"a\n" +
+	"\vWorkerState\x12R\n" +
+	"\x10worker_heartbeat\x18\x01 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat*z\n" +
+	"\x11WorkerGroupStatus\x12#\n" +
+	"\x1fWORKER_GROUP_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aWORKER_GROUP_STATUS_ACTIVE\x10\x01\x12 \n" +
+	"\x1cWORKER_GROUP_STATUS_INACTIVE\x10\x02B>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescOnce sync.Once
@@ -187,17 +224,18 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_goTypes = []any{
-	(WorkerStatus)(0),             // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerStatus
-	(*WorkerState)(nil),           // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerState
-	(*v1.WorkerHeartbeat)(nil),    // 2: temporal.api.worker.v1.WorkerHeartbeat
+	(WorkerGroupStatus)(0),        // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
+	(*WorkerGroupState)(nil),      // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState
+	(*WorkerState)(nil),           // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState
 	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*v1.WorkerHeartbeat)(nil),    // 4: temporal.api.worker.v1.WorkerHeartbeat
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int32{
-	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerStatus
-	2, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerState.worker_heartbeat:type_name -> temporal.api.worker.v1.WorkerHeartbeat
-	3, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
+	3, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	4, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState.worker_heartbeat:type_name -> temporal.api.worker.v1.WorkerHeartbeat
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -216,7 +254,7 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

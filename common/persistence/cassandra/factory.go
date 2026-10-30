@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -21,6 +22,7 @@ type (
 		clusterName string
 		logger      log.Logger
 		session     commongocql.Session
+		serializer  serialization.Serializer
 	}
 )
 
@@ -32,6 +34,7 @@ func NewFactory(
 	clusterName string,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) *Factory {
 	session, err := commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
@@ -43,7 +46,13 @@ func NewFactory(
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
-	return NewFactoryFromSession(cfg, clusterName, logger, session)
+	return NewFactoryFromSession(
+		cfg,
+		clusterName,
+		logger,
+		session,
+		serializer,
+	)
 }
 
 // NewFactoryFromSession returns an instance of a factory object from the given session.
@@ -52,12 +61,14 @@ func NewFactoryFromSession(
 	clusterName string,
 	logger log.Logger,
 	session commongocql.Session,
+	serializer serialization.Serializer,
 ) *Factory {
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
 		logger:      logger,
 		session:     session,
+		serializer:  serializer,
 	}
 }
 
@@ -88,7 +99,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionStore(f.session, f.serializer, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra

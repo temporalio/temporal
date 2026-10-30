@@ -31,7 +31,7 @@ func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
 			Name: "dostuff",
 			Action: func(c *cli.Context) error {
 				input := c.StringSlice("input")
-				s.Equal(3, len(input))
+				s.Len(input, 3)
 				expectedInput := []string{"s1", "s2", "s3"}
 				s.Equal(expectedInput, input)
 				return nil

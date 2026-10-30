@@ -10,22 +10,26 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 // TODO: Rename all SQL Managers to Stores
 type SqlStore struct {
-	DB     sqlplugin.DB
-	logger log.Logger
+	DB         sqlplugin.DB
+	logger     log.Logger
+	serializer serialization.Serializer
 }
 
-func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
+func NewSQLStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
 	return SqlStore{
-		DB:     db,
-		logger: logger,
+		DB:         db,
+		logger:     logger,
+		serializer: serializer,
 	}
 }
 
@@ -49,7 +53,7 @@ func (m *SqlStore) Close() {
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.DB.BeginTx(ctx)
 	if err != nil {
-		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
+		return convertSQLError(operation, "failed to start transaction", err)
 	}
 	err = f(tx)
 	if err != nil {
@@ -68,16 +72,30 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*serviceerror.NotFound:
 			return err
 		default:
-			return serviceerror.NewUnavailablef("%v: %v", operation, err)
+			return convertSQLError(operation, "", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return serviceerror.NewUnavailablef("%s operation failed. Failed to commit transaction. Error: %v", operation, err)
+		return convertSQLError(operation, "failed to commit transaction", err)
 	}
 	return nil
 }
 
-func gobSerialize(x interface{}) ([]byte, error) {
+// convertSQLError maps driver errors to persistence errors. Context cancel and
+// deadline must stay unwrap-able so callers can skip retries and error logs on
+// shutdown; other errors become Unavailable.
+func convertSQLError(operation string, message string, err error) error {
+	prefix := operation
+	if message != "" {
+		prefix = operation + ": " + message
+	}
+	if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
+		return fmt.Errorf("%s: %w", prefix, err)
+	}
+	return serviceerror.NewUnavailablef("%s: %v", prefix, err)
+}
+
+func gobSerialize(x any) ([]byte, error) {
 	b := bytes.Buffer{}
 	e := gob.NewEncoder(&b)
 	err := e.Encode(x)
@@ -87,7 +105,7 @@ func gobSerialize(x interface{}) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func gobDeserialize(a []byte, x interface{}) error {
+func gobDeserialize(a []byte, x any) error {
 	b := bytes.NewBuffer(a)
 	d := gob.NewDecoder(b)
 	err := d.Decode(x)

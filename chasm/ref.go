@@ -13,7 +13,8 @@ var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed compon
 // ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
 var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
-var defaultShardingFn = func(key ExecutionKey) string { return key.NamespaceID + "_" + key.BusinessID }
+// ErrInvalidRefConsistencyLevel is returned when a component ref cannot be used at the requested RefConsistencyLevel.
+var ErrInvalidRefConsistencyLevel = serviceerror.NewInvalidArgument("invalid consistency level for component ref")
 
 // ExecutionKey uniquely identifies a CHASM execution in the system.
 type ExecutionKey struct {
@@ -53,7 +54,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(NodeBackend, Context, Component) error
+	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
@@ -66,6 +67,55 @@ func NewComponentRef[C Component](
 	return ComponentRef{
 		ExecutionKey:    executionKey,
 		executionGoType: reflect.TypeFor[C](),
+	}
+}
+
+// NewComponentRefByArchetypeID creates a new ComponentRef with a known archetype ID.
+// This should only be used by CHASM framework internals.
+// CHASM library developers should use [NewComponentRef] instead.
+func NewComponentRefByArchetypeID(
+	executionKey ExecutionKey,
+	archetypeID ArchetypeID,
+) ComponentRef {
+	return ComponentRef{
+		ExecutionKey: executionKey,
+		archetypeID:  archetypeID,
+	}
+}
+
+// forConsistencyLevel returns a copy of the ref adjusted for the requested [RefConsistencyLevel] by
+// dropping the consistency tokens (and, at the weakest level, the run ID) that the level does not enforce.
+// See [RefConsistencyLevel] for the ladder.
+func (r *ComponentRef) forConsistencyLevel(level RefConsistencyLevel) (ComponentRef, error) {
+	ref := *r
+	switch level {
+	case RefConsistencyLevelExecutionLastUpdate:
+		// Strongest (default): enforce the execution-level token; nothing relaxed.
+		return ref, nil
+	case RefConsistencyLevelComponentCreation:
+		// Tolerate a stale execution transition without losing the staleness guarantee: run the
+		// execution staleness check ([Node.IsStale]) against the component's creation transition
+		// instead of the execution's last update. This still reloads a mutable state that predates
+		// the component (so the handler never operates on a state that doesn't yet know about the
+		// component), while no longer requiring the ref to match the latest execution transition.
+		// The creation transition is also matched in [Node.Component]; identity is otherwise the
+		// caller's responsibility (e.g. request ID).
+		ref.executionLastUpdateVT = ref.componentInitialVT
+		return ref, nil
+	case RefConsistencyLevelCurrentRun:
+		// Only workflow executions have a run chain to resolve a "current run" against, so this level
+		// is invalid for other archetypes (see ErrInvalidRefConsistencyLevel).
+		if r.archetypeID != WorkflowArchetypeID {
+			return ComponentRef{}, ErrInvalidRefConsistencyLevel
+		}
+		// Weakest: resolve by component path on the current run. Drop the run ID and every versioned
+		// transition; identity must be re-established by caller logic (e.g. request ID).
+		ref.executionLastUpdateVT = nil
+		ref.componentInitialVT = nil
+		ref.RunID = ""
+		return ref, nil
+	default:
+		return ref, serviceerror.NewInternalf("unknown ref consistency level: %d", level)
 	}
 }
 
@@ -83,26 +133,6 @@ func (r *ComponentRef) ArchetypeID(
 	r.archetypeID = rc.componentID
 
 	return r.archetypeID, nil
-}
-
-// ShardingKey returns the sharding key used for determining the shardID of the run
-// that contains the referenced component.
-// TODO: remove this method and ShardingKey concept, we don't need this functionality.
-func (r *ComponentRef) ShardingKey(
-	registry *Registry,
-) (string, error) {
-
-	archetypeID, err := r.ArchetypeID(registry)
-	if err != nil {
-		return "", err
-	}
-
-	rc, ok := registry.ComponentByID(archetypeID)
-	if !ok {
-		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
-	}
-
-	return rc.shardingFn(r.ExecutionKey), nil
 }
 
 func (r *ComponentRef) Serialize(

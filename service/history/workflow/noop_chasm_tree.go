@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -17,12 +18,20 @@ var NoopChasmTree = &noopChasmTree{}
 
 type noopChasmTree struct{}
 
-func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction(context.Context, bool) (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 
 func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
 	return chasm.NodesSnapshot{}
+}
+
+func (*noopChasmTree) PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState) {
+	return chasm.NodesSnapshot{}, nil
+}
+
+func (*noopChasmTree) ApplySystemMutation(chasm.NodesMutation) error {
+	return nil
 }
 
 func (*noopChasmTree) ApplyMutation(chasm.NodesMutation) error {
@@ -37,6 +46,8 @@ func (*noopChasmTree) RefreshTasks() error {
 	return nil
 }
 
+func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
+
 func (*noopChasmTree) IsStateDirty() bool {
 	return false
 }
@@ -45,7 +56,7 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
-func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error {
 	return nil
 }
 
@@ -78,7 +89,15 @@ func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component,
 
 func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
-	registry *chasm.Registry,
+	executionKey chasm.ExecutionKey,
+	task *tasks.ChasmTask,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	return nil
+}
+
+func (*noopChasmTree) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
 	executionKey chasm.ExecutionKey,
 	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
@@ -89,6 +108,6 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
-) (bool, error) {
-	return false, nil
+) (isTaskInTree bool, isValidByComponent bool, err error) {
+	return false, false, nil
 }

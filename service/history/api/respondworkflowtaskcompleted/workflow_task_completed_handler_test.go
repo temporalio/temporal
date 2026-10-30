@@ -2,6 +2,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -10,22 +11,33 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -33,17 +45,20 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms      *historyi.MockMutableState
-		updates update.Registry
-		handler *workflowTaskCompletedHandler
+		ms                    *historyi.MockMutableState
+		updates               update.Registry
+		handler               *workflowTaskCompletedHandler
+		chasmWorkflowRegistry *chasmworkflow.Registry
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -59,32 +74,54 @@ func TestCommandProtocolMessage(t *testing.T) {
 		}
 	}
 
-	setup := func(t *testing.T, out *testconf, blobSizeLimit int) {
-		shardCtx := historyi.NewMockShardContext(gomock.NewController(t))
+	type setupOpts struct {
+		blobSizeLimit int
+		chasmEnabled  bool
+	}
+
+	setup := func(t *testing.T, out *testconf, opts setupOpts) {
+		ctrl := gomock.NewController(t)
+		shardCtx := historyi.NewMockShardContext(ctrl)
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.ms = historyi.NewMockMutableState(gomock.NewController(t))
-		out.ms.EXPECT().VisitUpdates(gomock.Any())
-		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
-		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())
+		out.ms = historyi.NewMockMutableState(ctrl)
+		out.ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
+		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)).AnyTimes()
+
+		dcClient := dynamicconfig.StaticClient(nil)
+		if opts.chasmEnabled {
+			out.chasmWorkflowRegistry = chasmworkflow.NewRegistry()
+			mockCtx := &chasm.MockMutableContext{}
+			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
+			out.ms.EXPECT().ChasmEnabled().Return(true).AnyTimes()
+			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
+			dcClient = dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
+				dynamicconfig.EnableChasm.Key(): true,
+			})
+		}
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
-		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
+		col := dynamicconfig.NewCollection(dcClient, logger)
 		config := configs.NewConfig(col, 1)
-		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
+		mockMeta := persistence.NewMockMetadataManager(ctrl)
 		nsReg := nsregistry.NewRegistry(
 			mockMeta,
 			true,
+			"active",
 			func() time.Duration { return 1 * time.Hour },
 			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,
 			logger,
 			namespace.NewDefaultReplicationResolverFactory(),
+			nsregistry.DefaultNamespaceStateChanged,
 		)
-		out.handler = newWorkflowTaskCompletedHandler( // 😲
+		out.handler = newWorkflowTaskCompletedHandler(
 			t.Name(), // identity
+			"",       // workerControlTaskQueue
 			123,      // workflowTaskCompletedID
+			nil,      // workflowTaskDeployment
 			out.ms,
 			out.updates,
 			&effects,
@@ -94,7 +131,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 				nil, // searchAttributesValidator
 			),
 			newWorkflowSizeChecker(
-				workflowSizeLimits{blobSizeLimitError: blobSizeLimit},
+				workflowSizeLimits{blobSizeLimitError: opts.blobSizeLimit},
 				out.ms,
 				nil, // searchAttributesValidator
 				metricsHandler,
@@ -107,14 +144,16 @@ func TestCommandProtocolMessage(t *testing.T) {
 			shardCtx,
 			nil, // searchattribute.MapperProvider
 			false,
-			nil, // TODO: test usage of commandHandlerRegistry?
+			nil,
+			out.chasmWorkflowRegistry,
+			nil,
 			nil,
 		)
 	}
 
 	t.Run("missing message ID", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			command = msgCommand("") // blank is invalid
 		)
@@ -132,7 +171,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	// Verifies that if user metadata is present in the command then it is passed through to the newly created event.
 	t.Run("Attach user metadata", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		msgID := t.Name() + "-message-id"
 		command := msgCommand(msgID)
 		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
@@ -165,10 +204,78 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.Equal(t, event.UserMetadata, command.UserMetadata)
 	})
 
+	// Verifies that event group markers attached to a command are passed through to the newly created event.
+	t.Run("Attach event group markers", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.EventGroupMarkers = []*sdkpb.EventGroupMarker{
+			{
+				Variant: &sdkpb.EventGroupMarker_Label_{
+					Label: &sdkpb.EventGroupMarker_Label{
+						Id: "explicit-marker-id",
+						Label: &commonpb.Payload{
+							Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+							Data:     []byte(`"payment"`),
+						},
+					},
+				},
+			},
+			{
+				Variant: &sdkpb.EventGroupMarker_InboundUpdate_{
+					InboundUpdate: &sdkpb.EventGroupMarker_InboundUpdate{
+						InboundUpdateId: "fire-update-1",
+					},
+				},
+			},
+		}
+
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Equal(t, command.EventGroupMarkers, event.EventGroupMarkers)
+	})
+
+	// Verifies that an empty or nil EventGroupMarkers slice does not result in any unintended
+	// field being set on the produced history event.
+	t.Run("No event group markers leaves field unset", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Nil(t, event.EventGroupMarkers)
+	})
+
 	// Verifies that the error is properly handled when event creation fails.
 	t.Run("Event creation failure", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		command := msgCommand(t.Name() + "-message-id")
 		completeWorkflowExecutionCommandAttributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 			Result: &commonpb.Payloads{
@@ -202,7 +309,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("message not found", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			command = msgCommand("valid_but_not_found_msg_id")
 		)
@@ -220,7 +327,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Run("message too large", func(t *testing.T) {
 		var tc testconf
 		t.Log("setting max blob size to zero")
-		setup(t, &tc, 0)
+		setup(t, &tc, setupOpts{blobSizeLimit: 0})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -245,7 +352,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("message for unsupported protocol", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -272,7 +379,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("update not found", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -299,7 +406,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("deliver message failure", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			updateID = t.Name() + "-update-id"
 			msgID    = t.Name() + "-message-id"
@@ -332,7 +439,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("deliver message success", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			updateID = t.Name() + "-update-id"
 			msgID    = updateID + "/request"
@@ -370,6 +477,36 @@ func TestCommandProtocolMessage(t *testing.T) {
 			"delivering a acceptance message to an update in the sent state should succeed")
 		require.Nil(t, tc.handler.workflowTaskFailedCause)
 	})
+
+	t.Run("CHASM command handler is invoked", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit, chasmEnabled: true})
+
+		// Register a test handler that returns a sentinel error
+		sentinelErr := errors.New("sentinel: CHASM handler invoked")
+		err := tc.chasmWorkflowRegistry.Register(testWorkflowLibrary{
+			commandHandlers: map[enumspb.CommandType]chasmworkflow.CommandHandler{
+				enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION: func(chasm.MutableContext, *chasmworkflow.Workflow, chasmworkflow.Validator, *commandpb.Command, chasmworkflow.CommandHandlerOptions) error {
+					return sentinelErr
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		command := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "test-endpoint",
+					Service:   "test-service",
+					Operation: "test-operation",
+				},
+			},
+		}
+
+		_, err = tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.ErrorIs(t, err, sentinelErr)
+	})
 }
 
 func newMsgList(msgs ...*protocolpb.Message) *collection.IndexedTakeList[string, *protocolpb.Message] {
@@ -381,4 +518,787 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	var a anypb.Any
 	require.NoError(t, a.MarshalFrom(pb))
 	return &a
+}
+
+type testWorkflowLibrary struct {
+	commandHandlers map[enumspb.CommandType]chasmworkflow.CommandHandler
+}
+
+func (l testWorkflowLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflow.CommandHandler {
+	return l.commandHandlers
+}
+
+func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition {
+	return nil
+}
+
+func TestFlushWorkerCommandsTasks(t *testing.T) {
+	t.Parallel()
+
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+	token4 := []byte("token4")
+
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	t.Run("batches commands by control queue", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		expectedCommands := makeCommands(token1, token2, token3)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			expectedCommands,
+			"control-queue-1",
+		).Return(nil).Times(1)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": expectedCommands,
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
+
+	t.Run("creates separate tasks for different control queues", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		calls := make(map[string][]*workerpb.WorkerCommand)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			gomock.Any(),
+			gomock.Any(),
+		).DoAndReturn(func(commands []*workerpb.WorkerCommand, queue string) error {
+			calls[queue] = commands
+			return nil
+		}).Times(2)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": makeCommands(token1, token2),
+				"control-queue-2": makeCommands(token3, token4),
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+
+		require.Len(t, calls["control-queue-1"], 2)
+		require.Len(t, calls["control-queue-2"], 2)
+	})
+
+	t.Run("does nothing when no pending commands", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                        ms,
+			pendingWorkerCommandsByControlQueue: nil,
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
+}
+
+func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+
+	activityID := "test-activity-1"
+	scheduledEventID := int64(5)
+
+	ai := &persistencespb.ActivityInfo{
+		ScheduledEventId: scheduledEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
+		Version:          1,
+		StartVersion:     1,
+		TaskQueue:        "test-queue",
+		ActivityType:     &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	expectedDeployment := &deploymentpb.Deployment{SeriesName: "test-deployment", BuildId: "test-build-id"}
+
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), expectedDeployment, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
+	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: "test-namespace-id",
+		WorkflowId:  "test-workflow-id",
+	})
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: "test-run-id",
+	})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow"})
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+
+	shardCtx.EXPECT().NewVectorClock().Return(expectedClock, nil)
+
+	dcClient := dynamicconfig.StaticClient(nil)
+	col := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+	config := configs.NewConfig(col, 1)
+
+	handler := &workflowTaskCompletedHandler{
+		identity:               "test-identity",
+		workerControlTaskQueue: "/_sys/worker-commands/test-ns/key1",
+		workflowTaskDeployment: expectedDeployment,
+		mutableState:           ms,
+		shard:                  shardCtx,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		logger:                 log.NewNoopLogger(),
+		metricsHandler:         metrics.NoopMetricsHandler,
+		config:                 config,
+	}
+
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   activityID,
+		ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	mutation, err := handler.handlePostCommandEagerExecuteActivity(attr, ai)
+	require.NoError(t, err)
+	require.NotNil(t, mutation)
+}
+
+func TestGrantEagerActivityDispatchBatch(t *testing.T) {
+	t.Parallel()
+
+	priorities := []*commonpb.Priority{
+		{PriorityKey: 2, FairnessKey: "fairness-key-1"},
+		{PriorityKey: 3, FairnessKey: "fairness-key-2"},
+	}
+	deployment := &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"}
+	candidates := []eagerActivityCandidate{
+		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{Priority: priorities[0]}},
+		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{Priority: priorities[1]}},
+	}
+
+	testCases := []struct {
+		name     string
+		response *matchingservice.GrantEagerDispatchResponse
+		err      error
+		granted  []bool
+	}{
+		{
+			name: "partial grant",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+				{},
+			}},
+			granted: []bool{true, false},
+		},
+		{
+			name:     "matching error",
+			response: nil,
+			err:      errors.New("matching unavailable"),
+			granted:  []bool{false, false},
+		},
+		{
+			name:     "missing response item",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 1}}},
+			granted:  []bool{false, false},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			t.Cleanup(func() { metricsHandler.StopCapture(capture) })
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+					require.Equal(t, "namespace-id", request.GetNamespaceId())
+					require.Equal(t, "activity-task-queue", request.GetTaskQueuePartition().GetTaskQueue())
+					require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.GetTaskQueuePartition().GetTaskQueueType())
+					require.Len(t, request.GetItems(), 2)
+					for index, item := range request.GetItems() {
+						require.Equal(t, int32(1), item.GetCount())
+						require.True(t, proto.Equal(priorities[index], item.GetPriority()))
+						require.Equal(t, "deployment", item.GetVersion().GetDeploymentName())
+						require.Equal(t, "build-id", item.GetVersion().GetBuildId())
+					}
+					return test.response, test.err
+				},
+			)
+
+			handler := &workflowTaskCompletedHandler{
+				mutableState:   ms,
+				matchingClient: matchingClient,
+				metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope)),
+				config: &configs.Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+				workflowTaskDeployment: deployment,
+				eagerActivityCandidates: []eagerActivityCandidate{
+					{attr: candidates[0].attr},
+					{attr: candidates[1].attr},
+				},
+			}
+			handler.grantEagerActivityDispatchBatch(
+				context.Background(),
+				"activity-task-queue",
+				[]int{0, 1},
+			)
+			require.Equal(t, test.granted[0], handler.eagerActivityCandidates[0].granted)
+			require.Equal(t, test.granted[1], handler.eagerActivityCandidates[1].granted)
+
+			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
+			require.Len(t, requestMetrics, 1)
+			require.Equal(t, int64(2), requestMetrics[0].Value)
+			require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(), requestMetrics[0].Tags[metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY).Key])
+			require.Equal(t, metrics.HistoryRespondWorkflowTaskCompletedScope, requestMetrics[0].Tags[metrics.OperationTag("").Key])
+			require.Equal(t, tests.LocalNamespaceEntry.Name().String(), requestMetrics[0].Tags[metrics.NamespaceTag("").Key])
+			require.Equal(t, "activity-task-queue", requestMetrics[0].Tags[metrics.UnsafeTaskQueueTag("").Key])
+		})
+	}
+}
+
+func TestEagerDispatchRequestCount(t *testing.T) {
+	require.Equal(t, int64(5), eagerDispatchRequestCount([]*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 2},
+		{Count: 3},
+	}))
+}
+
+func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	candidates := []eagerActivityCandidate{
+		{scheduledEventID: 11, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-1", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
+		{scheduledEventID: 12, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-2", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
+		{scheduledEventID: 13, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-3", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-2"}}},
+		{scheduledEventID: 14, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "cancelled-activity", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-3"}}},
+	}
+	activityInfos := []*persistencespb.ActivityInfo{
+		{ScheduledEventId: 11},
+		{ScheduledEventId: 12},
+		{ScheduledEventId: 13},
+	}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(3)
+	for index, candidate := range candidates[:3] {
+		ms.EXPECT().GetActivityInfo(candidate.scheduledEventID).Return(activityInfos[index], true)
+		ms.EXPECT().GenerateActivityTask(activityInfos[index].GetScheduledEventId()).Return(nil)
+	}
+	ms.EXPECT().GetActivityInfo(int64(14)).Return(nil, false)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"}).Times(2)
+
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+			switch request.GetTaskQueuePartition().GetTaskQueue() {
+			case "queue-1":
+				require.Len(t, request.GetItems(), 2)
+			case "queue-2":
+				require.Len(t, request.GetItems(), 1)
+			default:
+				t.Fatalf("unexpected task queue: %q", request.GetTaskQueuePartition().GetTaskQueue())
+			}
+			return &matchingservice.GrantEagerDispatchResponse{
+				Items: make([]*matchingservice.GrantEagerDispatchResponse_Item, len(request.GetItems())),
+			}, nil
+		},
+	).Times(2)
+
+	handler := &workflowTaskCompletedHandler{
+		mutableState:            ms,
+		matchingClient:          matchingClient,
+		metricsHandler:          metrics.NoopMetricsHandler,
+		eagerActivityCandidates: candidates,
+		config:                  newEagerActivityDispatchTestConfig(true),
+	}
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, mutations)
+}
+
+func TestHandleEagerActivityCandidatesRescheduledActivity(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId: "reused-activity-id",
+		TaskQueue:  &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+	activityInfo := &persistencespb.ActivityInfo{ScheduledEventId: 12, ActivityId: attr.GetActivityId()}
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(2)
+	ms.EXPECT().GetActivityInfo(int64(11)).Return(nil, false)
+	ms.EXPECT().GetActivityInfo(int64(12)).Return(activityInfo, true)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+	ms.EXPECT().GenerateActivityTask(int64(12)).Return(nil)
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+			require.Len(t, request.GetItems(), 1, "only the replacement activity should request a grant")
+			return &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}}, nil
+		},
+	)
+	handler := &workflowTaskCompletedHandler{
+		mutableState:   ms,
+		matchingClient: matchingClient,
+		metricsHandler: metrics.NoopMetricsHandler,
+		config:         newEagerActivityDispatchTestConfig(true),
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: 11, attr: attr},
+			{scheduledEventID: 12, attr: attr},
+		},
+	}
+
+	mutations, err := handler.handleEagerActivityCandidates(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, mutations)
+	require.Nil(t, handler.eagerActivityCandidates[0].activityInfo)
+	require.Same(t, activityInfo, handler.eagerActivityCandidates[1].activityInfo)
+}
+
+func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attrs := []*commandpb.ScheduleActivityTaskCommandAttributes{
+		{
+			ActivityId:   "granted-activity",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		},
+		{
+			ActivityId:   "denied-activity",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		},
+		{
+			ActivityId:   "second-granted-activity",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		},
+	}
+	activityInfos := []*persistencespb.ActivityInfo{
+		{ScheduledEventId: 11, ActivityId: attrs[0].GetActivityId(), Attempt: 1, TaskQueue: "activity-task-queue"},
+		{ScheduledEventId: 12, ActivityId: attrs[1].GetActivityId(), Attempt: 1, TaskQueue: "activity-task-queue"},
+		{ScheduledEventId: 13, ActivityId: attrs[2].GetActivityId(), Attempt: 1, TaskQueue: "activity-task-queue"},
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id", WorkflowId: "workflow-id"}
+	executionState := &persistencespb.WorkflowExecutionState{RunId: "run-id"}
+	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetActivityInfo(activityInfos[0].GetScheduledEventId()).Return(activityInfos[0], true)
+	ms.EXPECT().GetActivityInfo(activityInfos[1].GetScheduledEventId()).Return(activityInfos[1], true)
+	ms.EXPECT().GetActivityInfo(activityInfos[2].GetScheduledEventId()).Return(activityInfos[2], true)
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).Times(3)
+	ms.EXPECT().GetAssignedBuildId().Return("").Times(2)
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		activityInfos[0], int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
+	).Return(&historypb.HistoryEvent{EventId: 14}, nil)
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		activityInfos[2], int64(13), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
+	).Return(&historypb.HistoryEvent{EventId: 15}, nil)
+	ms.EXPECT().GetExecutionState().Return(executionState).Times(2)
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"}).Times(2)
+	ms.EXPECT().GenerateActivityTask(int64(12)).Return(nil)
+	shardCtx.EXPECT().NewVectorClock().Return(clock, nil).Times(2)
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+			require.Len(t, request.GetItems(), 3)
+			return &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+				{},
+				{GrantedCount: 1},
+			}}, nil
+		},
+	)
+
+	config := newEagerActivityDispatchTestConfig(true)
+	handler := &workflowTaskCompletedHandler{
+		identity:        "worker",
+		mutableState:    ms,
+		shard:           shardCtx,
+		tokenSerializer: tasktoken.NewSerializer(),
+		logger:          log.NewNoopLogger(),
+		metricsHandler:  metrics.NoopMetricsHandler,
+		matchingClient:  matchingClient,
+		config:          config,
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: activityInfos[0].GetScheduledEventId(), attr: attrs[0]},
+			{scheduledEventID: activityInfos[1].GetScheduledEventId(), attr: attrs[1]},
+			{scheduledEventID: activityInfos[2].GetScheduledEventId(), attr: attrs[2]},
+		},
+	}
+
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, mutations, 2)
+	response := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	for _, mutation := range mutations {
+		require.NoError(t, mutation(response))
+	}
+	require.Len(t, response.GetActivityTasks(), 2)
+	require.Equal(t, attrs[0].GetActivityId(), response.GetActivityTasks()[0].GetActivityId())
+	require.Equal(t, attrs[2].GetActivityId(), response.GetActivityTasks()[1].GetActivityId())
+}
+
+func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   "activity-id",
+		ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+	activityInfo := &persistencespb.ActivityInfo{
+		ScheduledEventId: 11,
+		ActivityId:       attr.GetActivityId(),
+		Attempt:          1,
+		TaskQueue:        "activity-task-queue",
+	}
+	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		activityInfo, int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
+	).Return(&historypb.HistoryEvent{EventId: 12}, nil)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "workflow-id",
+	})
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "run-id"})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"})
+	shardCtx.EXPECT().NewVectorClock().Return(clock, nil)
+
+	config := newEagerActivityDispatchTestConfig(false)
+	handler := &workflowTaskCompletedHandler{
+		identity:        "worker",
+		mutableState:    ms,
+		shard:           shardCtx,
+		tokenSerializer: tasktoken.NewSerializer(),
+		logger:          log.NewNoopLogger(),
+		metricsHandler:  metrics.NoopMetricsHandler,
+		matchingClient:  matchingClient,
+		config:          config,
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr},
+		},
+	}
+
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, mutations, 1)
+}
+
+func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
+	t.Parallel()
+
+	generationErr := errors.New("generate activity task failed")
+	testCases := []struct {
+		name        string
+		response    *matchingservice.GrantEagerDispatchResponse
+		matchingErr error
+		generateErr error
+	}{
+		{
+			name:     "denied",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}},
+		},
+		{
+			name:        "matching error",
+			matchingErr: errors.New("matching unavailable"),
+		},
+		{
+			name:     "malformed response",
+			response: &matchingservice.GrantEagerDispatchResponse{},
+		},
+		{
+			name:        "task generation error",
+			response:    &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}},
+			generateErr: generationErr,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId: "activity-id",
+				TaskQueue:  &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+			}
+			activityInfo := &persistencespb.ActivityInfo{ScheduledEventId: 11}
+
+			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(2)
+			ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+			ms.EXPECT().GenerateActivityTask(int64(11)).Return(test.generateErr)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
+
+			handler := &workflowTaskCompletedHandler{
+				mutableState:            ms,
+				matchingClient:          matchingClient,
+				metricsHandler:          metrics.NoopMetricsHandler,
+				eagerActivityCandidates: []eagerActivityCandidate{{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr}},
+				config:                  newEagerActivityDispatchTestConfig(true),
+			}
+			mutations, err := handler.handleEagerActivityCandidates(context.Background())
+			if test.generateErr != nil {
+				require.ErrorIs(t, err, test.generateErr)
+			} else {
+				require.NoError(t, err)
+				require.Empty(t, mutations)
+			}
+		})
+	}
+}
+
+func TestHandleEagerActivityCandidatesWorkflowClosed(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	handler := &workflowTaskCompletedHandler{
+		mutableState:   ms,
+		matchingClient: matchingClient,
+		eagerActivityCandidates: []eagerActivityCandidate{{
+			attr: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId: "activity-id",
+				TaskQueue:  &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+			},
+		}},
+	}
+
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, mutations)
+}
+
+func TestHandleCommandScheduleActivityCollectsEagerCandidate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	logger := log.NewNoopLogger()
+	configClient := dynamicconfig.NewMemoryClient()
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerExecution, true)
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, true)
+	config := configs.NewConfig(dynamicconfig.NewCollection(configClient, logger), 100)
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowId:  tests.WorkflowID,
+		TaskQueue:   "workflow-task-queue",
+	}
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  tests.RunID,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:            "activity-id",
+		ActivityType:          &commonpb.ActivityType{Name: "activity-type"},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		StartToCloseTimeout:   durationpb.New(10 * time.Second),
+		RequestEagerExecution: true,
+	}
+	event := &historypb.HistoryEvent{EventId: 42}
+
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+	ms.EXPECT().GetAssignedBuildId().Return("").AnyTimes()
+	ms.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetMostRecentWorkerVersionStamp().Return(nil).AnyTimes()
+	ms.EXPECT().AddActivityTaskScheduledEvent(int64(123), attr, true).Return(event, nil, nil)
+	namespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
+
+	handler := &workflowTaskCompletedHandler{
+		workflowTaskCompletedID: 123,
+		mutableState:            ms,
+		attrValidator: api.NewCommandAttrValidator(
+			namespaceRegistry,
+			config,
+			nil,
+		),
+		sizeLimitChecker: newWorkflowSizeChecker(
+			workflowSizeLimits{},
+			ms,
+			nil,
+			metrics.NoopMetricsHandler,
+			logger,
+		),
+		metricsHandler: metrics.NoopMetricsHandler,
+		config:         config,
+	}
+
+	actualEvent, response, err := handler.handleCommandScheduleActivity(context.Background(), attr)
+	require.NoError(t, err)
+	require.Same(t, event, actualEvent)
+	require.NotNil(t, response)
+	require.Len(t, handler.eagerActivityCandidates, 1)
+	require.Same(t, attr, handler.eagerActivityCandidates[0].attr)
+	require.Equal(t, event.GetEventId(), handler.eagerActivityCandidates[0].scheduledEventID)
+}
+
+func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
+	t.Parallel()
+
+	cancelReqEvent := &historypb.HistoryEvent{EventId: 10}
+	scheduledEventID := int64(5)
+	controlQueue := "/_sys/worker-commands/test-ns/key1"
+
+	t.Run("collects commands for activities with clock, skips those without", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// Activity 1: started with clock (post-deploy) — should produce a cancel command.
+		ai1 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(5),
+			StartedEventId:         7,
+			ActivityId:             "act-1",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+		// Activity 2: started without clock (pre-deploy) — should be skipped.
+		ai2 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(6),
+			StartedEventId:         8,
+			ActivityId:             "act-2",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           nil,
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+		// Activity 3: started with clock — should also produce a cancel command.
+		ai3 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(7),
+			StartedEventId:         9,
+			ActivityId:             "act-3",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 200},
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(5), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 10}, ai1, nil)
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(6), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 11}, ai2, nil)
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(7), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 12}, ai3, nil)
+		ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+
+		handler := &workflowTaskCompletedHandler{
+			identity:                "test-identity",
+			workflowTaskCompletedID: 123,
+			mutableState:            ms,
+			tokenSerializer:         tasktoken.NewSerializer(),
+			logger:                  log.NewNoopLogger(),
+		}
+
+		for _, id := range []int64{5, 6, 7} {
+			_, err := handler.handleCommandRequestCancelActivity(
+				context.Background(),
+				&commandpb.RequestCancelActivityTaskCommandAttributes{ScheduledEventId: id},
+			)
+			require.NoError(t, err)
+		}
+
+		// Activities 1 and 3 (with clock) should produce commands; activity 2 (nil clock) should be skipped.
+		require.Len(t, handler.pendingWorkerCommandsByControlQueue[controlQueue], 2,
+			"only activities with StartedClock should produce cancel commands")
+	})
+
+	t.Run("started activity without control queue does not collect worker command", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		ai := &persistencespb.ActivityInfo{
+			ScheduledEventId:       scheduledEventID,
+			StartedEventId:         7,
+			ActivityId:             "act-1",
+			WorkerControlTaskQueue: "", // worker doesn't support control tasks
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
+		}
+
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), scheduledEventID, "test-identity").
+			Return(cancelReqEvent, ai, nil)
+
+		handler := &workflowTaskCompletedHandler{
+			identity:                "test-identity",
+			workflowTaskCompletedID: 123,
+			mutableState:            ms,
+			logger:                  log.NewNoopLogger(),
+		}
+
+		event, err := handler.handleCommandRequestCancelActivity(
+			context.Background(),
+			&commandpb.RequestCancelActivityTaskCommandAttributes{
+				ScheduledEventId: scheduledEventID,
+			},
+		)
+		require.NoError(t, err)
+		require.Equal(t, cancelReqEvent, event)
+		require.Empty(t, handler.pendingWorkerCommandsByControlQueue)
+	})
+}
+
+func newEagerActivityDispatchTestConfig(checkEnabled bool) *configs.Config {
+	configClient := dynamicconfig.NewMemoryClient()
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, checkEnabled)
+	return configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 100)
 }
