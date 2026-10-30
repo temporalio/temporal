@@ -47,6 +47,8 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 	}
 	leaseDuration := h.leaseDuration(ns.Name().String())
 	var createdGroup *WorkerGroup
+	// TODO: Once activity binding tracking is added, avoid creating or renewing
+	// runs for groups with no tracked activities.
 	_, err = chasm.UpdateWithStartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetWorkerGroupingKey()},
