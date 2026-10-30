@@ -128,7 +128,7 @@ func newLifecycleTestEnvironment(t *testing.T) *lifecycleTestEnvironment {
 	t.Helper()
 	logger := log.NewTestLogger()
 	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(NewLibrary()))
+	require.NoError(t, registry.Register(newLibrary(nil)))
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Unix(1000, 0).UTC())
 	backend := &chasm.MockNodeBackend{

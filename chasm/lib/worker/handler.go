@@ -2,70 +2,72 @@ package worker
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 )
 
 type handler struct {
 	workerstatepb.UnimplementedWorkerServiceServer
-	metricsHandler metrics.Handler
+
+	namespaceRegistry namespace.Registry
+	enabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	leaseDuration     dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	logger            log.Logger
 }
 
-func newHandler(metricsHandler metrics.Handler) *handler {
+func newHandler(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry, logger log.Logger) *handler {
 	return &handler{
-		metricsHandler: metricsHandler,
+		namespaceRegistry: namespaceRegistry,
+		enabled:           dynamicconfig.EnableWorkerStateTracking.Get(dc),
+		leaseDuration:     dynamicconfig.WorkerStateTrackingLeaseDuration.Get(dc),
+		logger:            logger,
 	}
 }
 
-func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (*workerstatepb.RecordHeartbeatResponse, error) {
-	// Validate that exactly one worker heartbeat is present
-	frontendReq := req.GetFrontendRequest()
-	if frontendReq == nil || len(frontendReq.GetWorkerHeartbeat()) != 1 {
-		return nil, errors.New("exactly one worker heartbeat must be present in the request")
+// RecordHeartbeat creates or renews the group addressed by the SDK grouping key.
+// CHASM updates an open run or creates a new run if the previous lease expired.
+func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (_ *workerstatepb.RecordHeartbeatResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+
+	if req.GetNamespaceId() == "" || req.GetWorkerGroupingKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace ID and worker grouping key are required")
 	}
-
-	workerHeartbeat := frontendReq.GetWorkerHeartbeat()[0]
-
-	executionKey := chasm.ExecutionKey{
-		NamespaceID: req.NamespaceId,
-		BusinessID:  workerHeartbeat.WorkerInstanceKey,
-	}
-
-	// Try to update existing worker, or create new one if not found
-	// newResp is set if a new worker is created, updateResp is set if an existing worker is updated
-	newResp, updateResp, _, _, err := chasm.UpdateWithNewExecution(
-		ctx,
-		executionKey,
-		// newFn: called if worker doesn't exist
-		func(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) (*Worker, *workerstatepb.RecordHeartbeatResponse, error) {
-			w := NewWorker()
-			resp, err := w.recordHeartbeat(ctx, req)
-			return w, resp, err
-		},
-		// updateFn: called if worker exists
-		(*Worker).recordHeartbeat,
-		req,
-	)
-
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
-		if _, ok := err.(*WorkerInactiveError); ok {
-			return nil, serviceerror.NewFailedPrecondition(err.Error())
-		}
-		if tokenErr, ok := err.(*TokenMismatchError); ok {
-			return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("%s: current token %x", err.Error(), tokenErr.CurrentToken))
-		}
 		return nil, err
 	}
-
-	// Return the response from whichever path was taken
-	if newResp != nil {
-		metrics.ChasmWorkerCreated.With(h.metricsHandler).Record(1)
-		return newResp, nil
+	if !h.enabled(ns.Name().String()) {
+		return nil, serviceerror.NewFailedPrecondition("durable worker heartbeats are disabled")
 	}
-	return updateResp, nil
+	leaseDuration := h.leaseDuration(ns.Name().String())
+	var createdGroup *WorkerGroup
+	_, err = chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetWorkerGroupingKey()},
+		func(mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (*WorkerGroup, error) {
+			var err error
+			createdGroup, err = newWorkerGroup(mctx, request.GetWorkerGroupingKey(), request.GetFrontendRequest().GetWorkerHeartbeat(), leaseDuration)
+			return createdGroup, err
+		},
+		func(group *WorkerGroup, mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (chasm.NoValue, error) {
+			// CHASM also invokes this callback for a newly created component.
+			// Its constructor already applied the first heartbeat and expiry task.
+			if group == createdGroup {
+				return nil, nil
+			}
+			return nil, group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), leaseDuration)
+		},
+		req,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &workerstatepb.RecordHeartbeatResponse{FrontendResponse: &workflowservice.RecordWorkerHeartbeatResponse{}}, nil
 }

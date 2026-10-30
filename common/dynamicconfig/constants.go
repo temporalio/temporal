@@ -3925,6 +3925,18 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
+	EnableWorkerStateTracking = NewNamespaceBoolSetting(
+		"worker.enableStateTracking",
+		false,
+		`Enable durable worker group heartbeats through Matching and History.`,
+	)
+	WorkerStateTrackingLeaseDuration = NewNamespaceDurationSetting(
+		"worker.stateTrackingLeaseDuration",
+		// Leave slack beyond the SDK's default one-minute heartbeat interval.
+		2*time.Minute,
+		`Shared lease duration for a worker group.`,
+	)
+
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
 	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
