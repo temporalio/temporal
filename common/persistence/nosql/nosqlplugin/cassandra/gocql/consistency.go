@@ -3,7 +3,7 @@ package gocql
 import (
 	"fmt"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 )
 
 // Definition of all Consistency levels
