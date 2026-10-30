@@ -2765,6 +2765,11 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 per execution; the oldest are swept beyond this limit. Set to 0 to disable the count cap. Update request IDs are
 kept in the CHASM request IDs data node and capped by history.maximumRequestIDsInChasmDataNode instead.`,
 	)
+	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
+		"history.enableChasmRequestIDDataNode",
+		false,
+		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
+	)
 	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
 		"history.maximumRequestIDsInChasmDataNode",
 		50,

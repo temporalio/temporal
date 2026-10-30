@@ -597,7 +597,9 @@ func (e *ChasmEngine) updateComponent(
 
 // isRequestIDUsed reports whether transitionOptions.RequestID was already recorded for the execution,
 // looking only where its RequestIDType is recorded (see recordRequestID). Start and update request IDs are
-// deduplicated independently, as StartWorkflow and SignalWorkflow request IDs are for workflows.
+// deduplicated independently, as StartWorkflow and SignalWorkflow request IDs are for workflows, except
+// that while history.enableChasmRequestIDDataNode is off an update request ID is recorded in the execution
+// state too. The data node is always checked, so IDs recorded in it stay honored if the flag is turned off.
 func (e *ChasmEngine) isRequestIDUsed(
 	logger log.Logger,
 	mutableState historyi.MutableState,
@@ -610,7 +612,15 @@ func (e *ChasmEngine) isRequestIDUsed(
 	if err != nil {
 		return false, err
 	}
-	return chasmTree.HasRequestID(transitionOptions.RequestID, e.config.RequestIDMaxAge(mutableState.GetNamespaceEntry().Name().String()))
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	used, err := chasmTree.HasRequestID(transitionOptions.RequestID, e.config.RequestIDMaxAge(nsName))
+	if err != nil || used {
+		return used, err
+	}
+	if !e.config.EnableChasmRequestIDDataNode(nsName) {
+		return mutableState.HasRequestID(transitionOptions.RequestID), nil
+	}
+	return false, nil
 }
 
 // recordRequestID records an accepted request ID for UpdateComponent idempotency.
@@ -618,17 +628,18 @@ func (e *ChasmEngine) isRequestIDUsed(
 // A chasm.RequestIDTypeStart request ID is recorded in the execution state, which is copied to the
 // current record where the start path checks for retried starts. A chasm.RequestIDTypeUpdate request ID
 // is only checked by UpdateComponent, so it is recorded in the CHASM tree's request IDs data node, which
-// is only written when an ID is added.
+// is only written when an ID is added, when history.enableChasmRequestIDDataNode is on. While it is off,
+// hosts that don't keep the data node may still be running, so it is recorded in the execution state.
 func (e *ChasmEngine) recordRequestID(
 	mutableState historyi.MutableState,
 	chasmTree *chasm.Node,
 	transitionOptions chasm.TransitionOptions,
 ) error {
-	if transitionOptions.RequestIDType == chasm.RequestIDTypeStart {
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	if transitionOptions.RequestIDType == chasm.RequestIDTypeStart || !e.config.EnableChasmRequestIDDataNode(nsName) {
 		mutableState.AttachChasmRequestID(transitionOptions.RequestID)
 		return nil
 	}
-	nsName := mutableState.GetNamespaceEntry().Name().String()
 	return chasmTree.AttachRequestID(
 		transitionOptions.RequestID,
 		e.config.MaximumRequestIDsInChasmDataNode(nsName),
