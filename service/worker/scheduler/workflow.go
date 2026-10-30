@@ -867,7 +867,11 @@ func (s *scheduler) walkTimeRange(
 		}
 	}
 
-	shortcuts := !manual && s.hasMinVersion(ChunkedCatchup)
+	// Jumping LastProcessedTime to end could skip a match whose nominal time has passed but
+	// whose jittered time hasn't (next-match lookups go by nominal time), so jittered specs
+	// don't take the shortcuts; the chunk limit still bounds them.
+	shortcuts := !manual && s.hasMinVersion(ChunkedCatchup) &&
+		timestamp.DurationValue(s.Schedule.GetSpec().GetJitter()) <= 0
 	skipPolicy := s.resolveOverlapPolicy(overlapPolicy) == enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	// Set once no later match in this range can be started.
 	var stopReason string

@@ -47,6 +47,21 @@ func TestChunkedCatchup(t *testing.T) {
 		require.Equal(t, baseStartTime, r.next.State.LastProcessedTime.AsTime())
 	})
 
+	t.Run("no-shortcut-for-jittered-specs", func(t *testing.T) {
+		// The match whose nominal time is `now` fires up to 500ms later, so it is not due
+		// yet and must stay ahead of LastProcessedTime. Jumping LastProcessedTime to now
+		// (as the shortcuts do) would skip it: next-match lookups go by nominal time.
+		args := newCatchupArgs(t, time.Hour)
+		args.Schedule.Spec.Jitter = durationpb.New(500 * time.Millisecond)
+		r := runCatchupRepro(t, catchupCase{chunked: 5000, args: args})
+		require.NoError(t, r.err)
+		require.True(t, r.next.State.LastProcessedTime.AsTime().Before(baseStartTime),
+			"LastProcessedTime %s must stay before the not-yet-due match at %s",
+			r.next.State.LastProcessedTime.AsTime(), baseStartTime)
+		require.InDelta(t, 3600, r.walked, 1, "walked normally, bounded by the chunk limit")
+		require.Empty(t, r.metrics[metrics.ScheduleCatchupRangeSkipped.Name()])
+	})
+
 	t.Run("misses-are-chunked-and-counted-exactly", func(t *testing.T) {
 		// Matches outside the catchup window are walked but never buffered, so neither
 		// shortcut applies; only the chunk limit bounds them. Chunks 1-7 contain nothing
