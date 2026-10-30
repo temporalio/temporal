@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )
@@ -58,14 +59,15 @@ const (
 
 type (
 	serviceResolver struct {
-		service       primitives.ServiceName
-		port          int
-		rp            *ringpop.Ringpop
-		replicaPoints int
-		refreshChan   chan struct{}
-		shutdownCh    chan struct{}
-		shutdownWG    sync.WaitGroup
-		logger        log.Logger
+		service        primitives.ServiceName
+		port           int
+		rp             *ringpop.Ringpop
+		replicaPoints  int
+		refreshChan    chan struct{}
+		shutdownCh     chan struct{}
+		shutdownWG     sync.WaitGroup
+		logger         log.Logger
+		metricsHandler metrics.Handler
 
 		ringAndHosts atomic.Value // holds a ringAndHosts
 
@@ -98,6 +100,7 @@ func newServiceResolver(
 	rp *ringpop.Ringpop,
 	replicaPoints int,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *serviceResolver {
 	resolver := &serviceResolver{
 		service:             service,
@@ -107,6 +110,7 @@ func newServiceResolver(
 		refreshChan:         make(chan struct{}),
 		shutdownCh:          make(chan struct{}),
 		logger:              log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
+		metricsHandler:      metricsHandler,
 		scheduledRefreshMap: make(map[int64]*time.Timer),
 		listeners:           make(map[string]chan<- *membership.ChangedEvent),
 	}
@@ -287,6 +291,13 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		return nil, err
 	}
 
+	// Emit membership gauges on every refresh, not just when membership changes.
+	// refreshLocked runs on a periodic ~10s ticker (see refreshRingWorker) as well as
+	// on real membership changes, so tying emission to this call (rather than to the
+	// changed-event early return below) bounds gauge staleness to that refresh cadence
+	// instead of leaving the last value stuck indefinitely during stable periods.
+	r.emitMembershipGaugesFromHosts(hosts)
+
 	// if we found an add/remove event, schedule another refresh right at that time
 	r.scheduleRefresh(nextEvent)
 
@@ -309,6 +320,29 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 
 	return changedEvent, nil
+}
+
+// emitMembershipGaugesFromHosts records per-service gauges describing the current membership
+// ring: how many hosts are reachable, how many are available (accepting requests, i.e. not
+// draining), and how many are draining. This is observation-only and does not affect routing.
+// It is called on every refreshLocked invocation (not gated on a detected membership change)
+// so that gauge freshness tracks the periodic refresh cadence instead of going stale during
+// stable periods.
+func (r *serviceResolver) emitMembershipGaugesFromHosts(hosts []*hostInfo) {
+	if r.metricsHandler == nil {
+		return
+	}
+	reachable := len(hosts)
+	available := 0
+	for _, host := range hosts {
+		if !isDraining(host) {
+			available++
+		}
+	}
+	serviceTag := metrics.ServiceNameTag(r.service)
+	metrics.MembershipReachableMembers.With(r.metricsHandler).Record(float64(reachable), serviceTag)
+	metrics.MembershipAvailableMembers.With(r.metricsHandler).Record(float64(available), serviceTag)
+	metrics.MembershipDrainingMembers.With(r.metricsHandler).Record(float64(reachable-available), serviceTag)
 }
 
 func (r *serviceResolver) scheduleRefresh(nextEvent int64) {
