@@ -3,7 +3,7 @@ package await
 import (
 	"testing"
 
-	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 // Rcv waits for and returns the next value from ch.

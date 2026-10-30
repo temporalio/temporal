@@ -1,25 +1,17 @@
 package parallelsuite
 
 import (
-	"context"
 	"flag"
 	"reflect"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/testx/testcontext"
 )
 
 type validSuite struct{ Suite[*validSuite] }
 
 func (s *validSuite) TestA() {
 	s.NotNil(s.T())
-
-	ch := make(chan int, 1)
-	s.Snd(ch, 42)
-	s.Equal(42, s.Rcv(ch))
 }
 
 type validWithArgsSuite struct{ Suite[*validWithArgsSuite] }
@@ -56,54 +48,6 @@ type setupTestSuite struct{ Suite[*setupTestSuite] }
 func (s *setupTestSuite) TestA()     {}
 func (s *setupTestSuite) SetupTest() {} //nolint:unused
 
-type awaitTrueSuite struct{ Suite[*awaitTrueSuite] }
-
-func (s *awaitTrueSuite) TestAwaitTrue() {
-	var attempts atomic.Int32
-	s.AwaitTrue(func() bool {
-		attempts.Add(1)
-		return true
-	}, time.Second, time.Millisecond)
-	s.Equal(int32(1), attempts.Load())
-}
-
-func (s *awaitTrueSuite) TestAwaitTrueFalseRetry() {
-	var attempts atomic.Int32
-	s.AwaitTrue(func() bool {
-		return attempts.Add(1) == 2
-	}, time.Second, time.Millisecond)
-	s.Equal(int32(2), attempts.Load())
-}
-
-func (s *awaitTrueSuite) TestAwaitTruef() {
-	s.AwaitTruef(func() bool {
-		return true
-	}, time.Second, time.Millisecond, "condition should pass")
-}
-
-type contextSuite struct{ Suite[*contextSuite] }
-
-func (s *contextSuite) TestContextHasDeadline() {
-	deadline, ok := s.Context().Deadline()
-	s.True(ok)
-	s.Positive(time.Until(deadline))
-}
-
-func (s *contextSuite) TestAwaitUsesSuiteContext() {
-	type key struct{}
-
-	testcontext.AttachDecorator(s.T(), key{}, func(ctx context.Context) context.Context {
-		return context.WithValue(ctx, key{}, "decorated")
-	})
-
-	s.Await(func(s *contextSuite) {
-		s.Equal("decorated", s.Context().Value(key{}))
-		deadline, ok := s.Context().Deadline()
-		s.True(ok)
-		s.Less(time.Until(deadline), 200*time.Millisecond)
-	}, 100*time.Millisecond, time.Millisecond)
-}
-
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
 
 func (s *sealAfterRunSuite) TestAssertionAfterRun() {
@@ -120,13 +64,6 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 	// T() also panics after Run.
 	require.Panics(t, func() { s.T() })
 
-	// Context() resolves through T() and also panics after Run.
-	require.Panics(t, func() { s.Context() })
-
-	// Channel helpers resolve through T() and also panic after Run.
-	ch := make(chan int, 1)
-	require.Panics(t, func() { s.Snd(ch, 42) })
-	require.Panics(t, func() { s.Rcv(ch) })
 }
 
 func TestRun_AcceptsSuite(t *testing.T) {
@@ -139,12 +76,7 @@ func TestRun_AcceptsSuite(t *testing.T) {
 	t.Run("legacy", func(t *testing.T) {
 		require.NotPanics(t, func() { RunLegacySequential(t, &validSuite{}) }) //nolint:staticcheck // SA1019: validating deprecated legacy runner
 	})
-	t.Run("await true", func(t *testing.T) {
-		require.NotPanics(t, func() { Run(t, &awaitTrueSuite{}) })
-	})
-	t.Run("context", func(t *testing.T) {
-		require.NotPanics(t, func() { Run(t, &contextSuite{}) })
-	})
+
 }
 
 func TestRun_RejectsSuite(t *testing.T) {

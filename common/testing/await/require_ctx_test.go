@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/testx/await"
-	"go.temporal.io/testx/internal/debug"
-	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 func TestRequire_ImmediateSuccess(t *testing.T) {

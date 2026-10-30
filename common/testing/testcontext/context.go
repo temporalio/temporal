@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/testx/internal/debug"
-	"go.temporal.io/testx/internal/timeutil"
+	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -87,7 +87,7 @@ func GoTestDeadline(tb testing.TB) (deadline time.Time, ok bool) {
 // the `go test -timeout` deadline.
 func newTestContext(tb testing.TB, st *contextState, deadline time.Time) (context.Context, context.CancelFunc) {
 	if goTestDeadline, ok := GoTestDeadline(tb); ok {
-		deadline = timeutil.MinTime(deadline, goTestDeadline)
+		deadline = util.MinTime(deadline, goTestDeadline)
 	}
 
 	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
@@ -235,7 +235,7 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 	}
 
 	// Cap the requested deadline at the context's ceiling.
-	requestedDeadline := timeutil.MinTime(time.Now().Add(minRemaining), st.maxDeadline())
+	requestedDeadline := util.MinTime(time.Now().Add(minRemaining), st.maxDeadline())
 
 	// Only a context this package handed out can be swapped for the extended
 	// one without dropping state the caller derived onto it.

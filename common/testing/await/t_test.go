@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/testx/await"
+	"go.temporal.io/server/common/testing/await"
 )
 
 func TestT_CollectsAssertionFailures(t *testing.T) {

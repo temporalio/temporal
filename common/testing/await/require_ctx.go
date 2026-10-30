@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/testx/internal/timeutil"
-	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/util"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
@@ -89,13 +89,13 @@ func run(
 	deadline := time.Now().Add(cfg.totalTimeout)
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline {
 		// Cap at the parent context's deadline if it's earlier than our timeout.
-		deadline = timeutil.MinTime(deadline, parentDeadline)
+		deadline = util.MinTime(deadline, parentDeadline)
 	}
 
 	// Cap at the test's deadline if it's earlier than our deadline.
 	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
 	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline {
-		deadline = timeutil.MinTime(deadline, testDeadline)
+		deadline = util.MinTime(deadline, testDeadline)
 	}
 
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)

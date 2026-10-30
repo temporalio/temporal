@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/testx/await"
-	"go.temporal.io/testx/testcontext"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 func TestRcv(t *testing.T) {
