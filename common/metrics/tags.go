@@ -24,6 +24,7 @@ const (
 	namespace               = "namespace"
 	namespaceID             = "namespace_id"
 	namespaceState          = "namespace_state"
+	migrationNamespace      = "migration_namespace"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
 	transport               = "transport"
@@ -151,6 +152,15 @@ func SourceClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: sourceCluster, Value: value}
+}
+
+// MigrationNamespaceTag returns a new tag for the namespace being migrated / replicated. It is
+// distinct from NamespaceTag, which is the namespace the migration workflow itself runs in.
+func MigrationNamespaceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: migrationNamespace, Value: value}
 }
 
 // TargetClusterTag returns a new target cluster tag.
