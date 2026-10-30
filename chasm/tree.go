@@ -2154,7 +2154,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
 			continue
 		}
@@ -2752,7 +2752,7 @@ func (n *Node) snapshotInternal(
 		return
 	}
 
-	if transitionhistory.Compare(n.serializedNode.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+	if transitionhistory.Compare(n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(), exclusiveMinVT) > 0 {
 		encodedPath, err := n.getEncodedPath()
 		if !softassert.That(n.logger, err == nil, "chasm path encoding should always succeed on clean tree") {
 			panic(fmt.Sprintf("failed to encode chasm path on clean tree: %v", err))
