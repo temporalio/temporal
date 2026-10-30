@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -223,6 +222,9 @@ func newStalledEverySecondArgs(t *testing.T, c *everySecondCounters, stall time.
 // Production gap was ~102h (~1.5s locally, too close to the 1s detector to be reliable),
 // so the deadlock cases use 30d for margin.
 func TestEverySecondSpec_LongStallDeadlocks(t *testing.T) {
+	if debugging() {
+		t.Skip("TEMPORAL_DEBUG disables the deadlock detector")
+	}
 	const deadlockGap = 30 * 24 * time.Hour
 	for _, tc := range []struct {
 		name         string
@@ -230,31 +232,31 @@ func TestEverySecondSpec_LongStallDeadlocks(t *testing.T) {
 		mutate       func(*schedulespb.StartScheduleArgs)
 		wantDeadlock bool
 	}{
-		// {
-		// 	name:  "short stall completes",
-		// 	stall: time.Hour,
-		// },
+		{
+			name:  "short stall completes",
+			stall: time.Hour,
+		},
 		{
 			name:         "long stall deadlocks",
 			stall:        deadlockGap,
 			wantDeadlock: true,
 		},
-		// {
-		// 	name:  "pause in same task does not help",
-		// 	stall: deadlockGap,
-		// 	mutate: func(a *schedulespb.StartScheduleArgs) {
-		// 		a.InitialPatch = &schedulepb.SchedulePatch{Pause: "rescue"}
-		// 	},
-		// 	wantDeadlock: true,
-		// },
-		// {
-		// 	// Control: the range walk is the culprit; already-paused schedules skip it.
-		// 	name:  "already paused completes",
-		// 	stall: deadlockGap,
-		// 	mutate: func(a *schedulespb.StartScheduleArgs) {
-		// 		a.Schedule.State = &schedulepb.ScheduleState{Paused: true}
-		// 	},
-		// },
+		{
+			name:  "pause in same task does not help",
+			stall: deadlockGap,
+			mutate: func(a *schedulespb.StartScheduleArgs) {
+				a.InitialPatch = &schedulepb.SchedulePatch{Pause: "rescue"}
+			},
+			wantDeadlock: true,
+		},
+		{
+			// Control: the range walk is the culprit; already-paused schedules skip it.
+			name:  "already paused completes",
+			stall: deadlockGap,
+			mutate: func(a *schedulespb.StartScheduleArgs) {
+				a.Schedule.State = &schedulepb.ScheduleState{Paused: true}
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prevIters := CurrentTweakablePolicies.IterationsBeforeContinueAsNew
@@ -278,8 +280,6 @@ func TestEverySecondSpec_LongStallDeadlocks(t *testing.T) {
 
 			require.True(t, env.IsWorkflowCompleted())
 			err := env.GetWorkflowError()
-			fmt.Println("/>>", err)
-			t.Fail()
 			if tc.wantDeadlock {
 				require.ErrorContains(t, err, "TMPRL1101")
 				return
