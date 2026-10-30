@@ -640,6 +640,8 @@ const (
 	ScheduleMissedReasonTag              = "reason"
 	ScheduleMissedReasonNotBuffered      = "not_buffered"
 	ScheduleMissedReasonBufferExpired    = "buffer_expired"
+	ScheduleCatchupSkipReasonSkipPolicy  = "skip_policy"
+	ScheduleCatchupSkipReasonBufferFull  = "buffer_full"
 	ScheduleActionRunningTag             = "action_running"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
@@ -1706,6 +1708,18 @@ var (
 	ScheduleBufferOverruns = NewCounterDef(
 		"schedule_buffer_overruns",
 		WithDescription("The number of schedule actions that were dropped due to the action buffer being full"),
+	)
+	ScheduleCatchupChunked = NewCounterDef(
+		"schedule_catchup_chunked",
+		WithDescription("The number of times a schedule's catch-up hit the per-task match limit and continued in a new run"),
+	)
+	ScheduleCatchupRangeSkipped = NewCounterDef(
+		"schedule_catchup_range_skipped",
+		WithDescription("The number of times a schedule stopped walking a time range because no later match in it could start, by reason (skip_policy, buffer_full)"),
+	)
+	ScheduleCatchupRange = NewTimerDef(
+		"schedule_catchup_range",
+		WithDescription("Length of the time range a schedule was catching up on when its catch-up was chunked or a range of at least a minute was skipped"),
 	)
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",

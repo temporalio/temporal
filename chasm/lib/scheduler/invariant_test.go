@@ -139,7 +139,7 @@ func idleTaskCount(registry *chasm.Registry, node *chasm.Node) int {
 // Only asserted in this direction. Sentinels legitimately arm an idle task
 // without setting IdleCloseTime (see NewSentinel), so an armed task with no
 // declared deadline is not a defect.
-func requireIdleCloseTimeBacked(t *testing.T, registry *chasm.Registry, node *chasm.Node, sched *scheduler.Scheduler) {
+func requireIdleCloseTimeBacked(t testing.TB, registry *chasm.Registry, node *chasm.Node, sched *scheduler.Scheduler) {
 	t.Helper()
 
 	if sched.GetSentinel() || sched.GetClosed() || sched.GetIdleCloseTime() == nil {
@@ -153,7 +153,7 @@ func requireIdleCloseTimeBacked(t *testing.T, registry *chasm.Registry, node *ch
 }
 
 // requireNotStuck asserts the stuckness invariant against a clean tree.
-func requireNotStuck(t *testing.T, node *chasm.Node, sched *scheduler.Scheduler) {
+func requireNotStuck(t testing.TB, node *chasm.Node, sched *scheduler.Scheduler) {
 	t.Helper()
 
 	total, byPath := liveTaskCount(node)

@@ -3865,6 +3865,12 @@ Operational notes: (1) A ceiling below 12 holds fresh or not-yet-advanced runs b
 		`SchedulerV1VersionOverride selects a supported V1 scheduler workflow version without waiting for a server release to change the default. Set it to a version from the current default through the latest version supported by this binary. A negative value (the default), a value below the default, or a value above the latest supported version is ignored.
 The override is reread during every scheduler tweakables evaluation through MutableSideEffect. It can advance the version in the current workflow run at the next evaluation, subject to the current SchedulerV1VersionCeiling. Neither a lower override nor a newly lower ceiling can reduce a version already recorded in that run.`,
 	)
+	SchedulerV1CatchupMatchesPerTask = NewNamespaceIntSetting(
+		"worker.schedulerV1CatchupMatchesPerTask",
+		-1,
+		`SchedulerV1CatchupMatchesPerTask limits how many spec matches a V1 scheduler walks in one workflow task while catching up after a delay; when hit, the scheduler records its progress and continues-as-new. A negative value (the default) uses the binary's default, 0 disables the limit. Only applies from scheduler version 15 (ChunkedCatchup); see worker.schedulerV1VersionOverride.
+The value is reread during every scheduler tweakables evaluation through MutableSideEffect, so a change takes effect at the next evaluation.`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
