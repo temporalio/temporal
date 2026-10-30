@@ -184,6 +184,13 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 	}
 
 	wasActive := !t.done
+	// Discard an unread tick so the next firing cannot block on a full channel.
+	if t.c != nil {
+		select {
+		case <-t.c:
+		default:
+		}
+	}
 	t.deadline = t.timeSource.now.Add(d)
 	if t.done {
 		t.done = false
