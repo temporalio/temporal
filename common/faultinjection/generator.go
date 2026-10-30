@@ -1,4 +1,4 @@
-// Package faultinjection registers request and response faults for multiple transports.
+// Package faultinjection selects and applies faults around operations.
 package faultinjection
 
 import (
@@ -33,6 +33,9 @@ const (
 type Outcome[Resp any] struct {
 	Response Resp
 	Error    error
+	// AfterSuccess selects an error before execution but injects it only if the
+	// operation succeeds. The operation's response is preserved.
+	AfterSuccess bool
 }
 
 // RequestCallback checks a request before the handler runs.
