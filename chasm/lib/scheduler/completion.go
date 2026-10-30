@@ -190,8 +190,12 @@ func (s *Scheduler) completeAction(
 	if outcome != nil && tracksCompletionResult {
 		switch outcome := outcome.Outcome.(type) {
 		case *persistencespb.ChasmNexusCompletion_Failure:
-			previousResult := s.LastCompletionResult.Get(ctx)
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
+			// Like V1, only a FAILED run sets the continued failure; canceled,
+			// terminated and timed-out runs leave completion state unchanged.
+			if completed.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
+				previousResult := s.LastCompletionResult.Get(ctx)
+				s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
+			}
 		case *persistencespb.ChasmNexusCompletion_Success:
 			// Any success clears the failure. A no-result workflow arrives as an empty
 			// payload and clears the previous result (unlike V1, which keeps it).

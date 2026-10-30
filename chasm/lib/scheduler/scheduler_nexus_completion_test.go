@@ -71,7 +71,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 
 	if tc.completion.GetSuccess() != nil {
 		require.NotNil(t, lastCompletion.GetSuccess())
-	} else if tc.completion.GetFailure() != nil {
+	} else if tc.completion.GetFailure() != nil && tc.expectStatus == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
 		require.NotNil(t, lastCompletion.GetFailure())
 	}
 
@@ -654,6 +654,80 @@ func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 			readCtx := chasm.NewContext(context.Background(), node)
 			require.True(t, proto.Equal(tc.want, sched.LastCompletionResult.Get(readCtx)))
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.GetCompleted().GetStatus())
+		})
+	}
+}
+
+// V1 records a continued failure only for FAILED runs; canceled, terminated and
+// timed-out runs leave the previous result and continued failure in place.
+func TestHandleNexusCompletion_FailureOutcomeContinuedFailure(t *testing.T) {
+	previous := &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous failure"},
+	}
+	for _, tc := range []struct {
+		name       string
+		failure    *failurepb.Failure
+		wantStatus enumspb.WorkflowExecutionStatus
+		wantState  *schedulerpb.LastCompletionResult
+	}{
+		{
+			name:       "failed",
+			failure:    &failurepb.Failure{Message: "new failure"},
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			wantState: &schedulerpb.LastCompletionResult{
+				Success: previous.GetSuccess(),
+				Failure: &failurepb.Failure{Message: "new failure"},
+			},
+		},
+		{
+			name: "canceled",
+			failure: &failurepb.Failure{Message: "operation canceled", FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+			}},
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+			wantState:  previous,
+		},
+		{
+			name: "terminated",
+			failure: &failurepb.Failure{Message: "operation terminated", FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+			}},
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantState:  previous,
+		},
+		{
+			name: "timed out",
+			failure: &failurepb.Failure{Message: "operation exceeded internal timeout", FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+			}},
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			wantState:  previous,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, node := setupSchedulerForTest(t)
+			sched.LastCompletionResult = chasm.NewDataField(ctx, common.CloneProto(previous))
+			start := &schedulespb.BufferedStart{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+				ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+				StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+			}
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{start}
+
+			err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome:   &persistencespb.ChasmNexusCompletion_Failure{Failure: tc.failure},
+				CloseTime: timestamppb.Now(),
+			})
+			require.NoError(t, err)
+			_, err = node.CloseTransaction(context.Background(), true)
+			require.NoError(t, err)
+
+			readCtx := chasm.NewContext(context.Background(), node)
+			require.True(t, proto.Equal(tc.wantState, sched.LastCompletionResult.Get(readCtx)))
+			require.Equal(t, tc.wantStatus, start.GetCompleted().GetStatus())
 		})
 	}
 }
