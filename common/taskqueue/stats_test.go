@@ -6,29 +6,36 @@ import (
 
 	"github.com/stretchr/testify/require"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestMergeStats(t *testing.T) {
+	t.Parallel()
 	into := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 10,
 		ApproximateBacklogAge:   durationpb.New(100 * time.Second),
 		TasksAddRate:            5,
 		TasksDispatchRate:       3,
+		EagerDispatchRate:       7,
 	}
 	from := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 20,
 		ApproximateBacklogAge:   durationpb.New(50 * time.Second),
 		TasksAddRate:            2,
 		TasksDispatchRate:       1,
+		EagerDispatchRate:       4,
 	}
 
 	MergeStats(into, from)
 
-	require.Equal(t, int64(30), into.ApproximateBacklogCount)
-	require.Equal(t, 100*time.Second, into.ApproximateBacklogAge.AsDuration())
-	require.InDelta(t, 7, into.TasksAddRate, 1e-9)
-	require.InDelta(t, 4, into.TasksDispatchRate, 1e-9)
+	protorequire.ProtoEqual(t, &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 30,
+		ApproximateBacklogAge:   durationpb.New(100 * time.Second),
+		TasksAddRate:            7,
+		TasksDispatchRate:       4,
+		EagerDispatchRate:       11,
+	}, into)
 }
 
 func TestMergeStats_NilFrom(t *testing.T) {
