@@ -58,9 +58,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          install_args: go
+          install: false
           cache_save_post: true
           minimum_release_age: 14d
           auto_update: true
@@ -149,10 +153,15 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
+        with:
+          go-version-file: "go.mod"
+
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         with:
-          install_args: go
+          install: false
           cache_save_post: true
           minimum_release_age: 14d
           auto_update: true
