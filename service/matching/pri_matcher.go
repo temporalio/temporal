@@ -413,20 +413,22 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
-
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
-	finish := func() (syncMatchOutcome, error) {
+//
+// The returned bool reports whether the task was forwarded to another partition, regardless of
+// whether it matched there.
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
+	finish := func() (syncMatchOutcome, bool, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return syncMatchUnspecified, nil
+			return syncMatchUnspecified, false, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return syncMatchSuccess, nil
+				return syncMatchSuccess, true, nil
 			}
-			return syncMatchNoPoller, nil // forward error, give up here
+			return syncMatchNoPoller, true, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -434,9 +436,13 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
+		// A dropped task is reported as a successful match so that it isn't spooled, and the
+		// caller records it as added (or, if it's a forwarded backlog task, the child partition
+		// completes it without a drop), so record the drop here.
+		recordDroppedTask(tm.metricsHandler, tm.config, res.dropReason, task.getPriority())
 		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
 		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
-		return syncMatchSuccess, res.startErr
+		return syncMatchSuccess, false, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
@@ -447,23 +453,23 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	case syncMatchSuccess:
 		return finish()
 	case syncMatchBacklogPresent:
-		return outcome, nil
+		return outcome, false, nil
 	default:
 		// We only block if we are the root and the task is forwarded from a backlog.
 		// Otherwise, stop here.
 		if tm.isForwardingAllowed() ||
 			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
 			!task.isForwarded() {
-			return outcome, nil
+			return outcome, false, nil
 		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return syncMatchNoPoller, res.ctxErr
+		return syncMatchNoPoller, false, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return syncMatchNoPoller, nil
+		return syncMatchNoPoller, false, nil
 	}
 
 	return finish()
@@ -559,6 +565,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		metrics.StringTag("source", task.source.String()),
 		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), tm.config.BreakdownMetricsByFairnessKey()),
 	)
 }
 
@@ -683,14 +690,17 @@ func (tm *priTaskMatcher) poll(
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
-		if !task.isQuery() {
-			if task.isSyncMatchTask() {
-				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		fairnessKeyTag := metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), tm.config.BreakdownMetricsByFairnessKey())
+		// A task never sat in a backlog if it came straight from history. Backlog tasks
+		// forwarded from a child are sync-match tasks here but keep their DB_BACKLOG source.
+		syncMatch := task.isQuery() || (task.isSyncMatchTask() && task.source == enumsspb.TASK_SOURCE_HISTORY)
+		// The task may still fail to start or be dropped, so poll_success is recorded by
+		// internalTask.finish once the dispatch succeeds.
+		task.recordPollSuccess = func() {
+			if syncMatch {
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			}
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		} else {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		}
 		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
 	}

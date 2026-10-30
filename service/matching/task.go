@@ -79,6 +79,9 @@ type (
 		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
 		taskDispatchRevisionNumber    int64
 		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
+		// recordPollSuccess records poll_success for the poller this task was handed to. It is
+		// set by the matcher and called by finish if the dispatch succeeded.
+		recordPollSuccess func()
 
 		// The following fields are for use by priMatcher/matcherData:
 		waitableMatchResult
@@ -356,7 +359,15 @@ func (task *internalTask) setEvicted() {
 // A non-nil error will generally cause a backlog task to be kept and attempted to match again,
 // but if the task should be dropped instead, pass a dropReason as err. The reason will be
 // recorded in metrics.
+//
+// A successful dispatch (nil err) records poll_success, so each task leaves the backlog exactly
+// once across poll_success and tasks_dropped.
 func (task *internalTask) finish(err error) {
+	recordPollSuccess := task.recordPollSuccess
+	task.recordPollSuccess = nil // clear so it's only used once; a re-dispatch sets it again
+	if recordPollSuccess != nil && err == nil {
+		recordPollSuccess()
+	}
 	if dr, ok := err.(dropReason); ok {
 		task.finishInternal(taskResponse{dropReason: dr}, true)
 	} else {

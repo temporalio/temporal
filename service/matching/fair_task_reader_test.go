@@ -1,14 +1,18 @@
 package matching
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
@@ -144,4 +148,34 @@ func newBacklogCountTestTasks(n int64) []*persistencespb.AllocatedTaskInfo {
 		tasks = append(tasks, &persistencespb.AllocatedTaskInfo{TaskPass: 1, TaskId: id, Data: &persistencespb.TaskInfo{}})
 	}
 	return tasks
+}
+
+// TestAddErrorBehavior checks that nonretryable addSpooledTask errors drop the task with a reason
+// (so it's counted in tasks_dropped) and retryable errors don't, in both readers.
+func TestAddErrorBehavior(t *testing.T) {
+	t.Parallel()
+	logger := log.NewNoopLogger()
+	readers := map[string]func(error) dropReason{
+		"pri":  (&priTaskReader{throttledLogger: logger}).addErrorBehavior,
+		"fair": (&fairTaskReader{throttledLogger: logger}).addErrorBehavior,
+	}
+	cases := []struct {
+		name string
+		err  error
+		want dropReason
+	}{
+		{"TaskQueueClosed", errTaskQueueClosed, dropReasonUnspecified},
+		{"Canceled", context.Canceled, dropReasonUnspecified},
+		{"StickyWorkerUnavailable", serviceerrors.NewStickyWorkerUnavailable(), dropReasonStickyWorkerUnavailable},
+		{"InvalidArgument", serviceerror.NewInvalidArgument("bad"), dropReasonInvalid},
+		{"Internal", serviceerror.NewInternal("boom"), dropReasonInternalError},
+		{"Other", serviceerror.NewUnavailable("later"), dropReasonUnspecified},
+	}
+	for readerName, addErrorBehavior := range readers {
+		for _, tc := range cases {
+			t.Run(readerName+"/"+tc.name, func(t *testing.T) {
+				require.Equal(t, tc.want, addErrorBehavior(tc.err))
+			})
+		}
+	}
 }
