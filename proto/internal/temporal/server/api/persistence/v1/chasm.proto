@@ -189,3 +189,14 @@ message ChasmNexusCompletion {
   // Start time from the callback request, used for completion-before-start.
   google.protobuf.Timestamp start_time = 7;
 }
+
+// ChasmRequestIDs is the state of the framework-owned data node that records request IDs accepted
+// by UpdateComponent, so that a retried request can be deduplicated. It is stored as a reserved child
+// of the root node (not declared by any component) and is only written when a request ID is added.
+message ChasmRequestIDs {
+  // Accepted request IDs, mapped to the time each was recorded (truncated to whole seconds to keep entries
+  // small). A map so the existence check is a lookup. Entries older than history.requestIDMaxAge are dropped
+  // when an ID is added; once there are more than history.maximumRequestIDsInChasmDataNode, the oldest are
+  // dropped until half that many remain, so the cost of finding the oldest is amortized.
+  map<string, google.protobuf.Timestamp> request_ids = 1;
+}
