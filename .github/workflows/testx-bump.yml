@@ -113,7 +113,7 @@ jobs:
         run: |
           version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
           pinned=${version##*-}
-          if ! git rev-parse -q --verify "${pinned}^{commit}" >/dev/null || ! git diff --quiet "${pinned}" HEAD -- common/testx/; then
+          if ! git diff --quiet "${pinned}" HEAD -- common/testx/; then
             echo "::error file=go.mod::Required testx version doesn't match common/testx/."
             exit 1
           fi
