@@ -5561,7 +5561,6 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 	})
 
 	s.Run("receive completed update result", func(s *UpdateWithStartSuite) {
-		_ = testcore.NewEnv(s.T()) // unused s
 		for _, p := range []enumspb.WorkflowIdConflictPolicy{
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
@@ -5609,7 +5608,6 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 	})
 
 	s.Run("dedupes start", func(s *UpdateWithStartSuite) {
-		_ = testcore.NewEnv(s.T()) // unused s
 		for _, p := range []enumspb.WorkflowIdConflictPolicy{
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
@@ -5747,7 +5745,6 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 	})
 
 	s.Run("receive completed update result", func(s *UpdateWithStartSuite) {
-		_ = testcore.NewEnv(s.T()) // unused s
 		for _, p := range []enumspb.WorkflowIdConflictPolicy{
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
@@ -5800,7 +5797,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsClosed() {
 				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, startResp.Status)
 				// TODO: check startResp.Running
 				s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
-				requireWorkflowEventLink(s.T(), startResp.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), common.FirstEventID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+				s.Nil(startResp.GetLink())
 				requireWorkflowEventLink(s.T(), updateRep.GetLink(), env.Namespace().String(), env.Tv().WorkflowID(), startResp.GetRunId(), acceptedEvent.GetEventId(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 			})
 		}
