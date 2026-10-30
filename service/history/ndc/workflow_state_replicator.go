@@ -2096,6 +2096,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
 	sortedAncestorsIdx := 0
 	var ancestors []*persistencespb.HistoryBranchRange
+	expectedEventID := common.FirstEventID
 
 BackfillLoop:
 	for remoteHistoryIterator.HasNext() {
@@ -2104,14 +2105,29 @@ BackfillLoop:
 			return err
 		}
 
-		if isStateBased {
-			// If backfill suceeds but later event reapply fails, during task's next retry,
-			// we still need to reapply events that have been stored in local DB.
-			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+		// The remote read can come back short or with a gap without returning an error, for example when the
+		// source moves the branch to another storage tier between pages. Persisting mutable state on top of such
+		// a history would lose events permanently, so every event is checked and the task retries instead.
+		batch, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+		if err != nil {
+			return err
+		}
+		for _, event := range batch {
+			if event.GetEventId() != expectedEventID {
+				return serviceerror.NewInternalf("Backfill history is not contiguous. Expected event %v, but got %v", expectedEventID, event.GetEventId())
+			}
+			version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, event.GetEventId())
 			if err != nil {
 				return err
 			}
-			for _, event := range events {
+			if version != event.GetVersion() {
+				return serviceerror.NewInternalf("Backfill event version does not match. Expected %v, but got %v", version, event.GetVersion())
+			}
+			expectedEventID++
+
+			if isStateBased {
+				// If backfill suceeds but later event reapply fails, during task's next retry,
+				// we still need to reapply events that have been stored in local DB.
 				mutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(mutableState.GetWorkflowKey(), event)
 			}
@@ -2194,6 +2210,10 @@ BackfillLoop:
 		}
 		prevTxnID = txnID
 		prevBranchID = branchID
+	}
+
+	if expectedEventID != lastEventItem.GetEventId()+1 {
+		return serviceerror.NewInternalf("Backfill history ended early. Expected events up to %v, but got up to %v", lastEventItem.GetEventId(), expectedEventID-1)
 	}
 
 	mutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
