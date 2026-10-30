@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
@@ -8,8 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"os"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
@@ -30,19 +34,120 @@ const (
 	isolationLevelAttrName       = "transaction_isolation"
 	isolationLevelAttrNameLegacy = "tx_isolation"
 	defaultIsolationLevel        = "'READ-COMMITTED'"
-	// customTLSName is the name used if a custom tls configuration is created
-	customTLSName = "tls-custom"
+	customTLSName                = "tls-custom"
 
 	interpolateParamsAttr = "interpolateParams"
+	srvConnectProtocol    = "tcp+srv"
+	checkWritableQuery    = "SELECT @@global.read_only = 0 AND @@global.super_read_only = 0"
 )
 
 var (
 	errVisInterpolateParamsNotSupported = errors.New("interpolateParams is not supported for mysql visibility stores")
+	errReadOnly                         = errors.New("MySQL server is read-only")
 	dsnAttrOverrides                    = map[string]string{
 		"parseTime":       "true",
 		"clientFoundRows": "true",
 	}
 )
+
+type (
+	lookupSRVFunc func(context.Context, string, string, string) (string, []*net.SRV, error)
+
+	multiHostConnector struct {
+		buildConfigs      func(context.Context) ([]*mysql.Config, error)
+		newConnector      func(*mysql.Config) (driver.Connector, error)
+		driver            driver.Driver
+		preferredHost     atomic.Uint64
+		rememberPreferred bool
+	}
+)
+
+func (c *multiHostConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	configs, err := c.buildConfigs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(configs) == 0 {
+		return nil, errors.New("no MySQL connection targets")
+	}
+
+	connectionErrors := make([]error, 0, len(configs))
+	start := 0
+	if c.rememberPreferred {
+		start = int(c.preferredHost.Load() % uint64(len(configs)))
+	}
+	for offset := range len(configs) {
+		index := (start + offset) % len(configs)
+		connector, err := c.newConnector(configs[index])
+		if err == nil {
+			var connection driver.Conn
+			connection, err = connector.Connect(ctx)
+			if err == nil && len(configs) > 1 {
+				if err = verifyWritable(ctx, connection); err != nil {
+					err = errors.Join(err, connection.Close())
+				}
+			}
+			if err == nil {
+				if c.rememberPreferred {
+					c.preferredHost.Store(uint64(index))
+				}
+				return connection, nil
+			}
+		}
+		connectionErrors = append(
+			connectionErrors,
+			fmt.Errorf("MySQL connection attempt %d failed: %w", index+1, err),
+		)
+	}
+	return nil, errors.Join(connectionErrors...)
+}
+
+func (c *multiHostConnector) Driver() driver.Driver {
+	return c.driver
+}
+
+func verifyWritable(ctx context.Context, connection driver.Conn) error {
+	queryer, ok := connection.(driver.QueryerContext)
+	if !ok {
+		return errors.New("MySQL connection does not support writer detection")
+	}
+
+	rows, err := queryer.QueryContext(ctx, checkWritableQuery, nil)
+	if err != nil {
+		return fmt.Errorf("failed to check whether MySQL server is writable: %w", err)
+	}
+
+	values := make([]driver.Value, 1)
+	nextErr := rows.Next(values)
+	closeErr := rows.Close()
+	if nextErr != nil {
+		return errors.Join(fmt.Errorf("failed to read MySQL writer status: %w", nextErr), closeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to close MySQL writer status rows: %w", closeErr)
+	}
+	switch writable := values[0].(type) {
+	case bool:
+		if writable {
+			return nil
+		}
+	case int64:
+		if writable == 1 {
+			return nil
+		}
+	case []byte:
+		if string(writable) == "1" {
+			return nil
+		}
+	case string:
+		if writable == "1" {
+			return nil
+		}
+	default:
+		return fmt.Errorf("unexpected MySQL writer status type %T", values[0])
+	}
+	return errReadOnly
+}
 
 func NewSession(
 	dbKind sqlplugin.DbKind,
@@ -67,37 +172,24 @@ func createConnection(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	err := registerTLSConfig(cfg)
+	tlsConfig, err := buildTLSConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	var db *sqlx.DB
-	if cfg.PasswordCommand != nil {
-		c := sqlplugin.NewRefreshingConnector(
-			func() (string, error) {
-				return buildDSN(dbKind, cfg, resolver)
-			},
-			func(dsn string) (driver.Connector, error) {
-				return mysql.MySQLDriver{}.OpenConnector(dsn)
-			},
-			mysql.MySQLDriver{},
-		)
-		db = sqlx.NewDb(sql.OpenDB(c), driverName)
-		if err := db.Ping(); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	} else {
-		var dsn string
-		dsn, err = buildDSN(dbKind, cfg, resolver)
-		if err != nil {
-			return nil, err
-		}
-		db, err = sqlx.Connect(driverName, dsn)
-		if err != nil {
-			return nil, err
-		}
+	mysqlDriver := mysql.MySQLDriver{}
+	connector := &multiHostConnector{
+		buildConfigs: func(ctx context.Context) ([]*mysql.Config, error) {
+			return buildConfigs(ctx, dbKind, cfg, resolver, tlsConfig)
+		},
+		newConnector:      mysql.NewConnector,
+		driver:            mysqlDriver,
+		rememberPreferred: cfg.ConnectProtocol != srvConnectProtocol,
+	}
+	db := sqlx.NewDb(sql.OpenDB(connector), driverName)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 	if cfg.MaxConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxConns)
@@ -114,39 +206,110 @@ func createConnection(
 	return db, nil
 }
 
-func buildDSN(
+func buildConfigs(
+	ctx context.Context,
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-) (string, error) {
+	tlsConfig *tls.Config,
+) ([]*mysql.Config, error) {
 	password, err := cfg.ResolvePassword()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	mysqlConfig := mysql.NewConfig()
-
-	mysqlConfig.User = cfg.User
-	mysqlConfig.Passwd = password
-	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
-	mysqlConfig.DBName = cfg.DatabaseName
-	mysqlConfig.Net = cfg.ConnectProtocol
-	mysqlConfig.Params, err = buildDSNAttrs(dbKind, cfg)
+	addresses, err := resolveAddresses(ctx, cfg, r, net.DefaultResolver.LookupSRV)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L104-L106
-	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L182-L189
-	if mysqlConfig.Net == "" {
-		mysqlConfig.Net = "tcp"
+	params, err := buildDSNAttrs(dbKind, cfg)
+	if err != nil {
+		return nil, err
+	}
+	useLocalTLS := tlsConfig != nil &&
+		(cfg.ConnectAttributes["tls"] == "" || cfg.ConnectAttributes["tls"] == customTLSName)
+	if useLocalTLS && cfg.ConnectAttributes["tls"] == customTLSName {
+		params = maps.Clone(params)
+		delete(params, "tls")
 	}
 
-	// https://github.com/go-sql-driver/mysql#rejectreadonly
-	// https://github.com/temporalio/temporal/issues/1703
-	mysqlConfig.RejectReadOnly = true
+	network := cfg.ConnectProtocol
+	if network == "" || network == srvConnectProtocol {
+		network = "tcp"
+	}
 
-	return mysqlConfig.FormatDSN(), nil
+	configs := make([]*mysql.Config, 0, len(addresses))
+	for _, address := range addresses {
+		mysqlConfig := mysql.NewConfig()
+		mysqlConfig.User = cfg.User
+		mysqlConfig.Passwd = password
+		mysqlConfig.Addr = address
+		mysqlConfig.DBName = cfg.DatabaseName
+		mysqlConfig.Net = network
+		mysqlConfig.Params = params
+
+		// https://github.com/go-sql-driver/mysql#rejectreadonly
+		// https://github.com/temporalio/temporal/issues/1703
+		mysqlConfig.RejectReadOnly = true
+
+		mysqlConfig, err = mysql.ParseDSN(mysqlConfig.FormatDSN())
+		if err != nil {
+			return nil, err
+		}
+		if useLocalTLS {
+			mysqlConfig.TLS = tlsConfig.Clone()
+		}
+		configs = append(configs, mysqlConfig)
+	}
+	return configs, nil
+}
+
+func resolveAddresses(
+	ctx context.Context,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	lookupSRV lookupSRVFunc,
+) ([]string, error) {
+	if cfg.ConnectProtocol == srvConnectProtocol {
+		_, records, err := lookupSRV(ctx, "", "", cfg.ConnectAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve MySQL SRV record %q: %w", cfg.ConnectAddr, err)
+		}
+
+		addresses := make([]string, 0, len(records))
+		for _, record := range records {
+			host := strings.TrimSuffix(record.Target, ".")
+			if host == "" {
+				return nil, fmt.Errorf("MySQL SRV record %q contains an empty target", cfg.ConnectAddr)
+			}
+			addresses = append(addresses, net.JoinHostPort(host, strconv.Itoa(int(record.Port))))
+		}
+		if len(addresses) == 0 {
+			return nil, fmt.Errorf("MySQL SRV record %q contains no targets", cfg.ConnectAddr)
+		}
+		return addresses, nil
+	}
+
+	resolvedAddresses := r.Resolve(cfg.ConnectAddr)
+	addresses := make([]string, 0, len(resolvedAddresses))
+	for _, resolvedAddress := range resolvedAddresses {
+		candidates := []string{resolvedAddress}
+		if strings.HasPrefix(cfg.ConnectProtocol, "tcp") {
+			candidates = strings.Split(resolvedAddress, ",")
+		}
+		for _, candidate := range candidates {
+			address := strings.TrimSpace(candidate)
+			if address == "" {
+				return nil, errors.New("connectAddr contains an empty MySQL address")
+			}
+			addresses = append(addresses, address)
+		}
+	}
+	if len(addresses) == 0 {
+		return nil, errors.New("connectAddr resolved to no MySQL addresses")
+	}
+	return addresses, nil
 }
 
 func paramInterpolationAllowed(dbKind sqlplugin.DbKind) bool {
@@ -201,9 +364,9 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 	}
 }
 
-func registerTLSConfig(cfg *config.SQL) error {
+func buildTLSConfig(cfg *config.SQL) (*tls.Config, error) {
 	if cfg.TLS == nil || !cfg.TLS.Enabled {
-		return nil
+		return nil, nil
 	}
 
 	// TODO: create a way to set MinVersion and CipherSuites via cfg.
@@ -213,10 +376,10 @@ func registerTLSConfig(cfg *config.SQL) error {
 		rootCertPool := x509.NewCertPool()
 		pem, err := os.ReadFile(cfg.TLS.CaFile)
 		if err != nil {
-			return fmt.Errorf("failed to load CA files: %v", err)
+			return nil, fmt.Errorf("failed to load CA files: %v", err)
 		}
 		if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-			return fmt.Errorf("failed to append CA file")
+			return nil, errors.New("failed to append CA file")
 		}
 		tlsConfig.RootCAs = rootCertPool
 	}
@@ -228,28 +391,11 @@ func registerTLSConfig(cfg *config.SQL) error {
 			cfg.TLS.KeyFile,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to load tls x509 key pair: %v", err)
+			return nil, fmt.Errorf("failed to load tls x509 key pair: %v", err)
 		}
 		clientCert = append(clientCert, certs)
 		tlsConfig.Certificates = clientCert
 	}
 
-	// In order to use the TLS configuration you need to register it. Once registered you use it by specifying
-	// `tls` in the connect attributes.
-	err := mysql.RegisterTLSConfig(customTLSName, tlsConfig)
-	if err != nil {
-		return fmt.Errorf("failed to register tls config: %v", err)
-	}
-
-	if cfg.ConnectAttributes == nil {
-		cfg.ConnectAttributes = map[string]string{}
-	}
-
-	// If no `tls` connect attribute is provided then we override it to our newly registered tls config automatically.
-	// This allows users to simply provide a tls config without needing to remember to also set the connect attribute
-	if cfg.ConnectAttributes["tls"] == "" {
-		cfg.ConnectAttributes["tls"] = customTLSName
-	}
-
-	return nil
+	return tlsConfig, nil
 }
