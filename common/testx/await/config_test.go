@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/testx/internal/debug"
 )
 
 func TestConfig_OverrideAttemptTimeout(t *testing.T) {
