@@ -132,8 +132,9 @@ func isMaxTaskQueuesInVersionError(err error) bool {
 }
 
 var (
-	defaultActivityOptions = workflow.ActivityOptions{
-		StartToCloseTimeout: 1 * time.Minute,
+	DefaultActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout:    1 * time.Minute,
+		ScheduleToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 100 * time.Millisecond,
 			MaximumAttempts: 5,
