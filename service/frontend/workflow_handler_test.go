@@ -134,7 +134,7 @@ func TestWorkflowHandlerSuite(t *testing.T) {
 }
 
 func TestValidatePollVersioningInfo(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name                   string
 		capabilities           *commonpb.WorkerVersionCapabilities
 		deploymentOptions      *deploymentpb.WorkerDeploymentOptions
@@ -207,7 +207,7 @@ func TestValidatePollVersioningInfo(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
 			config.BlockOldVersioningPollers = dc.GetBoolPropertyFnFilteredByNamespace(tc.blockOldPollers)
