@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
@@ -426,28 +427,32 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 
 	for _, tc := range []struct {
 		name              string
-		mode              namespaceMutationMode
 		wantShadow        bool
 		wantReplicateOnly bool
 	}{
-		{name: "authoritative", mode: namespaceMutationModeAuthoritative},
-		{name: "shadow", mode: namespaceMutationModeShadow, wantShadow: true},
-		{name: "replicate only", mode: namespaceMutationModeReplicateOnly, wantReplicateOnly: true},
+		{name: "authoritative"},
+		{name: "shadow", wantShadow: true},
+		{name: "replicate only", wantReplicateOnly: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := handler.triggerNamespaceMutation(
-				context.Background(),
-				enumsspb.NAMESPACE_OPERATION_UPDATE,
-				detail,
-				7,
-				[]string{"cell-b"},
-				true,
-				"namespace-id:mutation-id",
-				tc.mode,
-				[]byte("legacy-reference"),
-			)
+			_, err := handler.triggerNamespaceMutation(t.Context(), &namespacereplicationpb.TriggerNamespaceMutationRequest{
+				BusinessId: "namespace-id:mutation-id",
+				Mutation: &namespacereplicationpb.NamespaceMutation{
+					Operation:               enumsspb.NAMESPACE_OPERATION_UPDATE,
+					NamespaceDetail:         detail,
+					ExpectedVersion:         7,
+					PeerCells:               []string{"cell-b"},
+					IsGlobalNamespace:       true,
+					Shadow:                  tc.wantShadow,
+					ReplicateOnly:           tc.wantReplicateOnly,
+					ShadowLegacyTaskPayload: []byte("legacy-reference"),
+				},
+			})
 			require.NoError(t, err)
 			request := <-client.requests
+			require.Equal(t, "namespace-id", request.GetNamespaceId())
+			require.Equal(t, primitives.SystemNamespaceID, request.GetSystemNamespaceId())
+			require.Equal(t, int64(7), request.GetMutation().GetExpectedVersion())
 			require.Equal(t, "namespace-id:mutation-id", request.GetBusinessId())
 			require.Equal(t, []string{"cell-b"}, request.GetMutation().GetPeerCells())
 			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
@@ -456,96 +461,6 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 			require.True(t, request.GetMutation().GetIsGlobalNamespace())
 		})
 	}
-}
-
-func TestTriggerAuthoritativeNamespaceMutation(t *testing.T) {
-	client := &captureNamespaceReplicationClient{}
-	handler := &namespaceHandler{
-		chasmNsReplClient: client,
-	}
-	detail := &persistencespb.NamespaceDetail{
-		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
-	}
-
-	response, err := handler.triggerNamespaceMutation(
-		context.Background(),
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		detail,
-		7,
-		[]string{"cell-b"},
-		true,
-		"namespace-id:mutation-id",
-		namespaceMutationModeAuthoritative,
-		nil,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, response)
-	require.False(t, client.request.GetMutation().GetShadow())
-	require.False(t, client.request.GetMutation().GetReplicateOnly())
-	require.Equal(t, int64(7), client.request.GetMutation().GetExpectedVersion())
-	require.Equal(t, []string{"cell-b"}, client.request.GetMutation().GetPeerCells())
-}
-
-func TestTriggerReplicateOnlyNamespaceMutation(t *testing.T) {
-	client := &captureNamespaceReplicationClient{}
-	handler := &namespaceHandler{
-		chasmNsReplClient: client,
-	}
-	detail := &persistencespb.NamespaceDetail{
-		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
-	}
-
-	_, err := handler.triggerNamespaceMutation(
-		context.Background(),
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		detail,
-		7,
-		[]string{"cell-b"},
-		true,
-		"namespace-id:mutation-id",
-		namespaceMutationModeReplicateOnly,
-		nil,
-	)
-	require.NoError(t, err)
-	require.True(t, client.request.GetMutation().GetReplicateOnly())
-	require.False(t, client.request.GetMutation().GetShadow())
-}
-
-func TestShouldUseCHASMNamespaceReplication(t *testing.T) {
-	handler := &namespaceHandler{config: &Config{
-		NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeCHASM),
-	}}
-
-	require.True(t, handler.shouldUseCHASMNamespaceReplication(
-		namespaceReplicationTransportCHASM,
-		true,
-		false,
-		enumspb.NAMESPACE_STATE_REGISTERED,
-		[]string{"cell-a", "cell-b"},
-	))
-	require.False(t, handler.shouldUseCHASMNamespaceReplication(
-		namespaceReplicationTransportCHASM,
-		false,
-		false,
-		enumspb.NAMESPACE_STATE_REGISTERED,
-		[]string{"cell-a", "cell-b"},
-	))
-	require.False(t, handler.shouldUseCHASMNamespaceReplication(
-		namespaceReplicationTransportCHASM,
-		true,
-		false,
-		enumspb.NAMESPACE_STATE_REGISTERED,
-		[]string{"cell-a"},
-	))
-	require.False(t, handler.shouldUseCHASMNamespaceReplication(
-		namespaceReplicationTransportShadow,
-		true,
-		false,
-		enumspb.NAMESPACE_STATE_REGISTERED,
-		[]string{"cell-a", "cell-b"},
-	))
 }
 
 func TestPeerCellsFromClusters(t *testing.T) {
