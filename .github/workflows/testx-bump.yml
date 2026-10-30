@@ -69,7 +69,7 @@ jobs:
 
           git add go.mod go.sum
           git commit -m "Bump go.temporal.io/testx to ${sha::9}"
-          git push --dry-run origin HEAD:main
+          git push origin HEAD:main
 
   # Fails if the testx version required on main doesn't match common/testx/, e.g. because the bump failed
   # to push. Builds in this repo don't notice, since they use the replace.
@@ -102,7 +102,7 @@ jobs:
 
   notify-failure:
     name: Notify Slack on Failure
-    if: ${{ false }}
+    if: failure()
     needs: [bump, check-pin]
     runs-on: ubuntu-latest
     steps:
