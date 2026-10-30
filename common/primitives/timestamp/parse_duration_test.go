@@ -90,9 +90,16 @@ func (s *ParseDurationSuite) TestParseHHMMSSDuration() {
 		{"1:00:00", 1 * time.Hour},
 		{"123:05:10", 123*time.Hour + 5*time.Minute + 10*time.Second},
 		{"00:05:10", 5*time.Minute + 10*time.Second},
+		{"1:2:3", time.Hour + 2*time.Minute + 3*time.Second},
+		{"2562047:47:16", 2562047*time.Hour + 47*time.Minute + 16*time.Second},
 		{"-12:05:10", -1},
 		{"12:61:10", -1},
 		{"12:05:61", -1},
+		{"01:02:03suffix", -1},
+		{"00:00:01:00", -1},
+		{"00:00:01 2", -1},
+		{"2562048:00:00", -1},
+		{"2562047:47:17", -1},
 		{"", -1},
 	} {
 		got, err := ParseHHMMSSDuration(c.input)
