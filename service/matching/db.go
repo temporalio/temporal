@@ -939,7 +939,8 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 	return infos
 }
 
-func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
+// clearPhysicalBacklogGauges clears the gauges that emitPhysicalBacklogGaugesLocked records. See clearGauge.
+func (db *taskQueueDB) clearPhysicalBacklogGauges() {
 	if !db.config.BreakdownMetricsByTaskQueue() || !db.config.BreakdownMetricsByPartition() {
 		return
 	}
@@ -970,10 +971,11 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
 
+	removeSeries := db.config.RemoveGaugesOnUnload()
 	for k := range priorities {
 		priorityTag := metrics.MatchingTaskPriorityTag(k)
-		backlogCountGauge.With(db.metricsHandler).Record(0, priorityTag)
-		backlogAgeGauge.With(db.metricsHandler).Record(0, priorityTag)
+		clearGauge(removeSeries, backlogCountGauge.With(db.metricsHandler), priorityTag)
+		clearGauge(removeSeries, backlogAgeGauge.With(db.metricsHandler), priorityTag)
 	}
-	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
+	clearGauge(removeSeries, metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler))
 }
