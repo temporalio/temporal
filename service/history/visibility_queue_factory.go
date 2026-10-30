@@ -101,6 +101,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
 	)
 
 	executor := newVisibilityQueueTaskExecutor(
@@ -136,6 +137,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
 	)
 	return queues.NewImmediateQueue(
 		shard,

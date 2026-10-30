@@ -50,6 +50,10 @@ type (
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
 		SetScheduledTime(time.Time)
+
+		// SetThrottleAdmitted records that the gate issued this dispatch. It is set before the
+		// scheduler handoff, which is what carries it to the worker that reads it.
+		SetThrottleAdmitted(admitted bool)
 	}
 
 	Executor interface {
@@ -152,6 +156,9 @@ type (
 		lastActiveness             bool
 		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		throttleState              *ThrottleState
+		throttleKey                ThrottleKey
+		throttleAdmitted           bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
@@ -162,6 +169,7 @@ type (
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
+		ThrottleState              *ThrottleState
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -251,6 +259,7 @@ func NewExecutable(
 		),
 		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
+		throttleState:              params.ThrottleState,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
@@ -529,9 +538,11 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 		metrics.TaskThrottledCounter.With(e.chasmMetricsHandler).Record(
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
+		e.reportThrottle(resourceExhaustedErr.Cause, resourceExhaustedErr.Scope)
 		return true, err
 	}
 	e.resourceExhaustedCount = 0
+	e.clearThrottle()
 
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
@@ -594,6 +605,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}()
 
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
+		e.clearThrottle()
 		e.incAttempt()
 		return matchedErr
 	}
@@ -801,7 +813,7 @@ func (e *executableImpl) Nack(err error) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 
-		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
+		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration), e.throttleKey)
 	}
 }
 
@@ -811,7 +823,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)))
+	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)), e.throttleKey)
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -865,10 +877,15 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		return false
 	}
 
-	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
-		common.IsResourceExhausted(err) &&
-		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
-		return false
+	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
+		// Resubmitting synchronously bypasses the rescheduler, and with it the gate, so every
+		// parked task would keep rediscovering the same constraint at full dispatch cost.
+		if e.throttleState.Enabled() && e.throttleKey != (ThrottleKey{}) {
+			return false
+		}
+		if e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
+			return false
+		}
 	}
 
 	if shard.IsShardOwnershipLostError(err) {
@@ -882,6 +899,46 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	return err != consts.ErrTaskRetry &&
 		err != consts.ErrDependencyTaskNotCompleted &&
 		err != consts.ErrNamespaceHandover
+}
+
+// Classifies the failure, and reports it when the gate issued the dispatch.
+//
+// Classification runs even while the controller is off, so work parked before the flag is
+// turned on is paced rather than released in one ungated wave.
+func (e *executableImpl) reportThrottle(
+	cause enumspb.ResourceExhaustedCause,
+	scope enumspb.ResourceExhaustedScope,
+) {
+	// The issuing class is the one the task was parked under, until reclassified below.
+	issuer, metered := e.throttleKey, e.throttleAdmitted
+	e.throttleAdmitted = false
+	e.throttleKey = ThrottleKey{}
+
+	if !IsControllerInput(cause, scope) {
+		// Not a budget this controller paces, so the release stays counted as clean.
+		return
+	}
+	e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
+	if e.throttleState == nil {
+		return
+	}
+
+	// A metered rejection belongs to the class that issued the release, whichever budget
+	// refused it; an unmetered one is recorded against the new class but must not move it.
+	key := e.throttleKey
+	if metered {
+		key = issuer
+	}
+	e.throttleState.ReportThrottled(key, metered)
+}
+
+func (e *executableImpl) clearThrottle() {
+	e.throttleKey = ThrottleKey{}
+	e.throttleAdmitted = false
+}
+
+func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
+	e.throttleAdmitted = admitted
 }
 
 func (e *executableImpl) backoffDuration(
