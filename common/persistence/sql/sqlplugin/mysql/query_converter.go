@@ -133,6 +133,11 @@ func (c *queryConverter) BuildSelectStmt(
 	pageSize int,
 	token *sqlplugin.VisibilityPageToken,
 ) (string, []any) {
+	indexHint := ""
+	if isDefaultNamespaceDivisionFilter(queryParams.QueryExpr) {
+		indexHint = "FORCE INDEX (by_temporal_namespace_division) "
+	}
+
 	var whereClauses []string
 	var queryArgs []any
 
@@ -178,11 +183,13 @@ func (c *queryConverter) BuildSelectStmt(
 
 	stmt := fmt.Sprintf(
 		"SELECT %s FROM executions_visibility ev "+
+			"%s"+
 			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
 			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
 			"%s "+
 			"ORDER BY %s DESC, %s DESC, %s LIMIT ?",
 		strings.Join(dbFields, ", "),
+		indexHint,
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
@@ -195,6 +202,18 @@ func (c *queryConverter) BuildSelectStmt(
 	queryArgs = append(queryArgs, pageSize)
 
 	return stmt, queryArgs
+}
+
+func isDefaultNamespaceDivisionFilter(expr sqlparser.Expr) bool {
+	switch expr := expr.(type) {
+	case *sqlparser.IsExpr:
+		column, ok := expr.Expr.(*query.SAColumn)
+		return ok && expr.Operator == sqlparser.IsNullStr && column.FieldName == sadefs.TemporalNamespaceDivision
+	case *sqlparser.ParenExpr:
+		return isDefaultNamespaceDivisionFilter(expr.Expr)
+	default:
+		return false
+	}
 }
 
 func (c *queryConverter) BuildCountStmt(
