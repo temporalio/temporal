@@ -648,12 +648,13 @@ const (
 
 // Matching task dropped reason tag values
 const (
-	DroppedTaskReasonNotFound      = "not_found"
-	DroppedTaskReasonInternalError = "internal_error"
-	DroppedTaskReasonDataLoss      = "data_loss"
-	DroppedTaskReasonExpiredRead   = "expired_read"
-	DroppedTaskReasonExpiredMemory = "expired_memory"
-	DroppedTaskReasonInvalid       = "invalid"
+	DroppedTaskReasonNotFound                = "not_found"
+	DroppedTaskReasonInternalError           = "internal_error"
+	DroppedTaskReasonDataLoss                = "data_loss"
+	DroppedTaskReasonExpiredRead             = "expired_read"
+	DroppedTaskReasonExpiredMemory           = "expired_memory"
+	DroppedTaskReasonStickyWorkerUnavailable = "sticky_worker_unavailable"
+	DroppedTaskReasonInvalid                 = "invalid"
 )
 
 var (
@@ -1490,6 +1491,12 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand poller autoscaling adoption.
+	WorkerHeartbeatCount = NewCounterDef(
+		"worker_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats, per task type polled by the worker. poller_autoscaling_heartbeat_count is a subset of this. "+
+				"Dimensions: namespace, taskqueue, task_type"),
+	)
 	PollerAutoscalingHeartbeatCount = NewCounterDef(
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
@@ -1629,6 +1636,46 @@ var (
 	NamespaceReplicationApplyEndToEndLatency = NewTimerDef(
 		"namespace_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
+	)
+	NamespaceReplicationShadowPreparationOutcomes = NewCounterDef(
+		"namespace_replication_shadow_preparation_outcomes",
+		WithDescription("Legacy reference preparation outcomes for eligible shadow namespace mutations."),
+	)
+	NamespaceReplicationShadowTriggerOutcomes = NewCounterDef(
+		"namespace_replication_shadow_trigger_outcomes",
+		WithDescription("Shadow trigger RPC completion outcomes. An RPC error does not prove that no component was created."),
+	)
+	NamespaceReplicationShadowReceiveComparisonOutcomes = NewCounterDef(
+		"namespace_replication_shadow_receive_comparison_outcomes",
+		WithDescription("Receiver shadow comparisons against the legacy reference, tagged by outcome and failure reason."),
+	)
+	NamespaceReplicationCHASMApplyOutcomes = NewCounterDef(
+		"namespace_replication_chasm_apply_outcomes",
+		WithDescription("CHASM namespace replication attempt outcomes by mode and apply stage."),
+	)
+	NamespaceReplicationCHASMApplyLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_latency",
+		WithDescription("CHASM namespace replication attempt duration, including outcome persistence."),
+	)
+	NamespaceReplicationCHASMApplyEndToEndLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_end_to_end_latency",
+		WithDescription("Time from component scheduling to a terminal peer transition, including queue waits and retry backoff. Recorded after persistence succeeds."),
+	)
+	NamespaceReplicationShadowCompletionOutcomes = NewCounterDef(
+		"namespace_replication_shadow_completion_outcomes",
+		WithDescription("Normally completed shadow mutations, excluding forced terminations. Aggregate outcome prioritizes error over mismatch over match; zero peers yields no_peers."),
+	)
+	NamespaceReplicationShadowCompletionLatency = NewTimerDef(
+		"namespace_replication_shadow_completion_latency",
+		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds; excludes forced terminations."),
+	)
+	NamespaceReplicationCHASMPeerPendingAge = NewTimerDef(
+		"namespace_replication_chasm_peer_pending_age",
+		WithDescription("Unresolved peer age sampled when a retry is persisted."),
+	)
+	NamespaceReplicationCHASMPeerPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_peer_pending_threshold_exceeded",
+		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
 	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",

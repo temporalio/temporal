@@ -137,6 +137,10 @@ func TestSlackMessageStructure(t *testing.T) {
 	}, BuildFailureMessage(report))
 }
 
+func TestFormatPercentagePointComparison(t *testing.T) {
+	require.Equal(t, "↑ 1.5%", formatPercentagePointComparison(91.5, 90, true))
+}
+
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	report := &FailureReport{
 		Run: github.Run{
