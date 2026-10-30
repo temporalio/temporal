@@ -181,6 +181,20 @@ func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg strin
 	}, timeout, interval, msg, args...)
 }
 
+// AwaitHolds requires every assertion in fn to pass throughout duration.
+// It uses [await.RequireHolds], including its in-flight attempt completion policy.
+func (s *Suite[T]) AwaitHolds(fn func(T), duration, interval time.Duration) {
+	s.AwaitHoldsf(fn, duration, interval, "")
+}
+
+// AwaitHoldsf is like [AwaitHolds] but adds a formatted failure message.
+func (s *Suite[T]) AwaitHoldsf(fn func(T), duration, interval time.Duration, msg string, args ...any) {
+	t := s.T()
+	await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+		fn(s.copySuite(t, false, at, at.Context()).(T))
+	}, duration, interval, msg, args...)
+}
+
 // AwaitTrue calls fn repeatedly until it returns true or timeout is reached.
 //
 // Use it for simple local predicates only. Do not use assertions or side effects; use [Await] instead.
@@ -191,6 +205,17 @@ func (s *Suite[T]) AwaitTrue(fn func() bool, timeout, interval time.Duration) {
 // AwaitTruef is like [AwaitTrue] but includes a format string appended to the failure message.
 func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, msg string, args ...any) {
 	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
+}
+
+// AwaitHoldsTrue requires fn to return true on every poll for the full duration.
+// Use it for simple local predicates only. Use [AwaitHolds] for assertions or blocking operations.
+func (s *Suite[T]) AwaitHoldsTrue(fn func() bool, duration, interval time.Duration) {
+	s.AwaitHoldsTruef(fn, duration, interval, "")
+}
+
+// AwaitHoldsTruef is like [AwaitHoldsTrue] but adds a formatted failure message.
+func (s *Suite[T]) AwaitHoldsTruef(fn func() bool, duration, interval time.Duration, msg string, args ...any) {
+	await.RequireHoldsTruef(s.T(), fn, duration, interval, msg, args...)
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
