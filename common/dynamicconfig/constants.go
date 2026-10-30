@@ -1256,6 +1256,11 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
+	FrontendBlockOldVersioningPollers = NewNamespaceBoolSetting(
+		"frontend.blockOldVersioningPollers",
+		false,
+		`FrontendBlockOldVersioningPollers prevents workers using deprecated worker versioning options from polling.`,
+	)
 
 	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
 		"frontend.deleteNamespaceUseChasmDeleteExecution",
