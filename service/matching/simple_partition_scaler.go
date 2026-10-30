@@ -186,6 +186,7 @@ func (s *simplePartitionScaler) updateAddTarget(
 ) (int, bool) {
 	// TODO(dp): we should return some information about which window made the change and put
 	// a log of those in the scale state
+	prevTarget := target
 	for _, down := range cfg.Downs {
 		rate, full := s.getTracker(down.Window).rateAndFull()
 		if !full {
@@ -203,12 +204,12 @@ func (s *simplePartitionScaler) updateAddTarget(
 		if !full {
 			return 0, false
 		}
-		// increase target so that each partition is ~= target rate
-		target = max(
-			target,
-			int(rate/float32(up.TargetRate)+0.5),
-			1,
-		)
+		// increase target so that each partition is ~= target rate. if this raises a target
+		// that downs lowered, don't go below the previous target: an up must never cause a
+		// decrease.
+		if want := int(rate/float32(up.TargetRate) + 0.5); want > target {
+			target = max(prevTarget, want)
+		}
 	}
 
 	// always keep min of 1 even if we have no Ups/Downs

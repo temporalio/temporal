@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -482,4 +483,91 @@ func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
 	require.Equal(t, 8, d.NewTarget)
 	require.Equal(t, 1000, d.BacklogCap)
+}
+
+// onTasksAtRate drives a scaler through one full window at a controlled add rate: an empty
+// call creates the trackers, then rate*window tasks arrive once the window has elapsed. All
+// windows must equal window so every tracker sees the same rate; Ups/Downs targets are then
+// controlled by their TargetRate.
+func onTasksAtRate(
+	t *testing.T,
+	cfg dynamicconfig.SimplePartitionScalerSettings,
+	window time.Duration,
+	rate int,
+	in PartitionScalerInput,
+) PartitionScalerDecision {
+	t.Helper()
+	ts := clock.NewEventTimeSource()
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		ts,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	require.True(t, scaler.OnTasks(PartitionScalerInput{CurrentTarget: in.CurrentTarget}).NoChange)
+	ts.Advance(window)
+	in.NumTasks = rate * int(window/time.Second)
+	return scaler.OnTasks(in)
+}
+
+func addTargetFromState(t *testing.T, d PartitionScalerDecision) int {
+	t.Helper()
+	var state persistencespb.SimplePartitionScalerState
+	require.NoError(t, d.PrivateState.UnmarshalTo(&state))
+	return int(state.AddTarget)
+}
+
+// TestOnTasksUpsNeverLowerAddTarget verifies that when an Up window raises the working add
+// target, the result is at least the previous add target, while Downs can still lower it on
+// their own. Ups "intervene" only when they raise the candidate after Downs lowered it, so
+// e.g. Downs→1, Ups→2 holds 3 but Downs→2, Ups→2 decreases to 2.
+func TestOnTasksUpsNeverLowerAddTarget(t *testing.T) {
+	t.Parallel()
+
+	const window = time.Second
+	const rate = 100
+	// threshold returns a window whose target partition count at rate is want.
+	threshold := func(want int) dynamicconfig.SimplePartitionScalerThreshold {
+		return dynamicconfig.SimplePartitionScalerThreshold{Window: window, TargetRate: rate / want}
+	}
+	thresholds := func(wants ...int) []dynamicconfig.SimplePartitionScalerThreshold {
+		var ts []dynamicconfig.SimplePartitionScalerThreshold
+		for _, w := range wants {
+			ts = append(ts, threshold(w))
+		}
+		return ts
+	}
+
+	for _, tc := range []struct {
+		name     string
+		previous int
+		downs    []int
+		ups      []int
+		expected int
+	}{
+		{name: "ups below previous after downs decrease holds previous", previous: 3, downs: []int{1}, ups: []int{2}, expected: 3},
+		{name: "ups equal to downs allows decrease", previous: 3, downs: []int{2}, ups: []int{2}, expected: 2},
+		{name: "ups above previous increases", previous: 3, downs: []int{1}, ups: []int{4}, expected: 4},
+		{name: "ups at downs allows decrease to one", previous: 3, downs: []int{1}, ups: []int{1}, expected: 1},
+		{name: "downs only decreases", previous: 3, downs: []int{1}, expected: 1},
+		{name: "ups only below previous holds", previous: 3, ups: []int{2}, expected: 3},
+		{name: "ups only increases", previous: 3, ups: []int{5}, expected: 5},
+		{name: "later up below previous cannot undo earlier hold", previous: 3, downs: []int{1}, ups: []int{2, 1}, expected: 3},
+		{name: "later up below previous cannot undo earlier increase", previous: 3, downs: []int{1}, ups: []int{4, 2}, expected: 4},
+		{name: "earlier up at candidate then later up holds previous", previous: 3, downs: []int{1}, ups: []int{1, 2}, expected: 3},
+		{name: "multiple downs take the minimum", previous: 4, downs: []int{3, 2}, ups: []int{1}, expected: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := onTasksAtRate(t, dynamicconfig.SimplePartitionScalerSettings{
+				Enabled: true,
+				Downs:   thresholds(tc.downs...),
+				Ups:     thresholds(tc.ups...),
+			}, window, rate, PartitionScalerInput{CurrentTarget: tc.previous})
+			require.False(t, d.NoChange)
+			require.Equal(t, tc.expected, d.NewTarget)
+			require.Equal(t, tc.expected, addTargetFromState(t, d))
+		})
+	}
 }
