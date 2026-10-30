@@ -122,7 +122,7 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		nil, // no legacy count
-		nil, // time source unused on the fixed path
+		clock.NewEventTimeSource(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -140,7 +140,7 @@ func TestOnTasksFloorsAddTargetAtOne(t *testing.T) {
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		nil,
-		nil,
+		clock.NewEventTimeSource(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -164,7 +164,7 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		nil,
-		nil,
+		clock.NewEventTimeSource(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -254,7 +254,7 @@ func TestOnTasksReportsMaxClamping(t *testing.T) {
 					MaxAsMultipleOfLegacy: tc.maxMultiple,
 				}),
 				legacyCount,
-				nil,
+				clock.NewEventTimeSource(),
 				log.NewNoopLogger(),
 				metricsHandler,
 			)
@@ -290,7 +290,7 @@ func TestOnTasksReportsMaxClampingWhenUnclampedTargetChanges(t *testing.T) {
 			Max:          2,
 		}),
 		nil,
-		nil,
+		clock.NewEventTimeSource(),
 		log.NewNoopLogger(),
 		metricsHandler,
 	)
@@ -450,7 +450,7 @@ func TestOnTasksLegacyMultiples(t *testing.T) {
 			scaler := newSimplePartitionScaler(
 				dynamicconfig.GetTypedPropertyFn(tc.cfg),
 				tc.legacyCount,
-				nil, // time source unused with no Ups/Downs
+				clock.NewEventTimeSource(),
 				log.NewNoopLogger(),
 				metrics.NoopMetricsHandler,
 			)
@@ -475,11 +475,82 @@ func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		func() int { return 4 },
-		nil, // time source unused on the fixed path
+		clock.NewEventTimeSource(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
 	require.Equal(t, 8, d.NewTarget)
 	require.Equal(t, 1000, d.BacklogCap)
+}
+
+// TestOnTasksBatchedTasksDoNotInflateTarget feeds a constant 150/s in 400-task batches. The
+// true rate needs round(150/70) = 2 partitions; counting each batch at its flush time would
+// read ~190/s and ask for 3.
+func TestOnTasksBatchedTasksDoNotInflateTarget(t *testing.T) {
+	t.Parallel()
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true,
+			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: 2 * time.Second, TargetRate: 70},
+			},
+		}),
+		nil,
+		timeSource,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	const rate, batch = 150, 400
+	flushEvery := time.Second * batch / rate
+	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
+	for range 100 {
+		timeSource.Advance(flushEvery)
+		d = scaler.OnTasks(PartitionScalerInput{NumTasks: batch, CurrentTarget: 1, PrivateState: d.PrivateState})
+		require.False(t, d.NoChange)
+		require.Equal(t, 2, d.NewTarget)
+	}
+}
+
+// TestOnTasksTrackersCreatedLateMeasureTrueRate verifies that trackers created after the
+// scaler's first call (here: Enabled flips to true) measure the true rate. The batch from the
+// call that creates them accumulated before they existed; counting it in a window much shorter
+// than the batch's span would read far above the true rate.
+func TestOnTasksTrackersCreatedLateMeasureTrueRate(t *testing.T) {
+	t.Parallel()
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+	cfg := dynamicconfig.SimplePartitionScalerSettings{
+		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: 2 * time.Second, TargetRate: 50},
+		},
+	}
+	scaler := newSimplePartitionScaler(
+		func() dynamicconfig.SimplePartitionScalerSettings { return cfg },
+		nil,
+		timeSource,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// disabled: returns before creating trackers, but still records the call time
+	const rate = 100
+	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
+	require.Equal(t, 0, d.NewTarget)
+
+	// enable after 23s: this batch creates the trackers and predates all of them
+	cfg.Enabled = true
+	timeSource.Advance(23 * time.Second)
+	d = scaler.OnTasks(PartitionScalerInput{NumTasks: 23 * rate, CurrentTarget: 1})
+	require.True(t, d.NoChange)
+
+	for range 2 {
+		timeSource.Advance(time.Second)
+		d = scaler.OnTasks(PartitionScalerInput{NumTasks: rate, CurrentTarget: 1, PrivateState: d.PrivateState})
+	}
+	require.False(t, d.NoChange)
+	require.Equal(t, 2, d.NewTarget, "true rate 100/s at 50/s per partition")
 }
