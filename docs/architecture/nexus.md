@@ -323,7 +323,7 @@ workflow and operation state machine. The
 [component.nexusoperations.callback.endpoint.template](../../service/history/hsm/nexusoperations/config.go)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
-publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
+publicly accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
 the frontend URL via membership or, as a last resort, via static configuration overrides.
 
 The timeout for making a single Nexus HTTP call is configurable via: `component.nexusoperations.request.timeout`
