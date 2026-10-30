@@ -15,15 +15,16 @@ import (
 const pendingAlertThreshold = time.Minute
 
 type peerOutcomeRecord struct {
-	outcome          namespacereplicationpb.PeerApplyOutcome
-	attemptedOutcome namespacereplicationpb.PeerApplyOutcome
-	stateUpdated     bool
-	retryScheduled   bool
-	retryExhausted   bool
-	firstAttemptAt   time.Time
-	resolvedAt       time.Time
-	startedAt        time.Time
-	completion       *shadowCompletionRecord
+	outcome           namespacereplicationpb.PeerApplyOutcome
+	attemptedOutcome  namespacereplicationpb.PeerApplyOutcome
+	stateUpdated      bool
+	retryScheduled    bool
+	retryExhausted    bool
+	firstAttemptAt    time.Time
+	resolvedAt        time.Time
+	startedAt         time.Time
+	componentTerminal *componentTerminalObservation
+	completion        *shadowCompletionRecord
 }
 
 func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, recorded peerOutcomeRecord, applyErr, saveErr error, duration time.Duration) {

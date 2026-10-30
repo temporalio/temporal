@@ -1677,6 +1677,14 @@ var (
 		"namespace_replication_chasm_peer_pending_threshold_exceeded",
 		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
 	)
+	NamespaceReplicationCHASMLocalPendingAge = NewTimerDef(
+		"namespace_replication_chasm_local_pending_age",
+		WithDescription("Age of an unresolved authoritative CHASM local apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMLocalPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_local_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM local retries durably scheduled after the local apply has been pending for at least one minute."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),

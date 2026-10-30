@@ -178,22 +178,26 @@ func (h *taskExecutorImpl) Execute(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
+	execute := func() error {
+		outcome, err := h.executeValidatedTask(ctx, task)
+		if err == nil && outcome == ApplyOutcomeDuplicate {
+			h.observeDuplicate(ctx, task)
+		}
+		return err
+	}
 	if hook, ok := testhooks.Get(
 		h.testHooks,
 		testhooks.NamespaceReplicationTaskInterceptor,
 		namespace.Name(task.GetInfo().GetName()),
 	); ok {
-		return hook(ctx, task, func() error {
-			_, err := h.executeValidatedTask(ctx, task)
-			return err
-		})
+		return hook(ctx, task, execute)
 	}
-	_, err := h.executeValidatedTask(ctx, task)
-	return err
+	return execute()
 }
 
 // ExecuteWithOutcome applies a receiver mutation without the legacy queue test
-// interceptor and returns its state effect.
+// interceptor and returns the state effect of the successful attempt. A stale
+// no-op does not rule out a committed write from an earlier ambiguous attempt.
 func (h *taskExecutorImpl) ExecuteWithOutcome(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
@@ -207,7 +211,15 @@ func (h *taskExecutorImpl) ExecuteWithOutcome(
 		// Retry through apply-if-higher before acknowledging the newer update.
 		return ApplyOutcomeUnspecified, serviceerror.NewUnavailable("namespace created concurrently; retry namespace update")
 	}
+	if err == nil && outcome == ApplyOutcomeDuplicate {
+		h.observeDuplicate(ctx, task)
+	}
 	return outcome, err
+}
+
+func (h *taskExecutorImpl) observeDuplicate(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) {
+	h.recordOutcome(ctx, task, metricsOutcomeNoChange)
+	h.emitNamespaceReplicationProcessed(ctx, wideevents.NamespaceReplicationOutcomeDuplicate, nil, nil, nil)
 }
 
 func (h *taskExecutorImpl) executeValidatedTask(
@@ -372,14 +384,6 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 
 		if recordExists {
 			// name -> id & id -> name check pass, this is duplication request
-			h.recordOutcome(ctx, task, metricsOutcomeNoChange)
-			h.emitNamespaceReplicationProcessed(
-				ctx,
-				wideevents.NamespaceReplicationOutcomeDuplicate,
-				nil,
-				nil,
-				nil,
-			)
 			return ApplyOutcomeDuplicate, nil
 		}
 		return ApplyOutcomeUnspecified, err
@@ -524,13 +528,17 @@ func (h *taskExecutorImpl) recordOutcome(
 	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	recordOutcome(ctx, h.metricsHandler, task, outcome)
 }
 
 func (h *taskExecutorImpl) cloneLocalNamespaceForReplicationEvent(
 	ctx context.Context,
 	namespaceDetail *persistencespb.NamespaceDetail,
-) *persistencespb.NamespaceDetail {
+) (cloned *persistencespb.NamespaceDetail) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	if h.eventLogger == nil ||
 		h.emitNamespaceLifecycleEvents == nil ||
 		!h.emitNamespaceLifecycleEvents() {
@@ -554,6 +562,8 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	createRequest *persistence.CreateNamespaceRequest,
 	updateRequest *persistence.UpdateNamespaceRequest,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	if h.eventLogger == nil ||
 		h.emitNamespaceLifecycleEvents == nil ||
 		!h.emitNamespaceLifecycleEvents() {
@@ -565,14 +575,13 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 		return
 	}
 
-	sourceTaskID := metadata.SourceTaskID
 	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase:                     wideevents.NamespaceReplicationProcessed,
 		Outcome:                   outcome,
 		EventData:                 metadata.EventData,
 		SourceCluster:             metadata.SourceCluster,
 		TargetCluster:             metadata.TargetCluster,
-		SourceTaskID:              &sourceTaskID,
+		SourceTaskID:              metadata.SourceTaskID,
 		AttemptCount:              metadata.AttemptCount,
 		LocalNamespacePreMutation: localNamespacePreMutation,
 		CreateNamespaceRequest:    createRequest,

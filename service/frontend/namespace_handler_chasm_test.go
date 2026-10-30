@@ -2,10 +2,12 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -289,6 +291,21 @@ func TestInvokeShadowNamespaceMutationSkipsWhenLegacyWouldNotReplicate(t *testin
 			}
 		})
 	}
+}
+
+func namespaceReplicationEventDetails(t *testing.T, record otellog.Record) map[string]any {
+	t.Helper()
+	require.Equal(t, wideevents.NamespaceLifecycleEventName, record.EventName())
+	attributes := make(map[string]string)
+	record.WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Value.Kind() == otellog.KindString {
+			attributes[kv.Key] = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
+	return details
 }
 
 func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {

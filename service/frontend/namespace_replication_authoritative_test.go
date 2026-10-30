@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 )
@@ -22,6 +23,7 @@ func enabledNamespaceReplicationMetadata(t *testing.T) *cluster.MockMetadata {
 	t.Helper()
 	metadata := cluster.NewMockMetadata(gomock.NewController(t))
 	metadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	metadata.EXPECT().GetCurrentClusterName().Return("cellB").AnyTimes()
 	return metadata
 }
 
@@ -81,7 +83,10 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			executor := nsreplication.NewMockMutationTaskExecutor(gomock.NewController(t))
-			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor}
+			mh := metricstest.NewCaptureHandler()
+			capture := mh.StartCapture()
+			defer mh.StopCapture(capture)
+			handler := &AdminHandler{metricsHandler: mh, logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor}
 			task := shadowObservationTask()
 			payload, err := nsreplication.MarshalNamespaceTask(task)
 			require.NoError(t, err)
@@ -91,16 +96,31 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			}
 			executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Cond(func(received *replicationspb.NamespaceTaskAttributes) bool {
 				return proto.Equal(task, received)
-			})).Return(tc.outcome, tc.err).Times(attempts)
+			})).DoAndReturn(func(ctx context.Context, received *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
+				metadata, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+				require.True(t, ok)
+				require.Equal(t, "cellA", metadata.SourceCluster)
+				require.Equal(t, "cellB", metadata.TargetCluster)
+				require.Equal(t, task.GetId(), metadata.EventData.NamespaceID)
+				return tc.outcome, tc.err
+			}).Times(attempts)
 			response, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+				SourceCluster:           "cellA",
 				NamespaceTaskPayload:    payload,
 				NamespaceTask:           &replicationspb.NamespaceTaskAttributes{Id: "ignored-typed-task"},
 				ShadowLegacyTaskPayload: []byte("ignored-shadow-reference"),
 			})
+			recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+			require.Len(t, recordings, 1, "receiver retries emit one final RPC outcome")
+			require.Equal(t, nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
+			require.Equal(t, "authoritative", recordings[0].Tags["mode"])
+			require.Equal(t, "cellA", recordings[0].Tags["source_cluster"])
 			if tc.err != nil {
+				require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
 				require.ErrorIs(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
+				require.Equal(t, authoritativeReceiveOutcome(tc.outcome), recordings[0].Tags["outcome"])
 				require.Equal(t, tc.want, response.GetOutcome())
 			}
 		})

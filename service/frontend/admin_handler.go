@@ -1048,6 +1048,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 ) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	startTime := time.Now() // nolint:forbidigo // Wall-clock time measures only receiver latency.
 	defer log.CapturePanic(adh.logger, &retError)
 	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
 	var comparisonPanic error
@@ -1099,6 +1100,11 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
 	if !request.GetShadow() {
+		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
+			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+			Transport: nsreplication.CHASMReplicationTransport,
+		})
+		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
 		// CHASM deliveries can arrive out of order. Persist a removal even when this
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
@@ -1130,12 +1136,14 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			return retryable
 		})
 		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
 			return nil, err
 		}
 		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 		if err != nil {
 			return nil, err
 		}
+		adh.recordAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 	}
 	// Compare the byte payloads after decoding with the same schema. The typed
