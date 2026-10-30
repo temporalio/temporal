@@ -10,6 +10,21 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 )
 
+func TestScheduleLocalPreservesStartTime(t *testing.T) {
+	t.Parallel()
+	started := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	now := started
+	ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return now },
+	}}
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
+	require.NoError(t, TransitionScheduleLocal.Apply(c, ctx, EventScheduleLocal{}))
+	require.Equal(t, started, c.GetStartedAt().AsTime())
+	now = now.Add(time.Minute)
+	require.NoError(t, TransitionScheduleLocal.Apply(c, ctx, EventScheduleLocal{}))
+	require.Equal(t, started, c.GetStartedAt().AsTime())
+}
+
 func TestLocalRetryBackoff(t *testing.T) {
 	t.Parallel()
 
