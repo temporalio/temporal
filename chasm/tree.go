@@ -3130,6 +3130,40 @@ func (n *Node) RefreshTasks() error {
 	return nil
 }
 
+// RefreshPureTasks resets physical status for pure tasks so CloseTransaction emits the current
+// earliest task again. Workflow time skipping uses this after changing the virtual-time offset;
+// Nexus retry and timeout tasks are pure tasks, while outbound side-effect tasks must not be
+// duplicated.
+func (n *Node) RefreshPureTasks() error {
+	for _, node := range n.andAllChildren() {
+		if node.serializedNode == nil || node.serializedNode.GetMetadata() == nil {
+			continue
+		}
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		reset := false
+		for _, task := range componentAttr.GetPureTasks() {
+			if task.PhysicalTaskStatus == physicalTaskStatusCreated {
+				reset = true
+			}
+			task.PhysicalTaskStatus = physicalTaskStatusNone
+		}
+		if !reset {
+			continue
+		}
+
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+		n.systemMutation.UpdatedNodes[encodedPath] = node.serializedNode
+	}
+	return nil
+}
+
 func (n *Node) MarkTotalTimeSkippedUpdatedInPassive() {
 	n.totalTimeSkippedUpdatedInPassive = true
 }

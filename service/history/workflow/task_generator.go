@@ -1088,8 +1088,9 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	}
 
 	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
-	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
-	// because time skipping pauses when there is in-flight work. Activity retry
+	// WorkflowTask timer tasks aren't regenerated because time skipping pauses when there is
+	// in-flight workflow work. HSM timers are re-stamped by resetting their scheduled groups
+	// and letting normal close-time generation replace one wake-up at a time. Activity retry
 	// timers are the exception: an activity in retry backoff does not block skipping,
 	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
 	//
@@ -1187,8 +1188,8 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
-	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// StateMachineTimerTask is re-stamped by the normal HSM close path after its scheduled flag is
+	// reset. WorkflowTaskTimeoutTask and ActivityTimeoutTask are in-flight work and aren't regenerated.
 	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
 	return nil
 }

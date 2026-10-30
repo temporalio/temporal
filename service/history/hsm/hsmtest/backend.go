@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -17,6 +18,14 @@ import (
 
 type NodeBackend struct {
 	Events []*historypb.HistoryEvent
+	NowFn  func() time.Time
+}
+
+func (n *NodeBackend) Now() time.Time {
+	if n.NowFn != nil {
+		return n.NowFn()
+	}
+	return time.Now()
 }
 
 func (n *NodeBackend) GetCurrentVersion() int64 {

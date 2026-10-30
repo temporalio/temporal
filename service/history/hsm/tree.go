@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -152,6 +153,9 @@ func (ol OperationLog) String() string {
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
 // It currently has only a single implementation - workflow mutable state.
 type NodeBackend interface {
+	// Now returns the workflow's current logical time. Unlike the executor environment's wall
+	// clock, this includes any workflow time-skipping offset.
+	Now() time.Time
 	// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
 	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	// GenerateEventLoadToken generates a token for loading the given history event later via LoadHistoryEvent.
@@ -167,6 +171,11 @@ type NodeBackend interface {
 	GetWorkflowType() *commonpb.WorkflowType
 	// GetNamespaceEntry returns the namespace entry that owns this state machine tree.
 	GetNamespaceEntry() *namespace.Namespace
+}
+
+// Now returns the workflow's current logical time.
+func (n *Node) Now() time.Time {
+	return n.backend.Now()
 }
 
 // EventIDFromToken gets the event ID associated with an event load token.

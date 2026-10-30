@@ -272,6 +272,20 @@ func (mr *MockChasmTreeMockRecorder) PartitionedSnapshot(arg0 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionedSnapshot", reflect.TypeOf((*MockChasmTree)(nil).PartitionedSnapshot), arg0)
 }
 
+// RefreshPureTasks mocks base method.
+func (m *MockChasmTree) RefreshPureTasks() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshPureTasks")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshPureTasks indicates an expected call of RefreshPureTasks.
+func (mr *MockChasmTreeMockRecorder) RefreshPureTasks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshPureTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshPureTasks))
+}
+
 // RefreshTasks mocks base method.
 func (m *MockChasmTree) RefreshTasks() error {
 	m.ctrl.T.Helper()

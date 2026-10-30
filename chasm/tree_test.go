@@ -1853,6 +1853,46 @@ func (s *nodeSuite) TestRefreshTasks() {
 	s.Equal(pureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
+func (s *nodeSuite) TestRefreshPureTasksLeavesSideEffectsUntouched() {
+	now := s.timeSource.Now()
+	pureScheduledTime := now.Add(time.Minute).UTC()
+	root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+							TypeId: testPureTaskTypeID, ScheduledTime: timestamppb.New(pureScheduledTime),
+							VersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+							PhysicalTaskStatus:  physicalTaskStatusCreated,
+						}},
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+							TypeId:              testSideEffectTaskTypeID,
+							VersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+							PhysicalTaskStatus:  physicalTaskStatusCreated,
+						}},
+					},
+				},
+			},
+		},
+	})
+	s.Require().NoError(err)
+
+	s.Require().NoError(root.RefreshPureTasks())
+	mutation, err := root.CloseTransaction(context.Background(), true)
+	s.Require().NoError(err)
+	s.Len(mutation.UpdatedNodes, 1)
+	s.Equal(1, s.nodeBackend.NumTasksAdded(), "only the pure timer wake-up is regenerated")
+	s.Equal(pureScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
+
+	attrs := root.serializedNode.GetMetadata().GetComponentAttributes()
+	s.Equal(physicalTaskStatusCreated, attrs.GetPureTasks()[0].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusCreated, attrs.GetSideEffectTasks()[0].GetPhysicalTaskStatus())
+}
+
 func (s *nodeSuite) TestCarryOverTaskStatus() {
 	now := s.timeSource.Now()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{

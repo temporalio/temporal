@@ -14,11 +14,15 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -357,25 +361,25 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 	s.Run("EnabledAndIdle_Skippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true}}
-		s.True(s.mutableState.isWorkflowSkippable())
+		s.True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	// config tests: nil safe, and false safe proof
 	s.Run("NilTimeSkippingInfo_NotSkippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("NilConfig_NotSkippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("DisabledConfig_NotSkippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 		}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	// state and status tests
@@ -385,7 +389,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("WorkflowPaused_NotSkippable", func() {
@@ -394,7 +398,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	// inflight work tests
@@ -404,7 +408,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		}
 		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
 		s.True(s.mutableState.HasPendingWorkflowTask())
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("PendingActivity_NotSkippable", func() {
@@ -412,7 +416,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("PendingSignalExternal_NotSkippable", func() {
@@ -420,7 +424,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingSignalInfoIDs[1] = &persistencespb.SignalInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("PendingRequestCancelExternal_NotSkippable", func() {
@@ -428,7 +432,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingRequestCancelInfoIDs[1] = &persistencespb.RequestCancelInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("PendingChildExecution_NotSkippable", func() {
@@ -436,7 +440,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("PendingNexusOperation_NotSkippable", func() {
@@ -450,7 +454,166 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			},
 		}, []byte("token"))
 		s.Require().NoError(err)
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
+	})
+
+	s.Run("HSMNexusOperationInRetryBackoff_Skippable", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				ScheduledTime:           timestamppb.New(now.Add(-time.Minute)),
+				NextAttemptScheduleTime: timestamppb.New(now.Add(2 * time.Minute)),
+				ScheduleToCloseTimeout:  durationpb.New(4 * time.Minute),
+				ScheduleToStartTimeout:  durationpb.New(3 * time.Minute),
+			},
+		})
+		s.Require().NoError(err)
+
+		eligibility := s.mutableState.evaluateWorkflowTimeSkippingEligibility()
+		s.True(eligibility.eligible)
+		transition := s.mutableState.findNextSkipTarget(eligibility.nexusTargets...)
+		s.Equal(now.Add(2*time.Minute), transition.GetTargetTime())
+	})
+
+	s.Run("DueUserTimerBlocksFutureNexusRetryTarget", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				ScheduledTime:           timestamppb.New(now),
+				NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+			},
+		})
+		s.Require().NoError(err)
+		s.mutableState.pendingTimerInfoIDs["due"] = &persistencespb.TimerInfo{
+			TimerId:    "due",
+			ExpiryTime: timestamppb.New(now),
+		}
+
+		eligibility := s.mutableState.evaluateWorkflowTimeSkippingEligibility()
+		s.True(eligibility.eligible)
+		s.Nil(s.mutableState.findNextSkipTarget(eligibility.nexusTargets...),
+			"a future Nexus retry must not hide an ordinary timer that is already due")
+	})
+
+	for _, state := range []enumsspb.NexusOperationState{
+		enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+		enumsspb.NEXUS_OPERATION_STATE_STARTED,
+	} {
+		s.Run("HSMNexusOperation"+state.String()+"_NotSkippable", func() {
+			s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			}
+			_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+				NexusOperationInfo: &persistencespb.NexusOperationInfo{State: state},
+			})
+			s.Require().NoError(err)
+			s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
+		})
+	}
+
+	s.Run("HSMNexusOperationCancellationBlocksSkipping", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		node, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State: enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+			},
+		})
+		s.Require().NoError(err)
+		op, err := hsm.MachineData[nexusoperations.Operation](node)
+		s.Require().NoError(err)
+		_, err = op.Cancel(node, now, 1)
+		s.Require().NoError(err)
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
+	})
+
+	s.Run("SeveralHSMNexusOperationsUseEarliestRetry", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		collection := nexusoperations.MachineCollection(s.mutableState.HSM())
+		for id, deadline := range map[string]time.Time{
+			"later": now.Add(time.Hour), "earlier": now.Add(30 * time.Minute),
+		} {
+			_, err := collection.Add(id, nexusoperations.Operation{NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State: enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, NextAttemptScheduleTime: timestamppb.New(deadline),
+			}})
+			s.Require().NoError(err)
+		}
+		eligibility := s.mutableState.evaluateWorkflowTimeSkippingEligibility()
+		s.True(eligibility.eligible)
+		transition := s.mutableState.findNextSkipTarget(eligibility.nexusTargets...)
+		s.Equal(now.Add(30*time.Minute), transition.GetTargetTime())
+	})
+
+	s.Run("CHASMNexusOperationInRetryBackoff_Skippable", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.setChasmNexusOperationForTimeSkipping(&nexusoperationpb.OperationState{
+			Status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, ScheduledTime: timestamppb.New(now),
+			NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+		})
+		eligibility := s.mutableState.evaluateWorkflowTimeSkippingEligibility()
+		s.True(eligibility.eligible)
+		transition := s.mutableState.findNextSkipTarget(eligibility.nexusTargets...)
+		s.Equal(now.Add(time.Hour), transition.GetTargetTime())
+	})
+
+	for _, status := range []nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+		nexusoperationpb.OPERATION_STATUS_STARTED,
+	} {
+		s.Run("CHASMNexusOperation"+status.String()+"_NotSkippable", func() {
+			s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			}
+			s.setChasmNexusOperationForTimeSkipping(&nexusoperationpb.OperationState{Status: status})
+			s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
+		})
+	}
+
+	s.Run("CHASMNexusOperationCancellationBlocksSkipping", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.setChasmNexusOperationForTimeSkipping(&nexusoperationpb.OperationState{
+			Status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+		}, true)
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
+	})
+
+	s.Run("MixedHSMAndCHASMNexusOperationsUseEarliestRetry", func() {
+		now := s.mutableState.Now()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("hsm", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State: enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+			},
+		})
+		s.Require().NoError(err)
+		s.setChasmNexusOperationForTimeSkipping(&nexusoperationpb.OperationState{
+			Status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF, NextAttemptScheduleTime: timestamppb.New(now.Add(15 * time.Minute)),
+		})
+		eligibility := s.mutableState.evaluateWorkflowTimeSkippingEligibility()
+		s.True(eligibility.eligible)
+		transition := s.mutableState.findNextSkipTarget(eligibility.nexusTargets...)
+		s.Equal(now.Add(15*time.Minute), transition.GetTargetTime())
 	})
 
 	// conditions that won't impact the workflow skippability
@@ -459,7 +622,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.True(s.mutableState.isWorkflowSkippable())
+		s.True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("ActivityInRetryBackoff_Skippable", func() {
@@ -473,7 +636,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Attempt:          2,
 			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
 		}
-		s.True(s.mutableState.isWorkflowSkippable())
+		s.True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
 
 	s.Run("ActivityRetryDueNowOrPast_NotSkippable", func() {
@@ -490,8 +653,37 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 			Attempt:          2,
 			ScheduledTime:    timestamppb.New(now),
 		}
-		s.False(s.mutableState.isWorkflowSkippable())
+		s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	})
+}
+
+func (s *mutableStateSuite) setChasmNexusOperationForTimeSkipping(
+	state *nexusoperationpb.OperationState,
+	withCancellation ...bool,
+) {
+	registry := chasm.NewRegistry(s.logger)
+	s.Require().NoError(registry.Register(&chasm.CoreLibrary{}))
+	s.Require().NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	s.Require().NoError(registry.Register(chasmnexus.NewNilLibrary()))
+
+	tree := chasm.NewEmptyTree(
+		registry,
+		s.mutableState,
+		chasm.DefaultPathEncoder,
+		s.logger,
+		metrics.NoopMetricsHandler,
+	)
+	s.mutableState.chasmTree = tree
+	ctx := chasm.NewMutableContext(context.Background(), tree)
+	wf := chasmworkflow.NewWorkflow(ctx, chasm.NewMSPointer(s.mutableState))
+	op := chasmnexus.NewOperation(state)
+	wf.Operations = chasm.Map[int64, *chasmnexus.Operation]{
+		1: chasm.NewComponentField(ctx, op),
+	}
+	s.Require().NoError(tree.SetRootComponent(wf))
+	if len(withCancellation) != 0 && withCancellation[0] {
+		s.Require().NoError(op.RequestCancel(ctx, &nexusoperationpb.CancellationState{RequestId: "request"}))
+	}
 }
 
 func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
@@ -499,11 +691,11 @@ func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
 		Config: &commonpb.TimeSkippingConfig{Enabled: true},
 	}
 	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
-	s.False(s.mutableState.isWorkflowSkippable())
+	s.False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 	s.True(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
 
 	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
-	s.True(s.mutableState.isWorkflowSkippable())
+	s.True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 }
 
 func (s *mutableStateSuite) requireInitNoPanic(
@@ -1505,7 +1697,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		// Time skipping is not enabled (nil config), so the workflow is not skippable.
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.Require().False(s.mutableState.isWorkflowSkippable(), "nil config means not skippable")
+		s.Require().False(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible, "nil config means not skippable")
 
 		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
 			context.Background(), historyi.TransactionPolicyActive)
@@ -1548,7 +1740,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		}
 		s.mutableState.timeSkippingInfoUpdated = false
 		s.Require().True(s.mutableState.IsWorkflow())
-		s.Require().True(s.mutableState.isWorkflowSkippable())
+		s.Require().True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 
 		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
 			context.Background(), historyi.TransactionPolicyActive)
@@ -1597,7 +1789,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			TimerId:    "future",
 			ExpiryTime: timestamppb.New(now.Add(time.Hour)),
 		}
-		s.Require().True(s.mutableState.isWorkflowSkippable())
+		s.Require().True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 
 		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
 			context.Background(), historyi.TransactionPolicyActive)
@@ -1641,7 +1833,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.Require().True(s.mutableState.isWorkflowSkippable())
+		s.Require().True(s.mutableState.evaluateWorkflowTimeSkippingEligibility().eligible)
 		s.Require().False(s.mutableState.findNextSkipTarget().IsValid(), "no candidate -> invalid transition")
 
 		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
