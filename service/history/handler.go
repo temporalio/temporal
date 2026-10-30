@@ -770,7 +770,7 @@ func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseSha
 
 // GetShard gets a shard hosted by this instance
 func (h *Handler) GetShard(ctx context.Context, request *historyservice.GetShardRequest) (*historyservice.GetShardResponse, error) {
-	resp, err := h.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
+	resp, err := h.persistenceShardManager.GetShard(ctx, &persistence.GetShardRequest{
 		ShardID: request.ShardId,
 	})
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -73,6 +74,7 @@ func (s *ShardSuite) TestGetOrCreateShard_Create() {
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
@@ -86,6 +88,7 @@ func (s *ShardSuite) TestGetOrCreateShard_Get() {
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
@@ -93,6 +96,42 @@ func (s *ShardSuite) TestGetOrCreateShard_Get() {
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: RandomShardInfo(s.ShardID, rand.Int63()),
+		LifecycleContext: s.Ctx,
+	})
+	s.NoError(err)
+	s.ProtoEqual(shardInfo, resp.ShardInfo)
+}
+
+func (s *ShardSuite) TestGetShardExisting() {
+	rangeID := rand.Int63()
+	shardInfo := RandomShardInfo(s.ShardID, rangeID)
+
+	_, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID:          s.ShardID,
+		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
+	})
+	s.NoError(err)
+
+	resp, err := s.ShardManager.GetShard(s.Ctx, &p.GetShardRequest{
+		ShardID: s.ShardID,
+	})
+	s.NoError(err)
+	s.ProtoEqual(shardInfo, resp.ShardInfo)
+}
+
+func (s *ShardSuite) TestGetShardNotFound() {
+	_, err := s.ShardManager.GetShard(s.Ctx, &p.GetShardRequest{
+		ShardID: s.ShardID,
+	})
+	s.ErrorAs(err, new(*serviceerror.NotFound))
+
+	// GetShard must not have created the shard
+	shardInfo := RandomShardInfo(s.ShardID, rand.Int63())
+	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID:          s.ShardID,
+		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
@@ -105,6 +144,7 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
@@ -117,12 +157,11 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 	})
 	s.IsType(&p.ShardOwnershipLostError{}, err)
 
-	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          s.ShardID,
-		InitialShardInfo: shardInfo,
+	getResp, err := s.ShardManager.GetShard(s.Ctx, &p.GetShardRequest{
+		ShardID: s.ShardID,
 	})
 	s.NoError(err)
-	s.ProtoEqual(shardInfo, resp.ShardInfo)
+	s.ProtoEqual(shardInfo, getResp.ShardInfo)
 }
 
 func (s *ShardSuite) TestUpdateShard_Success() {
@@ -132,6 +171,7 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
@@ -143,10 +183,9 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 	})
 	s.NoError(err)
 
-	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          s.ShardID,
-		InitialShardInfo: shardInfo,
+	getResp, err := s.ShardManager.GetShard(s.Ctx, &p.GetShardRequest{
+		ShardID: s.ShardID,
 	})
 	s.NoError(err)
-	s.ProtoEqual(updateShardInfo, resp.ShardInfo)
+	s.ProtoEqual(updateShardInfo, getResp.ShardInfo)
 }
