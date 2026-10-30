@@ -11,7 +11,6 @@ all: clean proto bins check test
 # Used in CI.
 ci-build-misc: \
 	print-go-version \
-	clean-tools \
 	proto \
 	go-generate \
 	buf-breaking \
@@ -22,7 +21,7 @@ ci-build-misc: \
 	ensure-no-changes
 
 # Delete all build artifacts
-clean: clean-bins clean-tools clean-test-output
+clean: clean-bins clean-test-output
 
 # Recompile proto files.
 proto: lint-protos lint-api protoc proto-codegen
@@ -80,7 +79,6 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 ##### Variables ######
 
 ROOT := $(shell git rev-parse --show-toplevel)
-LOCALBIN := .bin
 
 OTEL ?= false
 ifeq ($(OTEL),true)
@@ -166,20 +164,13 @@ endef
 print-go-version:
 	@go version
 
-clean-tools:
-	@printf $(COLOR) "Delete tools..."
-	@rm -rf $(LOCALBIN)
-
-$(LOCALBIN):
-	@mkdir -p $(LOCALBIN)
-
 .PHONY: golangci-lint
 LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
 
 # Path to a tool pinned in mise.toml, installing it if missing.
-mise-tool = $(or $(shell command -v mise >/dev/null && mise exec $(2) -- sh -c 'command -v $(1)'),$(error $(1) must be installed via mise; see https://mise.jdx.dev/installing-mise.html))
+mise-tool = $(or $(shell command -v mise >/dev/null && mise exec go $(2) -- sh -c 'command -v $(1)'),$(error $(1) must be installed via mise; see https://mise.jdx.dev/installing-mise.html))
 GOLANGCI_LINT = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
@@ -201,8 +192,7 @@ PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/gr
 PROTOC_GEN_GO_HELPERS = $(call mise-tool,protoc-gen-go-helpers,go:go.temporal.io/api/cmd/protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 
-$(LOCALBIN)/protoc-gen-go-chasm: $(LOCALBIN) cmd/tools/protoc-gen-go-chasm/main.go go.mod go.sum
-	@go build -o $@ ./cmd/tools/protoc-gen-go-chasm
+PROTOC_GEN_GO_CHASM = $(shell mise exec go -- go tool -n protoc-gen-go-chasm)
 
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
@@ -217,7 +207,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@printf $(COLOR) "Generate CHASM proto image..."
 	@$(PROTOC) --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
-protoc: $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
+protoc: $(API_BINPB)
 	@go run ./cmd/tools/protogen \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
@@ -227,7 +217,7 @@ protoc: $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
 		-goimports-bin=$(GOIMPORTS) \
 		-mockgen-bin=$(MOCKGEN) \
 		-protoc-path="$(PROTOC)" \
-		-protoc-gen-go-chasm-bin=$(LOCALBIN)/protoc-gen-go-chasm \
+		-protoc-gen-go-chasm-bin=$(PROTOC_GEN_GO_CHASM) \
 		-protoc-gen-go-bin=$(PROTOC_GEN_GO) \
 		-protoc-gen-go-grpc-bin=$(PROTOC_GEN_GO_GRPC) \
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \

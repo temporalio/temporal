@@ -23,7 +23,7 @@ shellcheck = "0.11.0"
 "go:github.com/bufbuild/buf/cmd/buf" = "1.6.0"
 "go:go.temporal.io/api/cmd/protogen" = "{{ vars.go_api_version }}"
 "go:github.com/rhysd/actionlint/cmd/actionlint" = "1.7.7"
-"go:go.temporal.io/sdk/contrib/tools/workflowcheck" = "0.3.0"
+"go:go.temporal.io/sdk/contrib/tools/workflowcheck" = "0.6.0"
 # NilAway has no tagged releases; pin the pseudo-version for reproducible CI.
 "go:go.uber.org/nilaway/cmd/nilaway" = "v0.0.0-20260717164209-b48ebb193579"
 "go:github.com/google/yamlfmt/cmd/yamlfmt" = "0.16.0"
