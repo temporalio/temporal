@@ -1368,9 +1368,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return resp, nil
 		}).AnyTimes()
 
+	// Dispatch order is best effort, not guaranteed: if the RecordTaskStarted calls complete out
+	// of order then the tasks come back out of order, for either backlog implementation. See
+	// temporalio/temporal#12694. So validate every other field of the token against whichever
+	// task arrived, and check after the loop that the full set was dispatched exactly once.
+	deliveredScheduledEventIDs := make([]int64, 0, taskCount)
 	for i := int64(0); i < taskCount; {
-		scheduledEventID := i * 3
-
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -1394,12 +1397,16 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
 		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
 		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
+		gotToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+		s.NoError(err)
+		deliveredScheduledEventIDs = append(deliveredScheduledEventIDs, gotToken.ScheduledEventId)
+
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
 			WorkflowId:       workflowID,
 			RunId:            runID,
-			ScheduledEventId: scheduledEventID,
+			ScheduledEventId: gotToken.ScheduledEventId,
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
@@ -1408,6 +1415,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
+	expectedScheduledEventIDs := make([]int64, 0, taskCount)
+	for i := range int64(taskCount) {
+		expectedScheduledEventIDs = append(expectedScheduledEventIDs, i*3)
+	}
+	s.ElementsMatch(expectedScheduledEventIDs, deliveredScheduledEventIDs)
 	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
