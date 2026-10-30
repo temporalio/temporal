@@ -16,10 +16,21 @@ message TaskKey {
 message QueueState {
   map<int64, QueueReaderState> reader_states = 1;
   TaskKey exclusive_reader_high_watermark = 2;
+  // Distinct 16-byte namespace IDs referenced by index from
+  // NamespaceIdPredicateAttributes.namespace_id_indexes.
+  repeated bytes namespace_id_table = 3;
 }
 
 message QueueReaderState {
   repeated QueueSliceScope scopes = 1;
+  // Each group holds one predicate and every range that carries it. Readers expand the groups
+  // into ordinary scopes and treat them as a union with `scopes`.
+  repeated QueueSlicePredicateGroup predicate_groups = 2;
+}
+
+message QueueSlicePredicateGroup {
+  Predicate predicate = 1;
+  repeated QueueSliceRange ranges = 2;
 }
 
 message QueueSliceScope {

@@ -73,10 +73,21 @@ func getMinTaskKey(
 		taskKey := ConvertFromPersistenceTaskKey(queueState.ExclusiveReaderHighWatermark)
 		minTaskKey = &taskKey
 	}
-	for _, readerState := range queueState.ReaderStates {
-		taskKey := ConvertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin)
+	consider := func(persistenceKey *persistencespb.TaskKey) {
+		taskKey := ConvertFromPersistenceTaskKey(persistenceKey)
 		if minTaskKey == nil || taskKey.CompareTo(*minTaskKey) < 0 {
 			minTaskKey = &taskKey
+		}
+	}
+	for _, readerState := range queueState.ReaderStates {
+		// Only the first scope: replication readers hold per-priority scopes and lag follows the first.
+		if len(readerState.Scopes) > 0 {
+			consider(readerState.Scopes[0].Range.InclusiveMin)
+		}
+		for _, group := range readerState.PredicateGroups {
+			for _, taskRange := range group.Ranges {
+				consider(taskRange.InclusiveMin)
+			}
 		}
 	}
 	return minTaskKey
