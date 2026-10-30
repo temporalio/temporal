@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+import "chasm/lib/worker/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+// WorkerService is the internal History service for worker group heartbeats.
+service WorkerService {
+  // RecordHeartbeat updates worker metadata and renews the group's shared lease.
+  // Called by Matching for workers with the same grouping key.
+  rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "worker_grouping_key";
+  }
+}
