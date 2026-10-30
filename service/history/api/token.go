@@ -259,6 +259,16 @@ func RefreshBranchTokenAfterRead(
 		}
 		return branchToken, nil
 	}
+	// Raw history V2 takes its branch from the continuation token without checking it against mutable state, so
+	// report a branch this execution doesn't record but keep serving the page as read.
+	reportBranchTokenMismatch(
+		shardContext,
+		namespaceName.String(),
+		execution,
+		branchTokenMismatchReasonForeign,
+		response.GetCurrentBranchToken(),
+		readBranchToken,
+	)
 	return nil, nil
 }
 

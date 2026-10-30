@@ -7559,6 +7559,36 @@ func (s *engineSuite) TestGetWorkflowExecutionRawHistoryV2_RewrittenBranchTokenK
 	s.testRawHistoryV2RewrittenBranchTokenKept(true, true)
 }
 
+func (s *engineSuite) TestGetWorkflowExecutionRawHistoryV2_ForeignBranchTokenReportedAndServed() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-raw-foreign-branch", RunId: uuid.NewString()}
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.Require().NoError(err)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+	_, foreignBranchToken := s.mockExecutionWithForeignBranchToken(&we)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.ReadHistoryBranchRequest) (*persistence.ReadRawHistoryBranchResponse, error) {
+			s.Equal(foreignBranchToken, request.BranchToken)
+			return &persistence.ReadRawHistoryBranchResponse{}, nil
+		},
+	)
+
+	_, err = engine.GetWorkflowExecutionRawHistoryV2(
+		context.Background(),
+		s.rawHistoryV2RequestWithBranchToken(&we, foreignBranchToken, []byte("some random persistence token")),
+	)
+	s.Require().NoError(err)
+	recordings := capture.Snapshot()[metrics.PaginationTokenBranchMismatchCounter.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal("foreign_branch", recordings[0].Tags[metrics.ReasonTag("").Key])
+}
+
 func (s *engineSuite) TestGetWorkflowExecutionHistory_LongPollDiscardsRequestBranchToken() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid-longpoll-overwrite", RunId: uuid.NewString()}
 
