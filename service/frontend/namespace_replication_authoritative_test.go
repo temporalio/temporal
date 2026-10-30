@@ -113,6 +113,7 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
 			require.Len(t, recordings, 1, "receiver retries emit one final RPC outcome")
 			require.Equal(t, nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
+			require.Equal(t, "authoritative", recordings[0].Tags["mode"])
 			require.Equal(t, "cellA", recordings[0].Tags["source_cluster"])
 			if tc.err != nil {
 				require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])

@@ -634,9 +634,8 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
-	s.Nil(err)
-	s.Equal(ApplyOutcomeDuplicate, outcome)
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	s.Require().NoError(err)
 	s.requireMetricOutcome(metricsOutcomeNoChange, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeDuplicate))
 }

@@ -28,6 +28,7 @@ const (
 	CHASMApplyOutcomeRetryableError        = "retryable_error"
 	CHASMApplyOutcomeTerminalError         = "terminal_error"
 	CHASMApplyOutcomeRetryExhausted        = "retry_exhausted"
+	CHASMApplyOutcomeStateUpdateSkipped    = "state_update_skipped"
 	CHASMApplyOutcomeStateTransitionError  = "state_transition_error"
 	CHASMApplyOutcomeCompleted             = "completed"
 	CHASMApplyOutcomeCompletedWithFailures = "completed_with_failures"
@@ -68,6 +69,7 @@ func RecordCHASMAuthoritativeApply(
 		metrics.TargetClusterTag(observation.TargetCluster),
 		metrics.OperationTag(OperationMetricValue(observation.Task.GetNamespaceOperation())),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
+		metrics.StringTag("mode", chasmAuthoritativeMode),
 		metrics.OutcomeTag(observation.Outcome),
 	}
 	metrics.NamespaceReplicationCHASMApplyOutcomes.With(metricsHandler).Record(

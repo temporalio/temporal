@@ -60,7 +60,6 @@ func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, record
 	}
 	details := map[string]any{
 		"transport": "chasm", "mode": mode, "apply_stage": "peer",
-		"source_cluster": request.SourceCluster, "target_cluster": request.TargetCluster,
 		"component_business_id": request.ComponentBusinessID, "component_run_id": request.ComponentRunID,
 		"attempted_peer_outcome": recorded.attemptedOutcome.String(),
 		"retry_scheduled":        false,

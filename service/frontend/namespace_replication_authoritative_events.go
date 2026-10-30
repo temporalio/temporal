@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/wideevents"
 )
@@ -41,6 +42,8 @@ func (adh *AdminHandler) recordAuthoritativeNamespaceMutation(
 	startTime time.Time,
 	details map[string]any,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	nsreplication.RecordCHASMAuthoritativeApply(
 		adh.metricsHandler,
 		adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details),
@@ -55,6 +58,8 @@ func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 	startTime time.Time,
 	details map[string]any,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	observation := adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details)
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
 	if adh.config != nil &&
@@ -68,7 +73,10 @@ func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 	task *replicationspb.NamespaceTaskAttributes,
-) context.Context {
+) (observationCtx context.Context) {
+	observationCtx = ctx
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	eventData, ok := nsreplication.CHASMAuthoritativeApplyEventData(
 		nsreplication.CHASMAuthoritativeApplyObservation{
 			Task:                task,

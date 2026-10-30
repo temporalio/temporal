@@ -7,12 +7,16 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/log"
 	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 )
 
-func stateTransitionOutcome(successOutcome string, transitionErr error) string {
+func stateTransitionOutcome(successOutcome string, stateUpdated bool, transitionErr error) string {
 	if transitionErr != nil {
 		return nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
+	}
+	if !stateUpdated {
+		return nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped
 	}
 	return successOutcome
 }
@@ -50,6 +54,7 @@ func newComponentTerminalObservation(
 }
 
 func emitComponentTerminal(
+	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents func() bool,
 	currentCluster string,
@@ -58,6 +63,8 @@ func emitComponentTerminal(
 	terminal *componentTerminalObservation,
 	terminalErr error,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(logger, &telemetryPanic)
 	if terminal == nil || emitNamespaceLifecycleEvents == nil || !emitNamespaceLifecycleEvents() {
 		return
 	}
@@ -94,6 +101,7 @@ func emitComponentTerminal(
 func (h *applyLocalTaskHandler) observeLocalApplyResult(
 	ref chasm.ComponentRef,
 	task *replicationspb.NamespaceTaskAttributes,
+	recorded localApplyRecord,
 	applyErr error,
 	recordErr error,
 	startTime time.Time,
@@ -112,7 +120,7 @@ func (h *applyLocalTaskHandler) observeLocalApplyResult(
 	h.observeLocalApply(
 		ref,
 		task,
-		nsreplicationcommon.CHASMApplyOutcomeTerminalError,
+		stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeTerminalError, recorded.stateUpdated, nil),
 		applyErr,
 		startTime,
 		map[string]any{"error_type": classifyLocalErr(applyErr)},
@@ -127,6 +135,8 @@ func (h *applyLocalTaskHandler) observeLocalApply(
 	startTime time.Time,
 	details map[string]any,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	observation := nsreplicationcommon.CHASMAuthoritativeApplyObservation{
 		Task:                task,
 		Stage:               nsreplicationcommon.CHASMApplyStageLocal,
@@ -140,7 +150,7 @@ func (h *applyLocalTaskHandler) observeLocalApply(
 		Details:             details,
 	}
 	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
-	if h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
+	if outcome != nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped && h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
 	}
 }
@@ -153,12 +163,14 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 	saveErr error,
 	startTime time.Time,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	outcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
 	observationErr := retryErr
 	retryScheduled := saveErr == nil && recorded.retryScheduled
 	details := map[string]any{
 		"retry_scheduled": retryScheduled,
-		"retry_exhausted": recorded.retryExhausted,
+		"retry_exhausted": saveErr == nil && recorded.stateUpdated && recorded.retryExhausted,
 	}
 	if saveErr != nil {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
@@ -175,6 +187,7 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 		}
 		details["persisted_local_outcome"] = persistedOutcome.String()
 	} else {
+		outcome = nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped
 		details["state_update_skipped"] = true
 	}
 
@@ -201,7 +214,7 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 		Details:                     details,
 	}
 	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
-	if (!recorded.retryScheduled || saveErr != nil) &&
+	if (saveErr != nil || (recorded.stateUpdated && !recorded.retryScheduled)) &&
 		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
 	}

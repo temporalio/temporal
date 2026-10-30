@@ -387,6 +387,7 @@ func requireAuthoritativeMetric(
 	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
 	require.Len(t, recordings, 1)
 	require.Equal(t, stage, recordings[0].Tags["apply_stage"])
+	require.Equal(t, "authoritative", recordings[0].Tags["mode"])
 	require.Equal(t, outcome, recordings[0].Tags[metrics.OutcomeTag("").Key])
 	require.Len(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyLatency.Name()), 1)
 }
