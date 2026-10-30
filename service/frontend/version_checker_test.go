@@ -104,3 +104,22 @@ func TestIsUpdateNeeded(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionChecker_StartStop(t *testing.T) {
+	config := &Config{
+		EnableServerVersionCheck: func() bool { return true },
+	}
+	vc := &VersionChecker{
+		config:       config,
+		shutdownChan: make(chan struct{}),
+	}
+	vc.Start()
+	require.NotNil(t, vc.cancelFunc)
+	vc.Stop()
+	select {
+	case <-vc.shutdownChan:
+		// successfully closed
+	case <-time.After(1 * time.Second):
+		t.Fatal("shutdownChan was not closed after Stop()")
+	}
+}
