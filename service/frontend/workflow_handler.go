@@ -1131,7 +1131,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
@@ -1405,7 +1405,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
@@ -6522,7 +6522,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
@@ -6794,6 +6794,54 @@ func dedupLinksFromCallbacks(
 type buildIdAndFlag interface {
 	GetBuildId() string
 	GetUseVersioning() bool
+}
+
+const (
+	deprecatedWorkerVersioningV1OrV2 = "v0.1_or_v0.2"
+	deprecatedWorkerVersioningV3     = "v0.3"
+
+	deprecatedWorkerVersioningPollAllowed = "allowed"
+	deprecatedWorkerVersioningPollBlocked = "blocked"
+)
+
+func (wh *WorkflowHandler) validatePollVersioningInfo(
+	ctx context.Context,
+	nsName string,
+	capabilities *commonpb.WorkerVersionCapabilities,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+	tq *taskqueuepb.TaskQueue,
+) error {
+	version := deprecatedWorkerVersioningPollVersion(capabilities, deploymentOptions)
+	if version != "" {
+		action := deprecatedWorkerVersioningPollAllowed
+		if wh.config.BlockOldVersioningPollers(nsName) {
+			action = deprecatedWorkerVersioningPollBlocked
+		}
+		metrics.DeprecatedWorkerVersioningPollCounter.With(wh.metricsScope(ctx)).Record(
+			1,
+			metrics.WorkerVersioningVersionTag(version),
+			metrics.ActionType(action),
+		)
+		if action == deprecatedWorkerVersioningPollBlocked {
+			return errOldWorkerVersioningPollerNotAllowed
+		}
+	}
+
+	return wh.validateVersioningInfo(nsName, capabilities, deploymentOptions, tq)
+}
+
+func deprecatedWorkerVersioningPollVersion(
+	capabilities *commonpb.WorkerVersionCapabilities,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+) string {
+	if deploymentOptions.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED ||
+		!capabilities.GetUseVersioning() {
+		return ""
+	}
+	if capabilities.GetDeploymentSeriesName() != "" {
+		return deprecatedWorkerVersioningV3
+	}
+	return deprecatedWorkerVersioningV1OrV2
 }
 
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
