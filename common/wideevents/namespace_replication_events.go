@@ -202,8 +202,8 @@ func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicatio
 	}
 	Emit(logger, NamespaceReplicationLifecyclePayload{
 		Phase:       string(in.Phase),
-		Namespace:   strings.ToValidUTF8(in.EventData.Namespace, "�"),
-		NamespaceID: strings.ToValidUTF8(in.EventData.NamespaceID, "�"),
+		Namespace:   strings.ToValidUTF8(in.EventData.Namespace, "\uFFFD"),
+		NamespaceID: strings.ToValidUTF8(in.EventData.NamespaceID, "\uFFFD"),
 		Details:     details,
 	})
 }

@@ -681,6 +681,18 @@ func (o *Operation) isClosed() bool {
 	return o.LifecycleState(nil).IsClosed()
 }
 
+// DestinationBlocked reports whether the outbound queue's circuit breaker is holding back this operation's invocation
+// and cancelation tasks. Always false for the system endpoint, whose tasks run on the transfer queue (see
+// taskDestination). Requires the OperationContext and its DestinationBlocked, which only the history service provides.
+func (o *Operation) DestinationBlocked(ctx chasm.Context) bool {
+	//nolint:revive // unchecked-type-assertion: intentional panic on missing context value
+	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
+	if taskDestination(o.Endpoint) == "" {
+		return false
+	}
+	return opCtx.DestinationBlocked(ctx.ExecutionKey().NamespaceID, o.Endpoint)
+}
+
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {
 	requestData := o.RequestData.Get(ctx)
 	key := ctx.ExecutionKey()
@@ -738,18 +750,14 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	}
 
 	// If the Nexus operation is SCHEDULED, check the circuit breaker and upgrade it to BLOCKED if applicable.
-	if opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext); ok && opCtx.DestinationBlocked != nil {
-		if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED &&
-			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
-			info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-			info.BlockedReason = "The circuit breaker is open."
-		}
-
-		if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
-			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
-			info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-			info.CancellationInfo.BlockedReason = "The circuit breaker is open."
-		}
+	if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationBlocked(ctx) {
+		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+		info.BlockedReason = "The circuit breaker is open."
+	}
+	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
+		o.DestinationBlocked(ctx) {
+		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+		info.CancellationInfo.BlockedReason = "The circuit breaker is open."
 	}
 
 	return info

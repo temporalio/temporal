@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -156,11 +155,9 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
-	fx.Provide(chasmnexus.NewFrontendHandler),
-	chasmnexus.Module,
+	chasmnexus.FrontendModule,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	chasmcallback.Module,

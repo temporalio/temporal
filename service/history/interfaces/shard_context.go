@@ -90,6 +90,7 @@ type (
 		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
+		AppendRawHistoryEvents(ctx context.Context, request *persistence.AppendRawHistoryNodesRequest) (*persistence.AppendHistoryNodesResponse, error)
 
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
