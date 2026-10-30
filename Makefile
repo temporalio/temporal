@@ -83,7 +83,8 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
 STAMPDIR := .stamp
-export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(ROOT)/$(LOCALBIN):$(PATH)
+export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
+export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(PATH)
 export GOROOT := $(shell $(GO) env GOROOT)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) $(GO) install
 
