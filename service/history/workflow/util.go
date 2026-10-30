@@ -8,6 +8,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -25,6 +27,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func SingleSessionOptions(singleSessionBound bool, taskQueue *taskqueuepb.TaskQueue) *sessionpb.SingleSessionOptions {
+	if !singleSessionBound || taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY || taskQueue.GetName() == "" {
+		return nil
+	}
+	return &sessionpb.SingleSessionOptions{StableIdentity: taskQueue.GetName()}
+}
 
 func failWorkflowTask(
 	mutableState historyi.MutableState,

@@ -614,6 +614,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		// activity scheduling. Returning this error keeps retrying the timer task without dispatch.
 		return err
 	}
+	singleSessionBound := mutableState.GetExecutionInfo().GetSingleSessionBound()
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
@@ -629,6 +630,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			RunId:      task.GetRunID(),
 		},
 		TaskQueue:              taskQueue,
+		SingleSessionOptions:   workflow.SingleSessionOptions(singleSessionBound, taskQueue),
 		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),

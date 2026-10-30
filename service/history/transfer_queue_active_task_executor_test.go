@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -254,9 +255,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		name             string
 		session          bool
 		missingPlacement bool
+		bound            bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
+		{name: "single-session activity", session: true, bound: true},
 		{name: "workflow-session activity awaiting placement", session: true, missingPlacement: true},
 	} {
 		s.Run(tc.name, func() {
@@ -302,6 +305,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			if !tc.missingPlacement {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
+			mutableState.GetExecutionInfo().SingleSessionBound = tc.bound
 
 			transferTask := &tasks.ActivityTask{
 				WorkflowKey: definition.NewWorkflowKey(
@@ -323,6 +327,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 				if tc.session {
 					request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 					request.VersionDirective = nil
+				}
+				if tc.bound {
+					request.SingleSessionOptions = &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"}
 				}
 				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 			}
@@ -719,6 +726,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 						s.Equal(enumspb.TASK_QUEUE_KIND_STICKY, request.GetTaskQueue().GetKind())
 						if tc.bound {
 							s.Equal(5*time.Second, request.GetScheduleToStartTimeout().AsDuration())
+							if !tc.unavailable {
+								protorequire.ProtoEqual(s.T(), &sessionpb.SingleSessionOptions{StableIdentity: stickyTaskQueueName}, request.GetSingleSessionOptions())
+							}
 						}
 						if tc.unavailable {
 							return nil, &serviceerrors.StickyWorkerUnavailable{}

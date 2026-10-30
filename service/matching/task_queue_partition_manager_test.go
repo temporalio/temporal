@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1935,10 +1936,11 @@ type capturingTaskMatchHook struct {
 }
 
 type capturedTaskMatchDetails struct {
-	TaskQueueName     string
-	TaskQueueType     enumspb.TaskQueueType
-	SyncMatchOutcome  hooks.SyncMatchOutcome
-	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	TaskQueueName        string
+	TaskQueueType        enumspb.TaskQueueType
+	SyncMatchOutcome     hooks.SyncMatchOutcome
+	DeploymentVersion    *deploymentpb.WorkerDeploymentVersion
+	SingleSessionOptions *sessionpb.SingleSessionOptions
 }
 
 func (h *capturingTaskMatchHook) Create(details *hooks.TaskHookFactoryCreateDetails) hooks.TaskHook {
@@ -1957,9 +1959,10 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName:    h.taskQueueName,
-		TaskQueueType:    h.taskQueueType,
-		SyncMatchOutcome: event.SyncMatchOutcome,
+		TaskQueueName:        h.taskQueueName,
+		TaskQueueType:        h.taskQueueType,
+		SyncMatchOutcome:     event.SyncMatchOutcome,
+		SingleSessionOptions: common.CloneProto(event.SingleSessionOptions),
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -2168,6 +2171,91 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRec
 	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
 	s.False(exists, "No recordings should exist when there are no recent pollers")
 	s.Empty(recordings, "Metric should not be emitted when there are recent pollers")
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
+	for _, tc := range []struct {
+		name      string
+		taskType  enumspb.TaskQueueType
+		syncMatch bool
+	}{
+		{name: "workflow sync match", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, syncMatch: true},
+		{name: "workflow backlog", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{name: "activity sync match", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, syncMatch: true},
+		{name: "activity backlog", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithBuildIDNumber(1)
+			current := tv.WithBuildIDNumber(2)
+			pm := s.newEagerDispatchPartitionManager(0, nil)
+			pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), tc.taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			pm.userDataManager = &mockUserDataManager{data: &persistencespb.VersionedTaskQueueUserData{
+				Data: &persistencespb.TaskQueueUserData{
+					PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+						int32(tc.taskType): {
+							DeploymentData: &persistencespb.DeploymentData{
+								DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+									tv.DeploymentSeries(): {RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion:  current.ExternalDeploymentVersion(),
+										CurrentVersionChangedTime: timestamppb.Now(),
+									}},
+								},
+							},
+						},
+					},
+				},
+			}}
+			queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+			queue.EXPECT().QueueKey().Return(UnversionedQueueKey(pm.partition)).AnyTimes()
+			queue.EXPECT().HasPollerAfter(gomock.Any()).Return(true).AnyTimes()
+			outcome := syncMatchNoPoller
+			hookOutcome := hooks.SyncMatchOutcomeNotMatched
+			if tc.syncMatch {
+				outcome = syncMatchSuccess
+				hookOutcome = hooks.SyncMatchOutcomeSuccess
+			} else {
+				queue.EXPECT().SpoolTask(gomock.Any()).Return(nil)
+			}
+			queue.EXPECT().TrySyncMatch(gomock.Any(), gomock.Any()).Return(outcome, nil)
+			queue.EXPECT().RecordTaskAdd(gomock.Any(), false, enumspb.VERSIONING_BEHAVIOR_PINNED)
+			hook := &capturingTaskMatchHook{}
+			pm.taskHooks = []hooks.TaskHook{hook.Create(&hooks.TaskHookFactoryCreateDetails{Namespace: pm.ns, Partition: pm.partition})}
+			pm.engine.updateTaskQueue(pm.partition, pm)
+			defer func() {
+				pm.engine.partitionsLock.Lock()
+				delete(pm.engine.partitions, pm.partition.Key())
+				pm.engine.partitionsLock.Unlock()
+			}()
+			options := &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()}
+			directive := &taskqueuespb.TaskVersionDirective{
+				Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: tv.DeploymentVersion(),
+			}
+			var matched bool
+			var err error
+			if tc.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				_, matched, err = pm.engine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
+					VersionDirective: directive, SingleSessionOptions: options,
+				})
+			} else {
+				_, matched, err = pm.engine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
+					VersionDirective: directive, SingleSessionOptions: options,
+				})
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.syncMatch, matched)
+			calls := hook.getCalls()
+			require.Len(t, calls, 1)
+			require.Equal(t, tc.taskType, calls[0].TaskQueueType)
+			require.Equal(t, hookOutcome, calls[0].SyncMatchOutcome)
+			protorequire.ProtoEqual(t, options, calls[0].SingleSessionOptions)
+			protorequire.ProtoEqual(t, tv.ExternalDeploymentVersion(), calls[0].DeploymentVersion)
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
