@@ -175,11 +175,10 @@ func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
 func (s *PrioritySemaphoreImpl) Release(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cur -= n
-	if s.cur < 0 {
-		s.mu.Unlock()
+	if n > s.cur {
 		panic("semaphore: released more than held")
 	}
+	s.cur -= n
 	s.notifyWaiters()
 }
 
