@@ -720,8 +720,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:    taskInfo,
-		forwardInfo: addRequest.ForwardInfo,
+		taskInfo:             taskInfo,
+		forwardInfo:          addRequest.ForwardInfo,
+		singleSessionOptions: addRequest.GetSingleSessionOptions(),
 	})
 }
 
@@ -771,8 +772,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
-		taskInfo:    taskInfo,
-		forwardInfo: addRequest.ForwardInfo,
+		taskInfo:             taskInfo,
+		forwardInfo:          addRequest.ForwardInfo,
+		singleSessionOptions: addRequest.GetSingleSessionOptions(),
 	})
 }
 

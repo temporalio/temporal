@@ -12,6 +12,7 @@ import "temporal/api/history/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/session/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
@@ -168,6 +169,8 @@ message AddWorkflowTaskRequest {
   temporal.api.common.v1.Priority priority = 12;
   // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
   int32 stamp = 13;
+  // Identifies the bound single-session destination for this task, if any.
+  temporal.api.session.v1.SingleSessionOptions single_session_options = 14;
 }
 
 message AddWorkflowTaskResponse {
@@ -196,6 +199,8 @@ message AddActivityTaskRequest {
   // necessary start information is carried within this component, obviating the need to use the fields that apply to
   // embedded activities.
   bytes component_ref = 14;
+  // Identifies the bound single-session destination for this task, if any.
+  temporal.api.session.v1.SingleSessionOptions single_session_options = 15;
 }
 
 message AddActivityTaskResponse {

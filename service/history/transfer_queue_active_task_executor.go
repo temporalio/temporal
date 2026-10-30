@@ -278,6 +278,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if err != nil {
 		return err
 	}
+	singleSessionBound := mutableState.GetExecutionInfo().GetSingleSessionBound()
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
@@ -287,7 +288,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, taskQueue, timeout, directive, priority, historyi.TransactionPolicyActive)
+	return t.pushActivity(ctx, task, taskQueue, singleSessionBound, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -345,6 +346,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		ctx,
 		transferTask,
 		taskQueue,
+		singleSessionBound,
 		scheduleToStartTimeout.AsDuration(),
 		directive,
 		priority,
@@ -369,6 +371,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			ctx,
 			transferTask,
 			taskQueue,
+			singleSessionBound,
 			scheduleToStartTimeout.AsDuration(),
 			directive,
 			priority,

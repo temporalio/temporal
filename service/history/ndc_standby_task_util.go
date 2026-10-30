@@ -184,6 +184,7 @@ type (
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
+		singleSessionBound                 bool
 	}
 
 	verifyCompletionRecordedPostActionInfo struct {
@@ -199,6 +200,7 @@ type (
 		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
+		singleSessionBound                 bool
 	}
 )
 
@@ -226,6 +228,7 @@ func newActivityTaskPostActionInfo(
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
+		singleSessionBound:                 mutableState.GetExecutionInfo().GetSingleSessionBound(),
 	}, nil
 }
 
@@ -242,6 +245,7 @@ func newWorkflowTaskPostActionInfo(
 		taskqueue:                          taskqueue,
 		versionDirective:                   directive,
 		priority:                           priority,
+		singleSessionBound:                 mutableState.GetExecutionInfo().GetSingleSessionBound(),
 	}, nil
 }
 

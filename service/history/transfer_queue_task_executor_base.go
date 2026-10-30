@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -95,6 +96,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
 	taskQueue *taskqueuepb.TaskQueue,
+	singleSessionBound bool,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
@@ -107,6 +109,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskQueue,
+		SingleSessionOptions:   workflow.SingleSessionOptions(singleSessionBound, taskQueue),
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
@@ -148,6 +151,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
+	singleSessionBound bool,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
@@ -164,6 +168,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskqueue,
+		SingleSessionOptions:   workflow.SingleSessionOptions(singleSessionBound, taskqueue),
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: sst,
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
