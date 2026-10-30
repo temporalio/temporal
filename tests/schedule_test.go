@@ -29,12 +29,14 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
@@ -276,6 +278,28 @@ func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32)
 	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		_ = workflow.SideEffect(ctx, func(workflow.Context) any { runs.Add(1); return 0 })
 		workflow.GetSignalChannel(ctx, completeSignalName).Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+}
+
+// registerConcurrencyGatedWorkflow is registerGatedWorkflow that also records
+// the peak number of simultaneously running executions in peak.
+func registerConcurrencyGatedWorkflow(env *testcore.TestEnv, wt string, runs, peak *atomic.Int32) {
+	var running atomic.Int32
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
+			runs.Add(1)
+			n := running.Add(1)
+			for {
+				cur := peak.Load()
+				if n <= cur || peak.CompareAndSwap(cur, n) {
+					break
+				}
+			}
+			return 0
+		})
+		workflow.GetSignalChannel(ctx, completeSignalName).Receive(ctx, nil)
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { running.Add(-1); return 0 })
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 }
@@ -1428,6 +1452,79 @@ func (suite *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabl
 			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()) == fastInterval
 	}, awaitTimeout, pollInterval,
 		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
+}
+
+// A start whose RPC keeps failing retryably still occupies the overlap slot: V1
+// retries it synchronously before deciding again, so V2 must not admit later
+// ticks alongside it.
+func (suite *ScheduleSuite) TestOverlapHeldByRetryingStart(chasmEnabled bool) {
+	for _, policy := range []enumspb.ScheduleOverlapPolicy{
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+	} {
+		suite.Run(policy.String(), func(suite *ScheduleSuite) {
+			testOverlapHeldByRetryingStart(suite.T(), contextFactoryFor(chasmEnabled), policy)
+		})
+	}
+}
+
+func testOverlapHeldByRetryingStart(t *testing.T, newContext contextFactory, policy enumspb.ScheduleOverlapPolicy) {
+	sid := testcore.RandomizeStr("sched-retrying-start")
+	wid := testcore.RandomizeStr("sched-retrying-start-wf")
+	wt := testcore.RandomizeStr("sched-retrying-start-wt")
+
+	// Fail the scheduled workflow's creation in history persistence, which both
+	// V1 (worker) and V2 (history) starts go through. ResourceExhausted is a
+	// definite non-commit that both retry.
+	var failStarts atomic.Bool
+	failStarts.Store(true)
+	s := newScheduleEnv(t, append(scheduleCommonOpts(t), testcore.InjectPersistenceFault(
+		func(target config.FaultInjectionTarget) error {
+			req, ok := target.Request.(*persistence.InternalCreateWorkflowExecutionRequest)
+			if !ok || !failStarts.Load() || !strings.HasPrefix(req.NewWorkflowSnapshot.WorkflowID, wid) {
+				return nil
+			}
+			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "injected start failure")
+		},
+		testcore.WithStore(config.ExecutionStoreName),
+		testcore.WithMethod("CreateWorkflowExecution"),
+	))...)
+
+	var runs, peak atomic.Int32
+	registerConcurrencyGatedWorkflow(s, wt, &runs, &peak)
+
+	ctx := newContext(testcontext.For(t))
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:     intervalSpec(fastInterval),
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: policy},
+	})
+
+	// Keep starts failing across several ticks.
+	require.Never(t, func() bool { return runs.Load() > 0 }, 3*fastInterval, pollInterval,
+		"no workflow may start while starts are failing")
+	failStarts.Store(false)
+
+	await.RequireTruef(t, func() bool { return runs.Load() >= 1 }, awaitTimeout, pollInterval,
+		"a workflow must start once starts recover")
+	require.Never(t, func() bool { return peak.Load() > 1 }, neverWindow, pollInterval,
+		"ticks during the outage must not start alongside the retried start")
+
+	// Progress: completing the running workflow lets the schedule start another.
+	before := runs.Load()
+	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
+	await.RequireTruef(t, func() bool { return runs.Load() > before }, awaitTimeout, pollInterval,
+		"schedule must keep starting workflows after recovery")
+	require.Equal(t, int32(1), peak.Load(), "scheduled workflows must never run concurrently")
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	info := desc.GetInfo()
+	t.Logf("runs=%d actions=%d overlapSkipped=%d bufferDropped=%d bufferSize=%d",
+		runs.Load(), info.GetActionCount(), info.GetOverlapSkipped(), info.GetBufferDropped(), info.GetBufferSize())
 }
 
 func (suite *ScheduleSuite) TestDeletedScheduleOperations(chasmEnabled bool) {

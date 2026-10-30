@@ -190,6 +190,7 @@ func (i *Invoker) recordExecuteResult(
 	removedStarts := 0
 	retriedStarts := 0
 	startedUntracked := make(map[string]struct{})
+	i.releaseResolvedReservations(completed, failed)
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		failed := failed[start.RequestId]
 		if failed {
@@ -301,14 +302,8 @@ func (i *Invoker) recordCompletedAction(
 		})
 	}
 
-	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
-	// ProcessBuffer now that a workflow has completed. This allows the overlap
-	// policy to be re-evaluated.
-	for _, start := range i.BufferedStarts {
-		if start.Attempt == -1 {
-			start.Attempt = 0
-		}
-	}
+	// Re-evaluate overlap policy for deferred starts now that a workflow has completed.
+	i.reenableDeferredStarts()
 
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
@@ -331,6 +326,16 @@ func (i *Invoker) recordCompletedAction(
 	i.addTasks(ctx)
 
 	return
+}
+
+// reenableDeferredStarts resets deferred starts (Attempt == -1) to pending so
+// addTasks schedules a ProcessBuffer pass for them.
+func (i *Invoker) reenableDeferredStarts() {
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetAttempt() == -1 {
+			start.Attempt = 0
+		}
+	}
 }
 
 // addTasks adds both ProcessBuffer and Execute tasks as needed. It should be
@@ -406,6 +411,38 @@ func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 			start.GetRunId() == "" &&
 			!start.GetBackoffTime().AsTime().After(lastProcessed)
 	})
+}
+
+// isUnresolvedStart reports whether start was admitted for execution but has
+// no RunId yet (start RPC in flight or backing off). Such a start holds the
+// overlap slot, but has no run for CANCEL_OTHER/TERMINATE_OTHER to target.
+func isUnresolvedStart(start *schedulespb.BufferedStart) bool {
+	return start.GetAttempt() > 0 &&
+		start.GetRunId() == "" &&
+		start.GetCompleted() == nil &&
+		internal.TracksCompletionResult(start.GetOverlapPolicy())
+}
+
+// releaseResolvedReservations re-enables deferred starts if an execute result
+// starts or drops an unresolved start: either frees the overlap slot or gives
+// CANCEL_OTHER/TERMINATE_OTHER a RunId to target. Must run before the result
+// is applied.
+func (i *Invoker) releaseResolvedReservations(
+	completed map[string]*schedulespb.BufferedStart,
+	failed map[string]bool,
+) {
+	if slices.ContainsFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+		_, started := completed[start.GetRequestId()]
+		return isUnresolvedStart(start) && (started || failed[start.GetRequestId()])
+	}) {
+		i.reenableDeferredStarts()
+	}
+}
+
+// hasUnresolvedStart reports whether any start holds an overlap reservation
+// without a RunId. See isUnresolvedStart.
+func (i *Invoker) hasUnresolvedStart() bool {
+	return slices.ContainsFunc(i.GetBufferedStarts(), isUnresolvedStart)
 }
 
 // runningWorkflowExecutions returns the list of workflow executions that

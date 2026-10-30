@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/clock"
@@ -42,6 +43,8 @@ func TestGeneratorJitterFixKillswitch(t *testing.T) {
 			schedule := defaultSchedule()
 			schedule.Spec.Interval[0].Interval = durationpb.New(15 * time.Minute)
 			schedule.Spec.Jitter = durationpb.New(10 * time.Minute)
+			// Starts are never executed here; ALLOW_ALL keeps an unresolved start from blocking the next.
+			schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 			env := newSchedulerTestEngine(t, schedule, withEngineTimeSource(ts), withEngineSpecProcessor(processor))
 
 			// Change the setting after creation to exercise existing schedules.
