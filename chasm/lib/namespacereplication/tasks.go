@@ -336,12 +336,15 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	recorded, commitErr := h.commitAfterMetadataWrite(
-		ctx,
-		ref,
-		task,
-		namespace.Name(loaded.Detail.GetInfo().GetName()),
-	)
+	namespaceName := namespace.Name(loaded.Detail.GetInfo().GetName())
+	var commitErr error
+	if fault, ok := testhooks.Get(h.testHooks, testhooks.NamespaceReplicationBeforeLocalCommit, namespaceName); ok {
+		commitErr = fault(ctx)
+	}
+	var recorded localApplyRecord
+	if commitErr == nil {
+		recorded, commitErr = h.resolveLocal(ctx, ref, task, false)
+	}
 	observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeApplied, recorded.stateUpdated, commitErr), commitErr, nil)
 	emitTerminal(recorded.componentTerminal, nil)
 	return commitErr
@@ -384,25 +387,6 @@ func (h *applyLocalTaskHandler) reconcileCreateLocalApply(
 			persistedState,
 		)
 	}
-}
-
-func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
-	ctx context.Context,
-	ref chasm.ComponentRef,
-	task *namespacereplicationpb.ApplyLocalTask,
-	namespaceName namespace.Name,
-) (localApplyRecord, error) {
-	fault, ok := testhooks.Get(
-		h.testHooks,
-		testhooks.NamespaceReplicationBeforeLocalCommit,
-		namespaceName,
-	)
-	if ok {
-		if err := fault(ctx); err != nil {
-			return localApplyRecord{}, err
-		}
-	}
-	return h.resolveLocal(ctx, ref, task, false)
 }
 
 // reconcileUpdateLocalApply resolves a failed UPDATE attempt by reading the
