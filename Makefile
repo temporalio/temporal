@@ -84,8 +84,8 @@ ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
 STAMPDIR := .stamp
 export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
-export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(PATH)
 export GOROOT := $(shell $(GO) env GOROOT)
+export PATH := $(GOROOT)/bin:$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) $(GO) install
 
 OTEL ?= false
