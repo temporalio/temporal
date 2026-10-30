@@ -7099,7 +7099,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		requestID := testcore.RandomizeStr("request-id")
-		// 3s > timerSafetyMargin so the require.Never below has a non-trivial window
+		// 3s > timerSafetyMargin so the await.RequireHolds below has a non-trivial window
 		// (startDelay - timerSafetyMargin = 1.5s) to assert the activity stays SCHEDULED.
 		startDelay := 3 * time.Second
 
@@ -7119,14 +7119,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.True(t, startResp.Started)
 
 		// Verify activity stays in SCHEDULED state throughout the delay (not dispatched early).
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.GetRunId(),
 			})
-			return err != nil || describeResp.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+			require.NoError(at, err)
+			require.Equal(at, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, describeResp.GetInfo().GetRunState())
 		}, startDelay-timerSafetyMargin, 100*time.Millisecond,
 			"expected activity to remain in SCHEDULED state during start delay")
 
@@ -7191,7 +7191,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		requestID := testcore.RandomizeStr("request-id")
-		// require.Never window = startDelay + scheduleToStart - timerSafetyMargin = 2.5s. Total wait is
+		// await.RequireHolds window = startDelay + scheduleToStart - timerSafetyMargin = 2.5s. Total wait is
 		// startDelay + scheduleToStart = 4s; 3s+1s keeps the test fast while leaving a comfortable margin.
 		startDelay := 3 * time.Second
 		scheduleToStartTimeout := 1 * time.Second
@@ -7212,14 +7212,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToStartTimeout.
 		// The timeout should only fire after startDelay + scheduleToStartTimeout.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			descResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 		}, startDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToStartTimeout")
 
@@ -7240,7 +7240,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		requestID := testcore.RandomizeStr("request-id")
-		// Same shape as ScheduleToStartTimeoutExtended; require.Never window = 2.5s, total wait ~4s.
+		// Same shape as ScheduleToStartTimeoutExtended; await.RequireHolds window = 2.5s, total wait ~4s.
 		startDelay := 3 * time.Second
 		scheduleToCloseTimeout := 1 * time.Second
 
@@ -7269,14 +7269,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToCloseTimeout.
 		// The timeout should only fire after startDelay + scheduleToCloseTimeout.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			descResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 		}, startDelay+scheduleToCloseTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToCloseTimeout")
 
@@ -7507,7 +7507,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// require.Never below asserts SCHEDULED past originalDelay+timerSafetyMargin = 2.5s, which only
+		// await.RequireHolds below asserts SCHEDULED past originalDelay+timerSafetyMargin = 2.5s, which only
 		// holds if the extended delay is in effect; newDelay = 3s > 2.5s so the assertion is meaningful.
 		originalDelay := 1 * time.Second
 		newDelay := 3 * time.Second
@@ -7534,14 +7534,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 
 		// Activity should stay SCHEDULED past the original 2s delay, since the new target is at T+5s.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			descResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || descResp.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+			require.NoError(at, err)
+			require.Equal(at, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, descResp.GetInfo().GetRunState())
 		}, originalDelay+timerSafetyMargin, 100*time.Millisecond,
 			"activity should remain SCHEDULED past the original delay since start_delay was extended")
 
@@ -7710,7 +7710,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// Effective deadline = scheduleTime + startDelay + scheduleToClose = T+4s. require.Never window
+		// Effective deadline = scheduleTime + startDelay + scheduleToClose = T+4s. await.RequireHolds window
 		// = 4-timerSafetyMargin = 2.5s. A bug that anchored the deadline to scheduleTime alone would
 		// time out at T+1s, well inside the window.
 		startDelay := 3 * time.Second
@@ -7749,14 +7749,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.Equal(t, expectedExpiration, descResp.GetInfo().GetExpirationTime().AsTime())
 
 		// Must not time out before startDelay + scheduleToClose elapses (would happen with the bug).
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			resp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 		}, startDelay+scheduleToCloseTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity timed out earlier than scheduleTime + startDelay + scheduleToClose")
 
@@ -8368,8 +8368,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		ctx := s.Context()
-		describe := func() (*workflowservice.DescribeActivityExecutionResponse, error) {
+		describe := func(ctx context.Context) (*workflowservice.DescribeActivityExecutionResponse, error) {
 			return env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
@@ -8377,7 +8376,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			})
 		}
 
-		desc, err := describe()
+		desc, err := describe(s.Context())
 		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
@@ -8392,7 +8391,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
 		})
 		require.NoError(t, err)
-		desc, err = describe()
+		desc, err = describe(s.Context())
 		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(0+scheduleToCloseTimeout),
@@ -8406,15 +8405,16 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RestoreOriginalOptions: true,
 		})
 		require.NoError(t, err)
-		desc, err = describe()
+		desc, err = describe(s.Context())
 		require.NoError(t, err)
 		require.Equal(t,
 			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
 			desc.Info.ExpirationTime.AsTime())
 
-		require.Never(t, func() bool {
-			resp, err := describe()
-			return err != nil || resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			resp, err := describe(at.Context())
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 		}, 3500*time.Millisecond, 200*time.Millisecond,
 			"ScheduleToStart and ScheduleToClose timeouts should have been pushed back to 6s by the start delay")
 
@@ -8494,14 +8494,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// Must not time out before scheduleTime + updatedDelay + scheduleToStartTimeout = T+5s.
 		// With the bug, would time out at scheduleTime + originalDelay + scheduleToStartTimeout = T+2s.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			descResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 		}, updatedDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before scheduleTime + updatedDelay + scheduleToStartTimeout")
 
@@ -8937,7 +8937,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// Window for the require.Never below is startDelay+scheduleToStart-timerSafetyMargin = 2.5s.
+		// Window for the await.RequireHolds below is startDelay+scheduleToStart-timerSafetyMargin = 2.5s.
 		// A buggy "anchored to unpauseTime" would fire ScheduleToStart at ~unpauseTime+1s ≈ T0+1.5s,
 		// well inside the 2.5s window even on slow CI.
 		startDelay := 3 * time.Second
@@ -8975,14 +8975,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		// No worker polls. ScheduleToStart should fire at scheduleTime + start_delay + scheduleToStart,
 		// not at unpauseTime + scheduleToStart. Verify no timeout before the correct deadline.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			descResp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(at, err)
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 		}, startDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity timed out before scheduleTime + start_delay + scheduleToStart; ScheduleToStart was not re-anchored")
 
@@ -15001,17 +15001,16 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// The in-flight attempt must not time out at the restored 2s deadline. Buggy code re-arms
 		// ScheduleToClose at 2s immediately → TIMED_OUT within ~2s; correct code leaves it at 8s.
-		ctx := s.Context()
-		require.Never(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		await.RequireHoldsf(s.Context(), t, func(at *await.T) {
+			resp, err := env.FrontendClient().DescribeActivityExecution(at.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
 			if err != nil {
-				return false // a poll that loses the race to teardown must not fail the test
+				return // a poll that loses the race to teardown must not fail the test
 			}
-			return resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NotEqual(at, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 		}, 4*time.Second, 200*time.Millisecond,
 			"in-flight attempt must keep its current 8s ScheduleToClose; RestoreOriginalOptions must defer the restore of the 2s original to the reset landing")
 	})

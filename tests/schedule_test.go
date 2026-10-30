@@ -1391,13 +1391,15 @@ func (suite *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabl
 	// Keep the first workflow open across several more ticks. V1 evaluates the
 	// complete buffer and keeps its first entry; CHASM must do the same even after
 	// that entry has been marked deferred (Attempt=-1).
-	require.Never(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.RequireHoldsf(ctx, t, func(at *await.T) {
+		desc, descErr := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && (desc.GetInfo().GetBufferSize() != 1 ||
-			len(desc.GetInfo().GetRunningWorkflows()) != 1 || runs.Load() != 1)
+		require.NoError(at, descErr)
+		require.Equal(at, int64(1), desc.GetInfo().GetBufferSize())
+		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
+		require.Equal(at, int32(1), runs.Load())
 	}, 3*fastInterval, pollInterval,
 		"V1 and CHASM must retain exactly one buffered occurrence while later ticks arrive")
 
@@ -5479,7 +5481,7 @@ func (suite *ScheduleSuite) TestPausedScheduleNeverIdles(chasmEnabled bool) {
 	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Pause: "never-idles-test"})
 
 	// Across a window well past IdleTime, the schedule must never idle-close.
-	require.Never(t, func() bool { return scheduleClosed(ctx, s, sid) },
+	await.RequireHoldsf(ctx, t, func(at *await.T) { require.False(at, scheduleClosed(at.Context(), s, sid)) },
 		3*shortIdleTime, pollInterval,
 		"paused schedule must not close from idle even past IdleTime")
 
@@ -5529,7 +5531,7 @@ func (suite *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
 		Action: startWorkflowAction(s, wid, wt),
 	})
 
-	require.Never(t, func() bool { return runs.Load() > 0 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() == 0 },
 		neverWindow, pollInterval,
 		"empty paused spec must not fire any actions automatically")
 
@@ -5626,7 +5628,7 @@ func testTriggerImmediatelyOnPausedSchedule(t *testing.T, newContext contextFact
 	})
 
 	// Paused suppresses firing even though the 1s interval would otherwise tick.
-	require.Never(t, func() bool { return runs.Load() > 0 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() == 0 },
 		neverWindow, pollInterval,
 		"paused schedule must not fire automated actions before the trigger")
 
@@ -5665,7 +5667,7 @@ func testTriggerImmediatelyAfterActionsExhausted(t *testing.T, newContext contex
 		Action: startWorkflowAction(s, wid, wt),
 	})
 
-	require.Never(t, func() bool { return runs.Load() > 0 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() == 0 },
 		neverWindow, pollInterval,
 		"exhausted schedule must not auto-fire before the trigger")
 
@@ -5751,7 +5753,7 @@ func testBackfillReprocessesCompletedAction(
 		require.Empty(t, desc.GetInfo().GetRunningWorkflows())
 		require.Equal(t, paused, desc.GetSchedule().GetState().GetPaused())
 	}, awaitTimeout, pollInterval, "backfill should reprocess the completed action exactly once and settle")
-	require.Never(t, func() bool { return runs.Load() > expectedRuns },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() <= expectedRuns },
 		neverWindow, pollInterval,
 		"the completed action must be reprocessed once, not repeatedly")
 }
@@ -5798,7 +5800,7 @@ func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
 	await.RequireTruef(t, func() bool { return runs.Load() == 2 },
 		awaitTimeout, pollInterval,
 		"deferred backfill start must fire after the running one completes (Attempt=-1 -> 0 re-enable)")
-	require.Never(t, func() bool { return runs.Load() > 2 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() <= 2 },
 		neverWindow, pollInterval,
 		"BUFFER_ONE must collapse the rest of the backfill ticks - only the deferred start re-enables")
 }
@@ -5832,7 +5834,7 @@ func testBackfillRangeSmallerThanInterval(t *testing.T, newContext contextFactor
 	patchSchedule(ctx, t, s, sid, backfillPatch(windowStart, windowEnd, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
 
 	// No spec tick falls inside a sub-interval window, so no action fires.
-	require.Never(t, func() bool { return runs.Load() > 0 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() == 0 },
 		neverWindow, pollInterval,
 		"backfill range narrower than spec interval must produce no actions")
 
@@ -5871,7 +5873,7 @@ func testBackfillWithSkipOverlap(t *testing.T, newContext contextFactory) {
 	await.RequireTruef(t, func() bool { return runs.Load() == 1 },
 		awaitTimeout, pollInterval,
 		"SKIP backfill should fire exactly once")
-	require.Never(t, func() bool { return runs.Load() > 1 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() <= 1 },
 		neverWindow, pollInterval,
 		"SKIP backfill must collapse to a single execution, not fire all 5 ticks")
 }
@@ -6265,7 +6267,7 @@ func testPauseDuringIdleWindow(t *testing.T, newContext contextFactory) {
 	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Pause: "pause-during-idle"})
 
 	// Paused must hold the schedule open past the original idle deadline.
-	require.Never(t, func() bool { return scheduleClosed(ctx, s, sid) },
+	await.RequireHoldsf(ctx, t, func(at *await.T) { require.False(at, scheduleClosed(at.Context(), s, sid)) },
 		idleTime*2, pollInterval, "paused schedule must not close past original idle deadline")
 
 	// Unpause: the Generator re-arms idle and the schedule finally closes.
@@ -6392,7 +6394,7 @@ func testBackfillOnPausedSchedule(t *testing.T, newContext contextFactory) {
 	})
 
 	// Paused suppresses firing even though the 1s interval would otherwise tick.
-	require.Never(t, func() bool { return runs.Load() > 0 },
+	await.RequireHoldsTruef(t, func() bool { return runs.Load() == 0 },
 		neverWindow, pollInterval,
 		"paused schedule must not fire automated actions")
 

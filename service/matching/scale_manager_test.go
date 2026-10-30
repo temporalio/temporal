@@ -213,8 +213,8 @@ func waitLogMatches(s *ScaleManagerSuite, e *testlogger.Expectation, count int64
 func assertNoNewLogs(s *ScaleManagerSuite, e *testlogger.Expectation, d time.Duration, msg string) {
 	s.T().Helper()
 	before := e.MatchCount()
-	s.Require().Never(func() bool { return e.MatchCount() != before },
-		d, time.Millisecond, msg)
+	await.RequireHoldsTruef(s.T(), func() bool { return e.MatchCount() == before },
+		d, time.Millisecond, "%s", msg)
 }
 
 // --- tests ---
@@ -931,8 +931,8 @@ func (s *ScaleManagerSuite) TestNoChangeDecisionSkipsWrite() {
 	s.sm.AddedTasks(3)
 	waitRecv(s, inputs, "second decision never delivered")
 
-	s.Require().Never(func() bool {
-		return dbWrites.Load() > 0 || scalePushes.Load() > baseline
+	await.RequireHoldsTruef(s.T(), func() bool {
+		return dbWrites.Load() == 0 && scalePushes.Load() <= baseline
 	}, 30*time.Millisecond, time.Millisecond, "unexpected DB write or ephemeral push")
 }
 
@@ -1239,7 +1239,7 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 
 	s.fireBackgroundTimer()
 
-	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+	await.RequireHoldsTruef(s.T(), func() bool { return dbWrites.Load() == 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote despite backlog")
 	// No backlog cleared, so no further ephemeral push beyond the one at Start.
 	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push without drain")
@@ -1283,7 +1283,7 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 
 	s.fireBackgroundTimer()
 
-	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+	await.RequireHoldsTruef(s.T(), func() bool { return dbWrites.Load() == 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote inside DrainBufferTime")
 	// Drain skipped during buffer time, so no push beyond the one at Start.
 	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push during buffer time")
@@ -1540,7 +1540,7 @@ func (s *ScaleManagerSuite) TestNoWriteWhenBacklogUnchanged() {
 	s.startManager(4, initial)
 	s.fireBackgroundTimer()
 
-	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+	await.RequireHoldsTruef(s.T(), func() bool { return dbWrites.Load() == 0 },
 		30*time.Millisecond, time.Millisecond, "no write expected when backlog is unchanged and nothing drains")
 }
 
@@ -1604,6 +1604,6 @@ func (s *ScaleManagerSuite) TestSameTargetAndCapSkipsWrite() {
 	in := waitRecv(s, inputs, "scaler never called")
 	s.Equal([]byte{c500, c500, c500}, in.BacklogCounts, "stored backlog counts must be fed to the scaler")
 
-	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+	await.RequireHoldsTruef(s.T(), func() bool { return dbWrites.Load() == 0 },
 		30*time.Millisecond, time.Millisecond, "no write when both target and cap are unchanged")
 }

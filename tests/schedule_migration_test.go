@@ -1988,7 +1988,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 
 	// With the gate off, auto-migration is deferred: the scheduler re-evaluates the
 	// decision every interval but keeps running rather than migrating.
-	require.Never(t, func() bool { return v1Migrated(ctx) }, 5*time.Second, 500*time.Millisecond,
+	await.RequireHoldsf(ctx, t, func(at *await.T) { require.False(at, v1Migrated(at.Context())) }, 5*time.Second, 500*time.Millisecond,
 		"migration must be deferred while the schedule has a running workflow and the gate is off")
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
@@ -2743,8 +2743,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	// The rejected schedule's V1 workflow should remain running, and the CHASM
 	// handler should still report NotFound. Re-checked over a window to ensure
 	// the negative state is stable rather than racing a delayed migration.
-	require.Never(t, func() bool {
-		return v1Status(ctx, stayV1SID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	await.RequireHoldsf(ctx, t, func(at *await.T) {
+		require.NotEqual(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, v1Status(at.Context(), stayV1SID))
 	}, 10*time.Second, 1*time.Second, "schedule %q must not migrate while outside the rollout cohort", stayV1SID)
 
 	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
