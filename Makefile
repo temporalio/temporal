@@ -82,8 +82,8 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
-export PATH := $(dir $(shell mise exec go -- sh -c 'command -v go')):$(PATH)
 export GOROOT := $(shell $(GO) env GOROOT)
+export PATH := $(GOROOT)/bin:$(PATH)
 
 OTEL ?= false
 ifeq ($(OTEL),true)
