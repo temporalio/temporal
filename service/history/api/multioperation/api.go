@@ -195,7 +195,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		updateID := uws.updateReq.Request.Request.Meta.GetUpdateId()
 
 		// If Update is complete, return it.
-		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateID); err == nil {
+		if completedUpdate, err := workflowLease.GetMutableState().GetCompletedUpdate(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
 			// modify ExecutionState after acquiring the lock.
@@ -203,6 +203,13 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			status := ms.GetExecutionState().Status
 			updateNexusCtx := ms.GetUpdateNexusSerializationContext(updateID)
 			nexusSerializationContext := common.CloneProto(updateNexusCtx)
+			updateResponse := uws.updater.CreateCompletedResponse(
+				ms,
+				workflowKey,
+				completedUpdate.GetOutcome(),
+				completedUpdate.GetAcceptedEventId(),
+				nexusSerializationContext,
+			)
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
@@ -210,7 +217,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 					Started: false, // set explicitly for emphasis
 					Status:  status,
 				},
-				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext),
+				updateResponse,
 			), nil
 		}
 
