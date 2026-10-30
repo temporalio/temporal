@@ -210,10 +210,31 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Prepare Go
+        id: prepare-go
         uses: ./.github/actions/prepare-go
 
       - run: make pre-build-functional-test-coverage
 
+      - name: Save Go dependencies
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.dependency_cache_hit != 'true' }}
+        with:
+          path: ${{ steps.prepare-go.outputs.dependency_cache_path }}
+          key: ${{ steps.prepare-go.outputs.dependency_cache_primary_key }}
+
+      - name: Save Go tools
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.tools_cache_hit != 'true' }}
+        with:
+          path: ${{ steps.prepare-go.outputs.tools_cache_path }}
+          key: ${{ steps.prepare-go.outputs.tools_cache_primary_key }}
+
+      - name: Save Go build outputs
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.build_cache_hit != 'true' }}
+        with:
+          path: ${{ steps.prepare-go.outputs.build_cache_path }}
+          key: ${{ steps.prepare-go.outputs.build_cache_primary_key }}
 
   misc-checks:
     name: Misc checks

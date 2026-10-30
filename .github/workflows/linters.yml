@@ -32,9 +32,12 @@ jobs:
         with:
           submodules: true
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint protobuf definitions
         run: |
@@ -47,9 +50,12 @@ jobs:
         with:
           submodules: true
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint protobuf API definitions
         run: |
@@ -62,9 +68,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint system workflows with workflowcheck
         run: make workflowcheck
@@ -76,9 +85,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint nil-safety
         run: make lint-nilaway
@@ -90,9 +102,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: apply formatters
         run: |
@@ -114,9 +129,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: check test parallelization
         run: make parallelize-tests
@@ -138,9 +156,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          download-modules: false
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint code
         run: |

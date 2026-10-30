@@ -1,10 +1,34 @@
 name: Prepare Go
-description: Set up Go with mise, cache Go outputs, and optionally download modules with retry.
+description: Set up Go, restore caches, and download modules with retry.
 
-inputs:
-  download-modules:
-    description: Download all module dependencies before running Go commands.
-    default: "true"
+outputs:
+  build_cache_hit:
+    description: Whether the Go build cache was restored from an exact match.
+    value: ${{ steps.restore-build.outputs.cache-hit }}
+  build_cache_path:
+    description: Go build cache path.
+    value: ${{ steps.go-env.outputs.gocache }}
+  build_cache_primary_key:
+    description: Primary key used for the Go build cache restore.
+    value: ${{ steps.restore-build.outputs.cache-primary-key }}
+  dependency_cache_hit:
+    description: Whether the Go module cache was restored from an exact match.
+    value: ${{ steps.restore-deps.outputs.cache-hit }}
+  dependency_cache_path:
+    description: Go module cache path.
+    value: ${{ steps.go-env.outputs.gomodcache }}
+  dependency_cache_primary_key:
+    description: Primary key used for the Go module cache restore.
+    value: ${{ steps.restore-deps.outputs.cache-primary-key }}
+  tools_cache_hit:
+    description: Whether the Go tools cache was restored from an exact match.
+    value: ${{ steps.restore-tools.outputs.cache-hit }}
+  tools_cache_path:
+    description: Go tools cache path.
+    value: .bin
+  tools_cache_primary_key:
+    description: Primary key used for the Go tools cache restore.
+    value: ${{ steps.restore-tools.outputs.cache-primary-key }}
 
 runs:
   using: composite
@@ -26,14 +50,14 @@ runs:
 
     - name: Restore dependencies
       id: restore-deps
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ steps.go-env.outputs.gomodcache }}
         key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-env.outputs.go-version }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
     - name: Restore Go tools
       id: restore-tools
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: .bin
         key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-env.outputs.go-version }}-tools-${{ hashFiles('Makefile') }}
@@ -41,7 +65,6 @@ runs:
     # Cache restore can miss modules after go.sum changes or partial cache saves.
     # Retrying download here isolates transient Go proxy failures from the Go command.
     - name: Download Go modules
-      if: inputs.download-modules == 'true'
       uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       with:
         max_attempts: 3
@@ -52,9 +75,9 @@ runs:
 
     - name: Restore build outputs
       id: restore-build
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ steps.go-env.outputs.gocache }}
-        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-env.outputs.go-version }}-build-${{ env.COMMIT || github.sha }}
+        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-env.outputs.go-version }}-build-${{ env.COMMIT }}
         restore-keys: |
           go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-env.outputs.go-version }}-build-

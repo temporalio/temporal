@@ -58,7 +58,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: Run unit test
         timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
@@ -144,8 +149,13 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - uses: ./.github/actions/prepare-go
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
+        with:
+          install_args: go
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: Run functional test
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
