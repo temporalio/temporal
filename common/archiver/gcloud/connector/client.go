@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.uber.org/multierr"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 )
 
@@ -97,6 +98,7 @@ func (s *storageWrapper) UploadIfHashChanged(ctx context.Context, URI archiver.U
 
 func upload(ctx context.Context, object ObjectHandleWrapper, file []byte, metadata map[string]string) (err error) {
 	writer := object.NewWriter(ctx)
+	writer.SetChunkSize(uploadChunkSize(len(file)))
 	if metadata != nil {
 		writer.SetMetadata(metadata)
 	}
@@ -105,6 +107,16 @@ func upload(ctx context.Context, object ObjectHandleWrapper, file []byte, metada
 	}()
 	_, err = io.Copy(writer, bytes.NewReader(file))
 	return err
+}
+
+// uploadChunkSize returns the ChunkSize to use when uploading a file of the given size.
+// The storage client allocates a ChunkSize buffer for every Writer (16MiB by default) so it can
+// retry failed requests. Archived files are usually a few KB, so the default buffer turns every
+// upload into a 16MiB allocation. One byte more than the file lets the client reach EOF before the
+// buffer is full and send the file in a single request; the client rounds the value up to a
+// multiple of 256KiB. Files of 16MiB or more keep the default.
+func uploadChunkSize(fileSize int) int {
+	return min(fileSize+1, googleapi.DefaultUploadChunkSize)
 }
 
 // Exist check if a bucket or an object exist
