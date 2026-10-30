@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"errors"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,7 +14,9 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -22,6 +26,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/limiter"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -32,6 +37,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -859,4 +865,140 @@ func (s *contextSuite) TestTaskCompletionBuffer_MemoryLimitReason() {
 	recordings := capture.Snapshot()[metrics.WorkflowTaskCompletionBufferLost.Name()]
 	s.Len(recordings, 1)
 	s.Equal(string(metrics.BufferLostReasonMemoryLimit), recordings[0].Tags["reason"])
+}
+
+func (s *contextSuite) TestCacheSize_CountBasedLimit() {
+	// Size-based limit off (default): CacheSize is the constant 1, RefreshCacheSize a no-op.
+	controller := gomock.NewController(s.T())
+	s.workflowContext.MutableState = historyi.NewMockMutableState(controller)
+	s.False(s.workflowContext.config.HistoryCacheLimitSizeBased)
+	s.Equal(1, s.workflowContext.CacheSize())
+	s.workflowContext.RefreshCacheSize()
+	s.Equal(1, s.workflowContext.CacheSize())
+}
+
+func (s *contextSuite) TestCacheSize_SizeBasedLimit() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+
+	// NewContext seeds the size from the workflow key (mutable state/registry not loaded yet).
+	baseline := len(tests.WorkflowKey.WorkflowID) + len(tests.WorkflowKey.RunID) + len(tests.WorkflowKey.NamespaceID)
+	s.Equal(baseline, wfContext.CacheSize())
+
+	// CacheSize must stay at baseline until RefreshCacheSize runs: it returns the
+	// cached value lock-free, never reading mutable state live. So
+	// GetApproximatePersistedSize is expected exactly once, from RefreshCacheSize.
+	controller := gomock.NewController(s.T())
+	mockMS := historyi.NewMockMutableState(controller)
+	mockMS.EXPECT().GetApproximatePersistedSize().Return(900).Times(1)
+	wfContext.MutableState = mockMS
+
+	s.Equal(baseline, wfContext.CacheSize())
+
+	wfContext.RefreshCacheSize()
+	s.Equal(baseline+900, wfContext.CacheSize())
+}
+
+func (s *contextSuite) TestCacheSize_ConcurrentReadWriteIsRaceFree() {
+	// CacheSize reads lock-free while RefreshCacheSize writes under the lock, so
+	// cacheSize must be atomic. Run with -race to catch non-atomic regressions.
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+	reg := update.NewRegistry(fakeUpdateStore{})
+	wfContext.updateRegistry = reg
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	writerErr := make(chan error, 1)
+	wg.Go(func() {
+		for i := 0; i < iterations; i++ {
+			if err := wfContext.Lock(context.Background(), locks.PriorityHigh); err != nil {
+				writerErr <- err
+				return
+			}
+			if _, _, err := reg.FindOrCreate(context.Background(), strconv.Itoa(i)); err != nil {
+				wfContext.Unlock()
+				writerErr <- err
+				return
+			}
+			wfContext.RefreshCacheSize()
+			wfContext.Unlock()
+		}
+		writerErr <- nil
+	})
+	wg.Go(func() {
+		for i := 0; i < iterations; i++ {
+			_ = wfContext.CacheSize()
+		}
+	})
+	wg.Wait()
+	s.Require().NoError(<-writerErr)
+}
+
+// fakeUpdateStore is a no-op update.UpdateStore for building a real update.Registry
+// in tests, mirroring the update package's own emptyUpdateStore. GetUpdateOutcome
+// returns NotFound so the registry treats an unknown ID as new and creates it.
+type fakeUpdateStore struct{}
+
+func (fakeUpdateStore) VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo)) {}
+func (fakeUpdateStore) GetUpdateOutcome(context.Context, string) (*updatepb.Outcome, error) {
+	return nil, serviceerror.NewNotFound("not found")
+}
+func (fakeUpdateStore) GetUpdateAcceptedEventID(context.Context, string) (int64, error) {
+	return 0, serviceerror.NewNotFound("not found")
+}
+func (fakeUpdateStore) GetUpdateNexusSerializationContext(string) *nexuspb.PropagatedSerializationContext {
+	return nil
+}
+func (fakeUpdateStore) GetCurrentVersion() int64         { return 0 }
+func (fakeUpdateStore) IsWorkflowExecutionRunning() bool { return true }
+
+func (s *contextSuite) TestCacheSize_IncludesUpdateRegistry() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		nil,
+		testhooks.TestHooks{},
+	)
+	baseline := len(tests.WorkflowKey.WorkflowID) + len(tests.WorkflowKey.RunID) + len(tests.WorkflowKey.NamespaceID)
+
+	// The update registry is the state whose lock-free iteration caused the crash.
+	// CacheSize must keep returning the seeded baseline until RefreshCacheSize folds
+	// the registry size in under the workflow lock — never reading the registry live.
+	reg := update.NewRegistry(fakeUpdateStore{})
+	_, _, err := reg.FindOrCreate(context.Background(), "update-id")
+	s.Require().NoError(err)
+	wfContext.updateRegistry = reg
+	s.NotZero(reg.GetSize())
+
+	s.Equal(baseline, wfContext.CacheSize())
+
+	wfContext.RefreshCacheSize()
+	s.Equal(baseline+reg.GetSize(), wfContext.CacheSize())
 }
