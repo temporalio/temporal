@@ -23,15 +23,16 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// RecordHeartbeatRequest is the internal request for recording a worker heartbeat.
+// RecordHeartbeatRequest records heartbeats for one worker group.
 type RecordHeartbeatRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// The frontend request containing heartbeat information.
+	// The public heartbeat request, forwarded by Matching for this group.
+	// All worker heartbeats must have the specified worker_grouping_key.
 	FrontendRequest *v1.RecordWorkerHeartbeatRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	// The worker instance key for routing. Extracted from frontend_request.worker_heartbeat[0].
-	WorkerInstanceKey string `protobuf:"bytes,3,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
+	// SDK grouping key, used as the CHASM Business ID and History shard-routing key.
+	WorkerGroupingKey string `protobuf:"bytes,3,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -80,16 +81,17 @@ func (x *RecordHeartbeatRequest) GetFrontendRequest() *v1.RecordWorkerHeartbeatR
 	return nil
 }
 
-func (x *RecordHeartbeatRequest) GetWorkerInstanceKey() string {
+func (x *RecordHeartbeatRequest) GetWorkerGroupingKey() string {
 	if x != nil {
-		return x.WorkerInstanceKey
+		return x.WorkerGroupingKey
 	}
 	return ""
 }
 
 // RecordHeartbeatResponse is the response for recording a worker heartbeat.
 type RecordHeartbeatResponse struct {
-	state            protoimpl.MessageState            `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The public heartbeat response to return through Matching and Frontend.
 	FrontendResponse *v1.RecordWorkerHeartbeatResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -140,7 +142,7 @@ const file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_rawD
 	"\x16RecordHeartbeatRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12h\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequestR\x0ffrontendRequest\x12.\n" +
-	"\x13worker_instance_key\x18\x03 \x01(\tR\x11workerInstanceKey\"\x86\x01\n" +
+	"\x13worker_grouping_key\x18\x03 \x01(\tR\x11workerGroupingKey\"\x86\x01\n" +
 	"\x17RecordHeartbeatResponse\x12k\n" +
 	"\x11frontend_response\x18\x01 \x01(\v2>.temporal.api.workflowservice.v1.RecordWorkerHeartbeatResponseR\x10frontendResponseB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 

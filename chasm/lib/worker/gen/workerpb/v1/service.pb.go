@@ -28,7 +28,7 @@ const file_temporal_server_chasm_lib_worker_proto_v1_service_proto_rawDesc = "" 
 	"\n" +
 	"7temporal/server/chasm/lib/worker/proto/v1/service.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a@temporal/server/chasm/lib/worker/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xc5\x01\n" +
 	"\rWorkerService\x12\xb3\x01\n" +
-	"\x0fRecordHeartbeat\x12A.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest\x1aB.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatResponse\"\x19\x92\xc4\x03\x15\x1a\x13worker_instance_keyB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"\x0fRecordHeartbeat\x12A.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest\x1aB.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatResponse\"\x19\xd2\xc3\x18\x15\x1a\x13worker_grouping_keyB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_worker_proto_v1_service_proto_goTypes = []any{
 	(*RecordHeartbeatRequest)(nil),  // 0: temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest
