@@ -2,6 +2,7 @@ package matching
 
 import (
 	otellog "go.opentelemetry.io/otel/log"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -42,6 +43,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(WorkersRegistryProvider),
+	fx.Provide(workerstatepb.NewWorkerServiceLayeredClient),
 	fx.Provide(NewHandler),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),

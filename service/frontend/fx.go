@@ -17,6 +17,7 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -90,6 +91,10 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	chasmtests.Module,
+	// Register persisted worker types for admin inspection; serving stays in History.
+	fx.Invoke(func(registry *chasm.Registry) error {
+		return registry.Register(chasmworker.NewNilLibrary())
+	}),
 	scheduler.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.

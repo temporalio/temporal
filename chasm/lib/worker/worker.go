@@ -95,8 +95,8 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 
 // recordHeartbeat updates the reported workers and renews their shared lease.
 // Workers omitted from the batch remain registered.
-// TODO: Add run-scoped heartbeat tokens and retry deduplication with RPC integration,
-// before accepting activity binding deltas.
+// TODO: Add run-scoped heartbeat tokens and retry deduplication before accepting
+// activity binding deltas.
 func (g *WorkerGroup) recordHeartbeat(
 	ctx chasm.MutableContext,
 	heartbeats []*workerpb.WorkerHeartbeat,

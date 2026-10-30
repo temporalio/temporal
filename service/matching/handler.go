@@ -10,6 +10,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
@@ -45,6 +46,7 @@ type (
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
+		workerClient      workerstatepb.WorkerServiceClient
 		workersRegistry   workers.Registry
 	}
 
@@ -71,6 +73,7 @@ type (
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
+		WorkerClient                  workerstatepb.WorkerServiceClient
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
@@ -122,6 +125,7 @@ func NewHandler(
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
+		workerClient:      params.WorkerClient,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -615,7 +619,38 @@ func (h *Handler) RecordWorkerHeartbeat(
 	principal := headers.GetPrincipal(ctx)
 
 	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, principal, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+	if h.config.EnableWorkerStateTracking(nsName.String()) {
+		if err := h.recordDurableWorkerHeartbeats(ctx, request); err != nil {
+			return nil, err
+		}
+	}
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
+}
+
+// recordDurableWorkerHeartbeats forwards one batch per SDK grouping key to History.
+func (h *Handler) recordDurableWorkerHeartbeats(ctx context.Context, request *matchingservice.RecordWorkerHeartbeatRequest) error {
+	groups := make(map[string][]*workerpb.WorkerHeartbeat)
+	for _, heartbeat := range request.GetHeartbeartRequest().GetWorkerHeartbeat() {
+		groupingKey := heartbeat.GetHostInfo().GetWorkerGroupingKey()
+		// Older SDKs without a grouping key retain metadata-only heartbeat behavior.
+		if groupingKey != "" {
+			groups[groupingKey] = append(groups[groupingKey], heartbeat)
+		}
+	}
+	for groupingKey, heartbeats := range groups {
+		groupRequest := common.CloneProto(request.GetHeartbeartRequest())
+		groupRequest.WorkerHeartbeat = heartbeats
+		groupRequest.ResourceId = groupingKey
+		_, err := h.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
+			NamespaceId:       request.GetNamespaceId(),
+			FrontendRequest:   groupRequest,
+			WorkerGroupingKey: groupingKey,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
