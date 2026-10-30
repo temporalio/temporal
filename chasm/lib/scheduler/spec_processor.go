@@ -57,6 +57,9 @@ type (
 		// were dropped due to the limit being reached. Only populated when a limit
 		// is provided.
 		DroppedCount int64
+		// More is set when MaxCatchupMatchesPerTask stopped the walk before end: the
+		// range after LastActionTime still needs processing.
+		More bool
 	}
 )
 
@@ -129,6 +132,18 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var bufferedStarts []*schedulespb.BufferedStart
 	var droppedCount int64
 	recordedGenerateLatency := false
+	// Automated catch-up is bounded: at most maxMatches matches per call, and with the
+	// shortcut, no walking once no later match can start. Jumping the high water mark to
+	// end could skip a match whose nominal time has passed but whose jittered time hasn't,
+	// so the shortcut is off for jittered specs.
+	maxMatches, shortcut := 0, false
+	if !manual {
+		maxMatches = tweakables.MaxCatchupMatchesPerTask
+		shortcut = tweakables.EnableCatchupSkipShortcut &&
+			scheduler.Schedule.GetSpec().GetJitter().AsDuration() <= 0
+	}
+	walked := 0
+	var stopReason string
 	// Once the buffer fills, drop further automated actions (counted in
 	// droppedCount) instead of buffering. A non-manual limit already <= 0 means
 	// the buffer was full on entry, so the whole range drops. Manual (backfill)
@@ -137,6 +152,18 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	computeLimitWarning := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		computeLimitWarning = computeLimitWarning || next.ComputeLimitWarning
+		if stopReason != "" {
+			// next and every later match in the range would be skipped or dropped.
+			s.recordSkippedRange(scheduler, metricsHandler, stopReason, start, next.Next, end)
+			next, err = s.NextTime(scheduler, end)
+			return s.timeRangeResult(scheduler, metricsHandler, next, err, computeLimitWarning, end, bufferedStarts, droppedCount, false)
+		}
+		if maxMatches > 0 && walked >= maxMatches {
+			s.recordChunkedCatchup(scheduler, metricsHandler, start, end, lastAction, walked)
+			// next is the first match of the following chunk.
+			return s.timeRangeResult(scheduler, metricsHandler, next, nil, computeLimitWarning, lastAction, bufferedStarts, droppedCount, true)
+		}
+		walked++
 		lastAction = next.Next
 
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
@@ -174,6 +201,9 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 		if limitReached {
 			droppedCount++
+			if shortcut {
+				stopReason = metrics.ScheduleCatchupSkipReasonBufferFull
+			}
 			continue
 		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
@@ -184,6 +214,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 			WorkflowId:    schedulerinternal.GenerateWorkflowID(workflowID, next.Nominal),
 		})
+		// Under Skip, ProcessBuffer starts at most one of the starts buffered from this
+		// range and skips the rest.
+		if shortcut && overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_SKIP {
+			stopReason = metrics.ScheduleCatchupSkipReasonSkipPolicy
+		}
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -197,19 +232,77 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 	}
 
-	// Fold any warning seen mid-loop into the terminal result so it isn't lost.
+	return s.timeRangeResult(scheduler, metricsHandler, next, err, computeLimitWarning, lastAction, bufferedStarts, droppedCount, false)
+}
+
+// timeRangeResult resolves next into the result's wakeup time, folding in any compute
+// warning seen mid-loop so it isn't lost.
+func (s *SpecProcessorImpl) timeRangeResult(
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	next legacyscheduler.GetNextTimeResult,
+	err error,
+	computeLimitWarning bool,
+	lastAction time.Time,
+	bufferedStarts []*schedulespb.BufferedStart,
+	droppedCount int64,
+	more bool,
+) (*ProcessedTimeRange, error) {
 	next.ComputeLimitWarning = next.ComputeLimitWarning || computeLimitWarning
 	nextWakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 	if err != nil {
 		return nil, err
 	}
-
 	return &ProcessedTimeRange{
 		NextWakeupTime: nextWakeup,
 		LastActionTime: lastAction,
 		BufferedStarts: bufferedStarts,
 		DroppedCount:   droppedCount,
+		More:           more,
 	}, nil
+}
+
+// skippedRangeWarnThreshold is the skipped span from which a skip is a warning and is
+// recorded in schedule_catchup_range. Shorter skips are routine for frequent schedules
+// (e.g. a wakeup a few seconds late), so they log at info.
+const skippedRangeWarnThreshold = time.Minute
+
+const skippedRangeLogMessage = "Schedule skipped rest of catch-up range: no later match could start"
+
+func (s *SpecProcessorImpl) recordSkippedRange(
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	reason string,
+	start, from, end time.Time,
+) {
+	metricsHandler.WithTags(metrics.StringTag(metrics.ScheduleMissedReasonTag, reason)).
+		Counter(metrics.ScheduleCatchupRangeSkipped.Name()).Record(1)
+	logger := newTaggedLogger(s.logger, scheduler)
+	logFn := logger.Info
+	if end.Sub(from) >= skippedRangeWarnThreshold {
+		metricsHandler.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
+		logFn = logger.Warn
+	}
+	logFn(skippedRangeLogMessage,
+		tag.String("reason", reason),
+		tag.Time("range-start", start),
+		tag.Time("skipped-from", from),
+		tag.Time("to", end))
+}
+
+func (s *SpecProcessorImpl) recordChunkedCatchup(
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	start, end, lastWalked time.Time,
+	walked int,
+) {
+	metricsHandler.Counter(metrics.ScheduleCatchupChunked.Name()).Record(1)
+	metricsHandler.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
+	newTaggedLogger(s.logger, scheduler).Warn("Schedule catch-up hit the per-task match limit; continuing in a follow-up task",
+		tag.Int("matches", walked),
+		tag.Time("range-start", start),
+		tag.Time("resume-after", lastWalked),
+		tag.Time("to", end))
 }
 
 // checkNextScheduleResult resolves a NextTime result/error into a next-wakeup time.
