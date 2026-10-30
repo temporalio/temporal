@@ -322,7 +322,7 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
-	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
+	return d.dial(d.frontendURL, d.frontendTLSConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(primitives.InternalFrontendService))...)
 }
 
 // createInternodeGRPCConnection creates connection for gRPC calls
