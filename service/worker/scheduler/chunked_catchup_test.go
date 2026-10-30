@@ -101,7 +101,7 @@ func TestChunkedCatchup(t *testing.T) {
 	t.Run("instrumentation", func(t *testing.T) {
 		const (
 			chunkWarn = "Schedule catch-up hit the per-task match limit; continuing in a new run"
-			skipWarn  = "Schedule skipped rest of catch-up range: no later match could start"
+			skipMsg   = skippedRangeLogMessage
 		)
 		chunked := metrics.ScheduleCatchupChunked.Name()
 		skipped := metrics.ScheduleCatchupRangeSkipped.Name()
@@ -128,7 +128,7 @@ func TestChunkedCatchup(t *testing.T) {
 		t.Run("skip-policy", func(t *testing.T) {
 			r := runCatchupRepro(t, catchupCase{gap: 30 * 24 * time.Hour, chunked: 5000})
 			require.Equal(t, []string{metrics.ScheduleCatchupSkipReasonSkipPolicy}, reasons(r))
-			require.Equal(t, 1, r.logger.count(skipWarn))
+			require.Equal(t, 1, r.logger.countAt("WARN", skipMsg))
 			require.Len(t, r.metrics[catchupRange], 1)
 			require.Empty(t, r.metrics[chunked])
 		})
@@ -136,27 +136,29 @@ func TestChunkedCatchup(t *testing.T) {
 		t.Run("buffer-full", func(t *testing.T) {
 			r := runCatchupRepro(t, catchupCase{gap: 30 * 24 * time.Hour, chunked: 5000, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL})
 			require.Equal(t, []string{metrics.ScheduleCatchupSkipReasonBufferFull}, reasons(r))
-			require.Equal(t, 1, r.logger.count(skipWarn))
+			require.Equal(t, 1, r.logger.countAt("WARN", skipMsg))
 		})
 
-		t.Run("routine-short-skip-is-not-a-warning", func(t *testing.T) {
+		t.Run("routine-short-skip-logs-at-info", func(t *testing.T) {
 			// A wakeup a few seconds late for an every-second schedule.
 			r := runCatchupRepro(t, catchupCase{gap: 5 * time.Second, chunked: 5000})
 			require.Equal(t, []string{metrics.ScheduleCatchupSkipReasonSkipPolicy}, reasons(r))
-			require.Zero(t, r.logger.count(skipWarn))
+			require.Equal(t, 1, r.logger.countAt("INFO", skipMsg))
+			require.Zero(t, r.logger.countAt("WARN", skipMsg))
 			require.Empty(t, r.metrics[catchupRange])
 		})
 
 		t.Run("single-match-is-not-a-skip", func(t *testing.T) {
 			r := runCatchupRepro(t, catchupCase{gap: time.Second, chunked: 5000})
 			require.Empty(t, r.metrics[skipped])
+			require.Zero(t, r.logger.count(skipMsg))
 		})
 
 		t.Run("off-without-version", func(t *testing.T) {
 			r := runCatchupRepro(t, catchupCase{gap: time.Hour})
 			require.Empty(t, r.metrics[skipped])
 			require.Empty(t, r.metrics[chunked])
-			require.Zero(t, r.logger.count(chunkWarn)+r.logger.count(skipWarn))
+			require.Zero(t, r.logger.count(chunkWarn)+r.logger.count(skipMsg))
 		})
 	})
 

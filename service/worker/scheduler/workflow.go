@@ -967,20 +967,22 @@ func (s *scheduler) catchupStopReason(skipPolicy bool, bufferedBefore int) strin
 	}
 }
 
-// skippedRangeWarnThreshold is the skipped span from which a skip is logged as a warning.
-// Shorter skips are routine for frequent schedules (e.g. a wakeup a few seconds late).
+// skippedRangeWarnThreshold is the skipped span from which a skip is a warning and is
+// recorded in schedule_catchup_range. Shorter skips are routine for frequent schedules
+// (e.g. a wakeup a few seconds late), so they log at info.
 const skippedRangeWarnThreshold = time.Minute
+
+const skippedRangeLogMessage = "Schedule skipped rest of catch-up range: no later match could start"
 
 func (s *scheduler) recordSkippedRange(reason string, start, from, end time.Time) {
 	s.metrics.WithTags(map[string]string{metrics.ScheduleMissedReasonTag: reason}).
 		Counter(metrics.ScheduleCatchupRangeSkipped.Name()).Inc(1)
-	if end.Sub(from) < skippedRangeWarnThreshold {
-		s.logger.Debug("Schedule skipped rest of time range", "reason", reason, "from", from, "to", end)
-		return
+	logFn := s.logger.Info
+	if end.Sub(from) >= skippedRangeWarnThreshold {
+		s.metrics.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
+		logFn = s.logger.Warn
 	}
-	s.metrics.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
-	s.logger.Warn("Schedule skipped rest of catch-up range: no later match could start",
-		"reason", reason, "range-start", start, "skipped-from", from, "to", end)
+	logFn(skippedRangeLogMessage, "reason", reason, "range-start", start, "skipped-from", from, "to", end)
 }
 
 func (s *scheduler) recordChunkedCatchup(start, end, lastWalked time.Time, walked int) {

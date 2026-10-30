@@ -274,13 +274,14 @@ type warnCounter struct {
 	counts map[string]int
 }
 
-func (l *warnCounter) add(msg string) {
+func (l *warnCounter) add(level, msg string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.counts == nil {
 		l.counts = map[string]int{}
 	}
 	l.counts[msg]++
+	l.counts[level+" "+msg]++
 }
 
 func (l *warnCounter) count(msg string) int {
@@ -289,10 +290,13 @@ func (l *warnCounter) count(msg string) int {
 	return l.counts[msg]
 }
 
-func (l *warnCounter) Debug(msg string, _ ...any) { l.add(msg) }
-func (l *warnCounter) Info(msg string, _ ...any)  { l.add(msg) }
-func (l *warnCounter) Warn(msg string, _ ...any)  { l.add(msg) }
-func (l *warnCounter) Error(msg string, _ ...any) { l.add(msg) }
+// countAt counts msg logged at level (DEBUG, INFO, WARN, ERROR).
+func (l *warnCounter) countAt(level, msg string) int { return l.count(level + " " + msg) }
+
+func (l *warnCounter) Debug(msg string, _ ...any) { l.add("DEBUG", msg) }
+func (l *warnCounter) Info(msg string, _ ...any)  { l.add("INFO", msg) }
+func (l *warnCounter) Warn(msg string, _ ...any)  { l.add("WARN", msg) }
+func (l *warnCounter) Error(msg string, _ ...any) { l.add("ERROR", msg) }
 
 // sideEffectCounter counts workflow.SideEffect calls; each records a marker.
 type sideEffectCounter struct {
