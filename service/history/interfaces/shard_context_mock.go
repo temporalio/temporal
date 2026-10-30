@@ -111,6 +111,21 @@ func (mr *MockShardContextMockRecorder) AppendHistoryEvents(ctx, request, namesp
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockShardContext)(nil).AppendHistoryEvents), ctx, request, namespaceID, execution)
 }
 
+// AppendRawHistoryEvents mocks base method.
+func (m *MockShardContext) AppendRawHistoryEvents(ctx context.Context, request *persistence0.AppendRawHistoryNodesRequest) (*persistence0.AppendHistoryNodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendRawHistoryEvents", ctx, request)
+	ret0, _ := ret[0].(*persistence0.AppendHistoryNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendRawHistoryEvents indicates an expected call of AppendRawHistoryEvents.
+func (mr *MockShardContextMockRecorder) AppendRawHistoryEvents(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendRawHistoryEvents", reflect.TypeOf((*MockShardContext)(nil).AppendRawHistoryEvents), ctx, request)
+}
+
 // AssertOwnership mocks base method.
 func (m *MockShardContext) AssertOwnership(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -970,6 +985,21 @@ func (m *MockControllableContext) AppendHistoryEvents(ctx context.Context, reque
 func (mr *MockControllableContextMockRecorder) AppendHistoryEvents(ctx, request, namespaceID, execution any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockControllableContext)(nil).AppendHistoryEvents), ctx, request, namespaceID, execution)
+}
+
+// AppendRawHistoryEvents mocks base method.
+func (m *MockControllableContext) AppendRawHistoryEvents(ctx context.Context, request *persistence0.AppendRawHistoryNodesRequest) (*persistence0.AppendHistoryNodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendRawHistoryEvents", ctx, request)
+	ret0, _ := ret[0].(*persistence0.AppendHistoryNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendRawHistoryEvents indicates an expected call of AppendRawHistoryEvents.
+func (mr *MockControllableContextMockRecorder) AppendRawHistoryEvents(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendRawHistoryEvents", reflect.TypeOf((*MockControllableContext)(nil).AppendRawHistoryEvents), ctx, request)
 }
 
 // AssertOwnership mocks base method.
