@@ -226,7 +226,10 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-tool golang.org/x/perf/cmd/benchstat
+tool (
+	go.temporal.io/server/cmd/tools/protoc-gen-go-chasm
+	golang.org/x/perf/cmd/benchstat
+)
 
 // Use the local testx; consumers of the server ignore this replace.
 replace go.temporal.io/testx => ./common/testx
