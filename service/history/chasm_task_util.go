@@ -40,6 +40,38 @@ func validateChasmSideEffectTask(
 	return tree.ValidateSideEffectTask(ctx, task)
 }
 
+// checkChasmStandbyTask checks task identity under the workflow lock. Component validation
+// runs separately after the lock is released.
+func checkChasmStandbyTask(ctx context.Context, ms historyi.MutableState, task *tasks.ChasmTask) (bool, error) {
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return false, consts.ErrWorkflowZombie
+	}
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return false, errNoChasmTree
+	}
+	return tree.IsSideEffectTaskInTree(ctx, task)
+}
+
+// validateChasmStandbyTask invokes the handler after the workflow lock is released.
+func validateChasmStandbyTask(ctx context.Context, engine chasm.Engine, tree historyi.ChasmTree, task *tasks.ChasmTask) (bool, error) {
+	return tree.ValidateStandbySideEffectTask(
+		chasm.NewEngineContext(ctx, engine),
+		chasm.ExecutionKey{NamespaceID: task.NamespaceID, BusinessID: task.WorkflowID, RunID: task.RunID},
+		task,
+		func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
+			if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+				return consts.ErrWorkflowZombie
+			}
+			clock := backend.GetExecutionInfo().TaskGenerationShardClockTimestamp
+			if clock != 0 && task.TaskID != 0 && task.TaskID < clock {
+				return consts.ErrStaleReference
+			}
+			return nil
+		},
+	)
+}
+
 // executeChasmSideEffectTask completes execution of a CHASM side effect task
 // after physical task validation.
 //
@@ -146,7 +178,7 @@ func discardChasmSideEffectTask(
 		validate,
 	)
 	if errors.Is(err, chasm.ErrTaskDiscarded) {
-		logger.Warn("Discarding standby CHASM task due to task being pending for too long.", tag.Task(task))
+		logger.Warn("Discarding standby CHASM task after standby validation rejected it.", tag.Task(task))
 		return consts.ErrTaskDiscarded
 	}
 	return err

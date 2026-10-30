@@ -188,21 +188,23 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+	isTaskInTree, err := checkChasmStandbyTask(ctx, ms, task)
 	if err != nil {
 		return err
 	}
-	if !isTaskInTree || !isValid {
-		// Replication has removed the logical task, or the component reports it
-		// invalid — drop the physical task.
+	if !isTaskInTree {
+		// Replication removed the task or component access is no longer allowed.
 		return nil
 	}
 
-	// Task still exists in the tree; retry until the active cluster executes
-	// and replicates the resulting state change.
-	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
-	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
-	if !e.Now().After(discardTime) {
+	tree := ms.ChasmTree()
+	// Release is idempotent. Do not access mutable state after this point.
+	release(nil)
+	valid, err := validateChasmStandbyTask(ctx, e.chasmEngine, tree, task)
+	if err != nil {
+		return err
+	}
+	if valid {
 		return consts.ErrTaskRetry
 	}
 
@@ -210,7 +212,7 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		ctx,
 		e.chasmEngine,
 		e.shardContext.ChasmRegistry(),
-		ms.ChasmTree(),
+		tree,
 		task,
 		e.logger,
 		e.clusterName,
