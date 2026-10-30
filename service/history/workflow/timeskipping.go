@@ -247,6 +247,15 @@ func (util *TimeSkippingInfoUtil) GetAccumulatedSkippedDuration() time.Duration 
 	return util.tsi.GetAccumulatedSkippedDuration().AsDuration()
 }
 
+// CreateTime returns startTime minus the initial skipped duration, which is when the execution was
+// created. It ignores the accumulated skipped duration, which grows as the execution skips.
+func (util *TimeSkippingInfoUtil) CreateTime(startTime time.Time) time.Time {
+	if util == nil || util.tsi == nil || startTime.IsZero() {
+		return startTime
+	}
+	return startTime.Add(-util.tsi.GetInitialSkippedDuration().AsDuration())
+}
+
 // HasTimeSkippingClockOffset reports whether accumulated skipped time shifts the workflow clock.
 func (util *TimeSkippingInfoUtil) HasTimeSkippingClockOffset() bool {
 	return util.GetAccumulatedSkippedDuration() != 0

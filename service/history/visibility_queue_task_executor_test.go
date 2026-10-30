@@ -77,6 +77,7 @@ type (
 		visibilityQueueTaskExecutor queues.Executor
 
 		enableCloseWorkflowCleanup bool
+		writeCreateTime            bool
 	}
 )
 
@@ -179,6 +180,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.mockShard.SetEngineForTesting(h)
 
 	s.enableCloseWorkflowCleanup = false
+	s.writeCreateTime = true
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,
 		s.workflowCache,
@@ -189,6 +191,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
 		config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		config.ExternalPayloadsEnabled,
+		func(_ string) bool { return s.writeCreateTime },
 	)
 }
 
@@ -588,6 +591,173 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessDeleteExecution() {
 	})
 }
 
+func (s *visibilityQueueTaskExecutorSuite) TestProcessDeleteExecution_PassesTimes() {
+	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), "some random workflow ID", uuid.NewString())
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("CreateTimeSet", func() {
+		createTime := startTime.Add(-2 * time.Hour)
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+				s.Equal(startTime, request.StartTime)
+				s.Equal(createTime, request.CreateTime)
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+			StartTime:   startTime,
+			CreateTime:  createTime,
+		}))
+	})
+
+	s.Run("CreateTimeUnknown", func() {
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+				s.Equal(startTime, request.StartTime)
+				s.True(request.CreateTime.IsZero())
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+			StartTime:   startTime,
+		}))
+	})
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessExecution_InheritedTimeSkipping_SetsCreateTime() {
+	const initialSkip = 2 * time.Hour
+	taskQueueName := "some random task queue"
+
+	newSkippedMutableState := func() (*commonpb.WorkflowExecution, historyi.MutableState) {
+		execution := &commonpb.WorkflowExecution{WorkflowId: "some random workflow ID", RunId: uuid.NewString()}
+		mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+		_, err := mutableState.AddWorkflowExecutionStartedEvent(
+			execution,
+			&historyservice.StartWorkflowExecutionRequest{
+				Attempt:     1,
+				NamespaceId: s.namespaceID.String(),
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+					WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+					WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+					WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+				},
+				TimeSkippingStatePropagation: &commonpb.TimeSkippingStatePropagation{
+					InitialSkippedDuration: durationpb.New(initialSkip),
+				},
+			},
+		)
+		s.NoError(err)
+		s.Require().Equal(initialSkip, mutableState.GetExecutionInfo().GetTimeSkippingInfo().GetInitialSkippedDuration().AsDuration())
+		return execution, mutableState
+	}
+	requireCreateTime := func(mutableState historyi.MutableState, request *manager.VisibilityRequestBase) {
+		startTime := timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
+		s.Equal(startTime, request.StartTime)
+		s.Equal(startTime.Add(-initialSkip), request.CreateTime)
+	}
+
+	s.Run("Start", func() {
+		execution, mutableState := newSkippedMutableState()
+		wt := addWorkflowTaskScheduledEvent(mutableState)
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)}, nil)
+		s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.RecordWorkflowExecutionStartedRequest) error {
+				requireCreateTime(mutableState, request.VisibilityRequestBase)
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.StartExecutionVisibilityTask{
+			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			Version:     s.version,
+			TaskID:      59,
+		}))
+	})
+
+	s.Run("Upsert", func() {
+		execution, mutableState := newSkippedMutableState()
+		wt := addWorkflowTaskScheduledEvent(mutableState)
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)}, nil)
+		s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.UpsertWorkflowExecutionRequest) error {
+				requireCreateTime(mutableState, request.VisibilityRequestBase)
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.UpsertExecutionVisibilityTask{
+			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			TaskID:      59,
+		}))
+	})
+
+	s.Run("Close", func() {
+		execution, mutableState := newSkippedMutableState()
+		wt := addWorkflowTaskScheduledEvent(mutableState)
+		event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+		wt.StartedEventID = event.GetEventId()
+		event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+		event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())}, nil)
+		s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.RecordWorkflowExecutionClosedRequest) error {
+				requireCreateTime(mutableState, request.VisibilityRequestBase)
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.CloseExecutionVisibilityTask{
+			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			Version:     s.version,
+			TaskID:      59,
+		}))
+	})
+
+	s.Run("Disabled", func() {
+		s.writeCreateTime = false
+		defer func() { s.writeCreateTime = true }()
+		execution, mutableState := newSkippedMutableState()
+		wt := addWorkflowTaskScheduledEvent(mutableState)
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+			&persistence.GetWorkflowExecutionResponse{State: s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)}, nil)
+		s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *manager.RecordWorkflowExecutionStartedRequest) error {
+				s.True(request.CreateTime.IsZero())
+				return nil
+			},
+		)
+		s.NoError(s.execute(&tasks.StartExecutionVisibilityTask{
+			WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			Version:     s.version,
+			TaskID:      59,
+		}))
+	})
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InheritedTimeSkipping_SetsCreateTime() {
+	const initialSkip = 3 * time.Hour
+	key := definition.NewWorkflowKey(s.namespaceID.String(), "some random ID", uuid.NewString())
+	mutableState := s.buildChasmMutableState(key, 5)
+	mutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		InitialSkippedDuration: durationpb.New(initialSkip),
+	}
+	startTime := mutableState.ExecutionState.GetStartTime().AsTime()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.UpsertWorkflowExecutionRequest) error {
+			s.Equal(startTime, request.StartTime)
+			s.Equal(startTime.Add(-initialSkip), request.CreateTime)
+			return nil
+		},
+	)
+
+	s.NoError(s.execute(s.buildChasmVisTask(key, 5)))
+}
+
 func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InvalidTask() {
 	key := definition.NewWorkflowKey(
 		s.namespaceID.String(),
@@ -935,6 +1105,8 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 		Execution:        execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTime:        timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime()),
+		// Equal to StartTime because none of the tests using this helper are time skipped.
+		CreateTime:       timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime()),
 		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    timestamp.TimeValue(executionInfo.GetExecutionTime()),
 		TaskID:           task.GetTaskID(),

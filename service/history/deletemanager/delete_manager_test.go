@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -114,6 +116,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		&stage,
 		false,
 	).Return(nil)
@@ -162,6 +165,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		&stage,
 		false,
 	).Return(serviceerror.NewInternal("test error"))
@@ -208,6 +212,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_Skip
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		gomock.Any(),
 		true,
 	).DoAndReturn(func(
@@ -219,6 +224,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_Skip
 		_ int64,
 		_ time.Time,
 		_ time.Time,
+		_ time.Time,
 		stagePtr *tasks.DeleteWorkflowExecutionStage,
 		_ bool,
 	) error {
@@ -227,6 +233,56 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_Skip
 			"Replication stage should be pre-marked as processed for retention-based deletion")
 		return nil
 	})
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
+		context.Background(),
+		tests.NamespaceID,
+		&we,
+		mockWeCtx,
+		mockMutableState,
+		&stage,
+	)
+	s.NoError(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_TimeSkipped_PassesCreateTime() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	initialSkip := 2 * time.Hour
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(5 * time.Hour),
+			InitialSkippedDuration:     durationpb.New(initialSkip),
+		},
+	})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		StartTime: timestamppb.New(startTime),
+	})
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		startTime,
+		startTime.Add(-initialSkip),
+		gomock.Any(),
+		true,
+	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
 	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
@@ -270,6 +326,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		tests.Version,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
+		time.Unix(0, 0).UTC(),
 		time.Unix(0, 0).UTC(),
 		time.Unix(0, 0).UTC(),
 		&stage,

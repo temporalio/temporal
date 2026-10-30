@@ -113,6 +113,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		f.Config.ExternalPayloadsEnabled,
+		f.Config.VisibilityProcessorWriteCreateTime,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)

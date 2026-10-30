@@ -941,6 +941,9 @@ func (s *VisibilityStore) GenerateESDoc(
 	if request.ParentRunID != nil {
 		doc[sadefs.ParentRunID] = *request.ParentRunID
 	}
+	if !request.CreateTime.IsZero() {
+		doc[sadefs.TemporalCreateTime] = request.CreateTime
+	}
 
 	if len(request.Memo.GetData()) > 0 {
 		doc[sadefs.Memo] = request.Memo.GetData()
@@ -1034,7 +1037,7 @@ func (s *VisibilityStore) ParseESDoc(
 	for fieldName, fieldValue := range sourceMap {
 		var fieldType enumspb.IndexedValueType
 		switch fieldName {
-		case sadefs.VisibilityTaskKey:
+		case sadefs.VisibilityTaskKey, sadefs.TemporalCreateTime:
 			// Ignore these fields.
 			continue
 		case sadefs.NamespaceID:

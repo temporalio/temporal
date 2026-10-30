@@ -391,6 +391,7 @@ type Config struct {
 	VisibilityProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
 	VisibilityProcessorEnableCloseWorkflowCleanup         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityProcessorRelocateAttributesMinBlobSize      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	VisibilityProcessorWriteCreateTime                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
 	// Disable fetching memo and search attributes from visibility in the event that they were removed
@@ -829,6 +830,7 @@ func NewConfig(
 		VisibilityProcessorEnsureCloseBeforeDelete:            dynamicconfig.VisibilityProcessorEnsureCloseBeforeDelete.Get(dc),
 		VisibilityProcessorEnableCloseWorkflowCleanup:         dynamicconfig.VisibilityProcessorEnableCloseWorkflowCleanup.Get(dc),
 		VisibilityProcessorRelocateAttributesMinBlobSize:      dynamicconfig.VisibilityProcessorRelocateAttributesMinBlobSize.Get(dc),
+		VisibilityProcessorWriteCreateTime:                    dynamicconfig.VisibilityProcessorWriteCreateTime.Get(dc),
 		VisibilityQueueMaxReaderCount:                         dynamicconfig.VisibilityQueueMaxReaderCount.Get(dc),
 
 		DisableFetchRelocatableAttributesFromVisibility: dynamicconfig.DisableFetchRelocatableAttributesFromVisibility.Get(dc),

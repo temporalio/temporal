@@ -27,6 +27,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			RunID:            "rid",
 			WorkflowTypeName: "wfType",
 			StartTime:        time.Unix(0, 123).UTC(),
+			CreateTime:       time.Unix(0, 100).UTC(),
 			ExecutionTime:    time.Unix(0, 321).UTC(),
 			TaskID:           int64(111),
 			ShardID:          2208,
@@ -52,6 +53,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal(request.RunID, body[sadefs.RunID])
 			s.Equal(request.WorkflowTypeName, body[sadefs.WorkflowType])
 			s.EqualValues(request.StartTime, body[sadefs.StartTime])
+			s.EqualValues(request.CreateTime, body[sadefs.TemporalCreateTime])
 			s.EqualValues(request.ExecutionTime, body[sadefs.ExecutionTime])
 			s.Equal(request.TaskQueue, body[sadefs.TaskQueue])
 			s.EqualValues(request.Status.String(), body[sadefs.ExecutionStatus])
@@ -92,6 +94,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			body := bulkRequest.Doc
 
 			_, ok := body[sadefs.Memo]
+			s.False(ok)
+			_, ok = body[sadefs.TemporalCreateTime]
 			s.False(ok)
 			_, ok = body[sadefs.MemoEncoding]
 			s.False(ok)
@@ -182,6 +186,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			body := bulkRequest.Doc
 
 			_, ok := body[sadefs.Memo]
+			s.False(ok)
+			_, ok = body[sadefs.TemporalCreateTime]
 			s.False(ok)
 			_, ok = body[sadefs.MemoEncoding]
 			s.False(ok)
