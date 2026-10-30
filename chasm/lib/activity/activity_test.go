@@ -274,7 +274,7 @@ func TestHandleStarted(t *testing.T) {
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
-							BreakdownMetricsByTaskQueue:        dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							BreakdownMetricsByTaskQueue:       dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 							EnableCancelActivityWorkerCommand: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 						},
 					}),
@@ -399,7 +399,7 @@ func TestActivityTerminate(t *testing.T) {
 					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
-							BreakdownMetricsByTaskQueue:        dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+							BreakdownMetricsByTaskQueue:       dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 							EnableCancelActivityWorkerCommand: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 						},
 					}),

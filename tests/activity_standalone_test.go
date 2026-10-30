@@ -3151,8 +3151,6 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
 }
 
-
-
 func (s *standaloneActivityTestSuite) TestTerminate() {
 	env := s.newTestEnv()
 	t := s.T()
