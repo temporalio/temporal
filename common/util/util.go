@@ -32,7 +32,12 @@ func MaxTime(first time.Time, rest ...time.Time) time.Time {
 // NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple
 // of `align` since the unix epoch.
 func NextAlignedTime(t time.Time, align time.Duration) time.Time {
-	return time.Unix(0, (t.UnixNano()/int64(align)+1)*int64(align))
+	nanos := t.UnixNano()
+	remainder := nanos % int64(align)
+	if remainder < 0 {
+		remainder += int64(align)
+	}
+	return time.Unix(0, nanos-remainder+int64(align))
 }
 
 // SortSlice sorts the given slice of an ordered type.
