@@ -45,6 +45,25 @@ func NewKey(name string) Key {
 	return Key{name: name}
 }
 
+// GRPCKey returns the key of the failpoint that fires before the handler of a gRPC method runs.
+// fullMethod is the full method name, for example
+// "/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution".
+func GRPCKey(fullMethod string) Key {
+	return Key{name: "grpc:" + fullMethod}
+}
+
+// HTTPKey returns the key of the failpoint that fires before an outgoing HTTP request is sent.
+// operation is the request method and path, for example "POST /callback".
+func HTTPKey(operation string) Key {
+	return Key{name: "http:" + operation}
+}
+
+// PersistenceKey returns the key of the failpoint that fires before a persistence store method
+// runs, for example PersistenceKey("ExecutionStore", "UpdateWorkflowExecution").
+func PersistenceKey(store, method string) Key {
+	return Key{name: "persistence:" + store + "." + method}
+}
+
 // Name returns the failpoint name.
 func (k Key) Name() string { return k.name }
 
