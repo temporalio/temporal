@@ -144,6 +144,10 @@ type dbRowsIf interface {
 	Next() bool
 	Scan(...any) error
 	Close() error
+	// Err reports a read that ended before the rows did. Next returns false
+	// for that case exactly as it does for a clean end, so without Err a
+	// truncated result set is indistinguishable from a complete one.
+	Err() error
 }
 
 func ParseCountGroupByRows(rows dbRowsIf, groupBy []string) ([]VisibilityCountRow, error) {
@@ -186,6 +190,9 @@ func ParseCountGroupByRows(rows dbRowsIf, groupBy []string) ([]VisibilityCountRo
 			GroupValues: groupValues,
 			Count:       countTyped,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
