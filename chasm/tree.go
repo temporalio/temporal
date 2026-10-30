@@ -3968,14 +3968,7 @@ func (n *Node) validateSideEffectTask(
 	// was added; skip the check in that case to preserve backward compatibility.
 	var logicalTask *persistencespb.ChasmComponentAttributes_Task
 	if taskInfo.TaskVersionedTransition != nil {
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
-		for _, t := range componentAttr.GetSideEffectTasks() {
-			if transitionhistory.Compare(t.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
-				t.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
-				logicalTask = t
-				break
-			}
-		}
+		logicalTask = node.findSideEffectTask(taskInfo)
 		if logicalTask == nil {
 			return false, false, nil
 		}
@@ -4037,6 +4030,17 @@ func (n *Node) validateSideEffectTask(
 		chasmTask.DeserializedTask.Interface(),
 	)
 	return true, isValidByComponent, retErr
+}
+
+func (n *Node) findSideEffectTask(taskInfo *persistencespb.ChasmTaskInfo) *persistencespb.ChasmComponentAttributes_Task {
+	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
+	for _, task := range componentAttr.GetSideEffectTasks() {
+		if transitionhistory.Compare(task.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
+			task.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
+			return task
+		}
+	}
+	return nil
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
