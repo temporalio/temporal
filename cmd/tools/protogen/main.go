@@ -112,6 +112,7 @@ type generator struct {
 	protoBackup           string
 	apiBinpb              string
 	protoRoot             string
+	protocPath            string
 	protogenBin           string
 	goimportsBin          string
 	mockgenBin            string
@@ -128,6 +129,7 @@ func newGenerator() (*generator, error) {
 	flag.StringVar(&gen.protoRoot, "proto-root", "", "Proto root directory (required)")
 	flag.StringVar(&gen.rootDir, "root", "", "Root directory (required)")
 	flag.StringVar(&gen.apiBinpb, "api-binpb", "", "Path to API binpb file (required)")
+	flag.StringVar(&gen.protocPath, "protoc-path", "protoc", "Path to the protoc executable")
 	flag.StringVar(&gen.protogenBin, "protogen-bin", "", "Path to protogen binary (required)")
 	flag.StringVar(&gen.goimportsBin, "goimports-bin", "", "Path to goimports binary (required)")
 	flag.StringVar(&gen.mockgenBin, "mockgen-bin", "", "Path to mockgen binary (required)")
@@ -230,6 +232,7 @@ func (g *generator) copyChasmLibProtos() error {
 func (g *generator) runProtogen(ctx context.Context) error {
 	// Run protogen
 	protoArgs := []string{
+		"--protoc-path=" + g.protocPath,
 		"--descriptor_set_in=" + g.apiBinpb,
 		"--root=" + filepath.Join(g.tempProtoRoot, "internal"),
 		"--rewrite-enum=BuildId_State:BuildId",
