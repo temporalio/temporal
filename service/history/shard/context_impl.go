@@ -2296,7 +2296,8 @@ func newContext(
 	ioConcurrency := historyConfig.ShardIOConcurrency()
 	if ioConcurrency != 1 && persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil {
 		throttledLogger.Warn(
-			fmt.Sprintf("Cassandra persistence implementation only supports %v == 1", dynamicconfig.ShardIOConcurrency),
+			"Cassandra persistence implementation only supports shard IO concurrency of 1",
+			tag.Key(dynamicconfig.ShardIOConcurrency.Key().String()),
 			tag.Int("shard-io-concurrency", ioConcurrency),
 		)
 		ioConcurrency = 1
