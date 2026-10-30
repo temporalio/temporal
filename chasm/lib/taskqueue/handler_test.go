@@ -202,6 +202,8 @@ func TestTaskQueueUserDataCASConflictPreservesVersionAndData(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			h, ctx, req := newTestHandler(t)
+			// Create and update to reach version 2, so expected versions 0, 1, and 3 test
+			// duplicate creation, a stale version, and a future version, respectively.
 			_, err := h.UpsertTaskQueueUserData(ctx, req)
 			require.NoError(t, err)
 			req.ExpectedVersion = 1
