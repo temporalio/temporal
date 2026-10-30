@@ -327,10 +327,6 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
-
-  // Running storage usage of this run on this cluster. Each cluster (active or passive) accrues its own;
-  // it is not replicated.
-  StorageUsage storage_usage = 118;
 }
 
 message TimeSkippingInfo {
@@ -391,6 +387,9 @@ message ExecutionStats {
   // Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
   // This number doesn't include payloads in buffered events.
   int64 external_payload_count = 3;
+  // Running storage usage of this run on this cluster. Each cluster (active or passive) accrues its own;
+  // it is not replicated. Copy or clear this field on its own, not the whole ExecutionStats.
+  StorageUsage storage_usage = 4;
 }
 
 // Running storage usage of a run on one cluster, accrued by that cluster (active or passive) at each

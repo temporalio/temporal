@@ -31,7 +31,7 @@ func (s *FunctionalClustersTestSuite) TestStorageUsagePerCluster() {
 			Archetype: chasm.WorkflowArchetype,
 		})
 		require.NoError(t, err)
-		return resp.GetDatabaseMutableState().GetExecutionInfo().GetStorageUsage()
+		return resp.GetDatabaseMutableState().GetExecutionInfo().GetExecutionStats().GetStorageUsage()
 	}
 	// waitReplicated waits until the passive cluster has applied every event of the active cluster, so
 	// each transition is applied (and accrues locally) on the passive cluster before the next one.

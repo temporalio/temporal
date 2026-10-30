@@ -70,7 +70,9 @@ func sanitizeExecutionInfo(
 	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
 
 	// Storage usage is accrued by each cluster for the storage it holds, do not sync it.
-	executionInfo.StorageUsage = nil
+	if stats := executionInfo.GetExecutionStats(); stats != nil {
+		stats.StorageUsage = nil
+	}
 }
 
 func sanitizeChildExecutionInfo(

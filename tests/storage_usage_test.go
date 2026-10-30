@@ -122,5 +122,5 @@ func (s *StorageUsageSuite) describeStorageUsage(
 		Archetype: archetype,
 	})
 	require.NoError(s.T(), err)
-	return resp.GetDatabaseMutableState().GetExecutionInfo().GetStorageUsage(), resp.GetCurrentStorageUsage()
+	return resp.GetDatabaseMutableState().GetExecutionInfo().GetExecutionStats().GetStorageUsage(), resp.GetCurrentStorageUsage()
 }

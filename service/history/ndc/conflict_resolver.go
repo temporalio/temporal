@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -160,7 +161,10 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
 	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = r.mutableState.GetExecutionInfo().MutableStateRebuildTime
-	rebuildMutableState.GetExecutionInfo().StorageUsage = common.CloneProto(r.mutableState.GetExecutionInfo().GetStorageUsage())
+	workflow.SetStorageUsage(
+		rebuildMutableState.GetExecutionInfo(),
+		common.CloneProto(r.mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()),
+	)
 	if err != nil {
 		return nil, err
 	}

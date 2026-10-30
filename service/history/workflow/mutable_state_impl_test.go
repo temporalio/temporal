@@ -2526,12 +2526,17 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.NoError(err)
 
 	mutableStateProto := mutableState.CloneToProto()
-	mutableStateProto.ExecutionInfo.StorageUsage = &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222}
+	mutableStateProto.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+		HistorySize:  4096,
+		StorageUsage: &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222},
+	}
 	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto, 0)
 	s.NoError(err)
 	s.Equal(int64(0), sanitizedMutableState.executionInfo.LastFirstEventTxnId)
-	// Storage usage is per cluster: the source cluster's counter is not carried over.
-	s.Nil(sanitizedMutableState.executionInfo.StorageUsage)
+	// Storage usage is per cluster: the source cluster's counter is not carried over, but the rest of
+	// ExecutionStats is.
+	s.Nil(sanitizedMutableState.executionInfo.GetExecutionStats().GetStorageUsage())
+	s.Equal(int64(4096), sanitizedMutableState.executionInfo.GetExecutionStats().GetHistorySize())
 	s.Nil(sanitizedMutableState.executionInfo.ParentClock)
 	for _, childInfo := range sanitizedMutableState.pendingChildExecutionInfoIDs {
 		s.Nil(childInfo.Clock)
@@ -6128,7 +6133,7 @@ func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.
 	// These fields will be updated during ApplySnapshot
 	proto.Merge(state.ExecutionInfo, &persistencespb.WorkflowExecutionInfo{
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),
-		StorageUsage:   common.CloneProto(localStorageUsageForStateReplication),
+		ExecutionStats: &persistencespb.ExecutionStats{StorageUsage: common.CloneProto(localStorageUsageForStateReplication)},
 	})
 	proto.Merge(state.ExecutionState, &persistencespb.WorkflowExecutionState{
 		State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -6331,7 +6336,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(target.SubStateMachineTombstoneBatches, current.SubStateMachineTombstoneBatches, "SubStateMachineTombstoneBatches mismatch")
 	// Storage usage is per cluster: the local value set by addChangesForStateReplication is kept,
 	// not overwritten by the source's.
-	s.True(proto.Equal(localStorageUsageForStateReplication, current.StorageUsage), "StorageUsage mismatch")
+	s.True(proto.Equal(localStorageUsageForStateReplication, current.GetExecutionStats().GetStorageUsage()), "StorageUsage mismatch")
 }
 
 func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableStateImpl) {
@@ -10231,7 +10236,7 @@ func (s *mutableStateSuite) newStorageUsageTestMutableState() (*MutableStateImpl
 }
 
 func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage() {
-	// Active and passive each accrue their own storage into their own counter, and skipped time counts.
+	// Active and passive each accrue their own storage into their own counter, and skipped time does not count.
 	for _, tc := range []struct {
 		name    string
 		policy  historyi.TransactionPolicy
@@ -10244,7 +10249,7 @@ func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage() {
 	} {
 		s.Run(tc.name, func() {
 			mutableState, ts := s.newStorageUsageTestMutableState()
-			before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+			before := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 			msSize := mutableState.sizeAtLastClose
 			s.Positive(msSize)
 
@@ -10257,18 +10262,46 @@ func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage() {
 			_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), tc.policy)
 			s.NoError(err)
 
-			seconds := int64((10*time.Second + tc.skipped).Seconds())
-			usage := mutableState.GetExecutionInfo().GetStorageUsage()
+			seconds := int64(10)
+			usage := mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()
 			s.Equal(before.GetMutableStateByteSeconds()+seconds*msSize, usage.GetMutableStateByteSeconds())
 			s.Equal(before.GetHistoryByteSeconds()+seconds*4096, usage.GetHistoryByteSeconds())
 		})
 	}
 }
 
+func (s *mutableStateSuite) TestCloseTransactionStorageUsage_TimeSkippingOnLoad() {
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now().UTC().Truncate(time.Second))
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{HistorySize: 4096}
+	dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+	// LastUpdateTime was written on the execution's virtual clock, an hour ahead of the wall clock.
+	dbState.ExecutionInfo.LastUpdateTime = timestamppb.New(ts.Now().Add(time.Hour))
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	mutableState.timeSource = ts
+	mutableState.wrapTimeSourceWithTimeSkipping()
+	msSize := mutableState.sizeAtLastClose
+
+	// The baseline loaded from LastUpdateTime is converted back to the wall clock, so 10s accrue.
+	ts.Update(ts.Now().Add(10 * time.Second))
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	usage := mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()
+	s.Equal(10*msSize, usage.GetMutableStateByteSeconds())
+	s.Equal(int64(10*4096), usage.GetHistoryByteSeconds())
+}
+
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCounterOnSync() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
 	msSize := mutableState.sizeAtLastClose
-	local := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	local := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
 	mutableState.chasmTree = mockChasmTree
@@ -10280,7 +10313,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCoun
 	// The source cluster's clock is 4 minutes ahead and its counter has moved on.
 	incoming := common.CloneProto(mutableState.GetExecutionInfo())
 	incoming.LastUpdateTime = timestamppb.New(ts.Now().Add(4 * time.Minute))
-	incoming.StorageUsage = &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222}
+	SetStorageUsage(incoming, &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222})
 	incoming.TransitionHistory[len(incoming.TransitionHistory)-1].TransitionCount += 1
 	s.NoError(mutableState.ApplyMutation(&persistencespb.WorkflowMutableStateMutation{
 		ExecutionInfo:  incoming,
@@ -10293,13 +10326,13 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCoun
 
 	// The source's counter is not copied; this cluster's counter only grows by its own 5s interval,
 	// measured from the local baseline rather than the source's LastUpdateTime.
-	s.Equal(local.GetMutableStateByteSeconds()+5*msSize, mutableState.GetExecutionInfo().GetStorageUsage().GetMutableStateByteSeconds())
-	s.Equal(local.GetHistoryByteSeconds()+5*4096, mutableState.GetExecutionInfo().GetStorageUsage().GetHistoryByteSeconds())
+	s.Equal(local.GetMutableStateByteSeconds()+5*msSize, mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage().GetMutableStateByteSeconds())
+	s.Equal(local.GetHistoryByteSeconds()+5*4096, mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage().GetHistoryByteSeconds())
 }
 
 func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
-	local := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	local := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
 	mutableState.chasmTree = mockChasmTree
@@ -10311,7 +10344,7 @@ func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 	// Replicated from the old active cluster, whose clock is 4 minutes ahead.
 	incoming := common.CloneProto(mutableState.GetExecutionInfo())
 	incoming.LastUpdateTime = timestamppb.New(ts.Now().Add(4 * time.Minute))
-	incoming.StorageUsage = &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222}
+	SetStorageUsage(incoming, &persistencespb.StorageUsage{MutableStateByteSeconds: 111, HistoryByteSeconds: 222})
 	incoming.TransitionHistory[len(incoming.TransitionHistory)-1].TransitionCount += 1
 	s.NoError(mutableState.ApplyMutation(&persistencespb.WorkflowMutableStateMutation{
 		ExecutionInfo:  incoming,
@@ -10327,14 +10360,14 @@ func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 
-	usage := mutableState.GetExecutionInfo().GetStorageUsage()
+	usage := mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()
 	s.Equal(local.GetMutableStateByteSeconds()+5*msSize, usage.GetMutableStateByteSeconds())
 	s.Equal(local.GetHistoryByteSeconds()+5*historySize, usage.GetHistoryByteSeconds())
 }
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
-	before := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	before := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 	msSize := mutableState.sizeAtLastClose
 
 	// The transaction that closes the execution still accrues the interval before it.
@@ -10346,7 +10379,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	s.NoError(err)
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
-	atClose := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	atClose := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 	s.Equal(before.GetMutableStateByteSeconds()+10*msSize, atClose.GetMutableStateByteSeconds())
 
 	// Later transactions on the closed execution (reset of a closed base run, callbacks, timers)
@@ -10354,7 +10387,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	ts.Update(ts.Now().Add(7 * 24 * time.Hour))
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
-	s.True(proto.Equal(atClose, mutableState.GetExecutionInfo().GetStorageUsage()))
+	s.True(proto.Equal(atClose, mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()))
 }
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_ClosedOnLoad() {
@@ -10373,13 +10406,13 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_ClosedOnLoad() {
 	s.NoError(err)
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
-	s.Nil(mutableState.GetExecutionInfo().GetStorageUsage())
+	s.Nil(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 }
 
 func (s *mutableStateSuite) TestCurrentStorageUsage_Running() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
 	msSize := mutableState.sizeAtLastClose
-	stored := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	stored := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	// No transaction since the baseline: the current value includes the 10s held since then.
 	ts.Update(ts.Now().Add(10 * time.Second))
@@ -10387,7 +10420,7 @@ func (s *mutableStateSuite) TestCurrentStorageUsage_Running() {
 	s.Equal(stored.GetMutableStateByteSeconds()+10*msSize, current.GetMutableStateByteSeconds())
 	s.Equal(stored.GetHistoryByteSeconds()+10*4096, current.GetHistoryByteSeconds())
 	// The stored counter is not changed.
-	s.True(proto.Equal(stored, mutableState.GetExecutionInfo().GetStorageUsage()))
+	s.True(proto.Equal(stored, mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage()))
 }
 
 func (s *mutableStateSuite) TestCurrentStorageUsage_Closed() {
@@ -10399,7 +10432,7 @@ func (s *mutableStateSuite) TestCurrentStorageUsage_Closed() {
 	s.NoError(err)
 	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
-	stored := common.CloneProto(mutableState.GetExecutionInfo().GetStorageUsage())
+	stored := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	// Accrual stops at close, so the current value is the stored one.
 	ts.Update(ts.Now().Add(time.Hour))
