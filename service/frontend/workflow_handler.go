@@ -117,6 +117,15 @@ const (
 	defaultUserTerminateIdentity = "frontend-service"
 )
 
+// TODO (Shivam): Remove these constants with the deprecated worker-versioning implementations.
+const (
+	deprecatedWorkerVersioningV1OrV2 = "v0.1_or_v0.2"
+	deprecatedWorkerVersioningV3     = "v0.3"
+
+	deprecatedWorkerVersioningPollAllowed = "allowed"
+	deprecatedWorkerVersioningPollBlocked = "blocked"
+)
+
 type (
 	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
 	ActivityHandler = activity.FrontendHandler
@@ -6796,14 +6805,6 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-const (
-	deprecatedWorkerVersioningV1OrV2 = "v0.1_or_v0.2"
-	deprecatedWorkerVersioningV3     = "v0.3"
-
-	deprecatedWorkerVersioningPollAllowed = "allowed"
-	deprecatedWorkerVersioningPollBlocked = "blocked"
-)
-
 func (wh *WorkflowHandler) validatePollVersioningInfo(
 	ctx context.Context,
 	nsName string,
@@ -6811,15 +6812,17 @@ func (wh *WorkflowHandler) validatePollVersioningInfo(
 	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
 	tq *taskqueuepb.TaskQueue,
 ) error {
-	version := deprecatedWorkerVersioningPollVersion(capabilities, deploymentOptions)
-	if version != "" {
+	featureVersion := deprecatedWorkerVersioningPollVersion(capabilities, deploymentOptions)
+	if featureVersion != "" {
 		action := deprecatedWorkerVersioningPollAllowed
 		if wh.config.BlockOldVersioningPollers(nsName) {
 			action = deprecatedWorkerVersioningPollBlocked
 		}
+		// note: The frontend telemetry interceptor adds metrics.NamespaceTag(...) over here
+		// so this is already tagged by namespace
 		metrics.DeprecatedWorkerVersioningPollCounter.With(wh.metricsScope(ctx)).Record(
 			1,
-			metrics.WorkerVersioningVersionTag(version),
+			metrics.WorkerVersioningVersionTag(featureVersion),
 			metrics.ActionType(action),
 		)
 		if action == deprecatedWorkerVersioningPollBlocked {
@@ -6830,6 +6833,8 @@ func (wh *WorkflowHandler) validatePollVersioningInfo(
 	return wh.validateVersioningInfo(nsName, capabilities, deploymentOptions, tq)
 }
 
+// deprecatedWorkerVersioningPollVersion returns the version of the worker-versioning feature that the worker is using.
+// If the worker is not using the worker-versioning feature, it returns an empty string.
 func deprecatedWorkerVersioningPollVersion(
 	capabilities *commonpb.WorkerVersionCapabilities,
 	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
