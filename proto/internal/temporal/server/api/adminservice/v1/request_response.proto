@@ -211,7 +211,19 @@ message ApplyNamespaceMutationRequest {
   // Shadow requests validate transport equivalence but never mutate receiver state.
   bool shadow = 2;
 
-  // Fields 4-7 are used by observability metadata in the shadow metrics change.
+  reserved 3;
+  reserved "fingerprint";
+
+  // Source cluster initiating the delivery.
+  string source_cluster = 4;
+  // Source CHASM component business ID for correlation.
+  string component_business_id = 5;
+  // Source CHASM component run ID for correlation.
+  string component_run_id = 6;
+  // One-based component-managed peer retry attempt, not a physical delivery count.
+  // Task redelivery and transport retries may reuse the same number.
+  int32 attempt_count = 7;
+
   // Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
   // decodes this payload with its local schema for shadow comparison.
   bytes namespace_task_payload = 8;

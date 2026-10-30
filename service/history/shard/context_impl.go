@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
@@ -541,6 +542,9 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(ctx, request.NewWorkflowEvents); err != nil {
+		return nil, err
+	}
 
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
@@ -600,6 +604,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(ctx, request.UpdateWorkflowEvents, request.NewWorkflowEvents); err != nil {
+		return nil, err
+	}
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -678,6 +686,15 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	if err := s.validateWorkflowEventsTransactionIDs(
+		ctx,
+		request.ResetWorkflowEvents,
+		request.NewWorkflowEvents,
+		request.CurrentWorkflowEvents,
+	); err != nil {
+		return nil, err
+	}
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -882,6 +899,18 @@ func (s *ContextImpl) AppendHistoryEvents(
 
 	request.ShardID = s.shardID
 
+	if len(request.Events) > 0 {
+		if err := s.validateTransactionIDs(
+			ctx,
+			request.BranchToken,
+			request.Events[0].EventId,
+			request.PrevTransactionID,
+			request.TransactionID,
+		); err != nil {
+			return 0, err
+		}
+	}
+
 	size := 0
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
@@ -907,6 +936,81 @@ func (s *ContextImpl) AppendHistoryEvents(
 		size = resp.Size
 	}
 	return size, err0
+}
+
+func (s *ContextImpl) AppendRawHistoryEvents(
+	ctx context.Context,
+	request *persistence.AppendRawHistoryNodesRequest,
+) (*persistence.AppendHistoryNodesResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	request.ShardID = s.shardID
+
+	if err := s.validateTransactionIDs(
+		ctx,
+		request.BranchToken,
+		request.NodeID,
+		request.PrevTransactionID,
+		request.TransactionID,
+	); err != nil {
+		return nil, err
+	}
+	return s.GetExecutionManager().AppendRawHistoryNodes(ctx, request)
+}
+
+func (s *ContextImpl) validateWorkflowEventsTransactionIDs(
+	ctx context.Context,
+	workflowEventsSlices ...[]*persistence.WorkflowEvents,
+) error {
+	for _, workflowEventsSlice := range workflowEventsSlices {
+		for _, workflowEvents := range workflowEventsSlice {
+			if len(workflowEvents.Events) == 0 {
+				continue
+			}
+			if err := s.validateTransactionIDs(
+				ctx,
+				workflowEvents.BranchToken,
+				workflowEvents.Events[0].EventId,
+				workflowEvents.PrevTxnID,
+				workflowEvents.TxnID,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateTransactionIDs rejects a history node whose transaction ID is not greater than the previous node's. History
+// node writes are not fenced by RangeID, and a newer owner's higher transaction ID causes this, so it first asserts
+// shard ownership, which stops this shard if it is the stale one. It acquires the shard lock, so call it without the
+// lock held.
+func (s *ContextImpl) validateTransactionIDs(
+	ctx context.Context,
+	branchToken []byte,
+	nodeID int64,
+	prevTransactionID int64,
+	transactionID int64,
+) error {
+	if transactionID > prevTransactionID || !s.config.EnableHistoryNodeTransactionIDValidation() {
+		return nil
+	}
+	if err := s.AssertOwnership(ctx); err != nil {
+		return err
+	}
+	softassert.Fail(
+		s.contextTaggedLogger,
+		"history node transaction ID is not greater than previous transaction ID",
+		tag.WorkflowBranchToken(branchToken),
+		tag.NewInt64("node-id", nodeID),
+		tag.NewInt64("transaction-id", transactionID),
+		tag.NewInt64("prev-transaction-id", prevTransactionID),
+	)
+	return &persistence.InvalidPersistenceRequestError{
+		Msg: fmt.Sprintf("transaction ID %v must be greater than prevTransaction ID %v", transactionID, prevTransactionID),
+	}
 }
 
 func (s *ContextImpl) DeleteWorkflowExecution(

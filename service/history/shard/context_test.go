@@ -10,7 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -777,6 +779,199 @@ func (s *contextSuite) TestShardStopReasonAssertOwnership() {
 
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	_, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	var invalidRequestErr *persistence.InvalidPersistenceRequestError
+	s.ErrorAs(err, &invalidRequestErr)
+
+	s.True(s.mockShard.IsValid())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_ValidationDisabled() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(false)
+	s.mockExecutionManager.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	size, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	s.NoError(err)
+	s.Equal(1, size)
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_IncreasingTransactionID() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockExecutionManager.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	size, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(1<<20, 1<<20+1),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	s.NoError(err)
+	s.Equal(1, size)
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.AppendRawHistoryEvents(
+		context.Background(),
+		&persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 2 << 20, TransactionID: 1 << 20},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	_, err := s.mockShard.AppendRawHistoryEvents(
+		context.Background(),
+		&persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 2 << 20, TransactionID: 1 << 20},
+	)
+	var invalidRequestErr *persistence.InvalidPersistenceRequestError
+	s.ErrorAs(err, &invalidRequestErr)
+
+	s.True(s.mockShard.IsValid())
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_IncreasingTransactionID() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	request := &persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 1 << 20, TransactionID: 1<<20 + 1}
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), request).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	resp, err := s.mockShard.AppendRawHistoryEvents(context.Background(), request)
+	s.NoError(err)
+	s.Equal(1, resp.Size)
+	s.Equal(s.shardID, request.ShardID)
+}
+
+func (s *contextSuite) TestUpdateWorkflowExecution_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.UpdateWorkflowExecution(
+		context.Background(),
+		&persistence.UpdateWorkflowExecutionRequest{
+			UpdateWorkflowEvents: []*persistence.WorkflowEvents{s.newWorkflowEvents(2<<20, 1<<20)},
+		},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestWorkflowExecutionWrites_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	increasing := s.newWorkflowEvents(1<<20, 1<<20+1)
+	nonIncreasing := s.newWorkflowEvents(2<<20, 1<<20)
+
+	testCases := []struct {
+		name  string
+		write func() error
+	}{
+		{
+			name: "CreateWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.CreateWorkflowExecution(context.Background(), &persistence.CreateWorkflowExecutionRequest{
+					NewWorkflowEvents: []*persistence.WorkflowEvents{increasing, nonIncreasing},
+				})
+				return err
+			},
+		},
+		{
+			name: "UpdateWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.UpdateWorkflowExecution(context.Background(), &persistence.UpdateWorkflowExecutionRequest{
+					UpdateWorkflowEvents: []*persistence.WorkflowEvents{increasing},
+					NewWorkflowEvents:    []*persistence.WorkflowEvents{nonIncreasing},
+				})
+				return err
+			},
+		},
+		{
+			name: "ConflictResolveWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.ConflictResolveWorkflowExecution(context.Background(), &persistence.ConflictResolveWorkflowExecutionRequest{
+					ResetWorkflowEvents:   []*persistence.WorkflowEvents{increasing},
+					NewWorkflowEvents:     []*persistence.WorkflowEvents{increasing},
+					CurrentWorkflowEvents: []*persistence.WorkflowEvents{nonIncreasing},
+				})
+				return err
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+			err := tc.write()
+			var invalidRequestErr *persistence.InvalidPersistenceRequestError
+			s.ErrorAs(err, &invalidRequestErr)
+
+			s.True(s.mockShard.IsValid())
+		})
+	}
+}
+
+func (s *contextSuite) newAppendHistoryNodesRequest(prevTransactionID, transactionID int64) *persistence.AppendHistoryNodesRequest {
+	return &persistence.AppendHistoryNodesRequest{
+		Events:            []*historypb.HistoryEvent{{EventId: 5, Version: 1}},
+		PrevTransactionID: prevTransactionID,
+		TransactionID:     transactionID,
+	}
+}
+
+func (s *contextSuite) newWorkflowEvents(prevTransactionID, transactionID int64) *persistence.WorkflowEvents {
+	return &persistence.WorkflowEvents{
+		Events:    []*historypb.HistoryEvent{{EventId: 5, Version: 1}},
+		PrevTxnID: prevTransactionID,
+		TxnID:     transactionID,
+	}
 }
 
 func (s *contextSuite) TestShardStopReasonShardRead() {
