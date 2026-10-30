@@ -132,16 +132,10 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BUMP_PRS_URL: ${{ github.server_url }}/${{ github.repository }}/pulls?q=head%3A${{ env.BRANCH }}
         run: |
-          details=()
-          if [ "${BUMP_RESULT}" = "failure" ]; then
-            details+=("The bump job failed.")
-          fi
-          if [ "${CHECK_PIN_RESULT}" = "failure" ]; then
-            details+=("Required testx version doesn't match common/testx/.")
-          fi
           text=$(printf '%s\n' \
             ":warning: *go.temporal.io/testx version on main needs attention*" \
-            "${details[@]}" \
+            "bump: ${BUMP_RESULT}" \
+            "check-pin: ${CHECK_PIN_RESULT}" \
             "<${RUN_URL}|View run> · <${BUMP_PRS_URL}|Bump PR>")
           jq -n --arg text "${text}" '{text: $text}' |
             curl -fsS -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK}"
