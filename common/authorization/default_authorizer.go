@@ -29,6 +29,12 @@ var resultDeny = Result{Decision: DecisionDeny}
 //	System Admin is allowed to access all APIs on all namespaces and cluster-level.
 //	System Writer is allowed to access non admin APIs on all namespaces and cluster-level.
 //	System Reader is allowed to access readonly APIs on all namespaces and cluster-level.
+//	A reader on any individual namespace is also allowed to access cluster-level readonly
+//	APIs (ListNamespaces, GetSearchAttributes, GetClusterInfo) - these return low-sensitivity
+//	metadata (namespace names, server/cluster version info), and gating them on System claims
+//	alone leaves them unreachable for any purely namespace-scoped permission set, the shape the
+//	"namespace:role" JWT claim format itself describes - which breaks the Web UI outright for
+//	those deployments (#11639).
 //	Namespace Admin is allowed to access all APIs on their namespaces.
 //	Namespace Writer is allowed to access non admin APIs on their namespaces.
 //	Namespace Reader is allowed to access non admin readonly APIs on their namespaces.
@@ -48,6 +54,9 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	switch metadata.Scope {
 	case api.ScopeCluster:
 		hasRole = claims.System
+		if metadata.Access == api.AccessReadOnly && hasRole < RoleReader && claims.hasAnyNamespaceRole(RoleReader) {
+			hasRole = RoleReader
+		}
 	case api.ScopeNamespace:
 		// Note: system-level claims apply across all namespaces.
 		// Note: if claims.Namespace is nil or target.Namespace is not found, the lookup will return zero.
