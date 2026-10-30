@@ -7745,6 +7745,45 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
 		})
 	}
+
+	s.Run("virtual cutoff is converted to wall clock", func() {
+		skipped := time.Hour
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+		s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
+			{VisibilityTimestamp: now.Add(3 * time.Minute)},
+			{VisibilityTimestamp: now.Add(2 * time.Minute)},
+			{VisibilityTimestamp: now.Add(time.Minute)},
+		}
+		s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
+
+		virtualCutoff := now.Add(skipped + 2*time.Minute)
+		s.mutableState.DeleteCHASMPureTasks(virtualCutoff)
+
+		s.Len(s.mutableState.chasmPureTasks, 2)
+		s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 1)
+	})
+}
+
+func (s *mutableStateSuite) TestHasStateMachineTimerTask() {
+	skipped := time.Hour
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
+	s.mutableState.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	virtualDeadline := s.mutableState.Now().Add(time.Hour)
+
+	version := s.mutableState.GetCurrentVersion()
+	s.mutableState.AddTasks(&tasks.StateMachineTimerTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: virtualDeadline,
+		Version:             version,
+	})
+
+	s.True(s.mutableState.HasStateMachineTimerTask(virtualDeadline, version))
+	s.False(s.mutableState.HasStateMachineTimerTask(virtualDeadline.Add(time.Minute), version))
+	s.False(s.mutableState.HasStateMachineTimerTask(virtualDeadline, version+1))
 }
 
 func (s *mutableStateSuite) TestCHASMNodeSize() {
@@ -10036,8 +10075,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForExecutionsWithoutTimeSkipping", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
+		mockChasmTree.EXPECT().RequestTimerTaskRegenerationOnClose().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 
@@ -10051,8 +10089,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForNewlyInitializedTimeSkippingWithNoSkip", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
+		mockChasmTree.EXPECT().RequestTimerTaskRegenerationOnClose().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 
 		// Pre-sync: no TimeSkippingInfo, so the captured VT is nil. Capture as ApplyMutation/ApplySnapshot do.
@@ -10069,8 +10106,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("UnchangedVersionedTransitionDoesNotFlag", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
+		mockChasmTree.EXPECT().RequestTimerTaskRegenerationOnClose().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			LastUpdateVersionedTransition: timeSkippingVT(5),
@@ -10081,7 +10117,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 	s.Run("AdvancedVersionedTransitionFlags", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
 		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(1)
+		mockChasmTree.EXPECT().RequestTimerTaskRegenerationOnClose().Times(1)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			LastUpdateVersionedTransition: timeSkippingVT(6),
@@ -10091,10 +10127,10 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
 	})
 
-	s.Run("NotEffectiveForWorkflows", func() {
+	s.Run("WorkflowCHASMTreeIsFlagged", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
 		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(chasm.WorkflowArchetypeID)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
+		mockChasmTree.EXPECT().RequestTimerTaskRegenerationOnClose().Times(1)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			LastUpdateVersionedTransition: timeSkippingVT(6),
