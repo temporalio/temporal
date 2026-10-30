@@ -23,18 +23,19 @@ _Note that below, "Initialize history", "Append event to history", or "Persist M
 
 ```mermaid
 sequenceDiagram
-User Application->>Frontend: StartWorkflowExecution
-Frontend->> History: StartWorkflowExecution
-History ->> Persistence: CreateWorkflowExecution
-note over Persistence: Initialize History:<br>[WorkflowExecutionStarted, WorkflowTaskScheduled]<br>persist MutableState and Transfer Task
-Persistence ->> History: Create Succeed
-History->>Frontend: Start Succeed
-Frontend->>User Application: Start Succeed
-loop QueueProcessor
-    History->>Persistence: GetHistoryTasks
-		History->>History: ProcessTask
-		History->>Matching: AddWorkflowTask<br>
-end
+    autonumber
+    User Application->>Frontend: StartWorkflowExecution
+    Frontend->>History: StartWorkflowExecution
+    History->>Persistence: CreateWorkflowExecution
+    Note over Persistence: Initialize History:<br/>[WorkflowExecutionStarted, WorkflowTaskScheduled]<br/>persist MutableState and Transfer Task
+    Persistence->>History: Create Succeed
+    History->>Frontend: Start Succeed
+    Frontend->>User Application: Start Succeed
+    loop QueueProcessor
+        History->>Persistence: GetHistoryTasks
+        History->>History: ProcessTask
+        History->>Matching: AddWorkflowTask
+    end
 ```
 
 ```mermaid
