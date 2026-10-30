@@ -85,6 +85,9 @@ func (h *HistoryStore) AppendHistoryNodes(
 	}
 
 	treeInfoDataBlob := request.TreeInfo
+	// Both statements target the same tree_id but different tables (history_tree, history_node).
+	// LoggedBatch ensures atomicity across tables. ScyllaDB optimizes single-partition
+	// logged batches to unlogged internally, so no performance penalty on ScyllaDB.
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	batch.Query(v2templateInsertTree,
 		branchInfo.TreeId,
@@ -270,7 +273,10 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 
-	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	// UnloggedBatch: statements span history_tree and history_node tables (same tree_id
+	// partition key). Partial failure only leaves orphaned data that the scavenger cleans up.
+	// Avoids batchlog coordinator overhead on Cassandra; ScyllaDB already optimizes this.
+	batch := h.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
 
 	// delete each branch range
