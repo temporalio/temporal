@@ -8,9 +8,11 @@ on:
   push:
     branches:
       - main
+      - stephanos/testx-bump
     paths:
       - "common/testx/**"
       - "go.mod"
+      - ".github/workflows/testx-bump.yml"
   schedule:
     # Runs at 0800 UTC (night in the US) daily, to retry a failed or stuck bump and check the pin.
     - cron: "0 8 * * *"
@@ -93,7 +95,7 @@ jobs:
   # or its PR got stuck. Builds in this repo don't notice, since they use the replace.
   # Runs nightly (US time), when the bump for the day's testx changes should have landed.
   check-pin:
-    if: github.event_name != 'push'
+    if: github.event_name != 'push' || github.ref == 'refs/heads/stephanos/testx-bump'
     runs-on: ubuntu-latest
 
     steps:
