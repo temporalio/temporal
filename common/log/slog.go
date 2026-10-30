@@ -112,8 +112,8 @@ func withIncreasedSkip(logger Logger, skip int) Logger {
 		return l.Skip(skip)
 	case *throttledLogger:
 		return &throttledLogger{
-			limiter: l.limiter,
-			logger:  withIncreasedSkip(l.logger, skip),
+			limiters: l.limiters,
+			logger:   withIncreasedSkip(l.logger, skip),
 		}
 	case *withLogger:
 		return &withLogger{
