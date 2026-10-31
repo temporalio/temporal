@@ -164,6 +164,10 @@ func (c *ContextImpl) Lock(
 	return c.lock.Acquire(ctx, lockPriority, 1)
 }
 
+func (c *ContextImpl) TryLock(lockPriority locks.Priority) bool {
+	return c.lock.TryAcquire(lockPriority, 1)
+}
+
 func (c *ContextImpl) Unlock() {
 	c.lock.Release(1)
 }

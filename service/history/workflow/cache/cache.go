@@ -133,6 +133,7 @@ func NewHostLevelCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
+
 			if item.finalizer != nil {
 				wfKey := item.wfContext.GetWorkflowKey()
 				err := item.finalizer.Deregister(wfKey.String())
@@ -147,6 +148,23 @@ func NewHostLevelCache(
 			// We removed the finalizer callback before it ran, so this eviction now owns clearing
 			// the context. Without this, resources it holds, for example the bytes it reserved on the
 			// shared pagination buffer limiter would leak until process restart.
+			//
+			// A refCount of zero under lru.mut means no cache caller holds or waits on this workflow lock,
+			// so TryLock must succeed. Never block here: lru.mut is held, and the normal lock order is
+			// workflow lock then lru.mut. PriorityLow makes TryLock fail if any waiter is queued.
+			if !item.wfContext.TryLock(locks.PriorityLow) {
+				// The invariant is broken. Skip Clear rather than race with the lock holder; the
+				// context's reserved limiter bytes leak until restart.
+				wfKey := item.wfContext.GetWorkflowKey()
+				softassert.Fail(logger, "evicted workflow context is still locked",
+					tag.ComponentHistoryCache,
+					tag.WorkflowNamespaceID(wfKey.NamespaceID),
+					tag.WorkflowID(wfKey.WorkflowID),
+					tag.WorkflowRunID(wfKey.RunID),
+				)
+				return
+			}
+			defer item.wfContext.Unlock()
 			item.wfContext.Clear()
 		},
 	}
