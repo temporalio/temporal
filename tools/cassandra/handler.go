@@ -64,6 +64,8 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
+var createKeyspaceFn = doCreateKeyspace
+
 func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
@@ -76,7 +78,8 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	err = doCreateKeyspace(config, keyspace, logger)
+	config.Datacenter = keyspaceDatacenter(cli)
+	err = createKeyspaceFn(config, keyspace, logger)
 	if err != nil {
 		logger.Error("Unable to create keyspace.", tag.Error(err))
 		return err
@@ -121,6 +124,15 @@ func validateHealth(cli *cli.Context, logger log.Logger) error {
 
 	defer client.Close()
 	return nil
+}
+
+// keyspaceDatacenter returns the create-keyspace --datacenter value, falling back to the
+// global flag, which is also where CASSANDRA_DATACENTER is applied.
+func keyspaceDatacenter(cli *cli.Context) string {
+	if datacenter := cli.String(schema.CLIOptDatacenter); datacenter != "" {
+		return datacenter
+	}
+	return cli.GlobalString(schema.CLIOptDatacenter)
 }
 
 func doCreateKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error {
