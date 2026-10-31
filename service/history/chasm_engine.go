@@ -306,12 +306,38 @@ func (e *ChasmEngine) updateWithStartExecution(
 		return chasm.EngineUpdateWithStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for UpdateWithStartExecution")
 	}
 
+	if options.AssumeNew {
+		// Try the create first. On a conflict with an existing current run, fall through to the
+		// lookup-first path below, which handles the running and closed cases.
+		executionKey, newExecutionRef, created, err := e.startAndUpdateExecution(
+			ctx,
+			shardContext,
+			executionRef,
+			archetypeID,
+			startFn,
+			updateFn,
+			options,
+		)
+		if err == nil {
+			return chasm.EngineUpdateWithStartExecutionResult{
+				ExecutionKey: executionKey,
+				ExecutionRef: newExecutionRef,
+				Created:      created,
+			}, nil
+		}
+		if _, ok := errors.AsType[*persistence.CurrentWorkflowConditionFailedError](err); !ok {
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
+		}
+	}
+
 	_, executionLease, err := e.getExecutionLease(ctx, executionRef)
 	switch err.(type) {
 	case nil:
 		mutableState := executionLease.GetMutableState()
-		// A retry that already updated (or created) this running execution is rejected without running
-		// updateFn.
+		// A retry that already updated (or created) this running execution returns it without running
+		// updateFn again, the same way StartExecution returns the existing run for a retried start. This
+		// runs before the conflict policy check, so a retry succeeds even under
+		// BusinessIDConflictPolicyFail.
 		if updateTransitionOptions.RequestID != "" && mutableState.IsWorkflowExecutionRunning() {
 			used, err := e.isRequestIDUsed(shardContext.GetLogger(), mutableState, updateTransitionOptions)
 			if err != nil {
@@ -319,8 +345,31 @@ func (e *ChasmEngine) updateWithStartExecution(
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
 			if used {
+				existingRef := executionRef
+				existingRef.RunID = mutableState.GetWorkflowKey().RunID
 				executionLease.GetReleaseFn()(nil)
-				return chasm.EngineUpdateWithStartExecutionResult{}, chasm.ErrRequestIDAlreadyUsed
+				serializedRef, err := existingRef.Serialize(e.registry)
+				if err != nil {
+					return chasm.EngineUpdateWithStartExecutionResult{}, err
+				}
+				return chasm.EngineUpdateWithStartExecutionResult{
+					ExecutionKey: existingRef.ExecutionKey,
+					ExecutionRef: serializedRef,
+					Created:      false,
+				}, nil
+			}
+		}
+
+		// Updating a running execution reuses it, so the conflict policy must allow that.
+		if mutableState.IsWorkflowExecutionRunning() {
+			err := conflictPolicyAllowsUpdate(
+				executionRef.BusinessID,
+				currentExecutionInfoFromMutableState(mutableState),
+				options.ConflictPolicy,
+			)
+			if err != nil {
+				executionLease.GetReleaseFn()(nil)
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
 		}
 
@@ -1143,6 +1192,46 @@ func (e *ChasmEngine) handleExecutionConflict(
 	}
 }
 
+// newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
+// because the current run is still running.
+func newConflictPolicyFailErr(
+	businessID string,
+	currentRunInfo currentExecutionInfo,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	return chasm.NewExecutionAlreadyStartedErr(
+		fmt.Sprintf(
+			"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
+			businessID,
+			currentRunInfo.RunID,
+			conflictPolicy,
+		),
+		currentRunInfo.createRequestID,
+		currentRunInfo.RunID,
+	)
+}
+
+// conflictPolicyAllowsUpdate returns nil if the conflict policy lets UpdateWithStartExecution update the
+// running execution currentRunInfo describes, or the error to return instead.
+//
+// The switch deliberately has no default case, so the exhaustive linter flags it when a new
+// BusinessIDConflictPolicy is added; a value outside the enum falls through to the Internal error.
+func conflictPolicyAllowsUpdate(
+	businessID string,
+	currentRunInfo currentExecutionInfo,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	switch conflictPolicy {
+	case chasm.BusinessIDConflictPolicyUseExisting:
+		return nil
+	case chasm.BusinessIDConflictPolicyFail:
+		return newConflictPolicyFailErr(businessID, currentRunInfo, conflictPolicy)
+	case chasm.BusinessIDConflictPolicyTerminateExisting:
+		return serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not supported for UpdateWithStartExecution")
+	}
+	return serviceerror.NewInternalf("unknown business ID conflict policy: %v", conflictPolicy)
+}
+
 func (e *ChasmEngine) handleConflictPolicy(
 	_ context.Context,
 	_ historyi.ShardContext,
@@ -1152,15 +1241,10 @@ func (e *ChasmEngine) handleConflictPolicy(
 ) (chasm.StartExecutionResult, error) {
 	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
-			fmt.Sprintf(
-				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				newExecutionParams.executionRef.BusinessID,
-				currentRunInfo.RunID,
-				conflictPolicy,
-			),
-			currentRunInfo.createRequestID,
-			currentRunInfo.RunID,
+		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(
+			newExecutionParams.executionRef.BusinessID,
+			currentRunInfo,
+			conflictPolicy,
 		)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
 		// TODO: handle BusinessIDConflictPolicyTerminateExisting and update TestNewExecution_ConflictPolicy_TerminateExisting.

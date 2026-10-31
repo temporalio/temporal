@@ -2048,6 +2048,13 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	s.NoError(err)
 }
 
+// useExistingPolicy lets UpdateWithStartExecution update a running execution, which the default
+// BusinessIDConflictPolicyFail rejects.
+var useExistingPolicy = chasm.WithBusinessIDPolicy(
+	chasm.BusinessIDReusePolicyAllowDuplicate,
+	chasm.BusinessIDConflictPolicyUseExisting,
+)
+
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -2119,6 +2126,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId
 			return nil
 		},
+		useExistingPolicy,
 	)
 	s.NoError(err)
 
@@ -2134,7 +2142,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 
 // TestUpdateWithStartExecution_ExistingRunning_RequestIDDedup verifies that UpdateWithStart on a running
 // execution records its request ID as a start request ID (in the execution state, not the request IDs
-// data node) and rejects a retry with the same request ID without running updateFn again.
+// data node), and that a retry with the same request ID returns the existing run without running updateFn
+// again.
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestIDDedup() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -2182,6 +2191,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestI
 				return nil
 			},
 			chasm.WithStartRequestID(requestID),
+			useExistingPolicy,
 		)
 	}
 
@@ -2191,9 +2201,63 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestI
 	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 	s.Equal(1, updateCount)
 
-	_, err = updateWithStart()
-	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
+	// The retry returns the existing run, like a retried StartExecution, without running updateFn.
+	retryResult, err := updateWithStart()
+	s.NoError(err)
+	s.False(retryResult.Created)
+	s.Equal(tv.RunID(), retryResult.ExecutionKey.RunID)
+	retryRef, err := chasm.DeserializeComponentRef(retryResult.ExecutionRef)
+	s.NoError(err)
+	s.Equal(retryResult.ExecutionKey, retryRef.ExecutionKey)
 	s.Equal(1, updateCount, "updateFn must not run again for a reused request ID")
+}
+
+// TestUpdateWithStartExecution_ExistingRunning_RequestIDDedup_ConflictPolicyFail verifies that a retried
+// UpdateWithStart returns the existing run even under BusinessIDConflictPolicyFail, since the dedup check
+// runs before the conflict policy, as for a retried StartExecution.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_RequestIDDedup_ConflictPolicyFail() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	requestID := tv.RequestID()
+
+	state := s.buildPersistenceMutableState(
+		chasm.ExecutionKey{NamespaceID: executionKey.NamespaceID, BusinessID: executionKey.BusinessID, RunID: tv.RunID()},
+		&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	// The execution was created by this request ID.
+	state.ExecutionState.CreateRequestId = requestID
+	state.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+	}
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: tv.RunID()}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	// No UpdateWorkflowExecution or CreateWorkflowExecution.
+
+	result, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn should not be called when execution is running")
+			return nil, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Fail("updateFn should not run for a reused request ID")
+			return nil
+		},
+		chasm.WithStartRequestID(requestID),
+	)
+	s.NoError(err)
+	s.False(result.Created)
+	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 }
 
 // TestUpdateWithStartExecution_ExistingRunning_NoRequestID verifies that without a caller-supplied request
@@ -2240,6 +2304,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_NoReques
 				component.(*testComponent).ActivityInfo.ActivityId = fmt.Sprintf("act-%d", updateCount)
 				return nil
 			},
+			useExistingPolicy,
 		)
 		s.NoError(err)
 	}
@@ -2296,6 +2361,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_SetsCont
 			tc.ActivityInfo.ActivityId = updatedActivityID
 			return nil
 		},
+		useExistingPolicy,
 	)
 	s.NoError(err)
 	s.assertTestContextMetadata(requestCtx, updatedActivityID, "update-with-start-existing")
@@ -2413,6 +2479,359 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound_SetsContextMeta
 	)
 	s.NoError(err)
 	s.assertTestContextMetadata(requestCtx, newActivityID, "update-with-start-create")
+}
+
+// TestUpdateWithStartExecution_AssumeNew_NotFound verifies that with WithAssumeNew the execution is
+// created without looking up the current run first.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_NotFound() {
+	tv := testvars.New(s.T())
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	newActivityID := tv.Any().String()
+
+	// No GetCurrentExecution or GetWorkflowExecution: the create goes first.
+	var createdRunID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
+			createdRunID = request.NewWorkflowSnapshot.ExecutionState.RunId
+
+			newNode, ok := request.NewWorkflowSnapshot.ChasmNodes[""]
+			s.True(ok)
+			newActivityInfo := &persistencespb.ActivityInfo{}
+			s.NoError(serialization.Decode(newNode.Data, newActivityInfo))
+			s.Equal("updated-"+newActivityID, newActivityInfo.ActivityId)
+
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
+
+	result, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			return &testComponent{
+				ActivityInfo: &persistencespb.ActivityInfo{
+					ActivityId: newActivityID,
+				},
+			}, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId
+			return nil
+		},
+		chasm.WithAssumeNew(),
+	)
+	s.NoError(err)
+	s.True(result.Created)
+	s.Equal(createdRunID, result.ExecutionKey.RunID)
+
+	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
+	s.NoError(err)
+	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
+}
+
+// TestUpdateWithStartExecution_AssumeNew_ExistingRunning verifies that with WithAssumeNew a create that
+// conflicts with a running execution falls back to updating that execution.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_ExistingRunning() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	existingActivityID := tv.ActivityID()
+
+	gomock.InOrder(
+		s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(nil, &persistence.CurrentWorkflowConditionFailedError{
+				Msg:    "current workflow condition failed",
+				RunID:  tv.RunID(),
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			}).Times(1),
+		s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetCurrentExecutionResponse{
+				RunID: tv.RunID(),
+			}, nil).Times(1),
+		s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{
+				State: s.buildPersistenceMutableState(
+					chasm.ExecutionKey{
+						NamespaceID: executionKey.NamespaceID,
+						BusinessID:  executionKey.BusinessID,
+						RunID:       tv.RunID(),
+					},
+					&persistencespb.ActivityInfo{
+						ActivityId: existingActivityID,
+					},
+					enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					nil,
+				),
+			}, nil).Times(1),
+		s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *persistence.UpdateWorkflowExecutionRequest,
+			) (*persistence.UpdateWorkflowExecutionResponse, error) {
+				updatedNode, ok := request.UpdateWorkflowMutation.UpsertChasmNodes[""]
+				s.True(ok)
+				activityInfo := &persistencespb.ActivityInfo{}
+				s.NoError(serialization.Decode(updatedNode.Data, activityInfo))
+				s.Equal("updated-"+existingActivityID, activityInfo.ActivityId)
+				s.Nil(request.NewWorkflowSnapshot)
+				return tests.UpdateWorkflowExecutionResponse, nil
+			},
+		).Times(1),
+	)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
+
+	startFnCalls := 0
+	updateFnCalls := 0
+	result, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			startFnCalls++
+			return &testComponent{
+				ActivityInfo: &persistencespb.ActivityInfo{
+					ActivityId: tv.Any().String(),
+				},
+			}, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			updateFnCalls++
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId
+			return nil
+		},
+		chasm.WithAssumeNew(),
+		useExistingPolicy,
+	)
+	s.NoError(err)
+	s.False(result.Created)
+	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
+	// startFn and updateFn ran once on the discarded new execution; updateFn ran again on the existing one.
+	s.Equal(1, startFnCalls)
+	s.Equal(2, updateFnCalls)
+}
+
+// TestUpdateWithStartExecution_AssumeNew_CreateError verifies that with WithAssumeNew a create error other
+// than a current-run conflict is returned without falling back to the lookup.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_CreateError() {
+	tv := testvars.New(s.T())
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.TransactionSizeLimitError{Msg: "too large"}).Times(1)
+
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			return &testComponent{
+				ActivityInfo: &persistencespb.ActivityInfo{
+					ActivityId: tv.Any().String(),
+				},
+			}, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			return nil
+		},
+		chasm.WithAssumeNew(),
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+// expectRunningExecutionLookup mocks the current-run lookup and load of a running execution created by
+// createRequestID.
+func (s *chasmEngineSuite) expectRunningExecutionLookup(
+	key chasm.ExecutionKey,
+	createRequestID string,
+) {
+	state := s.buildPersistenceMutableState(
+		key,
+		&persistencespb.ActivityInfo{ActivityId: "existing"},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	state.ExecutionState.CreateRequestId = createRequestID
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: key.RunID}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+}
+
+// TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyFail verifies that under the default
+// BusinessIDConflictPolicyFail a running execution is not updated and ExecutionAlreadyStartedError is
+// returned, as StartExecution does.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyFail() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	createRequestID := tv.Any().String()
+	s.expectRunningExecutionLookup(chasm.ExecutionKey{
+		NamespaceID: executionKey.NamespaceID,
+		BusinessID:  executionKey.BusinessID,
+		RunID:       tv.RunID(),
+	}, createRequestID)
+	// No UpdateWorkflowExecution or CreateWorkflowExecution.
+
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn should not be called when execution is running")
+			return nil, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Fail("updateFn should not be called under BusinessIDConflictPolicyFail")
+			return nil
+		},
+	)
+	alreadyStarted, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err)
+	s.True(ok, "expected ExecutionAlreadyStartedError, got %v", err)
+	s.Equal(tv.RunID(), alreadyStarted.CurrentRunID)
+	s.Equal(createRequestID, alreadyStarted.CurrentRequestID)
+}
+
+// TestUpdateWithStartExecution_AssumeNew_ConflictPolicyFail verifies that with WithAssumeNew a create
+// that conflicts with a running execution still honors BusinessIDConflictPolicyFail after the fallback.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_AssumeNew_ConflictPolicyFail() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	createRequestID := tv.Any().String()
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.CurrentWorkflowConditionFailedError{
+			Msg:    "current workflow condition failed",
+			RunID:  tv.RunID(),
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		}).Times(1)
+	s.expectRunningExecutionLookup(chasm.ExecutionKey{
+		NamespaceID: executionKey.NamespaceID,
+		BusinessID:  executionKey.BusinessID,
+		RunID:       tv.RunID(),
+	}, createRequestID)
+
+	updateFnCalls := 0
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			return &testComponent{
+				ActivityInfo: &persistencespb.ActivityInfo{ActivityId: tv.Any().String()},
+			}, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			updateFnCalls++
+			return nil
+		},
+		chasm.WithAssumeNew(),
+	)
+	alreadyStarted, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err)
+	s.True(ok, "expected ExecutionAlreadyStartedError, got %v", err)
+	s.Equal(tv.RunID(), alreadyStarted.CurrentRunID)
+	// Only the discarded create ran updateFn; the running execution was not updated.
+	s.Equal(1, updateFnCalls)
+}
+
+// TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyTerminateExisting verifies that
+// BusinessIDConflictPolicyTerminateExisting is rejected as unimplemented, as StartExecution does.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_ConflictPolicyTerminateExisting() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	s.expectRunningExecutionLookup(chasm.ExecutionKey{
+		NamespaceID: executionKey.NamespaceID,
+		BusinessID:  executionKey.BusinessID,
+		RunID:       tv.RunID(),
+	}, tv.Any().String())
+
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn should not be called when execution is running")
+			return nil, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Fail("updateFn should not be called under BusinessIDConflictPolicyTerminateExisting")
+			return nil
+		},
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyTerminateExisting,
+		),
+	)
+	var unimplemented *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplemented)
+}
+
+// TestUpdateWithStartExecution_ExistingRunning_UnknownConflictPolicy verifies that a conflict policy
+// outside the enum is rejected as Internal instead of updating the running execution.
+func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning_UnknownConflictPolicy() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+	}
+	s.expectRunningExecutionLookup(chasm.ExecutionKey{
+		NamespaceID: executionKey.NamespaceID,
+		BusinessID:  executionKey.BusinessID,
+		RunID:       tv.RunID(),
+	}, tv.Any().String())
+	// No UpdateWorkflowExecution or CreateWorkflowExecution.
+
+	_, err := s.engine.UpdateWithStartExecution(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](executionKey),
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+			s.Fail("startFn should not be called when execution is running")
+			return nil, nil
+		},
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			s.Fail("updateFn should not be called for an unknown conflict policy")
+			return nil
+		},
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicy(99),
+		),
+	)
+	var internal *serviceerror.Internal
+	s.ErrorAs(err, &internal)
+	s.ErrorContains(err, "unknown business ID conflict policy")
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
@@ -2565,6 +2984,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
 		func(ctx chasm.MutableContext, component chasm.Component) error {
 			return expectedErr
 		},
+		useExistingPolicy,
 	)
 	s.ErrorIs(err, expectedErr)
 }
@@ -2691,6 +3111,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 			tc.ActivityInfo.ActivityId = "updated"
 			return nil
 		},
+		useExistingPolicy,
 	)
 	s.True(updateFnCalled, "updateFn should be called before version conflict is detected")
 	s.Error(err)
