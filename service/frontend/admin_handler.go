@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -94,6 +96,7 @@ type (
 		numberOfHistoryShards      int32
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
+		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
@@ -166,6 +169,7 @@ var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	historyHealthChecker := NewHealthChecker(
 		primitives.HistoryService,
@@ -184,6 +188,7 @@ func NewAdminHandler(
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
+		namespaceMutationExecutor:  namespaceMutationExecutor,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -1040,7 +1045,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 }
 
 func (adh *AdminHandler) ApplyNamespaceMutation(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 ) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -1062,22 +1067,29 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
-	if !request.GetShadow() {
-		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	// Shadow must expose the same feature prerequisite as authoritative applies.
+	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
+		comparisonReason = "global_namespace_disabled"
+		return nil, serviceerror.NewFailedPrecondition("global namespace replication is disabled on this cluster")
+	}
+	if request.GetRemovedPeer() && request.GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("removed_peer is only valid for authoritative updates")
 	}
 	if len(request.GetNamespaceTaskPayload()) == 0 {
 		comparisonReason = "missing_payload"
 		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
 	}
-	if len(request.GetShadowLegacyTaskPayload()) == 0 {
+	if request.GetShadow() && len(request.GetShadowLegacyTaskPayload()) == 0 {
 		comparisonReason = "missing_legacy_reference"
 		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
 	}
-	comparisonReason = "invalid_legacy_reference"
-	legacyTask = &replicationspb.NamespaceTaskAttributes{}
-	if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
-		legacyTask = nil
-		return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+	if request.GetShadow() {
+		comparisonReason = "invalid_legacy_reference"
+		legacyTask = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+			legacyTask = nil
+			return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+		}
 	}
 
 	payloadTask = &replicationspb.NamespaceTaskAttributes{}
@@ -1085,6 +1097,46 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		payloadTask = nil
 		comparisonOutcome, comparisonReason = "error", "invalid_payload"
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	if !request.GetShadow() {
+		// CHASM deliveries can arrive out of order. Persist a removal even when this
+		// peer has not received its earlier addition: the config version fences
+		// that delayed addition. Otherwise it can create stale membership after
+		// the source has stopped targeting this peer. Legacy never sets this marker.
+		if request.GetRemovedPeer() {
+			clusters := payloadTask.GetReplicationConfig().GetClusters()
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
+				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
+					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
+				}) {
+				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+			}
+			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
+		}
+		// Absorb transient Unavailable errors, including cell-wide metadata CAS
+		// contention and an UPDATE losing a missing-row CREATE race to an older
+		// snapshot. ExecuteWithOutcome converts that duplicate to Unavailable so
+		// the next attempt applies the newer update through apply-if-higher.
+		// Returning Unavailable signals a destination failure at the source and
+		// can open the shared destination circuit breaker, delaying other mutations.
+		// Each attempt rereads metadata; durable retries remain in CHASM.
+		policy := backoff.NewExponentialRetryPolicy(20 * time.Millisecond).
+			WithBackoffCoefficient(2).
+			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
+		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+		}, policy, func(err error) bool {
+			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
+			return retryable
+		})
+		if err != nil {
+			return nil, err
+		}
+		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
+		if err != nil {
+			return nil, err
+		}
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 	}
 	// Compare the byte payloads after decoding with the same schema. The typed
 	// gRPC field can encode unknown map fields in a different order.
@@ -1107,6 +1159,26 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
 	}, nil
+}
+
+// Three total receiver attempts bound transient retries within the RPC deadline.
+const namespaceMutationApplyMaxAttempts = 3
+
+func namespaceMutationResponseOutcome(outcome nsreplication.ApplyOutcome) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
+	switch outcome {
+	case nsreplication.ApplyOutcomeCreated:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, nil
+	case nsreplication.ApplyOutcomeApplied:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, nil
+	case nsreplication.ApplyOutcomeNoOpStale:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE, nil
+	case nsreplication.ApplyOutcomeDuplicate:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE, nil
+	case nsreplication.ApplyOutcomeNotAdmitted:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED, nil
+	default:
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
+	}
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.

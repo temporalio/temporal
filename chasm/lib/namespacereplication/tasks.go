@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
@@ -21,8 +22,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
@@ -39,6 +42,7 @@ type applyLocalTaskHandlerOptions struct {
 	ClusterMetadata cluster.Metadata
 	Config          *config
 	Logger          log.Logger
+	TestHooks       testhooks.TestHooks
 	MetricsHandler  metrics.Handler
 	EventLogger     otellog.Logger
 	DynamicConfig   *dynamicconfig.Collection
@@ -47,6 +51,7 @@ type applyLocalTaskHandlerOptions struct {
 type applyLocalTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*namespacereplicationpb.ApplyLocalTask]
 
+	testHooks                    testhooks.TestHooks
 	metadataManager              persistence.MetadataManager
 	currentCluster               string
 	config                       *config
@@ -75,6 +80,7 @@ const (
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
+		testHooks:                    opts.TestHooks,
 		metadataManager:              opts.MetadataManager,
 		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
 		config:                       opts.Config,
@@ -103,12 +109,12 @@ func (h *applyLocalTaskHandler) Validate(
 }
 
 // Execute writes authoritative mutations to the local metadata store with
-// strict version-CAS and skips that write for shadow mutations. Ambiguous
-// authoritative results are reconciled against current namespace state and
-// retried with a durable timer. A newer namespace version fences an UPDATE
-// whose exact outcome can no longer be determined; later mutations converge
-// current peers, while a peer removed only by the fenced mutation may require
-// operator repair.
+// strict version-CAS. Shadow and replicate-only mutations skip the local write;
+// only shadow also suppresses destination writes. Ambiguous authoritative
+// results are reconciled against current namespace state and retried with a
+// durable timer. A newer namespace version fences an UPDATE whose exact outcome
+// can no longer be determined; later mutations converge current peers, while a
+// peer removed only by the fenced mutation may require operator repair.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -122,6 +128,7 @@ func (h *applyLocalTaskHandler) Execute(
 		ExpectedVer       int64
 		IsGlobalNamespace bool
 		Shadow            bool
+		ReplicateOnly     bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -134,6 +141,7 @@ func (h *applyLocalTaskHandler) Execute(
 				ExpectedVer:       m.GetExpectedVersion(),
 				IsGlobalNamespace: m.GetIsGlobalNamespace(),
 				Shadow:            m.GetShadow(),
+				ReplicateOnly:     m.GetReplicateOnly(),
 			}, nil
 		},
 		nil,
@@ -153,10 +161,18 @@ func (h *applyLocalTaskHandler) Execute(
 	if loaded.Shadow {
 		return h.resolveLocal(ctx, ref, task, true)
 	}
+	if loaded.ReplicateOnly {
+		// A replicate-only mutation represents a legacy no-op UpdateNamespace: the
+		// source row is already the desired snapshot, but peer fan-out must still
+		// run authoritatively. Resolve the local phase as committed while keeping
+		// Shadow false so ApplyPeerTask writes the snapshot at destinations.
+		return h.resolveLocal(ctx, ref, task, false)
+	}
 
-	// The metadata write and component transition cannot share a transaction, so
-	// reconcile ambiguous write results before deciding whether to fail or commit
-	// the component.
+	// Apply to the local metadata store. The metadata write and the component
+	// transition cannot share a transaction, so an ambiguous write result is
+	// reconciled against the persisted namespace before deciding whether to fail
+	// or commit the component.
 	var applyErr error
 	switch loaded.Operation {
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
@@ -245,7 +261,6 @@ func (h *applyLocalTaskHandler) Execute(
 			return fmt.Errorf("unknown local namespace mutation resolution: %v", resolution)
 		}
 	}
-
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
 	// so complete the component in the same update. This is a separate transition
@@ -253,6 +268,12 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
+	namespaceName := namespace.Name(loaded.Detail.GetInfo().GetName())
+	if fault, ok := testhooks.Get(h.testHooks, testhooks.NamespaceReplicationBeforeLocalCommit, namespaceName); ok {
+		if err := fault(ctx); err != nil {
+			return err
+		}
+	}
 	return h.resolveLocal(ctx, ref, task, false)
 }
 
@@ -814,14 +835,18 @@ func (h *applyPeerTaskHandler) Execute(
 	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
 	defer cancel()
 	request := PeerApplyRequest{
-		SourceCluster:           h.currentCluster,
-		ComponentBusinessID:     ref.BusinessID,
-		ComponentRunID:          ref.RunID,
-		AttemptCount:            task.GetAttempt() + 1,
-		TargetCluster:           task.GetTargetCell(),
-		Operation:               loaded.Operation,
-		Detail:                  loaded.Detail,
-		Shadow:                  loaded.Shadow,
+		SourceCluster:       h.currentCluster,
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		AttemptCount:        task.GetAttempt() + 1,
+		TargetCluster:       task.GetTargetCell(),
+		Operation:           loaded.Operation,
+		Detail:              loaded.Detail,
+		Shadow:              loaded.Shadow,
+		// Targets are the union of previous and new membership. A target absent
+		// from the new list must retain the removal snapshot to fence older adds.
+		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
+			!slices.Contains(loaded.Detail.GetReplicationConfig().GetClusters(), task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)
