@@ -28,7 +28,7 @@ type RecordHeartbeatRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// The public heartbeat request, forwarded by Matching for this group.
+	// The public heartbeat request, forwarded by Frontend for this group.
 	// All worker heartbeats must have the specified worker_grouping_key.
 	FrontendRequest *v1.RecordWorkerHeartbeatRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
 	// SDK grouping key, used as the worker state machine's CHASM Business ID.
@@ -91,7 +91,7 @@ func (x *RecordHeartbeatRequest) GetWorkerGroupingKey() string {
 // RecordHeartbeatResponse is the response for recording a worker heartbeat.
 type RecordHeartbeatResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The public heartbeat response to return through Matching and Frontend.
+	// The public heartbeat response to return through Frontend.
 	FrontendResponse *v1.RecordWorkerHeartbeatResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache

@@ -28,7 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerServiceClient interface {
 	// RecordHeartbeat updates worker metadata and renews the group's shared lease.
-	// Called by Matching for workers with the same grouping key.
+	// Called by Frontend for workers with the same grouping key.
 	RecordHeartbeat(ctx context.Context, in *RecordHeartbeatRequest, opts ...grpc.CallOption) (*RecordHeartbeatResponse, error)
 }
 
@@ -54,7 +54,7 @@ func (c *workerServiceClient) RecordHeartbeat(ctx context.Context, in *RecordHea
 // for forward compatibility
 type WorkerServiceServer interface {
 	// RecordHeartbeat updates worker metadata and renews the group's shared lease.
-	// Called by Matching for workers with the same grouping key.
+	// Called by Frontend for workers with the same grouping key.
 	RecordHeartbeat(context.Context, *RecordHeartbeatRequest) (*RecordHeartbeatResponse, error)
 	mustEmbedUnimplementedWorkerServiceServer()
 }
