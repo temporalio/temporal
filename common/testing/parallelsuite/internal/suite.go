@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
@@ -59,7 +60,6 @@ func (s contextScope) Context() context.Context {
 // directly OR create subtests via Run — not both.
 type Suite[T TestingSuite] struct {
 	testifyBase
-	await.Suite[T]
 	*require.Assertions
 
 	guardT      guardT
@@ -98,9 +98,6 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	}
 	s.assertT = assertT
 	s.Assertions = require.New(assertT)
-	s.Suite = await.NewSuite(s, func(at *await.T) T {
-		return s.copySuite(t, false, at, at.Context()).(T)
-	})
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
@@ -137,6 +134,23 @@ func (s *Suite[T]) Context() context.Context {
 	return testcontext.For(s.T())
 }
 
+// Rcv waits for and returns the next value from ch.
+// A closed ch yields the zero value, as with a plain receive.
+// It fails the test if the context ends before ch produces a value.
+func (s *Suite[T]) Rcv[V any](ch <-chan V) V {
+	t := s.T()
+	t.Helper()
+	return await.Rcv(t, ch)
+}
+
+// Snd waits to send value to ch.
+// It fails the test if the context ends or ch closes before accepting the value.
+func (s *Suite[T]) Snd[V any](ch chan<- V, value V) {
+	t := s.T()
+	t.Helper()
+	await.Snd(t, ch, value)
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
@@ -155,6 +169,31 @@ func (s *Suite[T]) run(name string, parallel bool, fn func(T)) bool {
 	return pt.Run(name, func(t *testing.T) {
 		fn(s.copySuite(t, parallel, nil, nil).(T))
 	})
+}
+
+// Await calls fn repeatedly until all assertions pass or timeout is reached.
+func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
+	s.Awaitf(fn, timeout, interval, "")
+}
+
+// Awaitf is like [Await] but includes a format string appended to the failure message.
+func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
+	t := s.T()
+	await.Requiref(s.Context(), t, func(at *await.T) {
+		fn(s.copySuite(t, false, at, at.Context()).(T))
+	}, timeout, interval, msg, args...)
+}
+
+// AwaitTrue calls fn repeatedly until it returns true or timeout is reached.
+//
+// Use it for simple local predicates only. Do not use assertions or side effects; use [Await] instead.
+func (s *Suite[T]) AwaitTrue(fn func() bool, timeout, interval time.Duration) {
+	s.AwaitTruef(fn, timeout, interval, "")
+}
+
+// AwaitTruef is like [AwaitTrue] but includes a format string appended to the failure message.
+func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, msg string, args ...any) {
+	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
