@@ -33,6 +33,7 @@ included.
 
 | Tag                           | Integration                   | Dependencies it brings in |
 | ----------------------------- | ----------------------------- | ------------------------- |
+| `temporal_with_cassandra`     | Cassandra persistence         | Cassandra driver          |
 | `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
 | `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
 

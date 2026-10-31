@@ -144,8 +144,12 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	}
 
 	cluster.ProtoVersion = 4
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
+	cluster.Consistency = getConsistency(cfg.Consistency)
+	serialConsistency, err := getSerialConsistency(cfg.Consistency)
+	if err != nil {
+		return err
+	}
+	cluster.SerialConsistency = serialConsistency
 	cluster.DisableInitialHostLookup = cfg.DisableInitialHostLookup
 
 	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{

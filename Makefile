@@ -537,6 +537,7 @@ comma := ,
 # end of the variable name is set. Each temporal_with_* tag needs one.
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
+EXCLUDED_PACKAGES_temporal_with_cassandra := github.com/gocql/gocql
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
