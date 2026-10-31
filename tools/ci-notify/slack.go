@@ -130,7 +130,7 @@ func formatPercentagePointComparison(current, previous float64, available bool) 
 	if difference <= successRateComparisonTolerance {
 		return formatComparison(0, "")
 	}
-	return formatComparison(cmp.Compare(current, previous), fmt.Sprintf("%.1f pp", difference))
+	return formatComparison(cmp.Compare(current, previous), fmt.Sprintf("%.1f%%", difference))
 }
 
 func formatDurationComparison(current, previous time.Duration, available bool) string {

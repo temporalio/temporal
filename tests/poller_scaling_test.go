@@ -18,6 +18,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
@@ -89,7 +91,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, resp.PollerScalingDecision)
-		require.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+		require.Equal(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
@@ -146,7 +148,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 	nexusResp, err := feClient.PollNexusTaskQueue(s.Context(), &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: env.Namespace().String(),
@@ -411,4 +413,329 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
 	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+}
+
+// The following tests cover the hold and scale-down branches of the poller scaling decision. Each
+// opts into the poller_scale_decision metric so the reason behind a decision (or a withheld one) can
+// be asserted, not just its presence.
+
+func (s *PollerScalingIntegSuite) TestPollerScalingScaleDownWhenIdle() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 200*time.Millisecond),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	resp := s.startWorkflowAfterPollerWait(env, tq, 400*time.Millisecond)
+	s.NotNil(resp.PollerScalingDecision)
+	s.Equal(int32(-1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle), 1)
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingNoScaleDownForBacklogTasks() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+		// Every poll waits at least zero, so any task not exempted from scale-down would get a -1.
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, time.Duration(0)),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	const numTasks = 5
+	s.startBacklog(env, tq, numTasks)
+
+	scaleUps := 0
+	for range numTasks {
+		resp := s.pollWorkflowTask(env, tq)
+		s.NotEmpty(resp.GetTaskToken())
+		if d := resp.GetPollerScalingDecision(); d != nil {
+			s.NotEqual(int32(-1), d.PollRequestDeltaSuggestion, "backlog tasks must never suggest scaling down")
+			if d.PollRequestDeltaSuggestion == 1 {
+				scaleUps++
+			}
+		}
+	}
+	// The backlog is older than the scale-up threshold, so the delay signal should fire at least once.
+	s.GreaterOrEqual(scaleUps, 1)
+	s.Zero(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle))
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsRateLimited() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+		// Low enough that the limiter's burst can't cover a single decision.
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingDecisionsPerSecond, 0.001),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	const numTasks = 5
+	s.startBacklog(env, tq, numTasks)
+
+	nonNil := 0
+	for range numTasks {
+		resp := s.pollWorkflowTask(env, tq)
+		s.NotEmpty(resp.GetTaskToken())
+		if resp.GetPollerScalingDecision() != nil {
+			nonNil++
+		}
+	}
+	s.Zero(nonNil)
+	s.Equal(numTasks, pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited))
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingHoldsWhenTaskQueueRateLimited() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Rate limits are only allowed on activity queues.
+	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     env.Namespace().String(),
+		Identity:      "test",
+		TaskQueue:     tq,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: 1},
+			Reason:    "poller scaling test",
+		},
+	})
+	s.NoError(err)
+
+	// Wait for the limit to be in effect before building the backlog. Otherwise the activities
+	// could be dispatched unthrottled and the queue would never report rate limiting.
+	s.Await(func(s *PollerScalingIntegSuite) {
+		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportConfig:  true,
+		})
+		s.NoError(err)
+		s.InDelta(1, res.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond(), 1e-6)
+	}, 20*time.Second, 100*time.Millisecond)
+
+	// Build an activity backlog by scheduling activities from a single workflow task.
+	const numActivities = 10
+	_, err = env.SdkClient().ExecuteWorkflow(
+		s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	wfResp := s.pollWorkflowTask(env, tq)
+	s.NotEmpty(wfResp.GetTaskToken())
+	commands := make([]*commandpb.Command, 0, numActivities)
+	for i := range numActivities {
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:          fmt.Sprintf("%v", i),
+				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:               payloads.EncodeString("test-input"),
+				StartToCloseTimeout: durationpb.New(time.Minute),
+			}},
+		})
+	}
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: wfResp.TaskToken,
+		Commands:  commands,
+	})
+	s.NoError(err)
+
+	// Dispatch is capped at 1 RPS, so polls block on the rate limiter and the queue reports rate limiting
+	// as active. A backlog that adding pollers can't drain any faster must not produce a scale-up.
+	// The rate-limited tracker is a sliding window, so assert on the metric rather than per-poll timing.
+	s.Await(func(s *PollerScalingIntegSuite) {
+		// Bound each poll so an empty queue can't block past the Await timeout.
+		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+		resp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		s.NoError(err)
+		s.NotEmpty(resp.GetTaskToken())
+		s.Positive(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited))
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2Off() {
+	s.testPollerScalingNexusRatioScaleUp(false)
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingNexusRatioScaleUp_SignalsV2On() {
+	s.testPollerScalingNexusRatioScaleUp(true)
+}
+
+// Nexus tasks are never backlogged, so the ratio signal is what scales up Nexus pollers. The delay
+// signal is disabled here so a scale-up can only come from the ratio signal.
+func (s *PollerScalingIntegSuite) testPollerScalingNexusRatioScaleUp(useSignalsV2 bool) {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnablePollerScalingDecisionMetrics, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingUseSignalsV2ForPollerScaling, useSignalsV2),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp, time.Hour),
+	)
+	capture := env.StartNamespaceMetricCapture()
+	tq := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+
+	_, err := env.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: env.Namespace().String(),
+						TaskQueue: tq,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Queue a few workflows; each attempt below consumes one workflow task.
+	for range 5 {
+		_, err := env.SdkClient().ExecuteWorkflow(
+			s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.NoError(err)
+	}
+
+	// Schedule a batch of Nexus operations with no Nexus poller present. Retry because the new
+	// endpoint isn't visible to history immediately.
+	const numOperations = 10
+	input := testcore.MustToPayload(s.T(), "input")
+	s.Await(func(s *PollerScalingIntegSuite) {
+		resp := s.pollWorkflowTask(env, tq)
+		s.NotEmpty(resp.GetTaskToken())
+		commands := make([]*commandpb.Command, 0, numOperations)
+		for range numOperations {
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     input,
+					},
+				},
+			})
+		}
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: resp.TaskToken,
+			Commands:  commands,
+		})
+		s.NoError(err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Operations are added faster than this single poller takes them, so the ratio signal fires.
+	// Poll until a decision comes back, since the operations reach matching asynchronously.
+	s.Await(func(s *PollerScalingIntegSuite) {
+		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		s.NoError(err)
+		s.NotEmpty(resp.GetTaskToken())
+		s.NotNil(resp.GetPollerScalingDecision())
+		s.Equal(int32(1), resp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
+	}, 30*time.Second, 100*time.Millisecond)
+
+	s.GreaterOrEqual(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio), 1)
+	s.Zero(pollerScaleDecisionCount(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay))
+}
+
+// startBacklog starts n workflows with no pollers present and waits until their tasks are persisted, so
+// they are later dispatched from the DB backlog rather than sync-matched.
+func (s *PollerScalingIntegSuite) startBacklog(env *testcore.TestEnv, tq string, n int) {
+	for range n {
+		_, err := env.SdkClient().ExecuteWorkflow(
+			s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.NoError(err)
+	}
+	s.Await(func(s *PollerScalingIntegSuite) {
+		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
+		})
+		s.NoError(err)
+		s.GreaterOrEqual(res.GetStats().GetApproximateBacklogCount(), int64(n))
+	}, 20*time.Second, 100*time.Millisecond)
+}
+
+func (s *PollerScalingIntegSuite) pollWorkflowTask(env *testcore.TestEnv, tq string) *workflowservice.PollWorkflowTaskQueueResponse {
+	resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	return resp
+}
+
+// startWorkflowAfterPollerWait starts a workflow poller on an empty queue, waits at least wait, then
+// starts a workflow so its task sync-matches to that poller, and returns the poll response.
+func (s *PollerScalingIntegSuite) startWorkflowAfterPollerWait(env *testcore.TestEnv, tq string, wait time.Duration) *workflowservice.PollWorkflowTaskQueueResponse {
+	const identity = "idle-poller"
+	// Assert on the poll result in the test goroutine, not the poller's, so a failure there can't
+	// report on a test that has already finished.
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+	resCh := make(chan pollResult, 1)
+	go func() {
+		resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  identity,
+		})
+		resCh <- pollResult{resp: resp, err: err}
+	}()
+
+	s.Await(func(s *PollerScalingIntegSuite) {
+		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		s.NoError(err)
+		found := false
+		for _, p := range res.GetPollers() {
+			found = found || p.GetIdentity() == identity
+		}
+		s.True(found)
+	}, 10*time.Second, 50*time.Millisecond)
+	time.Sleep(wait) //nolint:forbidigo // the poll has to wait past PollerScalingWaitTime to look idle
+
+	_, err := env.SdkClient().ExecuteWorkflow(
+		s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	select {
+	case res := <-resCh:
+		s.NoError(res.err)
+		s.NotEmpty(res.resp.GetTaskToken())
+		return res.resp
+	case <-s.Context().Done():
+		s.FailNow("poll did not return")
+		return nil
+	}
+}
+
+func pollerScaleDecisionCount(capture *testcore.NamespaceMetricCapture, decision string, reason metrics.ReasonString) int {
+	return len(capture.CollectMetric(metrics.PollerScaleDecisionCounter.Name(), func(rec *metricstest.CapturedRecording) bool {
+		return rec.Tags["decision"] == decision && rec.Tags["reason"] == string(reason)
+	}))
 }
