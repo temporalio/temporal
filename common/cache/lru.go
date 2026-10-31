@@ -183,7 +183,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 // NewLRU creates a new LRU cache of the given size, setting initial capacity
 // to the max size
 func NewLRU(maxSize int, handler metrics.Handler) StoppableCache {
-	return New(maxSize, nil)
+	return NewWithMetrics(maxSize, nil, handler)
 }
 
 // Get retrieves the value stored under the given key
