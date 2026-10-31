@@ -177,7 +177,7 @@ GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
 GOTESTSUM = $(call mise-tool,gotestsum,go:gotest.tools/gotestsum)
 API_LINTER = $(call mise-tool,api-linter,go:github.com/googleapis/api-linter/cmd/api-linter)
 BUF = $(call mise-tool,buf,go:github.com/bufbuild/buf/cmd/buf)
-PROTOGEN = $(call mise-tool,protogen,go:go.temporal.io/api/cmd/protogen)
+PROTOGEN = $(shell go tool -n protogen)
 ACTIONLINT = $(call mise-tool,actionlint,go:github.com/rhysd/actionlint/cmd/actionlint)
 WORKFLOWCHECK = $(call mise-tool,workflowcheck,go:go.temporal.io/sdk/contrib/tools/workflowcheck)
 NILAWAY = $(call mise-tool,nilaway,go:go.uber.org/nilaway/cmd/nilaway)
@@ -188,9 +188,9 @@ ERRORTYPE = $(call mise-tool,errortype,go:fillmore-labs.com/errortype)
 MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
 PROTOC = $(call mise-tool,protoc,protoc)
 PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd/protoc-gen-go)
-PROTOC_GEN_GO_CHASM = $(shell mise exec go -- go tool -n protoc-gen-go-chasm)
+PROTOC_GEN_GO_CHASM = $(shell go tool -n protoc-gen-go-chasm)
 PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/grpc/cmd/protoc-gen-go-grpc)
-PROTOC_GEN_GO_HELPERS = $(call mise-tool,protoc-gen-go-helpers,go:go.temporal.io/api/cmd/protoc-gen-go-helpers)
+PROTOC_GEN_GO_HELPERS = $(shell go tool -n protoc-gen-go-helpers)
 SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 
 ##### Proto #####
@@ -735,7 +735,7 @@ update-dependencies-major:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
-	@mise exec go go:go.uber.org/mock/mockgen go:golang.org/x/tools/cmd/goimports go:golang.org/x/tools/cmd/stringer go:github.com/hexdigest/gowrap/cmd/gowrap -- go generate ./...
+	@mise exec -- go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
