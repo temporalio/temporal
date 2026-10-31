@@ -383,6 +383,18 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 		noSkippingReason = "has pending nexus operations"
 		return false
 	}
+	if ms.ChasmEnabled() {
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+		if err != nil {
+			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+			ms.logger.Error("failed to check CHASM workflow time skipping eligibility", tag.Error(err))
+			return false
+		}
+		if !wf.IsExecutionSkippable(chasmCtx) {
+			noSkippingReason = "has pending CHASM nexus operations"
+			return false
+		}
+	}
 	if len(ms.GetPendingChildExecutionInfos()) > 0 {
 		noSkippingReason = "has pending child execution"
 		return false
