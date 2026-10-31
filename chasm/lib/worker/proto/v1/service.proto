@@ -10,7 +10,7 @@ option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerp
 // WorkerService provides internal RPCs for the worker state machine.
 service WorkerService {
   // RecordHeartbeat updates worker metadata and renews the group's shared lease.
-  // Called by Matching for workers with the same grouping key.
+  // Called by Frontend for workers with the same grouping key.
   rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "worker_grouping_key";
   }
