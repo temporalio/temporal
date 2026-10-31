@@ -41,6 +41,16 @@ type TimeSkippingRuntimeGate interface {
 	IsExecutionSkippable(ctx Context) bool
 }
 
+type TimeSkippingTargetSelector interface {
+	// Optionally implemented by the root node of a chasm tree.
+	// By default in time skipping, the framework iterate all pending chasm tasks find the next one in the future.
+	// If a root node decides to implements this interface, it will override the default behavior.
+	//
+	// Tasks that are invalid or not-scheduled shouldn't be returned.
+	// Fast-forward limit is handled in framework and shouldn't be considered here.
+	FindSkipToTarget(ctx Context) TimeSkippingTransition
+}
+
 // PropagateTimeSkippingToOtherExecution snapshots time-skipping state for a new, independent
 // execution that shares the source execution's virtual clock, such as a child workflow or a
 // workflow started by a schedule.
