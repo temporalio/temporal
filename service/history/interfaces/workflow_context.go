@@ -31,6 +31,7 @@ type (
 		Clear()
 
 		Lock(ctx context.Context, lockPriority locks.Priority) error
+		TryLock(lockPriority locks.Priority) bool
 		Unlock()
 
 		IsDirty() bool
