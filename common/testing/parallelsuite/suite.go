@@ -122,8 +122,6 @@ func (s *Suite[T]) AssertionT() require.TestingT {
 
 // Context returns the test-scoped context (created from [testcontext]).
 // Inside an [Await] callback, it returns the await-scoped context.
-//
-// The result is deliberately not cached; see [testcontext.EnsureRemaining].
 func (s *Suite[T]) Context() context.Context {
 	if s.ctx != nil {
 		return s.ctx
