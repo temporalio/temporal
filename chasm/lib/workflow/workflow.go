@@ -78,6 +78,13 @@ func (w *Workflow) IsExecutionSkippable(_ chasm.Context) bool {
 	return w.pendingNexusOperationCount() == 0
 }
 
+// currently only a part of workflow is in chasm, this method is provided temporarily
+// to be called in the time skipping path of workflow in mutable state
+func (w *Workflow) FindSkipToTarget(ctx chasm.Context) chasm.TimeSkippingTransition {
+	// #todo: if a feature is migrated from workflow to chasm
+	return *chasm.NewTimeSkippingTransition(ctx.Now(w))
+}
+
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
 	return nil
