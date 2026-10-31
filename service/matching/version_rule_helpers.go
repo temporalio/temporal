@@ -608,7 +608,7 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the passed id
 func calcRampThreshold(id string) float64 {
 	if id == "" {
-		return rand.Float64()
+		return 100 * rand.Float64()
 	}
 	h := farm.Fingerprint32([]byte(id))
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))

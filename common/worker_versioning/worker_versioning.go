@@ -971,7 +971,7 @@ func PickFinalCurrentAndRamping(
 // passed id. If id is empty, a random threshold is returned.
 func calcRampThreshold(id string) float64 {
 	if id == "" {
-		return rand.Float64()
+		return 100 * rand.Float64()
 	}
 	h := farm.Fingerprint32([]byte(id))
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
