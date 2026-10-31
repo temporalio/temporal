@@ -191,6 +191,10 @@ func (lc *loopContext) check(ctx context.Context, check pingable.Check) {
 
 		lc.dd.detected(check.Name)
 
+		if check.OnTimeout != nil {
+			check.OnTimeout()
+		}
+
 		// Wait and see if Ping() returns past the timeout. If it's a true deadlock, it'll
 		// block here forever.
 		<-resolved

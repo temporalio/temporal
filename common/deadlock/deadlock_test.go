@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/testing/await"
 )
 
 type blockingPingable struct{ done chan struct{} }
@@ -74,4 +75,67 @@ func TestCurrentCounterAndGauge(t *testing.T) {
 		require.Equal(collect, 0.0, current[1].Value)
 		require.Len(collect, counter, 1)
 	}, 2*time.Second, time.Millisecond)
+}
+
+func TestOnTimeoutRunsOnceWhenPingBlocks(t *testing.T) {
+	dd := NewDeadlockDetector(params{
+		Logger:         log.NewNoopLogger(),
+		Collection:     dynamicconfig.NewNoopCollection(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+	})
+	lc := &loopContext{
+		dd:   dd,
+		p:    goro.NewAdaptivePool(clock.NewRealTimeSource(), 0, 1, 10*time.Millisecond, 10),
+		root: nil,
+	}
+	defer lc.p.Stop()
+
+	done := make(chan struct{})
+	timedOut := make(chan struct{}, 2)
+	check := pingable.Check{
+		Name:    "test",
+		Timeout: 10 * time.Millisecond,
+		Ping: func() []pingable.Pingable {
+			<-done
+			return nil
+		},
+		OnTimeout: func() { timedOut <- struct{}{} },
+	}
+	go lc.check(t.Context(), check)
+
+	select {
+	case <-timedOut:
+	case <-time.After(10 * time.Second):
+		t.Fatal("OnTimeout was not called for a ping that exceeded its timeout")
+	}
+	close(done)
+	await.RequireTrue(t, func() bool { return dd.CurrentSuspected() == 0 }, 5*time.Second, 10*time.Millisecond)
+	require.Empty(t, timedOut, "OnTimeout must run once")
+}
+
+func TestOnTimeoutNotCalledWhenPingReturnsInTime(t *testing.T) {
+	dd := NewDeadlockDetector(params{
+		Logger:         log.NewNoopLogger(),
+		Collection:     dynamicconfig.NewNoopCollection(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+	})
+	lc := &loopContext{
+		dd:   dd,
+		p:    goro.NewAdaptivePool(clock.NewRealTimeSource(), 0, 1, 10*time.Millisecond, 10),
+		root: nil,
+	}
+	defer lc.p.Stop()
+
+	timedOut := make(chan struct{}, 1)
+	check := pingable.Check{
+		Name:      "test",
+		Timeout:   time.Minute,
+		Ping:      func() []pingable.Pingable { return nil },
+		OnTimeout: func() { timedOut <- struct{}{} },
+	}
+	// check stops the timeout timer as soon as Ping returns, so with a one-minute timeout and
+	// an immediate Ping the callback can never fire.
+	lc.check(t.Context(), check)
+	require.Empty(t, timedOut)
+	require.Equal(t, int64(0), dd.CurrentSuspected())
 }
