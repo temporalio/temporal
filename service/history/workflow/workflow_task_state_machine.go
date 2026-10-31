@@ -330,7 +330,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
 		workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		createWorkflowTaskScheduledEvent = true
-		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
+		if err := m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch()); err != nil {
+			return nil, err
+		}
 	}
 	if m.ms.IsTransientWorkflowTask() {
 		// TODO: ideally this should be the version of the last started workflow task.

@@ -26,6 +26,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
@@ -2038,6 +2039,72 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true, s.logger)
 	s.NoError(err)
 	s.Empty(appliedEvents) // Event should be skipped
+}
+
+func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_UpdateCallbacksSkipCHASMReference() {
+	const (
+		updateID  = "update-id"
+		requestID = "request-id"
+	)
+	callbacks := []*commonpb.Callback{{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: "http://example.com"},
+		},
+	}}
+	event := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				WorkflowUpdateOptions: []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+					UpdateId:                    updateID,
+					AttachedRequestId:           requestID,
+					AttachedCompletionCallbacks: callbacks,
+				}},
+			},
+		},
+	}
+
+	ms := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	ms.EXPECT().ChasmEnabled().Return(true)
+	chasmCtx := &chasm.MockContext{}
+	wf := &chasmworkflow.Workflow{
+		Updates: chasm.Map[string, *chasmworkflow.WorkflowUpdate]{
+			updateID: chasm.NewComponentField(&chasm.MockMutableContext{}, &chasmworkflow.WorkflowUpdate{
+				UpdateState: &chasmworkflowpb.UpdateState{
+					UpdateId: updateID,
+					CallbackAttachmentEventReferences: map[string]*chasmworkflowpb.CallbackAttachmentEventReference{
+						requestID: {
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+							EventId:   101,
+						},
+					},
+				},
+			}),
+		},
+	}
+	ms.EXPECT().ChasmWorkflowComponentReadOnly(gomock.Any()).Return(wf, chasmCtx, nil)
+
+	appliedEvents, err := reapplyEvents(
+		context.Background(),
+		ms,
+		nil,
+		smReg,
+		chasmworkflow.NewRegistry(),
+		[]*historypb.HistoryEvent{event},
+		nil,
+		"",
+		true,
+		s.logger,
+	)
+	s.NoError(err)
+	s.Empty(appliedEvents)
 }
 
 func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTimeSkippingConfig() {
