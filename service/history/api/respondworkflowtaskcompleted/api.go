@@ -292,7 +292,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	// When pagination is enabled, buffer intermediate pages and merge them into the final page
 	// before continuing through the normal workflow task completion path.
-	paginationResp, mergedCommands, err := handler.applyTaskCompletionPagination(weContext, token, request, nsName)
+	paginationResp, mergedCommands, releasePagination, err := handler.applyTaskCompletionPagination(weContext, token, request, nsName)
+	if releasePagination != nil {
+		// Keep the merged pages reserved in the pagination limiter until the transaction
+		// is persisted, so the limiter also bounds the memory held while persisting
+		defer releasePagination()
+	}
 	// In case of a buffer overflow fall through and fail the workflow task below
 	paginationOverflow := errors.Is(err, workflow.ErrTaskCompletionBufferSizeExceeded)
 	if !paginationOverflow && (paginationResp != nil || err != nil) {
@@ -851,21 +856,22 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 // request proceeds through the normal completion path:
 //   - intermediate pages are buffered on the cached workflow context
 //   - for the final page the buffered intermediate pages are returned as mergedCommands,
-//     to be merged ahead of the page's own commands by the caller
+//     to be merged ahead of the page's own commands by the caller, together with
+//     releaseBuffer, which the caller invokes after the transaction is persisted
 func (handler *WorkflowTaskCompletedHandler) applyTaskCompletionPagination(
 	weContext historyi.WorkflowContext,
 	token *tokenspb.Task,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	nsName string,
-) (resp *historyservice.RespondWorkflowTaskCompletedResponse, mergedCommands []*commandpb.Command, err error) {
+) (resp *historyservice.RespondWorkflowTaskCompletedResponse, mergedCommands []*commandpb.Command, releaseBuffer func(), err error) {
 	if !handler.config.EnableWorkflowTaskCompletionPagination(nsName) {
 		if request.GetIntermediatePage() || request.GetPageNumber() > 0 {
-			return nil, nil, serviceerror.NewFailedPreconditionf(
+			return nil, nil, nil, serviceerror.NewFailedPreconditionf(
 				"workflow task completion pagination is disabled for this namespace %s",
 				nsName,
 			)
 		}
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	schedID := token.GetScheduledEventId()
@@ -875,21 +881,21 @@ func (handler *WorkflowTaskCompletedHandler) applyTaskCompletionPagination(
 	case request.GetIntermediatePage():
 		// Buffer this page on the cached context
 		if err := weContext.AppendTaskCompletionPage(schedID, attempt, request); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return &historyservice.RespondWorkflowTaskCompletedResponse{}, nil, nil
+		return &historyservice.RespondWorkflowTaskCompletedResponse{}, nil, nil, nil
 	case request.GetPageNumber() > 0:
 		// Final page: return the buffered intermediate pages so the caller can merge
 		// them ahead of this page's own commands.
-		mergedCommands, err := weContext.GetMergedTaskCompletionPages(schedID, attempt, request)
+		mergedCommands, releaseBuffer, err := weContext.GetMergedTaskCompletionPages(schedID, attempt, request)
 		if err != nil {
 			// Buffer lost (e.g. the context was evicted between pages).
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return nil, mergedCommands, nil
+		return nil, mergedCommands, releaseBuffer, nil
 	}
 
-	return nil, nil, nil
+	return nil, nil, nil, nil
 }
 
 func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse(

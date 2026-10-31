@@ -136,7 +136,9 @@ type (
 		AppendTaskCompletionPage(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) error
 		// GetMergedTaskCompletionPages concatenates the buffered intermediate pages
 		// (0..finalPageNumber-1) in order, clears the buffer, and returns the merged
-		// commands to be prepended to the final page's own commands.
-		GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*commandpb.Command, error)
+		// commands to be prepended to the final page's own commands. On success the
+		// buffer's bytes stay reserved in the pagination limiter until the caller
+		// invokes the returned release func after the transaction is persisted.
+		GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*commandpb.Command, func(), error)
 	}
 )
