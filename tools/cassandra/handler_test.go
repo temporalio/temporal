@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/urfave/cli"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/temporal/environment"
 )
 
@@ -113,17 +113,21 @@ func (s *HandlerTestSuite) TestCreateKeyspaceDatacenter() {
 		s.Run(tc.name, func() {
 			s.T().Setenv("CASSANDRA_DATACENTER", tc.env)
 
-			var datacenter string
-			app := buildCLIOptions()
-			for i := range app.Commands {
-				if app.Commands[i].Name == "create-keyspace" {
-					app.Commands[i].Action = func(c *cli.Context) {
-						datacenter = keyspaceDatacenter(c)
-					}
-				}
+			backExit := osExit
+			defer func() { osExit = backExit }()
+			osExit = func(code int) {
+				s.Failf("unexpected exit", "exit code %d", code)
 			}
 
-			s.NoError(app.Run(append([]string{"./tool"}, tc.args...)))
+			var datacenter string
+			backCreate := createKeyspaceFn
+			defer func() { createKeyspaceFn = backCreate }()
+			createKeyspaceFn = func(cfg *CQLClientConfig, _ string, _ log.Logger) error {
+				datacenter = cfg.Datacenter
+				return nil
+			}
+
+			s.NoError(buildCLIOptions().Run(append([]string{"./tool"}, tc.args...)))
 			s.Equal(tc.expected, datacenter)
 		})
 	}

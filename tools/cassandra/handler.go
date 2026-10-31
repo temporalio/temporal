@@ -64,6 +64,8 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
+var createKeyspaceFn = doCreateKeyspace
+
 func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
@@ -77,7 +79,7 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 	config.Datacenter = keyspaceDatacenter(cli)
-	err = doCreateKeyspace(config, keyspace, logger)
+	err = createKeyspaceFn(config, keyspace, logger)
 	if err != nil {
 		logger.Error("Unable to create keyspace.", tag.Error(err))
 		return err
