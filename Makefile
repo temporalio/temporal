@@ -738,7 +738,7 @@ update-dependencies-major:
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
-	@mise exec go go:go.uber.org/mock/mockgen go:golang.org/x/tools/cmd/goimports go:golang.org/x/tools/cmd/stringer go:github.com/hexdigest/gowrap/cmd/gowrap -- go generate ./...
+	@mise exec -- go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
