@@ -29,6 +29,8 @@ type (
 	// Collection implements lookup and constraint logic on top of a Client.
 	// The rest of the server code should use Collection as the interface to dynamic config,
 	// instead of the low-level Client.
+	// Subscription callbacks run serially per subscription, outside subscriptionLock.
+	// Pending updates are coalesced so that a slow callback is followed by the latest value.
 	Collection struct {
 		client   Client
 		logger   log.Logger
@@ -58,7 +60,9 @@ type (
 		def  T
 		cdef []TypedConstrainedValue[T] // nil for regular settings, populated for constrained default settings
 		// protected by subscriptionLock in Collection:
-		raw any // raw value that last sent value was converted from
+		raw     any // most recently observed raw value
+		pending *T
+		running bool
 	}
 
 	subscriptionCallbackSettings struct {
@@ -517,7 +521,7 @@ func dispatchUpdate[T any](
 	}
 
 	sub.raw = raw
-	go sub.f(newVal)
+	sub.dispatch(c, newVal)
 }
 
 // called with subscriptionLock
@@ -544,7 +548,33 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	}
 
 	sub.raw = raw
-	go sub.f(newVal)
+	sub.dispatch(c, newVal)
+}
+
+// dispatch is called with subscriptionLock held. It keeps at most one delivery goroutine
+// and one pending value per subscription, regardless of how long a callback takes.
+func (sub *subscription[T]) dispatch(c *Collection, value T) {
+	sub.pending = &value
+	if sub.running {
+		return
+	}
+	sub.running = true
+
+	go func() {
+		for {
+			c.subscriptionLock.Lock()
+			pending := sub.pending
+			sub.pending = nil
+			if pending == nil {
+				sub.running = false
+				c.subscriptionLock.Unlock()
+				return
+			}
+			c.subscriptionLock.Unlock()
+
+			sub.f(*pending)
+		}
+	}()
 }
 
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
