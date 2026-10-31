@@ -43,6 +43,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client/frontend"
 	matchingclient "go.temporal.io/server/client/matching"
@@ -147,6 +148,7 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
+		workerClient                    workerstatepb.WorkerServiceClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
@@ -324,6 +326,7 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
+	workerClient workerstatepb.WorkerServiceClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -383,6 +386,7 @@ func NewWorkflowHandler(
 		clusterMetadata:                 clusterMetadata,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
+		workerClient:                    workerClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
@@ -7691,8 +7695,8 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
 }
 
-// RecordWorkerHeartbeat receive heartbeat request from the worker
-// and forwards it to the corresponding matching service.
+// RecordWorkerHeartbeat updates the metadata registry and, when enabled,
+// forwards durable heartbeats to the worker state machine.
 func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
 ) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
@@ -7714,7 +7718,41 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 		return nil, err
 	}
 
+	if wh.config.EnableDurableWorkerHeartbeats(namespaceName.String()) {
+		if err := wh.recordDurableWorkerHeartbeats(ctx, namespaceID.String(), request); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
+}
+
+// recordDurableWorkerHeartbeats forwards each group to its worker state machine.
+func (wh *WorkflowHandler) recordDurableWorkerHeartbeats(ctx context.Context, namespaceID string, request *workflowservice.RecordWorkerHeartbeatRequest) error {
+	// SDK heartbeats are normally grouped already. Regroup for robustness so
+	// mixed-group requests reach the correct worker state machines.
+	groups := make(map[string][]*workerpb.WorkerHeartbeat)
+	for _, heartbeat := range request.GetWorkerHeartbeat() {
+		groupingKey := heartbeat.GetHostInfo().GetWorkerGroupingKey()
+		// Older SDKs without a grouping key retain metadata-only heartbeat behavior.
+		if groupingKey != "" {
+			groups[groupingKey] = append(groups[groupingKey], heartbeat)
+		}
+	}
+	for groupingKey, heartbeats := range groups {
+		groupRequest := common.CloneProto(request)
+		groupRequest.WorkerHeartbeat = heartbeats
+		groupRequest.ResourceId = groupingKey
+		_, err := wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
+			NamespaceId:       namespaceID,
+			FrontendRequest:   groupRequest,
+			WorkerGroupingKey: groupingKey,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.

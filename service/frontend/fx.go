@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworker "go.temporal.io/server/chasm/lib/worker"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -160,6 +161,7 @@ var Module = fx.Options(
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(workerstatepb.NewWorkerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,
 	chasmscheduler.Module,
@@ -1019,6 +1021,7 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
+	workerClient workerstatepb.WorkerServiceClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -1062,6 +1065,7 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
+		workerClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
 		archiverProvider,

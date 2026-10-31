@@ -53,7 +53,6 @@ type (
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-		EnableDurableWorkerHeartbeats            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -276,7 +275,6 @@ func NewConfig(
 	dc *dynamicconfig.Collection,
 ) *Config {
 	return &Config{
-		EnableDurableWorkerHeartbeats:            dynamicconfig.EnableDurableWorkerHeartbeats.Get(dc),
 		PersistenceMaxQPS:                        dynamicconfig.MatchingPersistenceMaxQPS.Get(dc),
 		PersistenceGlobalMaxQPS:                  dynamicconfig.MatchingPersistenceGlobalMaxQPS.Get(dc),
 		PersistenceNamespaceMaxQPS:               dynamicconfig.MatchingPersistenceNamespaceMaxQPS.Get(dc),

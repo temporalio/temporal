@@ -3928,7 +3928,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	EnableDurableWorkerHeartbeats = NewNamespaceBoolSetting(
 		"worker.enableDurableWorkerHeartbeats",
 		false,
-		`Enable forwarding worker heartbeats from Matching to the worker state machine.`,
+		`Enable forwarding worker heartbeats from Frontend to the worker state machine.`,
 	)
 	WorkerStateTrackingLeaseDuration = NewNamespaceDurationSetting(
 		"worker.stateTrackingLeaseDuration",
