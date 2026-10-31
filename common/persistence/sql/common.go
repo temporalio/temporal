@@ -55,7 +55,12 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 	if err != nil {
 		return convertSQLError(operation, "failed to start transaction", err)
 	}
-	err = f(tx)
+	return m.finishTx(tx, operation, f(tx))
+}
+
+// finishTx commits tx when err is nil. Otherwise it rolls tx back and returns
+// err, wrapped as Unavailable unless it is a known persistence error.
+func (m *SqlStore) finishTx(tx sqlplugin.Tx, operation string, err error) error {
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
