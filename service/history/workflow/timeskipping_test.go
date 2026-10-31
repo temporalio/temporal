@@ -2323,11 +2323,13 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 	s.Run("ToDescribeInfo_EnabledNoFastForward_NilFastForwardInfo", func() {
 		now := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			Config:           &commonpb.TimeSkippingConfig{Enabled: true},
+			SessionSkipCount: 3,
 		})
 		info := util.ToDescribeInfo(now)
 		s.NotNil(info)
 		s.True(info.GetEffectiveConfig().GetEnabled())
+		s.Equal(int32(3), info.GetCurrentSessionSkipCount())
 		s.Equal(now, info.GetCurrentTime().AsTime())
 		s.Nil(info.GetFastForwardInfo(), "no fast-forward set")
 	})
@@ -2337,9 +2339,10 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		targetTime := now.Add(time.Hour)
 		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:           true,
+				Enabled:           false,
 				FastForwardConfig: &commonpb.FastForwardConfig{Id: "ff-1"},
 			},
+			SessionSkipCount: 2,
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: timestamppb.New(targetTime),
 				HasReached: true,
@@ -2352,6 +2355,7 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.Equal(targetTime, ff.GetTargetTime().AsTime())
 		s.True(ff.GetHasCompleted())
 		s.Equal("ff-1", ff.GetFastForwardId())
+		s.Equal(int32(2), info.GetCurrentSessionSkipCount())
 	})
 
 	s.Run("ToDescribeInfo_DisabledConfig_ReflectsConfig", func() {
@@ -2363,6 +2367,7 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		info := util.ToDescribeInfo(msNow)
 		s.NotNil(info)
 		s.False(info.GetEffectiveConfig().GetEnabled())
+		s.Zero(info.GetCurrentSessionSkipCount())
 		s.Equal(msNow, info.GetCurrentTime().AsTime())
 	})
 

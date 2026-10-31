@@ -39,8 +39,6 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          working_directory: .github
-          install_args: protoc
           minimum_release_age: 14d
           auto_update: true
 
@@ -63,8 +61,6 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          working_directory: .github
-          install_args: protoc
           minimum_release_age: 14d
           auto_update: true
 
@@ -87,8 +83,6 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          working_directory: .github
-          install_args: protoc
           minimum_release_age: 14d
           auto_update: true
 
