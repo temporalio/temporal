@@ -178,7 +178,8 @@ type (
 
 		needsPointerResolution bool
 
-		totalTimeSkippedUpdatedInPassive bool
+		totalTimeSkippedUpdatedInPassive       bool
+		needsTimeSkippingTaskRegenForWorkflows bool
 	}
 
 	taskWithAttributes struct {
@@ -2724,6 +2725,7 @@ func (n *Node) cleanupTransaction() {
 
 	n.needsPointerResolution = false
 	n.totalTimeSkippedUpdatedInPassive = false
+	n.needsTimeSkippingTaskRegenForWorkflows = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -3113,6 +3115,7 @@ func (n *Node) RefreshTasks() error {
 	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
 	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
 	n.totalTimeSkippedUpdatedInPassive = false
+	n.needsTimeSkippingTaskRegenForWorkflows = false
 
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
@@ -3137,8 +3140,14 @@ func (n *Node) RefreshTasks() error {
 	return nil
 }
 
+// MarkTotalTimeSkippedUpdatedInPassive marks timer tasks for regeneration after
+// passive replication updates the accumulated skip duration.
 func (n *Node) MarkTotalTimeSkippedUpdatedInPassive() {
 	n.totalTimeSkippedUpdatedInPassive = true
+}
+
+func (n *Node) MarkNeedsTimeSkippingTaskRegenForWorkflows() {
+	n.needsTimeSkippingTaskRegenForWorkflows = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -4186,9 +4195,12 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 }
 
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+
 	// Replication does not mark the subtree dirty. Re-stamp timers only when the
 	// replicated accumulated skip changed.
 	if !n.subtreeIsDirty {
+		// task regeneration works both for pure chasm-based executions
+		// and workflows that is only partially on chasm
 		if n.totalTimeSkippedUpdatedInPassive {
 			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
 				return err
@@ -4197,12 +4209,17 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
+	// the following steps are long executed in active clusters:
 	if n.parent != nil {
 		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil
 	}
+
 	if n.ArchetypeID() == WorkflowArchetypeID {
-		return nil
+		// marked ture when this workflow also has a chasm component (e.g. chasm nexus operation)
+		if n.needsTimeSkippingTaskRegenForWorkflows {
+			return n.regenerateTimerTasksForTimeSkipping()
+		}
 	}
 
 	// conf check
