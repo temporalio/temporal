@@ -194,7 +194,7 @@ linters:
         text: "Unix|UnixMilli|UnixNano"
         linters:
           - forbidigo
-      - path: _test\.go|tests/.+\.go|common/testing/
+      - path: _test\.go|tests/.+\.go|common/testing/|common/testx/
         text: "panic"
         linters:
           - forbidigo
@@ -223,11 +223,11 @@ linters:
       - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
-      - path: _test\.go|tests/.+\.go|common/testing/
+      - path: _test\.go|tests/.+\.go|common/testing/|common/testx/
         text: "(cyclomatic|cognitive)" # false positives when using subtests
         linters:
           - revive
-      - path: _test\.go|tests/.+\.go|common/testing/
+      - path: _test\.go|tests/.+\.go|common/testing/|common/testx/
         text: "(dot-imports|unchecked-type-assertion)" # helpful in tests
         linters:
           - revive
@@ -239,7 +239,7 @@ linters:
         linters:
           - staticcheck
       # Underscores in method names are allowed in test code.
-      - path: _test\.go|tests/.+\.go|common/testing/
+      - path: _test\.go|tests/.+\.go|common/testing/|common/testx/
         text: "ST1003: should not use underscores in Go names; (func|method) "
         linters:
           - staticcheck
