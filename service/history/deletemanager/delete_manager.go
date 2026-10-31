@@ -182,6 +182,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	}
 
 	executionInfo := ms.GetExecutionInfo()
+	startTime := ms.GetExecutionState().GetStartTime().AsTime()
+	createTime := workflow.NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).CreateTime(startTime)
 	lastWriteVersion := common.EmptyVersion
 	if !retentionDelete {
 		lastWriteVersion, err = ms.GetLastWriteVersion()
@@ -201,7 +203,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
 		closeTime,
-		ms.GetExecutionState().GetStartTime().AsTime(),
+		startTime,
+		createTime,
 		stage,
 		retentionDelete,
 	); err != nil {

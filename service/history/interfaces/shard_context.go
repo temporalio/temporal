@@ -112,6 +112,7 @@ type (
 			closeExecutionVisibilityTaskID int64,
 			workflowCloseTime time.Time,
 			workflowStartTime time.Time,
+			workflowCreateTime time.Time,
 			stage *tasks.DeleteWorkflowExecutionStage,
 			retentionDelete bool,
 		) error

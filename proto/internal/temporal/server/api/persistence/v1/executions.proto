@@ -509,6 +509,8 @@ message VisibilityTaskInfo {
   google.protobuf.Timestamp close_time = 11;
   google.protobuf.Timestamp start_time = 13;
   bool is_retention_delete = 14;
+  // start_time minus any inherited skipped time.
+  google.protobuf.Timestamp create_time = 15;
 
   oneof task_details {
     // If the task addresses a CHASM component, this field will be set.

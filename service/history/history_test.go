@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,8 @@ import (
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -193,6 +196,95 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+
+	_, err := forcedeleteworkflowexecution.Invoke(
+		context.Background(),
+		request,
+		shardID,
+		s.chasmRegistry,
+		s.mockExecutionMgr,
+		s.mockVisibilityMgr,
+		s.logger,
+	)
+	s.NoError(err)
+}
+
+func (s *historyAPISuite) TestForceDeleteWorkflowExecution_VisibilityDeleteCarriesTimes() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.NewString(),
+	}
+	shardID := common.WorkflowIDToHistoryShard(tests.NamespaceID.String(), execution.GetWorkflowId(), 1)
+	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.DeleteWorkflowExecutionRequest{
+			Execution: &execution,
+			Archetype: chasm.WorkflowArchetype,
+		},
+	}
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	initialSkip := 2 * time.Hour
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					InitialSkippedDuration: durationpb.New(initialSkip),
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				StartTime: timestamppb.New(startTime),
+			},
+		},
+	}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+			s.Equal(startTime, request.StartTime)
+			s.Equal(startTime.Add(-initialSkip), request.CreateTime)
+			return nil
+		},
+	)
+
+	_, err := forcedeleteworkflowexecution.Invoke(
+		context.Background(),
+		request,
+		shardID,
+		s.chasmRegistry,
+		s.mockExecutionMgr,
+		s.mockVisibilityMgr,
+		s.logger,
+	)
+	s.NoError(err)
+}
+
+func (s *historyAPISuite) TestForceDeleteWorkflowExecution_LoadMutableStateFailed_TimesUnknown() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.NewString(),
+	}
+	shardID := common.WorkflowIDToHistoryShard(tests.NamespaceID.String(), execution.GetWorkflowId(), 1)
+	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.DeleteWorkflowExecutionRequest{
+			Execution: &execution,
+			Archetype: chasm.WorkflowArchetype,
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+			s.True(request.StartTime.IsZero())
+			s.True(request.CreateTime.IsZero())
+			return nil
+		},
+	)
 
 	_, err := forcedeleteworkflowexecution.Invoke(
 		context.Background(),

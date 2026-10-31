@@ -674,6 +674,80 @@ func (s *mutableStateSuite) TestInitialSkippedDurationRemainsFixed() {
 	s.Equal(initialSkip, tsi.GetInitialSkippedDuration().AsDuration())
 }
 
+func (s *mutableStateSuite) TestTimeSkippingInfoUtil_CreateTime() {
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("NilReceiver_ReturnsStartTime", func() {
+		var util *TimeSkippingInfoUtil
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("NilTimeSkippingInfo_ReturnsStartTime", func() {
+		s.Equal(startTime, NewTimeSkippingInfoUtil(nil).CreateTime(startTime))
+	})
+
+	s.Run("NoInitialSkip_ReturnsStartTime", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("ZeroStartTime_ReturnsZero", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			InitialSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.True(util.CreateTime(time.Time{}).IsZero())
+	})
+
+	s.Run("InitialSkip_SubtractsInitialNotAccumulated", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(5 * time.Hour),
+			InitialSkippedDuration:     durationpb.New(2 * time.Hour),
+		})
+		s.Equal(startTime.Add(-2*time.Hour), util.CreateTime(startTime))
+	})
+}
+
+func (s *mutableStateSuite) TestCreateTime_InheritedSkip() {
+	realNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	parentSkip := 5 * time.Hour
+	parentTSI := func() *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 100},
+			AccumulatedSkippedDuration: durationpb.New(parentSkip),
+		}
+	}
+
+	testCases := []struct {
+		name      string
+		propagate func(*persistencespb.TimeSkippingInfo) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	}{
+		// continue-as-new and retry
+		{name: "ContinueAsNewOrRetry", propagate: propagateTimeSkippingToNextRun},
+		// child workflows and schedules
+		{name: "ChildOrSchedule", propagate: chasm.PropagateTimeSkippingToOtherExecution},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			tsc, stateProp := tc.propagate(parentTSI())
+			s.Require().Equal(parentSkip, stateProp.GetInitialSkippedDuration().AsDuration())
+
+			startTime := AdjustNowWithTimeSkipping(realNow, stateProp)
+			s.Require().Equal(realNow.Add(parentSkip), startTime)
+
+			s.mutableState.initTimeSkippingInfo(tsc, stateProp)
+			util := NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(realNow, util.CreateTime(startTime))
+
+			s.mutableState.executeTimeSkippingTransition(time.Hour, true, false)
+			util = NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(parentSkip+time.Hour, util.GetAccumulatedSkippedDuration())
+			s.Equal(realNow, util.CreateTime(startTime))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	s.Run("UpdateWithNilConfig_ClearsConfigAndFastForward", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()

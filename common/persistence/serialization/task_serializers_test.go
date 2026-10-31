@@ -354,6 +354,51 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 	s.assertEqualTasks(deleteExecutionVisibilityTask)
 }
 
+func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask_CreateTime() {
+	startTime := time.Unix(0, rand.Int63()).UTC()
+	newTask := func(createTime time.Time) *tasks.DeleteExecutionVisibilityTask {
+		return &tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey:         s.workflowKey,
+			VisibilityTimestamp: time.Unix(0, 0).UTC(),
+			TaskID:              rand.Int63(),
+			StartTime:           startTime,
+			CreateTime:          createTime,
+		}
+	}
+
+	s.Run("Set", func() {
+		s.assertEqualTasks(newTask(startTime.Add(-2 * time.Hour)))
+	})
+
+	deserialize := func(blob *commonpb.DataBlob) *tasks.DeleteExecutionVisibilityTask {
+		deserializedTask, err := s.serializer.DeserializeTask(tasks.CategoryVisibility, blob)
+		s.NoError(err)
+		deleteTask, ok := deserializedTask.(*tasks.DeleteExecutionVisibilityTask)
+		s.Require().True(ok)
+		return deleteTask
+	}
+
+	s.Run("Unknown", func() {
+		blob, err := s.serializer.SerializeTask(newTask(time.Time{}))
+		s.NoError(err)
+		s.True(deserialize(blob).CreateTime.IsZero())
+	})
+
+	s.Run("MissingFromBlob", func() {
+		blob, err := s.serializer.SerializeTask(newTask(startTime.Add(-2 * time.Hour)))
+		s.NoError(err)
+		info := &persistencespb.VisibilityTaskInfo{}
+		s.NoError(Decode(blob, info))
+		info.CreateTime = nil
+		blob, err = Encode(info)
+		s.NoError(err)
+
+		deleteTask := deserialize(blob)
+		s.True(deleteTask.CreateTime.IsZero())
+		s.Equal(startTime, deleteTask.StartTime)
+	})
+}
+
 func (s *taskSerializerSuite) TestVisibilityChasmTask() {
 	visibilityChasmTask := &tasks.ChasmTask{
 		WorkflowKey:         s.workflowKey,
