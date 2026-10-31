@@ -1214,6 +1214,67 @@ func (suite *ScheduleSuite) TestBufferSizeReportedWhenBuffered(chasmEnabled bool
 	s.GreaterOrEqual(len(lastDescribe.GetInfo().GetRunningWorkflows()), 1, "expected the buffered fire to be queued behind a running workflow")
 }
 
+// A retried PatchSchedule with the same request ID must not trigger the action again.
+func (suite *ScheduleSuite) TestPatchTriggerRetryDedupsRequestID(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-patch-dedup")
+	wid := testcore.RandomizeStr("sched-patch-dedup-wf")
+	wt := testcore.RandomizeStr("sched-patch-dedup-wt")
+
+	// A gated workflow keeps the first trigger running, so BUFFER_ALL buffers every later trigger
+	// and the buffer size counts them.
+	var runs atomic.Int32
+	registerGatedWorkflow(s, wt, &runs)
+
+	ctx := newContext(testcontext.For(t))
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+	})
+	trigger := func(requestID string) {
+		_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch:      triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED),
+			Identity:   "test",
+			RequestId:  requestID,
+		})
+		require.NoError(t, err)
+	}
+	describe := func() (*workflowservice.DescribeScheduleResponse, error) {
+		return s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+	}
+
+	trigger("trigger-1")
+	await.Requiref(ctx, t, func(at *await.T) {
+		require.Equal(at, int32(1), runs.Load())
+	}, awaitTimeout, pollInterval, "the first trigger should start a workflow")
+
+	trigger("trigger-2")
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := describe()
+		require.NoError(at, err)
+		require.Equal(at, int64(1), desc.GetInfo().GetBufferSize())
+	}, awaitTimeout, pollInterval, "the second trigger should be buffered behind the running workflow")
+
+	// Retry the second trigger with the same request ID.
+	trigger("trigger-2")
+	require.Never(t, func() bool {
+		desc, err := describe()
+		return err == nil && desc.GetInfo().GetBufferSize() != 1
+	}, neverWindow, pollInterval, "a retried trigger must not buffer another start")
+	require.Equal(t, int32(1), runs.Load())
+}
+
 // A full buffer (MaxBufferSize reached) makes the CHASM generator drop further
 // fires and increment ScheduleInfo.BufferDropped.
 func (suite *ScheduleCHASMSuite) TestBufferOverrunDropsActions() {
