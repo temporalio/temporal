@@ -21,10 +21,9 @@ import (
 // So while Workflow implements the [callback.Host] interface, WorkflowUpdate is only a [callback.Holder].
 // And attaching completion callbacks to a WorkflowUpdate is done through an [updateCallbackHost].
 var (
-	_ callback.Host                    = (*Workflow)(nil)
-	_ callback.Holder                  = (*WorkflowUpdate)(nil)
-	_ chasm.TimeSkippingRuntimeGate    = (*Workflow)(nil)
-	_ chasm.TimeSkippingTargetSelector = (*Workflow)(nil)
+	_ callback.Host                 = (*Workflow)(nil)
+	_ callback.Holder               = (*WorkflowUpdate)(nil)
+	_ chasm.TimeSkippingRuntimeGate = (*Workflow)(nil)
 )
 
 type Workflow struct {
@@ -79,7 +78,10 @@ func (w *Workflow) IsExecutionSkippable(_ chasm.Context) bool {
 	return w.pendingNexusOperationCount() == 0
 }
 
+// currently only a part of workflow is in chasm, this method is provided temporarily
+// to be called in the time skipping path of workflow in mutable state
 func (w *Workflow) FindSkipToTarget(ctx chasm.Context) chasm.TimeSkippingTransition {
+	// #todo: if a feature is migrated from workflow to chasm
 	return *chasm.NewTimeSkippingTransition(ctx.Now(w))
 }
 
