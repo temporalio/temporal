@@ -18,9 +18,11 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -593,4 +595,65 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+// TestHandleNexusCompletion_SuccessPayload: any success clears the failure. A value,
+// including an explicit binary/null, replaces the result; a no-result workflow (empty
+// or nil payload) clears it, so the next run gets no last completion result.
+func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
+	empty := &schedulerpb.LastCompletionResult{}
+	previous := &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous failure"},
+	}
+	// Shaped like a codec-encrypted result: custom encoding plus extra metadata keys.
+	value := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding":            []byte("binary/encrypted-payload-v2"),
+			"codec-key-id":        []byte("key-1"),
+			"codec-proxy-version": []byte("9b81b8d"),
+		},
+		Data: []byte("ciphertext"),
+	}
+	null := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("binary/null")}}
+	for _, tc := range []struct {
+		name    string
+		initial *schedulerpb.LastCompletionResult
+		success *commonpb.Payload
+		want    *schedulerpb.LastCompletionResult
+	}{
+		{name: "empty payload, empty state", initial: empty, success: &commonpb.Payload{}, want: empty},
+		{name: "nil payload, empty state", initial: empty, success: nil, want: empty},
+		{name: "binary/null, empty state", initial: empty, success: null, want: &schedulerpb.LastCompletionResult{Success: null}},
+		{name: "empty payload, previous state", initial: previous, success: &commonpb.Payload{}, want: empty},
+		{name: "nil payload, previous state", initial: previous, success: nil, want: empty},
+		{name: "binary/null, previous state", initial: previous, success: null, want: &schedulerpb.LastCompletionResult{Success: null}},
+		{name: "value, empty state", initial: empty, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
+		{name: "value, previous state", initial: previous, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, node := setupSchedulerForTest(t)
+			sched.LastCompletionResult = chasm.NewDataField(ctx, common.CloneProto(tc.initial))
+			start := &schedulespb.BufferedStart{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+				ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+				StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+			}
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{start}
+
+			err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome:   &persistencespb.ChasmNexusCompletion_Success{Success: tc.success},
+				CloseTime: timestamppb.Now(),
+			})
+			require.NoError(t, err)
+			_, err = node.CloseTransaction(context.Background(), true)
+			require.NoError(t, err)
+
+			readCtx := chasm.NewContext(context.Background(), node)
+			require.True(t, proto.Equal(tc.want, sched.LastCompletionResult.Get(readCtx)))
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.GetCompleted().GetStatus())
+		})
+	}
 }

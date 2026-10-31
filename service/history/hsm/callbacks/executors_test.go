@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -602,4 +604,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			tc.assertOutcome(t, cb)
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it matches this task type by its "callbacks." prefix.
+// This test fails if it is renamed without updating tasks.Tags.
+func TestInvocationTaskTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: callbacks.TaskTypeInvocation}},
+	}
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }

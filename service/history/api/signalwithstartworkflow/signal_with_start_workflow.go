@@ -162,6 +162,7 @@ func startAndSignalWorkflow(
 		shard,
 		vrid,
 		newWorkflowLease,
+		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 	)
 }
 
@@ -308,6 +309,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
+	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 ) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
@@ -347,14 +349,100 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
 	)
-	// CurrentWorkflowConditionFailedError.RequestIDs does not record signal delivery.
-	// Return the error so a retry can check IsSignalRequested.
-	if err != nil {
+	switch failedErr := err.(type) {
+	case nil:
+		// Brand-new run: head of the chain == this run id.
+		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
+	case *persistence.CurrentWorkflowConditionFailedError:
+		// RequestIDs does not record signal delivery. Return other CAS failures so a retry
+		// can check IsSignalRequested. Completed BrandNew conflicts are the orphaned-pointer
+		// case StartWorkflow recovers with UpdateCurrent.
+		if createMode != persistence.CreateWorkflowModeBrandNew ||
+			failedErr.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+			len(failedErr.RunID) == 0 {
+			return startOutcome{}, err
+		}
+		if err := createAsCurrent(
+			ctx,
+			shardContext,
+			newWorkflowLease,
+			newWorkflow,
+			newWorkflowEventsSeq,
+			workflowIDReusePolicy,
+			failedErr,
+		); err != nil {
+			return startOutcome{}, err
+		}
+		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
+	default:
 		return startOutcome{}, err
 	}
-	// Brand-new run: head of the chain == this run id.
-	runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
-	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
+}
+
+// createAsCurrent writes the new run and points current_executions at it.
+func createAsCurrent(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	newWorkflowLease api.WorkflowLease,
+	newWorkflow *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
+	failedErr *persistence.CurrentWorkflowConditionFailedError,
+) error {
+	mutableState := newWorkflowLease.GetMutableState()
+	if err := api.NewWorkflowVersionCheck(
+		shardContext,
+		failedErr.LastWriteVersion,
+		mutableState,
+	); err != nil {
+		return err
+	}
+
+	namespaceEntry := mutableState.GetNamespaceEntry()
+	currentWorkflowStartTime := time.Time{}
+	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) &&
+		failedErr.StartTime != nil {
+		currentWorkflowStartTime = *failedErr.StartTime
+	}
+
+	workflowKey := newWorkflowLease.GetContext().GetWorkflowKey()
+	workflowKey.RunID = failedErr.RunID
+	if err := api.ResolveWorkflowIDReusePolicy(
+		shardContext,
+		workflowKey,
+		namespaceEntry,
+		failedErr.Status,
+		failedErr.RequestIDs,
+		failedErr.FirstExecutionRunID,
+		workflowIDReusePolicy,
+		currentWorkflowStartTime,
+	); err != nil {
+		return err
+	}
+
+	// If current workflow is closed after the original snapshot was prepared,
+	// LastRunningClock in that snapshot can be smaller than the current row's,
+	// causing the new workflow to be marked as zombie in the standby cluster.
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(newWorkflowEventsSeq)
+	if err != nil {
+		return err
+	}
+	newWorkflow.ExecutionInfo = updateExecutionInfo
+	newWorkflowEventsSeq = updatedWorkflowEventBatches
+
+	return newWorkflowLease.GetContext().CreateWorkflowExecution(
+		ctx,
+		shardContext,
+		persistence.CreateWorkflowModeUpdateCurrent,
+		failedErr.RunID,
+		failedErr.LastWriteVersion,
+		mutableState,
+		newWorkflow,
+		newWorkflowEventsSeq,
+		historyi.TransactionPolicyActive,
+	)
 }
 
 // Successful calls leave the lease held for outcome reads. Invoke releases it.

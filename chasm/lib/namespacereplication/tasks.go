@@ -1,10 +1,13 @@
 package namespacereplication
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -13,8 +16,11 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -33,15 +39,21 @@ type applyLocalTaskHandlerOptions struct {
 	ClusterMetadata cluster.Metadata
 	Config          *config
 	Logger          log.Logger
+	MetricsHandler  metrics.Handler
+	EventLogger     otellog.Logger
+	DynamicConfig   *dynamicconfig.Collection
 }
 
 type applyLocalTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*namespacereplicationpb.ApplyLocalTask]
 
-	metadataManager persistence.MetadataManager
-	currentCluster  string
-	config          *config
-	logger          log.Logger
+	metadataManager              persistence.MetadataManager
+	currentCluster               string
+	config                       *config
+	logger                       log.Logger
+	metricsHandler               metrics.Handler
+	eventLogger                  otellog.Logger
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 }
 
 type localApplyResolution int
@@ -63,10 +75,13 @@ const (
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
-		metadataManager: opts.MetadataManager,
-		currentCluster:  opts.ClusterMetadata.GetCurrentClusterName(),
-		config:          opts.Config,
-		logger:          opts.Logger,
+		metadataManager:              opts.MetadataManager,
+		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
+		config:                       opts.Config,
+		logger:                       opts.Logger,
+		metricsHandler:               opts.MetricsHandler,
+		eventLogger:                  opts.EventLogger,
+		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(opts.DynamicConfig),
 	}
 }
 
@@ -87,12 +102,13 @@ func (h *applyLocalTaskHandler) Validate(
 	return c.GetLocalApply().GetAttemptCount() == task.GetAttempt(), nil
 }
 
-// Execute writes to the local metadata store with strict version-CAS, then
-// transitions the component to a terminal local outcome. Ambiguous write
-// results are reconciled against the current namespace state and retried with a
-// durable timer. A newer namespace version fences an UPDATE whose exact outcome
-// can no longer be determined; later mutations converge current peers, while a
-// peer removed only by the fenced mutation may require operator repair.
+// Execute writes authoritative mutations to the local metadata store with
+// strict version-CAS and skips that write for shadow mutations. Ambiguous
+// authoritative results are reconciled against current namespace state and
+// retried with a durable timer. A newer namespace version fences an UPDATE
+// whose exact outcome can no longer be determined; later mutations converge
+// current peers, while a peer removed only by the fenced mutation may require
+// operator repair.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -105,6 +121,7 @@ func (h *applyLocalTaskHandler) Execute(
 		Detail            *persistencespb.NamespaceDetail
 		ExpectedVer       int64
 		IsGlobalNamespace bool
+		Shadow            bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -116,6 +133,7 @@ func (h *applyLocalTaskHandler) Execute(
 				Detail:            common.CloneProto(m.GetNamespaceDetail()),
 				ExpectedVer:       m.GetExpectedVersion(),
 				IsGlobalNamespace: m.GetIsGlobalNamespace(),
+				Shadow:            m.GetShadow(),
 			}, nil
 		},
 		nil,
@@ -131,6 +149,9 @@ func (h *applyLocalTaskHandler) Execute(
 			task,
 			serviceerror.NewInvalidArgument("CHASM namespace replication only supports global namespaces"),
 		)
+	}
+	if loaded.Shadow {
+		return h.resolveLocal(ctx, ref, task, true)
 	}
 
 	// The metadata write and component transition cannot share a transaction, so
@@ -199,7 +220,7 @@ func (h *applyLocalTaskHandler) Execute(
 				tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
 				tag.NewStringTag("business_id", ref.BusinessID),
 			)
-			return h.commitLocal(ctx, ref, task)
+			return h.resolveLocal(ctx, ref, task, false)
 		case localApplyResolutionUnresolved:
 			// A read immediately after a timed-out write can still see the old
 			// value even when that write later commits.
@@ -232,7 +253,7 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	return h.commitLocal(ctx, ref, task)
+	return h.resolveLocal(ctx, ref, task, false)
 }
 
 // reconcileCreateLocalApply resolves a failed CREATE attempt by comparing the
@@ -439,30 +460,46 @@ func normalizeNamespaceDetailAfterPersistenceRead(
 	}
 }
 
-func (h *applyLocalTaskHandler) commitLocal(
+func (h *applyLocalTaskHandler) resolveLocal(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	task *namespacereplicationpb.ApplyLocalTask,
+	shadow bool,
 ) error {
-	_, _, err := chasm.UpdateComponent(
+	completion, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*shadowCompletionRecord, error) {
 			if !localTaskIsCurrent(c, task) {
 				return nil, nil
 			}
-			if err := TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{
-				Time: mctx.Now(c),
-			}); err != nil {
+
+			var err error
+			if shadow {
+				err = TransitionLocalShadowSkipped.Apply(c, mctx, EventLocalShadowSkipped{Time: mctx.Now(c)})
+			} else {
+				err = TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{Time: mctx.Now(c)})
+			}
+			if err != nil {
 				return nil, err
 			}
 			if c.allPeersTerminal() {
-				return nil, TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{})
+				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
+					return nil, err
+				}
+				return newShadowCompletionRecord(c, mctx.Now(c)), nil
 			}
 			return nil, nil
 		},
 		nil,
 	)
+	if err == nil {
+		observer := shadowCompletionObserver{
+			logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
+			emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
+		}
+		observer.observe(ref, completion)
+	}
 	return err
 }
 
@@ -659,9 +696,13 @@ func classifyLocalErr(err error) string {
 type applyPeerTaskHandlerOptions struct {
 	fx.In
 
-	PeerApplier PeerApplier
-	Config      *config
-	Logger      log.Logger
+	PeerApplier     PeerApplier
+	ClusterMetadata cluster.Metadata
+	Config          *config
+	Logger          log.Logger
+	MetricsHandler  metrics.Handler
+	EventLogger     otellog.Logger
+	DynamicConfig   *dynamicconfig.Collection
 }
 
 type applyPeerTaskHandler struct {
@@ -671,7 +712,11 @@ type applyPeerTaskHandler struct {
 	// cell. The default OSS impl uses the ApplyNamespaceMutation admin RPC; this
 	// handler owns the surrounding policy (retry, error classification, per-peer
 	// state, completion) independent of which transport is injected.
-	peerApplier PeerApplier
+	peerApplier                  PeerApplier
+	currentCluster               string
+	metricsHandler               metrics.Handler
+	eventLogger                  otellog.Logger
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 	// Retriable peer failures are retried with capped exponential backoff over a
 	// configurable budget by recordPeerOutcome + TransitionPeerRetry (see
 	// statemachine.go), not by CHASM's default task retry.
@@ -681,13 +726,17 @@ type applyPeerTaskHandler struct {
 
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
-		peerApplier: opts.PeerApplier,
-		config:      opts.Config,
-		logger:      opts.Logger,
+		peerApplier:                  opts.PeerApplier,
+		currentCluster:               opts.ClusterMetadata.GetCurrentClusterName(),
+		metricsHandler:               opts.MetricsHandler,
+		eventLogger:                  opts.EventLogger,
+		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(opts.DynamicConfig),
+		config:                       opts.Config,
+		logger:                       opts.Logger,
 	}
 }
 
-// Validate gates execution: the local apply must have committed, this peer's
+// Validate gates execution: the local phase must permit fan-out, this peer's
 // status must still be PENDING, and the attempt number must match. The attempt
 // gating prevents stale retries (callback library uses the same pattern).
 func (h *applyPeerTaskHandler) Validate(
@@ -699,10 +748,10 @@ func (h *applyPeerTaskHandler) Validate(
 	if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING {
 		return false, nil
 	}
-	if c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED {
+	if !localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) {
 		softassert.Fail(
 			h.logger,
-			"peer apply task exists before local apply committed",
+			"peer apply task exists before local phase allows fan-out",
 			tag.WorkflowNamespaceID(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
 			tag.NewStringTag("target_cell", task.GetTargetCell()),
 			tag.NewStringTag("local_apply_outcome", c.GetLocalApply().GetOutcome().String()),
@@ -730,10 +779,13 @@ func (h *applyPeerTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	task *namespacereplicationpb.ApplyPeerTask,
 ) error {
+	startTime := time.Now() // nolint:forbidigo // Wall-clock time measures only attempt latency.
 	// Load the mutation payload from component state.
 	type loadResult struct {
-		Operation enumsspb.NamespaceOperation
-		Detail    *persistencespb.NamespaceDetail
+		Operation               enumsspb.NamespaceOperation
+		Detail                  *persistencespb.NamespaceDetail
+		Shadow                  bool
+		ShadowLegacyTaskPayload []byte
 	}
 	loaded, readErr := chasm.ReadComponent(
 		ctx,
@@ -741,8 +793,10 @@ func (h *applyPeerTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation: m.GetOperation(),
-				Detail:    common.CloneProto(m.GetNamespaceDetail()),
+				Operation:               m.GetOperation(),
+				Detail:                  common.CloneProto(m.GetNamespaceDetail()),
+				Shadow:                  m.GetShadow(),
+				ShadowLegacyTaskPayload: bytes.Clone(m.GetShadowLegacyTaskPayload()),
 			}, nil
 		},
 		nil,
@@ -755,16 +809,36 @@ func (h *applyPeerTaskHandler) Execute(
 	// (dial failure or apply failure) is classified here into retriable vs
 	// terminal, so the retry/gating policy stays in this package regardless of
 	// which transport the deployment injected.
-	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail)
+	// Leave time in the task context to persist the outcome and schedule a retry
+	// after a slow peer request times out.
+	callCtx, cancel := contextutil.WithDeadlineBuffer(ctx, 10*time.Second, time.Second)
+	defer cancel()
+	request := PeerApplyRequest{
+		SourceCluster:           h.currentCluster,
+		ComponentBusinessID:     ref.BusinessID,
+		ComponentRunID:          ref.RunID,
+		AttemptCount:            task.GetAttempt() + 1,
+		TargetCluster:           task.GetTargetCell(),
+		Operation:               loaded.Operation,
+		Detail:                  loaded.Detail,
+		Shadow:                  loaded.Shadow,
+		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
+	}
+	result, applyErr := h.peerApplier.Apply(callCtx, request)
+	record := func(outcome namespacereplicationpb.PeerApplyOutcome, outcomeErr error) error {
+		recorded, saveErr := h.recordPeerOutcome(ctx, ref, loaded.Detail.GetInfo().GetId(), task, outcome, outcomeErr)
+		h.observePeerApply(request, recorded, outcomeErr, saveErr, time.Since(startTime))
+		if saveErr == nil {
+			observer := shadowCompletionObserver{
+				logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
+				emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
+			}
+			observer.observe(ref, recorded.completion)
+		}
+		return saveErr
+	}
 	if applyErr != nil {
-		saveErr := h.recordPeerOutcome(
-			ctx,
-			ref,
-			loaded.Detail.GetInfo().GetId(),
-			task,
-			classifyPeerErr(applyErr),
-			applyErr,
-		)
+		saveErr := record(classifyPeerErr(applyErr), applyErr)
 		if isPeerDestinationDown(applyErr) {
 			// Signal the outbound queue's per-destination circuit breaker without
 			// introducing a second retry path. The queue unwraps this and returns
@@ -777,26 +851,24 @@ func (h *applyPeerTaskHandler) Execute(
 
 	outcome, resultErr := peerOutcomeFromResult(result)
 	if resultErr != nil {
-		return h.recordPeerOutcome(
-			ctx,
-			ref,
-			loaded.Detail.GetInfo().GetId(),
-			task,
-			classifyPeerErr(resultErr),
-			resultErr,
-		)
+		return record(classifyPeerErr(resultErr), resultErr)
 	}
-	return h.recordPeerOutcome(ctx, ref, loaded.Detail.GetInfo().GetId(), task, outcome, nil)
+	return record(outcome, nil)
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the
-// persisted per-peer outcome. All three are terminal (see allPeersTerminal):
+// persisted per-peer outcome. All outcomes mapped here are terminal (see
+// allPeersTerminal):
 // NotAdmitted is a terminal non-failure, kept distinct from Applied so the
 // component never records a peer write that didn't happen.
 func peerOutcomeFromResult(result PeerApplyResult) (namespacereplicationpb.PeerApplyOutcome, error) {
 	switch result {
 	case PeerApplyResultApplied:
 		return namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED, nil
+	case PeerApplyResultShadowMatch:
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH, nil
+	case PeerApplyResultShadowMismatch:
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH, nil
 	case PeerApplyResultNoOpStale:
 		return namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE, nil
 	case PeerApplyResultNotAdmitted:
@@ -816,7 +888,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 	task *namespacereplicationpb.ApplyPeerTask,
 	outcome namespacereplicationpb.PeerApplyOutcome,
 	execErr error,
-) error {
+) (peerOutcomeRecord, error) {
 	retryPolicy := h.config.peerRetryPolicy()
 	if execErr != nil {
 		h.logger.Warn("namespacereplication peer apply failed",
@@ -827,34 +899,41 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			tag.Error(execErr),
 		)
 	}
-	_, _, updErr := chasm.UpdateComponent(
+	recorded, _, updErr := chasm.UpdateComponent(
 		ctx,
 		ref,
-		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (peerOutcomeRecord, error) {
 			peer := c.GetPeerApply()[task.GetTargetCell()]
 			if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING ||
-				c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED ||
+				!localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) ||
 				peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING ||
 				peer.GetAttemptCount() != task.GetAttempt() {
-				return nil, nil
+				return peerOutcomeRecord{}, nil
 			}
 
 			now := mctx.Now(c)
 			completedAttempts := task.GetAttempt() + 1
+			record := peerOutcomeRecord{resolvedAt: now, stateUpdated: true, outcome: outcome}
+			if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
+				record.startedAt = started.AsTime()
+			}
+			firstAt := now
+			if peer.GetFirstAttemptAt() != nil {
+				firstAt = peer.GetFirstAttemptAt().AsTime()
+				record.firstAttemptAt = firstAt
+			}
 
-			// Retriable failure: keep the peer PENDING and reschedule with capped
+			// Retriable failure: wait in FAILED_RETRIABLE and reschedule with capped
 			// exponential backoff until the total retry budget (measured from the
 			// first failed attempt) is exhausted. This lets the mutation converge
 			// once a temporarily-unreachable peer recovers. Only after the budget
 			// is spent do we give up as FAILED_TERMINAL so the component can still
 			// complete.
 			if outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
-				firstAt := now
-				if peer.GetFirstAttemptAt() != nil {
-					firstAt = peer.GetFirstAttemptAt().AsTime()
-				}
+				record.firstAttemptAt = firstAt
 				if now.Sub(firstAt) < retryPolicy.expirationInterval {
-					return nil, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
+					record.retryScheduled = true
+					return record, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
 						TargetCell: task.GetTargetCell(),
 						Attempts:   completedAttempts,
@@ -863,17 +942,18 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					})
 				}
 				// Budget exhausted: fall through and record a terminal failure.
-				outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+				record.outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+				record.retryExhausted = true
 			}
 
 			if err := TransitionPeerCompleted.Apply(c, mctx, EventPeerCompleted{
 				Time:       now,
 				TargetCell: task.GetTargetCell(),
-				Outcome:    outcome,
+				Outcome:    record.outcome,
 				Attempts:   completedAttempts,
 				Err:        execErr,
 			}); err != nil {
-				return nil, err
+				return peerOutcomeRecord{}, err
 			}
 			// If every peer has reached a terminal outcome, move to COMPLETED so
 			// retention can clean up the component. (Done as a separate transition
@@ -881,14 +961,16 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			// after apply returns.)
 			if c.allPeersTerminal() {
 				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
-					return nil, err
+					return peerOutcomeRecord{}, err
 				}
+				record.completion = newShadowCompletionRecord(c, now)
 			}
-			return nil, nil
+			return record, nil
 		},
 		nil,
 	)
-	return updErr
+	recorded.attemptedOutcome = outcome
+	return recorded, updErr
 }
 
 // classifyPeerErr maps an admin RPC error to the appropriate peer apply outcome.
@@ -957,14 +1039,19 @@ func (h *applyPeerBackoffTaskHandler) Validate(
 	if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING {
 		return false, nil
 	}
-	if c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED {
+	if !localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) {
 		return false, nil
 	}
 	peer := c.GetPeerApply()[task.GetTargetCell()]
-	if peer == nil || peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING {
+	if peer == nil || peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
 		return false, nil
 	}
 	return peer.GetAttemptCount() == task.GetAttempt(), nil
+}
+
+func localApplyAllowsPeerFanout(outcome namespacereplicationpb.LocalApplyOutcome) bool {
+	return outcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED ||
+		outcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW
 }
 
 func (h *applyPeerBackoffTaskHandler) Execute(

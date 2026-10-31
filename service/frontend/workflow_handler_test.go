@@ -52,13 +52,14 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -132,6 +133,131 @@ func TestWorkflowHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestValidatePollVersioningInfo(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		capabilities           *commonpb.WorkerVersionCapabilities
+		deploymentOptions      *deploymentpb.WorkerDeploymentOptions
+		blockOldPollers        bool
+		expectDeprecated       bool
+		expectedVersion        string
+		expectedAction         string
+		expectPermissionDenied bool
+	}{
+		{
+			name: "unversioned poller",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId: "build-id",
+			},
+		},
+		{
+			name: "v0.1 or v0.2 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV1OrV2,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "v0.3 poller allowed",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			expectDeprecated: true,
+			expectedVersion:  deprecatedWorkerVersioningV3,
+			expectedAction:   deprecatedWorkerVersioningPollAllowed,
+		},
+		{
+			name: "current versioned poller not classified as deprecated",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "legacy-build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "legacy-deployment-series",
+			},
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			blockOldPollers: true,
+		},
+		{
+			name: "v0.1 or v0.2 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "build-id",
+				UseVersioning: true,
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV1OrV2,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+		{
+			name: "v0.3 poller blocked",
+			capabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              "build-id",
+				UseVersioning:        true,
+				DeploymentSeriesName: "deployment-series",
+			},
+			blockOldPollers:        true,
+			expectDeprecated:       true,
+			expectedVersion:        deprecatedWorkerVersioningV3,
+			expectedAction:         deprecatedWorkerVersioningPollBlocked,
+			expectPermissionDenied: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+			config.BlockOldVersioningPollers = dc.GetBoolPropertyFnFilteredByNamespace(tc.blockOldPollers)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			ctx := interceptor.AddTelemetryContext(context.Background(), metricsHandler)
+			handler := &WorkflowHandler{
+				config: config,
+				logger: log.NewNoopLogger(),
+			}
+
+			err := handler.validatePollVersioningInfo(
+				ctx,
+				"namespace",
+				tc.capabilities,
+				tc.deploymentOptions,
+				&taskqueuepb.TaskQueue{Name: "task-queue"},
+			)
+			if tc.expectPermissionDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+				require.ErrorIs(t, err, errOldWorkerVersioningPollerNotAllowed)
+			} else {
+				require.NoError(t, err)
+			}
+
+			recordings := capture.SnapshotMetric(metrics.DeprecatedWorkerVersioningPollCounter.Name())
+			if !tc.expectDeprecated {
+				require.Empty(t, recordings)
+				return
+			}
+			require.Equal(t, []*metricstest.CapturedRecording{
+				{
+					Value: int64(1),
+					Tags: map[string]string{
+						"action_type":               tc.expectedAction,
+						"worker_versioning_version": tc.expectedVersion,
+					},
+				},
+			}, recordings)
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) SetupSuite() {
 }
 
@@ -166,7 +292,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = tasktoken.NewSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
@@ -249,6 +375,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -2581,7 +2709,7 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(esconfig.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{

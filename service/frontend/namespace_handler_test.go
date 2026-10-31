@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -119,6 +120,8 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 

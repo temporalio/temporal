@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,9 +24,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -336,6 +342,115 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	6 WorkflowTaskStarted
 	7 WorkflowTaskCompleted
 	8 WorkflowExecutionCompleted`, events)
+}
+
+// TestResetWorkflow_HistoryTransactionIDsAboveShard resets a run whose stored history nodes have transaction IDs
+// above the shard's, as history written with another shard's transaction IDs would. The reset's first new node gets
+// a lower transaction ID than the node before it, so the shard asserts its ownership and the write must be rejected.
+// The persistence stores currently do not implement AssertShardOwnership, so the stale owner case is injected.
+func (s *ResetWorkflowTestSuite) TestResetWorkflow_HistoryTransactionIDsAboveShard() {
+	testCases := []struct {
+		name       string
+		staleOwner bool
+	}{
+		{name: "owner"},
+		{name: "stale owner", staleOwner: true},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *ResetWorkflowTestSuite) {
+			opts := []testcore.TestOption{
+				testcore.WithDisableTestloggerFailure(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableHistoryNodeTransactionIDValidation, true),
+			}
+			// Shard IDs start at 1, so 0 matches no shard.
+			var staleShardID atomic.Int32
+			if tc.staleOwner {
+				opts = append(opts, testcore.InjectPersistenceFault(
+					func(target config.FaultInjectionTarget) error {
+						request := target.Request.(*persistence.AssertShardOwnershipRequest)
+						if !staleShardID.CompareAndSwap(request.ShardID, 0) {
+							return nil
+						}
+						return &persistence.ShardOwnershipLostError{ShardID: request.ShardID, Msg: "injected shard ownership lost"}
+					},
+					testcore.WithStore(config.ShardStoreName),
+					testcore.WithMethod("AssertShardOwnership"),
+				))
+			}
+			env := testcore.NewEnv(s.T(), opts...)
+			tv := testvars.New(s.T())
+
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:    uuid.NewString(),
+				Namespace:    env.Namespace().String(),
+				WorkflowId:   tv.WorkflowID(),
+				WorkflowType: tv.WorkflowType(),
+				TaskQueue:    tv.TaskQueue(),
+				Identity:     tv.WorkerIdentity(),
+			})
+			s.NoError(err)
+			s.runWorkflowWithPoller(env, tv)
+			execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: we.RunId}
+
+			ms, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+				Namespace: env.Namespace().String(),
+				Execution: execution,
+			})
+			s.NoError(err)
+			shardID, err := strconv.ParseInt(ms.GetShardId(), 10, 32)
+			s.NoError(err)
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories())
+			s.NoError(err)
+			branchToken := currentVersionHistory.GetBranchToken()
+
+			// Rewrite every node with a transaction ID far above the shard's. For the same node ID the higher
+			// transaction ID wins, so reads return the rewritten nodes.
+			executionManager := env.GetTestCluster().ExecutionManager()
+			history, err := executionManager.ReadHistoryBranchByBatch(s.Context(), &persistence.ReadHistoryBranchRequest{
+				ShardID:     int32(shardID),
+				BranchToken: branchToken,
+				MinEventID:  common.FirstEventID,
+				MaxEventID:  common.EndEventID,
+				PageSize:    100,
+			})
+			s.NoError(err)
+			var prevTransactionID int64
+			for i, batch := range history.History {
+				transactionID := history.TransactionIDs[i] + 1<<40
+				_, err := executionManager.AppendHistoryNodes(s.Context(), &persistence.AppendHistoryNodesRequest{
+					ShardID:           int32(shardID),
+					BranchToken:       branchToken,
+					Events:            batch.GetEvents(),
+					PrevTransactionID: prevTransactionID,
+					TransactionID:     transactionID,
+				})
+				s.NoError(err)
+				prevTransactionID = transactionID
+			}
+
+			shardBefore, err := env.AdminClient().GetShard(s.Context(), &adminservice.GetShardRequest{ShardId: int32(shardID)})
+			s.NoError(err)
+			if tc.staleOwner {
+				staleShardID.Store(int32(shardID))
+			}
+			_, err = env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+				Namespace:                 env.Namespace().String(),
+				WorkflowExecution:         execution,
+				Reason:                    "reset execution from test",
+				RequestId:                 uuid.NewString(),
+				WorkflowTaskFinishEventId: 3,
+			})
+			s.ErrorContains(err, "must be greater than prevTransaction ID")
+
+			shardAfter, err := env.AdminClient().GetShard(s.Context(), &adminservice.GetShardRequest{ShardId: int32(shardID)})
+			s.NoError(err)
+			if tc.staleOwner {
+				s.Greater(shardAfter.GetShardInfo().GetRangeId(), shardBefore.GetShardInfo().GetRangeId())
+			} else {
+				s.Equal(shardBefore.GetShardInfo().GetRangeId(), shardAfter.GetShardInfo().GetRangeId())
+			}
+		})
+	}
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyDefault() {

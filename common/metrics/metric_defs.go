@@ -648,12 +648,13 @@ const (
 
 // Matching task dropped reason tag values
 const (
-	DroppedTaskReasonNotFound      = "not_found"
-	DroppedTaskReasonInternalError = "internal_error"
-	DroppedTaskReasonDataLoss      = "data_loss"
-	DroppedTaskReasonExpiredRead   = "expired_read"
-	DroppedTaskReasonExpiredMemory = "expired_memory"
-	DroppedTaskReasonInvalid       = "invalid"
+	DroppedTaskReasonNotFound                = "not_found"
+	DroppedTaskReasonInternalError           = "internal_error"
+	DroppedTaskReasonDataLoss                = "data_loss"
+	DroppedTaskReasonExpiredRead             = "expired_read"
+	DroppedTaskReasonExpiredMemory           = "expired_memory"
+	DroppedTaskReasonStickyWorkerUnavailable = "sticky_worker_unavailable"
+	DroppedTaskReasonInvalid                 = "invalid"
 )
 
 var (
@@ -697,6 +698,7 @@ var (
 	ServiceErrInvalidArgumentCounter         = NewCounterDef("service_errors_invalid_argument")
 	ServiceErrNamespaceNotActiveCounter      = NewCounterDef("service_errors_namespace_not_active")
 	ServiceErrResourceExhaustedCounter       = NewCounterDef("service_errors_resource_exhausted")
+	ResourceExhaustedRetryDelayFloorCounter  = NewCounterDef("resource_exhausted_retry_delay_floor", WithDescription("Number of ResourceExhausted responses that carried a google.rpc.RetryInfo retry delay floor."))
 	ServiceErrNotFoundCounter                = NewCounterDef("service_errors_entity_not_found")
 	ServiceErrExecutionAlreadyStartedCounter = NewCounterDef("service_errors_execution_already_started")
 	ServiceErrContextTimeoutCounter          = NewCounterDef("service_errors_context_timeout")
@@ -726,11 +728,15 @@ var (
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
-	ClientFailures                   = NewCounterDef("client_errors")
-	ClientLatency                    = NewTimerDef("client_latency")
-	ClientRedirectionRequests        = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures        = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency         = NewTimerDef("client_redirection_latency")
+	ClientFailures            = NewCounterDef("client_errors")
+	ClientLatency             = NewTimerDef("client_latency")
+	ClientRedirectionRequests = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency  = NewTimerDef("client_redirection_latency")
+	ClientDuplicatedRedirects = NewCounterDef(
+		"client_duplicated_redirects",
+		WithDescription("The number of requests forwarded from another cluster for a namespace that is passive in the receiving cluster."),
+	)
 	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
 	HistorySize                      = NewBytesHistogramDef("history_size")
 	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
@@ -1485,6 +1491,12 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand poller autoscaling adoption.
+	WorkerHeartbeatCount = NewCounterDef(
+		"worker_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats, per task type polled by the worker. poller_autoscaling_heartbeat_count is a subset of this. "+
+				"Dimensions: namespace, taskqueue, task_type"),
+	)
 	PollerAutoscalingHeartbeatCount = NewCounterDef(
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
@@ -1506,6 +1518,13 @@ var (
 	)
 
 	// Versioning and Reachability
+	DeploymentVersionMissingFromUserData = NewCounterDef(
+		"deployment_version_missing_from_user_data",
+		WithDescription(
+			"Emitted when a deployment version that was successfully registered is not found in its "+
+				"task queue's user data after a configurable grace period. Indicates broken or lagging "+
+				"user data replication, which prevents task dispatch to workers on this version."),
+	)
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 
 	// Worker
@@ -1617,6 +1636,46 @@ var (
 	NamespaceReplicationApplyEndToEndLatency = NewTimerDef(
 		"namespace_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
+	)
+	NamespaceReplicationShadowPreparationOutcomes = NewCounterDef(
+		"namespace_replication_shadow_preparation_outcomes",
+		WithDescription("Legacy reference preparation outcomes for eligible shadow namespace mutations."),
+	)
+	NamespaceReplicationShadowTriggerOutcomes = NewCounterDef(
+		"namespace_replication_shadow_trigger_outcomes",
+		WithDescription("Shadow trigger RPC completion outcomes. An RPC error does not prove that no component was created."),
+	)
+	NamespaceReplicationShadowReceiveComparisonOutcomes = NewCounterDef(
+		"namespace_replication_shadow_receive_comparison_outcomes",
+		WithDescription("Receiver shadow comparisons against the legacy reference, tagged by outcome and failure reason."),
+	)
+	NamespaceReplicationCHASMApplyOutcomes = NewCounterDef(
+		"namespace_replication_chasm_apply_outcomes",
+		WithDescription("CHASM namespace replication attempt outcomes by mode and apply stage."),
+	)
+	NamespaceReplicationCHASMApplyLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_latency",
+		WithDescription("CHASM namespace replication attempt duration, including outcome persistence."),
+	)
+	NamespaceReplicationCHASMApplyEndToEndLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_end_to_end_latency",
+		WithDescription("Time from component scheduling to a terminal peer transition, including queue waits and retry backoff. Recorded after persistence succeeds."),
+	)
+	NamespaceReplicationShadowCompletionOutcomes = NewCounterDef(
+		"namespace_replication_shadow_completion_outcomes",
+		WithDescription("Normally completed shadow mutations, excluding forced terminations. Aggregate outcome prioritizes error over mismatch over match; zero peers yields no_peers."),
+	)
+	NamespaceReplicationShadowCompletionLatency = NewTimerDef(
+		"namespace_replication_shadow_completion_latency",
+		WithDescription("Time from component scheduling until all shadow peers reach terminal outcomes. Recorded after persistence succeeds; excludes forced terminations."),
+	)
+	NamespaceReplicationCHASMPeerPendingAge = NewTimerDef(
+		"namespace_replication_chasm_peer_pending_age",
+		WithDescription("Unresolved peer age sampled when a retry is persisted."),
+	)
+	NamespaceReplicationCHASMPeerPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_peer_pending_threshold_exceeded",
+		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
 	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
@@ -1762,6 +1821,8 @@ var (
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
+	WorkerDeploymentTaskQueueFamilyBloomFilterOutcome = NewCounterDef("worker_deployment_task_queue_family_bloom_filter_outcome")
+	DeprecatedWorkerVersioningPollCounter             = NewCounterDef("deprecated_worker_versioning_poll")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

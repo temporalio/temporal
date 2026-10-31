@@ -1186,6 +1186,63 @@ func (m *historyEventMatcher) String() string {
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents() {
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(context.Background())
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_RateLimited() {
+	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	// One wait per appended batch: the gap, the request events and the tail.
+	rateLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).Return(nil).Times(3)
+	s.workflowStateReplicator.persistenceRateLimiter = rateLimiter
+	s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(dynamicconfig.HistoryReplicationRateLimiterSettings{
+		Enabled: true,
+		Scope:   dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication,
+	})
+
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(withReplicationTaskInfo(context.Background(), replicationTaskInfo{
+		isForceReplication: true,
+		workflowStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}))
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_NotRateLimited() {
+	s.workflowStateReplicator.persistenceRateLimiter = quotas.NewMockRequestRateLimiter(s.controller)
+	s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(dynamicconfig.HistoryReplicationRateLimiterSettings{
+		Enabled: true,
+		Scope:   dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication,
+	})
+
+	s.bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(context.Background())
+}
+
+func (s *workflowReplicatorSuite) Test_shouldRateLimitHistoryAppend() {
+	live := replicationTaskInfo{workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	forceReplicationRunning := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	forceReplicationPaused := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED}
+	forceReplicationClosed := replicationTaskInfo{isForceReplication: true, workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}
+	testCases := []struct {
+		name     string
+		settings dynamicconfig.HistoryReplicationRateLimiterSettings
+		info     replicationTaskInfo
+		expected bool
+	}{
+		{"disabled", dynamicconfig.HistoryReplicationRateLimiterSettings{Scope: dynamicconfig.HistoryReplicationRateLimiterScopeAll}, forceReplicationRunning, false},
+		{"enabled, no scope", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true}, forceReplicationRunning, false},
+		{"all, live", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeAll}, live, true},
+		{"open force replication, running", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationRunning, true},
+		{"open force replication, paused", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationPaused, true},
+		{"open force replication, closed", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, forceReplicationClosed, false},
+		{"open force replication, live", dynamicconfig.HistoryReplicationRateLimiterSettings{Enabled: true, Scope: dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication}, live, false},
+	}
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			s.workflowStateReplicator.persistenceRateLimiterConfig = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(tt.settings)
+			s.Equal(tt.expected, s.workflowStateReplicator.shouldRateLimitHistoryAppend(withReplicationTaskInfo(context.Background(), tt.info), "ns"))
+		})
+	}
+}
+
+func (s *workflowReplicatorSuite) bringLocalEventsUpToSourceCurrentBranchWithGapAndTailEvents(ctx context.Context) {
 	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -1332,8 +1389,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{27},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1342,8 +1398,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            21,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           blobs,
@@ -1352,8 +1407,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            25,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           tailBlobs,
@@ -1363,7 +1417,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
 	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
-		context.Background(),
+		ctx,
 		namespace.ID(namespaceID),
 		s.workflowID,
 		s.runID,
@@ -1497,8 +1551,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{5},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       true,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1507,8 +1560,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            1,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           blobs,
@@ -1517,8 +1569,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            4,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistories.Histories[0].BranchToken,
 		History:           tailBlobs,
@@ -1687,8 +1738,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		VersionHistory: versionHistories.Histories[0],
 		HistoryNodeIds: []int64{27},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           gapBlobs,
@@ -1697,8 +1747,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		NodeID:            21,
 		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
 	}).Return(nil, nil).Times(1)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
-		ShardID:           mockShard.GetShardID(),
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		IsNewBranch:       false,
 		BranchToken:       localVersionHistoryies.Histories[0].BranchToken,
 		History:           blobs,
@@ -2235,7 +2284,7 @@ func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		TransactionIDs: []int64{12, forkPointTxnID},
 	}, nil)
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
 		ShardID:           0,
 		IsNewBranch:       isNewBranch,
 		BranchToken:       appendBranchToken,
@@ -2376,7 +2425,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 
-	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	mockShard.EXPECT().AppendRawHistoryEvents(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
 	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),

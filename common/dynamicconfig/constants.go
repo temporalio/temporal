@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	NamespaceReplicationTransportModeLegacy = "legacy"
+	NamespaceReplicationTransportModeShadow = "shadow"
+)
+
 var (
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
@@ -78,6 +83,12 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
+	)
+	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
+		"system.namespaceReplicationTransportMode",
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		NamespaceReplicationTransportModeLegacy,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -252,6 +263,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		true,
 		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
+	)
+	EnableWorkflowEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableWorkflowEagerDispatchCheck",
+		false,
+		`EnableWorkflowEagerDispatchCheck controls whether history asks matching for a grant before eagerly starting a workflow.`,
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
@@ -790,6 +806,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
 	)
+	FrontendResourceExhaustedRetryDelayFloor = NewNamespaceDurationSetting(
+		"frontend.resourceExhaustedRetryDelayFloor",
+		0,
+		`Minimum retry delay duration on ResourceExhausted errors from the frontend namespace RPS and
+concurrency limiters. 0 disables the feature.`,
+	)
 	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
 		50,
@@ -1127,6 +1149,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 			"xdc-redirection",
 			"xdc-redirection-api",
 			"temporal-nexus-failure-support",
+			"temporal-internal-nexus-cloud-caller-namespace-id",
+			"temporal-internal-nexus-cloud-caller-type",
 		}),
 		`Nexus request headers to be removed before being sent to a user handler. Wildcards (*) are expanded to
 allow any substring. By default headers that are meant for internal use are disallowed. Concrete type should be list of
@@ -1231,6 +1255,11 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		"frontend.workerVersioningRuleAPIs",
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
+	)
+	FrontendBlockOldVersioningPollers = NewNamespaceBoolSetting(
+		"frontend.blockOldVersioningPollers",
+		false,
+		`FrontendBlockOldVersioningPollers prevents workers using deprecated worker versioning options from polling.`,
 	)
 
 	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
@@ -1479,6 +1508,16 @@ This can help reduce effects of task queue movement.`,
 		5*time.Second,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingDeploymentVersionMonitorGracePeriod = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorGracePeriod",
+		5*time.Minute,
+		`Grace period after a deployment version is registered before the monitor starts checking whether it appeared in task queue user data. If the version is still missing after this period, a counter is emitted every MatchingDeploymentVersionMonitorInterval.`,
+	)
+	MatchingDeploymentVersionMonitorInterval = NewTaskQueueDurationSetting(
+		"matching.deploymentVersionMonitorInterval",
+		time.Minute,
+		`How often to check and emit deployment_version_missing_from_user_data after the grace period has elapsed.`,
 	)
 	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
 		"matching.backlogMetricsEmitInterval",
@@ -1884,6 +1923,13 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableHistoryNodeTransactionIDValidation = NewGlobalBoolSetting(
+		"history.enableHistoryNodeTransactionIDValidation",
+		false,
+		`EnableHistoryNodeTransactionIDValidation rejects appending a history node whose transaction ID is not greater than
+		the previous node transaction ID, after asserting shard ownership. Enable it only with a persistence store that
+		implements AssertShardOwnership. This is a safety mechanism and will be removed in the future.`,
 	)
 	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
 		"history.enableWorkflowTaskCompletionPagination",
@@ -2727,14 +2773,31 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
 		"history.maximumRequestIDsPerExecution",
 		25,
-		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
-execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM start request IDs retained in the execution state
+per execution; the oldest are swept beyond this limit. Set to 0 to disable the count cap. Update request IDs are
+kept in the CHASM request IDs data node and capped by history.maximumRequestIDsInChasmDataNode instead.`,
+	)
+	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
+		"history.enableChasmRequestIDDataNode",
+		false,
+		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
+	)
+	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
+		"history.maximumRequestIDsInChasmDataNode",
+		50,
+		`MaximumRequestIDsInChasmDataNode is the maximum number of update request IDs retained per execution in
+the CHASM request IDs data node, for UpdateComponent idempotency. Once it is exceeded, the oldest are
+dropped until half this many remain, so at least half of it is always kept. It can be higher than
+history.maximumRequestIDsPerExecution because the node is only written when an ID is added. Set to 0 to disable
+the count cap.`,
 	)
 	RequestIDMaxAge = NewNamespaceDurationSetting(
 		"history.requestIDMaxAge",
 		7*24*time.Hour,
-		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
-UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID used for idempotency. In the
+execution state (start request IDs), older request IDs are swept when a new one is added. In the CHASM request IDs
+data node (update request IDs), older request IDs are no longer treated as duplicates, and are dropped first when
+the node is trimmed. Set to 0 to disable age-based expiry.`,
 	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
@@ -3203,10 +3266,13 @@ pinned open indefinitely by endless replication streams. 0 disables the max life
 ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
 time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
 	)
-	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
+	HistoryReplicationRateLimiter = NewNamespaceTypedSettingWithConverter(
 		"history.EnableHistoryReplicationRateLimiter",
-		false,
-		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
+		convertHistoryReplicationRateLimiterSettings,
+		HistoryReplicationRateLimiterSettings{},
+		`HistoryReplicationRateLimiter controls the rate limiter on history events appended by replication. Enabled turns it
+on and Scope, which is required, selects the appends it applies to: "all" or "openForceReplication". A bool value is
+also accepted and applies to all appends. An invalid value disables the rate limiter.`,
 	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",

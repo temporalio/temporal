@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -41,11 +43,11 @@ type (
 )
 
 const (
-	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
-	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
-	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
-	orphanedChildReplacementReplaced                                      = "replaced"
-	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
+	eagerStartDeniedReasonDynamicConfigDisabled    metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
+	eagerStartDeniedReasonDispatchNotGranted       metrics.ReasonString = "dispatch_not_granted"
+	orphanedChildReplacementReplaced                                    = "replaced"
 )
 
 const (
@@ -70,6 +72,7 @@ type Starter struct {
 	shouldSkipReactivation     bool
 	revisionNumber             int64
 	derivedRunID               bool
+	orphanedChildEvent         *wideevents.ReplicationLifecyclePayload
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -171,9 +174,47 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
+		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) {
+			// Matching grants are best-effort. On a denial or any Matching failure, start the workflow
+			// normally instead of failing the start request.
+			if !s.grantEagerWorkflowDispatch(ctx) {
+				metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
+					Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
+				request.RequestEagerExecution = false
+			}
 		}
 	}
 	return nil
+}
+
+// grantEagerWorkflowDispatch asks Matching whether the first workflow task may be dispatched eagerly.
+// TODO: Reconcile the Matching grant when the start does not create a new execution.
+func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
+	request := s.request.StartRequest
+	// Pinned and pending one-time overrides route the first workflow task to their target version.
+	// TODO: When there's no override, send the version from EagerWorkerDeploymentOptions (sent by the Go SDK since
+	// sdk-go#2075), so Matching also checks the versioned queue's backlog.
+	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
+		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
+	))
+	// Same tags as the activity eager paths, which have no workflow type.
+	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
+		s.shardContext.GetMetricsHandler(),
+		s.namespace.Name(),
+		request.GetTaskQueue().GetName(),
+		s.shardContext.GetConfig(),
+		metrics.OperationTag(metrics.HistoryStartWorkflowExecutionScope),
+		metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+	)).Record(1)
+	return common.GrantEagerDispatch(
+		ctx,
+		s.matchingClient,
+		s.namespace.ID().String(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetPriority(),
+		version,
+	)
 }
 
 func (s *Starter) getMetricsHandler() metrics.Handler {
@@ -257,6 +298,12 @@ func (s *Starter) runIDDedupResponse(
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
+	// Registered first so workflow locks are released before the event is emitted.
+	defer func() {
+		if s.orphanedChildEvent != nil {
+			wideevents.Emit(s.shardContext.GetEventLogger(), *s.orphanedChildEvent)
+		}
+	}()
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
 		return nil, StartErr, err
@@ -542,19 +589,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	newRunID := s.newRunID()
 
 	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
+	var orphanedChildEvent *wideevents.ReplicationLifecyclePayload
 	var err error
 	orphanedChildReplacementInfo := s.request.GetOrphanedChildReplacementInfo()
 	orphanedChildReplacementRequested := orphanedChildReplacementInfo != nil &&
 		s.request.StartRequest.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 	replaceOrphanedChild := orphanedChildReplacementRequested &&
 		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if orphanedChildReplacementRequested && !replaceOrphanedChild {
-		metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
-			1,
-			metrics.OutcomeTag(orphanedChildReplacementRejectedUnsupportedState),
-			metrics.StringTag("workflow_state", currentWorkflowConditionFailed.State.String()),
-		)
-	}
 	if replaceOrphanedChild {
 		currentExecutionUpdateAction = api.ReplaceOrphanedChildAction(
 			ctx,
@@ -563,6 +604,39 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			newRunID,
 			s.getMetricsHandler(),
 		)
+		if s.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+			replaceAction := currentExecutionUpdateAction
+			currentExecutionUpdateAction = func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+				mutableState := lease.GetMutableState()
+				state := mutableState.GetExecutionState()
+				executionInfo := mutableState.GetExecutionInfo()
+				parentExecutionInfo := s.request.GetParentExecutionInfo()
+				orphanedChildEvent = &wideevents.ReplicationLifecyclePayload{
+					Phase:       wideevents.ReplicationApplied,
+					TaskType:    enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION.String(),
+					Shard:       s.shardContext.GetShardID(),
+					Namespace:   s.namespace.Name().String(),
+					NamespaceID: s.namespace.ID().String(),
+					WorkflowID:  workflowID,
+					RunID:       workflowKey.RunID,
+					NewRunID:    newRunID,
+					Outcome:     wideevents.ParentChildOutcomeReplaced,
+					Details: map[string]any{
+						"event_type":                           wideevents.ParentChildLifecycleEventType,
+						"phase":                                wideevents.ParentChildPhaseOrphanedChildReplacement,
+						"outcome":                              wideevents.ParentChildOutcomeReplaced,
+						"child_workflow_state":                 state.GetState().String(),
+						"child_workflow_status":                state.GetStatus().String(),
+						"first_workflow_task_scheduled":        mutableState.HadOrHasWorkflowTask(),
+						"parent_initiated_version":             executionInfo.GetParentInitiatedVersion(),
+						"replacement_parent_initiated_id":      parentExecutionInfo.GetInitiatedId(),
+						"replacement_parent_initiated_version": parentExecutionInfo.GetInitiatedVersion(),
+					},
+				}
+				orphanedChildEvent.PopulateParentInfo(executionInfo)
+				return replaceAction(lease)
+			}
+		}
 	} else {
 		currentExecutionUpdateAction, err = api.ResolveDuplicateWorkflowID(
 			s.shardContext,
@@ -644,6 +718,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	switch err {
 	case nil:
 		if replaceOrphanedChild {
+			s.orphanedChildEvent = orphanedChildEvent
 			metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
 				1,
 				metrics.OutcomeTag(orphanedChildReplacementReplaced),
@@ -715,16 +790,7 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
-		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
-			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
-
-		return &historyservice.StartWorkflowExecutionResponse{
-			RunId:               runID,
-			FirstExecutionRunId: firstExecutionRunID,
-			Started:             true,
-			// Status is set by caller
-			Link: s.generateStartedEventRefLink(runID),
-		}, nil
+		return s.taskAlreadyDispatchedResponse(runID, firstExecutionRunID), nil
 	}
 
 	events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -732,7 +798,26 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
+	// A first attempt that didn't start eagerly sent its task through matching, so a poller may already have it.
+	// TODO: Return the grant this request already took from Matching, since the retry doesn't dispatch a new task.
+	if !events[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted() {
+		return s.taskAlreadyDispatchedResponse(runID, firstExecutionRunID), nil
+	}
+
 	return s.generateResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
+}
+
+func (s *Starter) taskAlreadyDispatchedResponse(runID string, firstExecutionRunID string) *historyservice.StartWorkflowExecutionResponse {
+	metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
+		Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
+
+	return &historyservice.StartWorkflowExecutionResponse{
+		RunId:               runID,
+		FirstExecutionRunId: firstExecutionRunID,
+		Started:             true,
+		// Status is set by caller
+		Link: s.generateStartedEventRefLink(runID),
+	}
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
