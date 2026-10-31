@@ -23,12 +23,14 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -727,6 +729,174 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ShardOwnershipLost() {
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID + 1,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.IsType(&p.ShardOwnershipLostError{}, err)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
+	s.AssertHEPrefixWithDB(branchToken, newEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ExecutionMissing() {
+	if strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("this checks the SQL update transaction")
+	}
+
+	branchToken, newSnapshot, _ := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	// Deleting the execution keeps its current execution row.
+	err := s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.IsType(&p.ConditionFailedError{}, err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_DuplicateTask() {
+	if strings.HasPrefix(s.T().Name(), "TestCassandra") {
+		s.T().Skip("Cassandra task inserts overwrite existing tasks")
+	}
+
+	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	task := &tasks.ActivityTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID),
+		TaskID:              rand.Int63(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	firstMutation, firstEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	firstMutation.Tasks[tasks.CategoryTransfer] = []tasks.Task{task}
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *firstMutation,
+		UpdateWorkflowEvents:   firstEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	secondMutation, secondEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		firstMutation.DBRecordVersion+1,
+		branchToken,
+	)
+	secondMutation.Tasks[tasks.CategoryTransfer] = []tasks.Task{task}
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *secondMutation,
+		UpdateWorkflowEvents:   secondEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.IsType(&serviceerror.Unavailable{}, err)
+	s.True(strings.HasPrefix(err.Error(), "createTransferTasks failed. Error:"), err.Error())
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, firstMutation)
+	s.AssertHEPrefixWithDB(branchToken, newEvents, firstEvents)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {

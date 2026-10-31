@@ -348,6 +348,9 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	}
 
 	// then update mutable state
+	if handled, err := m.updateWorkflowExecutionPipelined(ctx, request); handled {
+		return err
+	}
 	return m.txExecuteShardLocked(ctx,
 		"UpdateWorkflowExecution",
 		request.ShardID,

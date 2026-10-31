@@ -442,6 +442,31 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLPipelineSuite() {
+	if p.pluginName != "postgres12_pgx" || p.connectAttrs["default_query_exec_mode"] != "" {
+		p.T().Skip("only pgx in its default exec mode pipelines transactions")
+	}
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	admin, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL admin DB: %v", err)
+	}
+	defer func() {
+		_ = admin.Close()
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewPipelineSuite(p.T(), store, admin)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTransferTaskSuite() {
 	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)

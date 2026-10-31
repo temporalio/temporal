@@ -37,6 +37,7 @@ type db struct {
 
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
+	pipe   *pipeline
 }
 
 var _ sqlplugin.DB = (*db)(nil)
@@ -64,6 +65,9 @@ func newDB(
 }
 
 func (pdb *db) conn() sqlplugin.Conn {
+	if pdb.pipe != nil {
+		return pdb.pipe
+	}
 	if pdb.tx != nil {
 		return pdb.tx
 	}

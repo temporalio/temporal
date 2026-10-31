@@ -5,6 +5,7 @@ package sqlplugin
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
@@ -21,6 +22,13 @@ const (
 	DbKindUnknown DbKind = iota
 	DbKindMain
 	DbKindVisibility
+)
+
+var (
+	// ErrNotFlushed is the result of a PipelinedTx call made before Flush.
+	ErrNotFlushed = errors.New("pipelined statement result is not available before flush")
+	// ErrPipelineUnsupported is returned when the plugin or its connection cannot pipeline.
+	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
 )
 
 type VersionedBlob struct {
@@ -97,6 +105,22 @@ type (
 		TableCRUD
 		Commit() error
 		Rollback() error
+	}
+
+	// PipelinedTx is a transaction that queues its statements until Flush sends
+	// them in one round trip. After Flush, the same calls made in the same order
+	// return the flushed results.
+	PipelinedTx interface {
+		Tx
+		Flush() error
+		// Diverged reports whether the calls after Flush differed from the queued
+		// statements.
+		Diverged() bool
+	}
+
+	// TxPipeliner lets SQL plugins run a transaction as a PipelinedTx.
+	TxPipeliner interface {
+		BeginPipelinedTx(ctx context.Context) (PipelinedTx, error)
 	}
 
 	// DB defines the API for regular SQL operations of a Temporal server
