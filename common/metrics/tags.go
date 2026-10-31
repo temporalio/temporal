@@ -41,6 +41,7 @@ const (
 	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
+	workerVersioningVersion = "worker_versioning_version"
 	workerDeploymentName    = "worker_deployment_name"
 	workerDeploymentBuildID = "worker_build_id"
 	destination             = "destination"
@@ -222,6 +223,10 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 		version = "__versioned__"
 	}
 	return Tag{Key: workerVersion, Value: version}
+}
+
+func WorkerVersioningVersionTag(featureVersion string) Tag {
+	return Tag{Key: workerVersioningVersion, Value: featureVersion}
 }
 
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {

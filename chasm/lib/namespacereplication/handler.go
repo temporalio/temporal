@@ -46,7 +46,7 @@ func (h *serviceHandler) TriggerNamespaceMutation(
 			return component, nil
 		},
 		req.GetMutation(),
-		chasm.WithRequestID(req.GetBusinessId()),
+		chasm.WithStartRequestID(req.GetBusinessId()),
 	)
 	if err != nil {
 		return nil, err
