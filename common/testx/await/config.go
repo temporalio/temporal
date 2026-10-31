@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/testx/internal/debug"
 )
 
 const attemptTimeoutEnvVar = "TEMPORAL_AWAIT_ATTEMPT_TIMEOUT"
