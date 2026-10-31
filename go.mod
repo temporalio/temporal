@@ -112,7 +112,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.56.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
-	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/apache/thrift v0.24.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.22 // indirect
@@ -206,7 +205,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	google.golang.org/genproto v0.0.0-20260420184626-e10c466a9529 // indirect
@@ -226,7 +224,13 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-tool golang.org/x/perf/cmd/benchstat
+// Add tools from this repository or tools that must match its dependency versions here.
+// Add standalone developer tools to mise.toml.
+tool (
+	go.temporal.io/api/cmd/protoc-gen-go-helpers
+	go.temporal.io/api/cmd/protogen
+	go.temporal.io/server/cmd/tools/protoc-gen-go-chasm
+)
 
 // Use the local testx; consumers of the server ignore this replace.
 replace go.temporal.io/testx => ./common/testx

@@ -17,10 +17,16 @@ jobs:
           check-latest: true
           cache: true
 
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
+
       - name: lint actions
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           make lint-actions
         shell: bash
 
@@ -39,6 +45,8 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
+          install: false
+          cache_save_post: true
           minimum_release_age: 14d
           auto_update: true
 
@@ -61,6 +69,8 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
+          install: false
+          cache_save_post: true
           minimum_release_age: 14d
           auto_update: true
 
@@ -83,6 +93,8 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
+          install: false
+          cache_save_post: true
           minimum_release_age: 14d
           auto_update: true
 
@@ -102,6 +114,13 @@ jobs:
           check-latest: true
           cache: true
 
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
+
       - name: lint nil-safety
         run: make lint-nilaway
 
@@ -117,6 +136,13 @@ jobs:
           go-version-file: "go.mod"
           check-latest: true
           cache: true
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: apply formatters
         run: |
@@ -169,6 +195,13 @@ jobs:
           go-version-file: "go.mod"
           check-latest: true
           cache: true
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install: false
+          cache_save_post: true
+          minimum_release_age: 14d
+          auto_update: true
 
       - name: lint code
         run: |
