@@ -198,6 +198,9 @@ type (
 		// Polls from workers in this cache are rejected immediately to prevent
 		// zombie re-polls from stealing tasks after ShutdownWorker.
 		shutdownWorkers cache.Cache
+		// In-flight shutdowns must reject polls even when their cache entries expire.
+		workerShutdownLock      sync.Mutex
+		inFlightWorkerShutdowns map[string]int
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -1347,22 +1350,55 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	if err != nil {
 		return nil, err
 	}
+	// Cancel local polls before waiting for root initialization or remote fan-out.
+	if request.WorkerInstanceKey != "" {
+		defer e.beginWorkerShutdown(request.WorkerInstanceKey)()
+	}
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
 		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
 		// fully rolled out. This check is only needed during the transition since the legacy
 		// frontend fan-out path may send non-root partitions to this handler.
 		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+			resp, err := e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+			if err != nil {
+				return nil, err
+			}
+			resp.CancelledCount += cancelledCount
+			return resp, nil
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
-	if request.WorkerInstanceKey != "" {
-		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
-		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
-	}
-	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// beginWorkerShutdown keeps a worker marked until all overlapping shutdowns finish.
+// The returned function refreshes the cache before releasing the in-flight marker.
+func (e *matchingEngineImpl) beginWorkerShutdown(workerKey string) func() {
+	e.workerShutdownLock.Lock()
+	if e.inFlightWorkerShutdowns == nil {
+		e.inFlightWorkerShutdowns = make(map[string]int)
+	}
+	e.inFlightWorkerShutdowns[workerKey]++
+	e.workerShutdownLock.Unlock()
+	e.shutdownWorkers.Put(workerKey, struct{}{})
+	return func() {
+		e.workerShutdownLock.Lock()
+		defer e.workerShutdownLock.Unlock()
+		e.shutdownWorkers.Put(workerKey, struct{}{})
+		e.inFlightWorkerShutdowns[workerKey]--
+		if e.inFlightWorkerShutdowns[workerKey] == 0 {
+			delete(e.inFlightWorkerShutdowns, workerKey)
+		}
+	}
+}
+
+func (e *matchingEngineImpl) isWorkerShutdown(workerKey string) bool {
+	e.workerShutdownLock.Lock()
+	defer e.workerShutdownLock.Unlock()
+	return e.inFlightWorkerShutdowns[workerKey] > 0 || e.shutdownWorkers.Get(workerKey) != nil
 }
 
 // cancelOutstandingWorkerPollsForAllPartitions performs flat fan-out from the root partition.
@@ -1373,20 +1409,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 	rootPartition tqid.Partition,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
+	// Late polls can reach remote partitions even if the root has not loaded yet.
+	// Initialize the root to recover its authoritative read count before notifying those hosts.
+	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
-	}
-	if rootPM == nil {
-		// Root not loaded means no pending polls anywhere — child partitions loading
-		// triggers root to load via user data fetch chain.
-		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
-			tag.WorkflowNamespaceID(request.GetNamespaceId()),
-			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
-			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-		)
-		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
 	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
 	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
@@ -1504,8 +1531,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	var cancelledCount int32
 	for _, worker := range request.GetWorkers() {
 		if worker.GetWorkerInstanceKey() != "" {
-			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
-			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
+			defer e.beginWorkerShutdown(worker.GetWorkerInstanceKey())()
 		}
 		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
 	}
@@ -3194,14 +3220,14 @@ func (e *matchingEngineImpl) pollTask(
 	defer cancel()
 
 	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
-		// Register before checking shutdownWorkers. The shutdown path does the reverse:
-		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// Register before checking for shutdown. The shutdown path does the reverse:
+		// it marks the worker before calling CancelAll. So either the check
 		// sees the shutdown, or CancelAll sees the registration.
 		pollerTrackerKey := uuid.NewString()
 		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
 
-		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+		if e.isWorkerShutdown(workerInstanceKey) {
 			e.logger.Debug("Rejecting poll from recently-shutdown worker",
 				tag.WorkflowNamespaceID(partition.NamespaceId()),
 				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
