@@ -200,6 +200,10 @@ func (e *Engine) UpdateWithStartExecution(
 	if hasCurrent {
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+			// Updating a running execution reuses it, so the conflict policy must allow that.
+			if err := conflictPolicyAllowsUpdate(ref, current, options.ConflictPolicy); err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
 			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, "")
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
@@ -373,6 +377,42 @@ func (e *Engine) DeleteExecution(
 	return nil
 }
 
+// newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
+// because current is still running.
+func newConflictPolicyFailErr(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	return chasm.NewExecutionAlreadyStartedErr(
+		fmt.Sprintf(
+			"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
+			ref.BusinessID, current.key.RunID, conflictPolicy,
+		),
+		current.createRequestID,
+		current.key.RunID,
+	)
+}
+
+// conflictPolicyAllowsUpdate returns nil if the conflict policy lets UpdateWithStartExecution update the
+// running execution current, or the error to return instead. Like the history engine's version, the
+// switch has no default case so the exhaustive linter flags a new BusinessIDConflictPolicy.
+func conflictPolicyAllowsUpdate(
+	ref chasm.ComponentRef,
+	current *execution,
+	conflictPolicy chasm.BusinessIDConflictPolicy,
+) error {
+	switch conflictPolicy {
+	case chasm.BusinessIDConflictPolicyUseExisting:
+		return nil
+	case chasm.BusinessIDConflictPolicyFail:
+		return newConflictPolicyFailErr(ref, current, conflictPolicy)
+	case chasm.BusinessIDConflictPolicyTerminateExisting:
+		return serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not supported for UpdateWithStartExecution")
+	}
+	return serviceerror.NewInternal(fmt.Sprintf("unknown business ID conflict policy: %v", conflictPolicy))
+}
+
 // handleConflictPolicy is called when a StartExecution arrives for a business ID whose
 // current run is still running.
 func (e *Engine) handleConflictPolicy(
@@ -384,14 +424,7 @@ func (e *Engine) handleConflictPolicy(
 ) (chasm.StartExecutionResult, error) {
 	switch options.ConflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
-			fmt.Sprintf(
-				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				ref.BusinessID, current.key.RunID, options.ConflictPolicy,
-			),
-			current.createRequestID,
-			current.key.RunID,
-		)
+		return chasm.StartExecutionResult{}, newConflictPolicyFailErr(ref, current, options.ConflictPolicy)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
 		_, _ = current.backend.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,

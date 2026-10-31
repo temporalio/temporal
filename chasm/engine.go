@@ -115,6 +115,7 @@ type TransitionOptions struct {
 	RequestID        string
 	RequestIDType    RequestIDType
 	Speculative      bool
+	AssumeNew        bool
 }
 
 // RequestIDType says which code path checks a request ID for retries, which decides where the request ID
@@ -189,6 +190,13 @@ type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struc
 func WithSpeculative() TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.Speculative = true
+	}
+}
+
+// WithAssumeNew hints to UpdateWithStartExecution() that the execution most likely does not exist yet.
+func WithAssumeNew() TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.AssumeNew = true
 	}
 }
 
