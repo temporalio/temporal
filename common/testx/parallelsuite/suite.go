@@ -1,6 +1,7 @@
 package parallelsuite
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"reflect"
@@ -10,28 +11,46 @@ import (
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
+	"go.temporal.io/testx/await"
+	"go.temporal.io/testx/testcontext"
 )
 
 // TestingSuite is the constraint for suite types.
 type TestingSuite interface {
 	testifysuite.TestingSuite
-	Scope
-	copySuite(t *testing.T, parallel bool, assertT require.TestingT) TestingSuite
-	initSuite(t *testing.T, parallel bool, assertT require.TestingT)
+	//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
+	copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) TestingSuite
+	//nolint:revive // see copySuite above.
+	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
 }
 
-// Extension adds methods to a suite through an exported, embedded struct field.
-// Init binds each fresh extension instance to its owning suite, after the base
-// test handle and assertions are initialized. Extensions are initialized in field order.
-type Extension[T TestingSuite] interface {
-	Init(T)
+// AssertionsInitializer may be implemented by an embedded suite to bind
+// additional assertions after each test, subtest, or await attempt is initialized.
+type AssertionsInitializer interface {
+	InitAssertions()
 }
 
-// Scope provides the test handle and assertions for a suite instance.
+// Scope provides the context and test handles for a test or await attempt.
+// It is useful for test helpers.
 type Scope interface {
+	Context() context.Context
 	TB() testing.TB
 	Require() *require.Assertions
 	AssertionT() require.TestingT
+}
+
+type contextScope struct {
+	Scope
+	ctx context.Context
+}
+
+// WithContext returns a scope that uses ctx and delegates assertions to scope.
+func WithContext(ctx context.Context, scope Scope) Scope {
+	return contextScope{Scope: scope, ctx: ctx}
+}
+
+func (s contextScope) Context() context.Context {
+	return s.ctx
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -40,27 +59,37 @@ type Scope interface {
 // directly OR create subtests via Run — not both.
 type Suite[T TestingSuite] struct {
 	testifyBase
+	await.Suite[T]
 	*require.Assertions
 
 	guardT      guardT
 	runParallel bool
 	assertT     require.TestingT
+	ctx         context.Context // override set in initSuite; nil means "use the test context"
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT) TestingSuite {
+// ctx overrides the suite's context; nil means use the test context (see [Suite.Context]).
+//
+//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
+func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) TestingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
-	initialize(t, cp, parallel, assertT)
+	cp.initSuite(t, parallel, assertT, ctx)
+	if initializer, ok := any(cp).(AssertionsInitializer); ok {
+		initializer.InitAssertions()
+	}
 	return cp
 }
 
-func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.TestingT) {
+//nolint:revive // see copySuite above.
+func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
 	g.hasSubtests.Store(false)
 	s.runParallel = parallel
+	s.ctx = ctx
 	if s.runParallel {
 		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel tests
 	}
@@ -69,6 +98,9 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	}
 	s.assertT = assertT
 	s.Assertions = require.New(assertT)
+	s.Suite = await.NewSuite(s, func(at *await.T) T {
+		return s.copySuite(t, false, at, at.Context()).(T)
+	})
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
@@ -94,6 +126,17 @@ func (s *Suite[T]) AssertionT() require.TestingT {
 	return s.assertT
 }
 
+// Context returns the test-scoped context (created from [testcontext]).
+// Inside an [Await] callback, it returns the await-scoped context.
+//
+// The result is deliberately not cached; see [testcontext.EnsureRemaining].
+func (s *Suite[T]) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return testcontext.For(s.T())
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
@@ -110,7 +153,7 @@ func (s *Suite[T]) run(name string, parallel bool, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
-		fn(s.copySuite(t, parallel, nil).(T))
+		fn(s.copySuite(t, parallel, nil, nil).(T))
 	})
 }
 
@@ -120,8 +163,7 @@ func (s *Suite[T]) run(name string, parallel bool, fn func(T)) bool {
 // *testing.T. Both the suite-level test and each method subtest are marked as
 // parallel. Any sequential setup must happen before calling Run.
 //
-// The suite must embed [Suite]. Additional fields must be exported, embedded
-// structs implementing [Extension]; other state must be passed as extra args to Run.
+// The suite must embed [Suite] and have no other fields.
 func Run[T TestingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
@@ -143,7 +185,7 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	}
 	structType := typ.Elem()
 
-	validateSuiteStruct[T](structType)
+	validateSuiteStruct(structType)
 
 	methods := discoverTestMethods(typ, structType, args)
 	if len(methods) == 0 {
@@ -160,45 +202,38 @@ func run[T TestingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	initialize(t, s, true, nil)
+	s.initSuite(t, true, nil, nil)
+	if initializer, ok := any(s).(AssertionsInitializer); ok {
+		initializer.InitAssertions()
+	}
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			cpS := s.copySuite(t, methodsParallel, nil)
+			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
 	}
 }
 
-// WithAssertions creates a fresh suite for the same test with assertions bound to target.
-// Embedded extensions are initialized for the new instance, as with a subtest.
-func WithAssertions[T TestingSuite](suite T, target require.TestingT) T {
-	return suite.copySuite(suite.T(), false, target).(T)
-}
-
-func initialize[T TestingSuite](t *testing.T, suite T, parallel bool, target require.TestingT) {
-	suite.initSuite(t, parallel, target)
-	value := reflect.ValueOf(suite).Elem()
-	for _, field := range value.Fields() {
-		if extension, ok := field.Addr().Interface().(Extension[T]); ok {
-			extension.Init(suite)
-		}
-	}
-}
-
-func validateSuiteStruct[T TestingSuite](structType reflect.Type) {
+func validateSuiteStruct(structType reflect.Type) {
 	if !strings.HasSuffix(structType.Name(), "Suite") {
 		panic(fmt.Sprintf("parallelsuite.Run: struct name %q must end with \"Suite\"", structType.Name()))
 	}
-	for field := range structType.Fields() {
-		if !field.Anonymous || field.PkgPath != "" || field.Type.Kind() != reflect.Struct {
-			panic(fmt.Sprintf("parallelsuite.Run: suite %s field %s must be an exported, embedded struct", structType.Name(), field.Name))
-		}
-		fieldType := reflect.PointerTo(field.Type)
-		if !fieldType.Implements(reflect.TypeFor[TestingSuite]()) && !fieldType.Implements(reflect.TypeFor[Extension[T]]()) {
-			panic(fmt.Sprintf("parallelsuite.Run: suite %s field %s must embed Suite or implement Extension", structType.Name(), field.Name))
-		}
+
+	if structType.NumField() != 1 {
+		panic(fmt.Sprintf(
+			"parallelsuite.Run: suite %s must have no fields besides the embedded parallelsuite.Suite; "+
+				"pass parameters as extra args to Run instead (got %d fields)",
+			structType.Name(), structType.NumField(),
+		))
+	}
+	f := structType.Field(0)
+	if !f.Anonymous {
+		panic(fmt.Sprintf(
+			"parallelsuite.Run: suite %s must embed parallelsuite.Suite, found named field %q",
+			structType.Name(), f.Name,
+		))
 	}
 }
 
@@ -231,17 +266,15 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
-	inheritedMethods := make(map[string]bool)
-	for field := range structType.Fields() {
-		fieldType := field.Type
-		for method := range reflect.PointerTo(fieldType).Methods() {
-			inheritedMethods[method.Name] = true
-		}
+	inheritedType := structType.Field(0).Type
+	if inheritedType.Kind() != reflect.Pointer {
+		inheritedType = reflect.PointerTo(inheritedType)
 	}
 
 	for method := range ptrType.Methods() {
 		name := method.Name
-		if !strings.HasPrefix(name, "Test") && !inheritedMethods[name] {
+		_, inherited := inheritedType.MethodByName(name)
+		if !strings.HasPrefix(name, "Test") && !inherited {
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: suite %s has exported method %s that does not start with Test; "+
 					"use a package-level function instead",
