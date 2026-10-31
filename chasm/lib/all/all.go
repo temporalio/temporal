@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/worker"
 	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/log"
 )
@@ -29,6 +30,7 @@ func NewNilRegistry(logger log.Logger) (*chasm.Registry, error) {
 		namespacereplication.NewNilLibrary(),
 		nexusoperation.NewNilLibrary(),
 		scheduler.NewNilLibrary(),
+		worker.NewNilLibrary(),
 		workflow.NewNilLibrary(),
 	}
 

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/worker/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+// WorkerGroupState owns the shared lease for workers heartbeating together.
+message WorkerGroupState {
+  // SDK-generated grouping key, also used as the CHASM Business ID.
+  string worker_grouping_key = 1;
+  // Lifecycle of the group run. Individual workers may stop while the group stays active.
+  WorkerGroupStatus status = 2;
+  // Deadline computed from CHASM time and the effective lease duration.
+  google.protobuf.Timestamp lease_expiration_time = 3;
+}
+
+// WorkerState stores metadata for one worker within a group.
+message WorkerState {
+  // Last reported heartbeat, including the worker instance key and runtime metadata.
+  temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 1;
+}
+
+// WorkerGroupStatus describes the lifecycle of a worker group run.
+enum WorkerGroupStatus {
+  WORKER_GROUP_STATUS_UNSPECIFIED = 0;
+  WORKER_GROUP_STATUS_ACTIVE = 1;
+  WORKER_GROUP_STATUS_INACTIVE = 2;
+}
