@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -57,10 +58,7 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 	}
 	err = f(tx)
 	if err != nil {
-		rollBackErr := tx.Rollback()
-		if rollBackErr != nil {
-			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
+		m.rollback(tx)
 
 		switch err.(type) {
 		case *persistence.ConditionFailedError,
@@ -79,6 +77,14 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 		return convertSQLError(operation, "failed to commit transaction", err)
 	}
 	return nil
+}
+
+// rollback rolls back tx and logs a failure. It does not log sql.ErrTxDone. database/sql already
+// rolled back the transaction when the context passed to BeginTx was canceled.
+func (m *SqlStore) rollback(tx sqlplugin.Tx) {
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		m.logger.Error("transaction rollback error", tag.Error(err))
+	}
 }
 
 // convertSQLError maps driver errors to persistence errors. Context cancel and
