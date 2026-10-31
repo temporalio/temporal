@@ -15,7 +15,7 @@ message RecordHeartbeatRequest {
   // All worker heartbeats must have the specified worker_grouping_key.
   temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest frontend_request = 2;
 
-  // SDK grouping key, used as the CHASM Business ID and History shard-routing key.
+  // SDK grouping key, used as the worker state machine's CHASM Business ID.
   string worker_grouping_key = 3;
 }
 
