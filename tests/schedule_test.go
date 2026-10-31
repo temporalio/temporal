@@ -1983,8 +1983,10 @@ func (suite *ScheduleSuite) TestInput(chasmEnabled bool) {
 	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-// A workflow with no return value must not hand the next run a last completion
-// result; V2 used to forward an empty, metadata-less payload that codecs reject.
+// A no-result run clears V2's last completion result, while V1 keeps the previous one;
+// an explicit nil (binary/null) is handed over as a result by both.
+// Whatever is handed over must decode; V2 used to forward an empty, metadata-less
+// payload that codecs reject.
 func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmEnabled bool) {
 	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)
@@ -1994,13 +1996,38 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	wid := testcore.RandomizeStr("sched-no-result-wf")
 	wt := testcore.RandomizeStr("sched-no-result-wt")
 
-	var runs, sawLastCompletionResult atomic.Int32
-	workflowFn := func(ctx workflow.Context) error {
-		if workflow.HasLastCompletionResult(ctx) {
-			sawLastCompletionResult.Store(1)
+	// Run 1 returns a value, run 2 nothing, run 3 an explicit nil (binary/null), later runs nothing.
+	// Each run records the last completion result it was handed.
+	var runs atomic.Int32
+	var seen sync.Map // run number -> "none", "null", "error" or the decoded value
+	workflowFn := func(ctx workflow.Context) (any, error) {
+		var n int32
+		if err := workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) }).Get(&n); err != nil {
+			return nil, err
 		}
-		workflow.SideEffect(ctx, func(workflow.Context) any { return runs.Add(1) })
-		return nil
+		got := "none"
+		if workflow.HasLastCompletionResult(ctx) {
+			var result *string
+			switch err := workflow.GetLastCompletionResult(ctx, &result); {
+			case err != nil:
+				got = "error"
+			case result == nil:
+				got = "null"
+			default:
+				got = *result
+			}
+		}
+		seen.Store(n, got)
+		switch n {
+		case 1:
+			result := "value"
+			return &result, nil
+		case 3:
+			// A typed nil through `any` is encoded as binary/null; an untyped nil sends no result.
+			return (*string)(nil), nil
+		default:
+			return nil, nil
+		}
 	}
 	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
@@ -2027,13 +2054,22 @@ func (suite *ScheduleSuite) TestLastCompletionResultAfterNoResultWorkflow(chasmE
 	})
 	require.NoError(t, err)
 
-	await.RequireTrue(t, func() bool { return runs.Load() >= 3 }, 20*time.Second, 200*time.Millisecond)
-	require.Zero(t, sawLastCompletionResult.Load())
+	await.RequireTrue(t, func() bool { _, ok := seen.Load(int32(4)); return ok }, 25*time.Second, 200*time.Millisecond)
+	afterNoResult := "none"
+	if !chasmEnabled {
+		afterNoResult = "value" // V1 keeps the previous result.
+	}
+	for n, want := range map[int32]string{1: "none", 2: "value", 3: afterNoResult, 4: "null"} {
+		got, _ := seen.Load(n)
+		require.Equal(t, want, got, "run %d", n)
+	}
 }
 
 // TestScheduleLastCompletionResultMatchesV1 drives a V1 and a V2 schedule
 // through the same outcomes and requires every started event to be identical,
-// presence-aware (nil != empty Payloads).
+// presence-aware (nil != empty Payloads), except where a no-result run intentionally
+// diverges: V1 keeps the previous result and failure, V2 clears both. An explicit nil
+// (binary/null) is a result for both.
 func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 	// Must precede env creation, which otherwise fixes the default timeout.
 	ctx := testcontext.For(t, testcontext.WithTimeout(3*time.Minute))
@@ -2053,16 +2089,17 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		value    = "value"
 		noResult = "no-result"
 		fail     = "fail"
+		null     = "null"
 	)
 	// Cancel/terminate/timeout are excluded: V2 diverges on ContinuedFailure there (separate fix).
-	steps := []string{value, noResult, fail, noResult, value, noResult, noResult}
+	steps := []string{value, noResult, fail, null, fail, noResult, value, null, noResult, noResult}
 
 	type step struct {
 		Index   int
 		Outcome string
 	}
 	var current sync.Map // workflow ID prefix -> step
-	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (*string, error) {
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) (any, error) {
 		var st step
 		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
 			id := workflow.GetInfo(ctx).WorkflowExecution.ID
@@ -2077,6 +2114,9 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		switch st.Outcome {
 		case noResult:
 			return nil, nil
+		case null:
+			// Typed nil through `any` is encoded as binary/null.
+			return (*string)(nil), nil
 		case fail:
 			return nil, temporal.NewNonRetryableApplicationError("scripted failure", "lcr", nil)
 		default:
@@ -2156,12 +2196,27 @@ func TestScheduleLastCompletionResultMatchesV1(t *testing.T) {
 		return started, events[len(events)-1].GetEventType()
 	}
 
+	v2ResultCleared, v2FailureCleared := false, false
 	for i, outcome := range steps {
 		started := make([]*historypb.WorkflowExecutionStartedEventAttributes, len(scheds))
 		closed := make([]enumspb.EventType, len(scheds))
 		for j, sc := range scheds {
 			current.Store(sc.workflowID, step{Index: i, Outcome: outcome})
 			started[j], closed[j] = runEvents(sc, i)
+		}
+		if v2ResultCleared {
+			started[0].LastCompletionResult = nil
+		}
+		if v2FailureCleared {
+			started[0].ContinuedFailure = nil
+		}
+		switch outcome {
+		case value, null:
+			v2ResultCleared, v2FailureCleared = false, false
+		case noResult:
+			v2ResultCleared, v2FailureCleared = true, true
+		default: // fail
+			v2FailureCleared = false
 		}
 		require.Empty(t, protodiff.Diff(started[0], started[1]), "step %d (%s): started event differs (-v1 +v2)", i, outcome)
 		require.Equal(t, closed[0], closed[1], "step %d (%s): close event differs (v1, v2)", i, outcome)

@@ -15,6 +15,7 @@ import (
 	v4signer "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 type awsSigningTransport struct {
@@ -54,7 +55,7 @@ func (t *awsSigningTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return t.wrapped.RoundTrip(req)
 }
 
-func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
+func NewAwsHttpClient(config esconfig.ESAWSRequestSigningConfig) (*http.Client, error) { //nolint:staticcheck // should be NewAwsHTTPClient
 	if !config.Enabled {
 		return nil, nil
 	}
