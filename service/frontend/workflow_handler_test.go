@@ -6800,6 +6800,35 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_ReturnsUpdateTime() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	options := &workflowpb.WorkflowExecutionOptions{
+		Priority: &commonpb.Priority{PriorityKey: 1},
+	}
+	updateTime := timestamppb.New(time.Unix(1700000000, 0))
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().UpdateWorkflowExecutionOptions(gomock.Any(), gomock.Any()).Return(
+		&historyservice.UpdateWorkflowExecutionOptionsResponse{
+			WorkflowExecutionOptions: options,
+			UpdateTime:               updateTime,
+		}, nil)
+
+	resp, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		WorkflowExecutionOptions: options,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
+	})
+	s.NoError(err)
+	s.ProtoEqual(options, resp.GetWorkflowExecutionOptions())
+	s.ProtoEqual(updateTime, resp.GetUpdateTime())
+}
+
 // TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled verifies that when the DC gate is
 // off, UpdateWorkflowExecutionOptions rejects a request containing a TimeSkippingConfig.
 func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
