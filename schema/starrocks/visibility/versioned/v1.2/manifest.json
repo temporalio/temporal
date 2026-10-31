@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.2",
+  "MinCompatibleVersion": "0.1",
+  "Description": "update schema to support advanced visibility",
+  "SchemaUpdateCqlFiles": [
+    "advanced_visibility.sql"
+  ]
+}

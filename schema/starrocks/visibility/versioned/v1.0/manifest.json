@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.0",
+  "MinCompatibleVersion": "0.1",
+  "Description": "base version of visibility schema",
+  "SchemaUpdateCqlFiles": [
+    "schema.sql"
+  ]
+}
