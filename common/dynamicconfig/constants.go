@@ -1748,6 +1748,15 @@ an optional feature and also requires a metrics collection system that can handl
 The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
 default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
+	MatchingRemoveGaugesOnUnload = NewTaskQueueBoolSetting(
+		"matching.removeGaugesOnUnload",
+		false,
+		`MatchingRemoveGaugesOnUnload controls what happens to per-Task Queue gauges (backlog count, backlog age,
+lag and fairness key count) when a task queue or worker version is unloaded. When enabled, their series are removed,
+so they are no longer exported and metric cardinality does not grow with pod uptime. When disabled, they are set to 0
+and stay exported until the process restarts. Metrics backends that can't remove series (e.g. tally) always set them
+to 0. Changes apply to unloads that happen after the change.`,
+	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",
 		PartitionScaleAllowedDrift{

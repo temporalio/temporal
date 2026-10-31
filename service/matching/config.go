@@ -53,6 +53,7 @@ type (
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		RemoveGaugesOnUnload                     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -221,6 +222,7 @@ type (
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
 		BreakdownMetricsByBuildID   func() bool
+		RemoveGaugesOnUnload        func() bool
 
 		PollerHistoryTTL func() time.Duration
 
@@ -315,6 +317,7 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
+		RemoveGaugesOnUnload:                     dynamicconfig.MatchingRemoveGaugesOnUnload.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
@@ -502,6 +505,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		BreakdownMetricsByBuildID: func() bool {
 			return config.BreakdownMetricsByBuildID(ns.String(), taskQueueName, taskType)
+		},
+		RemoveGaugesOnUnload: func() bool {
+			return config.RemoveGaugesOnUnload(ns.String(), taskQueueName, taskType)
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(ns.String())
