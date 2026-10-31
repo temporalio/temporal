@@ -471,6 +471,10 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 			ms.logger.Error("failed to check CHASM workflow time skipping eligibility", tag.Error(err))
 			return nil
 		}
+		chasmTransition := wf.FindSkipToTarget(chasmCtx)
+		if chasmTransition.IsValid() {
+			ms.trackFutureOrReportDueTaskForWorkflow(transition, chasmTransition.GetTargetTime(), "chasm nexus skippable timer")
+		}
 	}
 
 	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
@@ -540,9 +544,16 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
+
 		// 5. Timer tasks only need to be re-stamped when the virtual-time offset changed.
 		// A valid transition may only disable time skipping or update session state.
-		return ms.accumulatedSkippedDuration() != previousDuration
+		needTaskRegen := ms.accumulatedSkippedDuration() != previousDuration
+
+		// 6. If this workflow contains chasm components.
+		if needTaskRegen && ms.ChasmEnabled() {
+			ms.chasmTree.MarkNeedsTimeSkippingTaskRegenForWorkflows()
+		}
+		return needTaskRegen
 	case historyi.TransactionPolicyPassive:
 		return false
 	default:
@@ -676,8 +687,10 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 	preAccumulatedSkipDuration time.Duration,
 ) {
-	if ms.IsWorkflow() {
-		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
+	if ms.IsWorkflow() && !ms.ChasmEnabled() {
+		// Workflow executions now re-stamp timer tasks
+		// via chasm for those of chasm nexus operations
+		// via TaskRefresher.refreshTasksForTimeSkipping for the rest
 		return
 	}
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()

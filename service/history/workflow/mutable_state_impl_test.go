@@ -10091,11 +10091,25 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
 	})
 
-	s.Run("NotEffectiveForWorkflows", func() {
+	s.Run("NotEffectiveForWorkflowsWithNoNexus", func() {
+		s.mutableState.chasmTree = NoopChasmTree
+		s.True(s.mutableState.IsWorkflow())
+		s.False(s.mutableState.ChasmEnabled())
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(6),
+			AccumulatedSkippedDuration:    durationpb.New(time.Hour),
+		}
+
+		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+		s.Empty(s.mutableState.PopTasks())
+	})
+
+	s.Run("EffectiveForWorkflowsWithNexus", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
 		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(chasm.WorkflowArchetypeID)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
+		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(1)
 		s.mutableState.chasmTree = mockChasmTree
+		s.True(s.mutableState.ChasmEnabled())
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			LastUpdateVersionedTransition: timeSkippingVT(6),
 			AccumulatedSkippedDuration:    durationpb.New(time.Hour),
