@@ -30,6 +30,20 @@ func legacyConfig(timeout, pollInterval time.Duration, timeoutMsg string) config
 	return cfg
 }
 
+func nextPollInterval(base time.Duration, attempt int) time.Duration {
+	interval := min(base, 2*time.Second)
+	if interval <= 0 {
+		return interval
+	}
+	for range attempt - 1 {
+		if interval >= time.Second {
+			return 2 * time.Second
+		}
+		interval *= 2
+	}
+	return min(interval, 2*time.Second)
+}
+
 func envDuration(name string, fallback time.Duration) time.Duration {
 	if s := os.Getenv(name); s != "" {
 		if d, err := time.ParseDuration(s); err == nil && d > 0 {
