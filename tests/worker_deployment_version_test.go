@@ -3929,7 +3929,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 					"sg2": {TaskQueueTypes: nil, Provider: validProvider},
 				},
 			},
-			expectedError: "only one scaling group can have no task types defined",
+			expectedError: "which already serves all task queue types",
 		},
 		{
 			name: "overlapping workflow task queue type",
