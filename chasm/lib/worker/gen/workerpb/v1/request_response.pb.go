@@ -31,7 +31,7 @@ type RecordHeartbeatRequest struct {
 	// The public heartbeat request, forwarded by Matching for this group.
 	// All worker heartbeats must have the specified worker_grouping_key.
 	FrontendRequest *v1.RecordWorkerHeartbeatRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	// SDK grouping key, used as the CHASM Business ID and History shard-routing key.
+	// SDK grouping key, used as the worker state machine's CHASM Business ID.
 	WorkerGroupingKey string `protobuf:"bytes,3,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
