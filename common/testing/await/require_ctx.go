@@ -120,6 +120,7 @@ func run(
 
 		// Run attempt.
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
+		attemptErr := attemptCtx.Err()
 		attemptCancel()
 		if res.panicVal != nil {
 			panic(res.panicVal) // propagate to caller
@@ -140,7 +141,7 @@ func run(
 		// Attempt-timeout expiry: attemptCtx is done but awaitCtx is not.
 		// An attempt timeout is retryable while the await is still active. Track
 		// it separately so the final report identifies the responsible timeout.
-		attemptHitOwnTimeout := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
+		attemptHitOwnTimeout := attemptErr == context.DeadlineExceeded && awaitCtx.Err() == nil
 		if attemptHitOwnTimeout {
 			report.recordAttemptTimeout()
 		}
@@ -165,7 +166,7 @@ func run(
 		}
 
 		// Success: attempt completed without failures.
-		if !res.stopped && !t.Failed() && !attemptHitOwnTimeout {
+		if !res.stopped && !t.Failed() && attemptErr == nil {
 			return
 		}
 
