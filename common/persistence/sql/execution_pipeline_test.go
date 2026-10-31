@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -42,7 +43,31 @@ type (
 		flushed   bool
 		committed bool
 	}
+
+	// taskOrderTx records the task table each insert goes to.
+	taskOrderTx struct {
+		sqlplugin.Tx
+		inserts []string
+	}
 )
+
+// A pipelined replay must queue the statements its record pass queued, so
+// applyTasks must not follow map iteration order.
+func TestApplyTasks_InsertsCategoriesInIDOrder(t *testing.T) {
+	task := []p.InternalHistoryTask{{Blob: &commonpb.DataBlob{}}}
+	insertTasks := map[tasks.Category][]p.InternalHistoryTask{
+		tasks.CategoryVisibility:  task,
+		tasks.CategoryReplication: task,
+		tasks.CategoryTimer:       task,
+		tasks.CategoryTransfer:    task,
+	}
+	// Map iteration order changes between loops, so repeat to catch one that follows it.
+	for range 100 {
+		tx := &taskOrderTx{}
+		require.NoError(t, applyTasks(context.Background(), tx, 1, insertTasks))
+		require.Equal(t, []string{"transfer", "timer", "replication", "visibility"}, tx.inserts)
+	}
+}
 
 func TestUpdateWorkflowExecutionPipelined_RecordErrorRunsSequential(t *testing.T) {
 	request := newPipelineTestRequest()
@@ -179,4 +204,24 @@ func (t *fakeUpdateTx) Commit() error {
 
 func (t *fakeUpdateTx) Rollback() error {
 	return nil
+}
+
+func (t *taskOrderTx) InsertIntoTransferTasks(_ context.Context, rows []sqlplugin.TransferTasksRow) (sql.Result, error) {
+	t.inserts = append(t.inserts, "transfer")
+	return driver.RowsAffected(len(rows)), nil
+}
+
+func (t *taskOrderTx) InsertIntoTimerTasks(_ context.Context, rows []sqlplugin.TimerTasksRow) (sql.Result, error) {
+	t.inserts = append(t.inserts, "timer")
+	return driver.RowsAffected(len(rows)), nil
+}
+
+func (t *taskOrderTx) InsertIntoReplicationTasks(_ context.Context, rows []sqlplugin.ReplicationTasksRow) (sql.Result, error) {
+	t.inserts = append(t.inserts, "replication")
+	return driver.RowsAffected(len(rows)), nil
+}
+
+func (t *taskOrderTx) InsertIntoVisibilityTasks(_ context.Context, rows []sqlplugin.VisibilityTasksRow) (sql.Result, error) {
+	t.inserts = append(t.inserts, "visibility")
+	return driver.RowsAffected(len(rows)), nil
 }
