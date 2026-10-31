@@ -14,6 +14,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
@@ -492,6 +495,51 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		}
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
+}
+
+func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASM() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+
+	registry := chasm.NewRegistry(s.logger)
+	s.Require().NoError(registry.Register(&chasm.CoreLibrary{}))
+	s.Require().NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	s.Require().NoError(registry.Register(chasmnexus.NewNilLibrary()))
+	tree := chasm.NewEmptyTree(registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+	s.mutableState.chasmTree = tree
+
+	// A workflow may have a CHASM tree without a persisted root component yet.
+	s.True(s.mutableState.isWorkflowSkippable())
+	s.False(tree.IsStateDirty(), "the eligibility check must only read the CHASM tree")
+
+	wf, chasmCtx, err := s.mutableState.ChasmWorkflowComponent(s.T().Context())
+	s.Require().NoError(err)
+	wf.Operations = chasm.Map[int64, *chasmnexus.Operation]{
+		1: chasm.NewComponentField(chasmCtx, chasmnexus.NewOperation(&nexusoperationpb.OperationState{})),
+	}
+	s.False(s.mutableState.isWorkflowSkippable(), "a pending CHASM Nexus operation blocks time skipping")
+}
+
+func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASMReadError() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+
+	// The tree exists, but its workflow root type cannot be resolved by this registry.
+	registry := chasm.NewRegistry(s.logger)
+	s.mutableState.chasmTree = chasm.NewEmptyTree(
+		registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler,
+	)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mutableState.metricsHandler = metricsHandler
+
+	s.False(s.mutableState.isWorkflowSkippable())
+	s.Require().Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()], 1)
 }
 
 func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
