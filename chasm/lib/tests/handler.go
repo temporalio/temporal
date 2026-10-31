@@ -16,6 +16,8 @@ type (
 		StoreID          string
 		IDReusePolicy    chasm.BusinessIDReusePolicy
 		IDConflictPolicy chasm.BusinessIDConflictPolicy
+		// RequestID, when set, identifies the start request via chasm.WithStartRequestID.
+		RequestID string
 	}
 
 	NewPayloadStoreResponse struct {
@@ -52,6 +54,8 @@ type (
 		PayloadKey  string
 		Payload     *commonpb.Payload
 		TTL         time.Duration
+		// RequestID, when set, deduplicates the update via chasm.WithRequestID.
+		RequestID string
 	}
 
 	AddPayloadResponse struct {
@@ -102,6 +106,7 @@ func NewPayloadStoreHandler(
 		},
 		nil,
 		chasm.WithBusinessIDPolicy(request.IDReusePolicy, request.IDConflictPolicy),
+		chasm.WithStartRequestID(request.RequestID),
 	)
 	if err != nil {
 		return NewPayloadStoreResponse{}, err
@@ -178,6 +183,7 @@ func AddPayloadHandler(
 		),
 		(*PayloadStore).AddPayload,
 		request,
+		chasm.WithRequestID(request.RequestID),
 	)
 	if err != nil {
 		return AddPayloadResponse{}, err
