@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/testx/internal/debug"
-	"go.temporal.io/testx/internal/timeutil"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -87,7 +85,7 @@ func GoTestDeadline(tb testing.TB) (deadline time.Time, ok bool) {
 // the `go test -timeout` deadline.
 func newTestContext(tb testing.TB, st *contextState, deadline time.Time) (context.Context, context.CancelFunc) {
 	if goTestDeadline, ok := GoTestDeadline(tb); ok {
-		deadline = timeutil.MinTime(deadline, goTestDeadline)
+		deadline = minTime(deadline, goTestDeadline)
 	}
 
 	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
@@ -235,7 +233,7 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 	}
 
 	// Cap the requested deadline at the context's ceiling.
-	requestedDeadline := timeutil.MinTime(time.Now().Add(minRemaining), st.maxDeadline())
+	requestedDeadline := minTime(time.Now().Add(minRemaining), st.maxDeadline())
 
 	// Only a context this package handed out can be swapped for the extended
 	// one without dropping state the caller derived onto it.
@@ -326,7 +324,7 @@ func (s *contextState) maxDeadline() time.Time {
 	if !s.explicitTimeout {
 		// A defaulted or TEMPORAL_TEST_TIMEOUT-configured timeout may grow,
 		// up to whichever of the two is larger; see [maxTimeout].
-		limit = max(limit, maxTimeout*debug.TimeoutMultiplier)
+		limit = max(limit, maxTimeout)
 	}
 	return s.createdAt.Add(limit)
 }
@@ -363,11 +361,6 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 // effectiveTimeout resolves the timeout to use and reports whether it was
 // explicitly configured (as opposed to defaulted).
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration, explicit bool) {
-	defer func() {
-		// Build flag TEMPORAL_DEBUG applies a timeout multiplier to all test timeouts.
-		timeout *= debug.TimeoutMultiplier
-	}()
-
 	// 1. Custom timeout (via WithTimeout option).
 	if customTimeout > 0 {
 		return customTimeout, true
@@ -383,4 +376,12 @@ func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration, expli
 
 	// 3. Default timeout.
 	return defaultTimeout, false
+}
+
+// minTime returns the earlier of two given time.Time
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
