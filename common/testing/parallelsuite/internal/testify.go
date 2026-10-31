@@ -27,7 +27,7 @@ func (b *testifyBase) SetS(_ testifysuite.TestingSuite) {
 
 // Deprecated: Assert returns non-fatal assertions which are not supported.
 // Use s.NoError, s.Equal, etc. directly (require semantics).
-func (b *testifyBase) Assert() *assert.Assertions {
+func (b *testifyBase) Assert() *assert.Assertions { //nolint:forbidigo // The disabled testify API must retain its signature.
 	panic("parallelsuite: do not use Assert(); use s.NoError, s.Equal, etc. directly")
 }
 
