@@ -1684,8 +1684,8 @@ func (s *ContextImpl) UnloadForOwnershipLost() {
 
 // FinishStop should only be called by the controller.
 func (s *ContextImpl) FinishStop() {
-	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
-	// an Engine here, we won't ever have one.
+	// After this returns, an engine can no longer be published, so if we don't see
+	// an engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
 	// Use a context that we know is cancelled so that this doesn't block.
@@ -1835,6 +1835,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext)
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
+		s.engineFuture.SetIfNotReady(nil, s.newShardClosedErrorWithShardID())
 		// This will cause the controller to remove this shard from the map and then call s.FinishStop()
 		if s.closeCallback != nil {
 			go s.closeCallback(s)
@@ -1847,6 +1848,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		// Do this again in case we skipped the stopping state, which could happen
 		// when calling CloseShardByID or the controller is shutting down.
 		s.lifecycleCancel()
+		s.engineFuture.SetIfNotReady(nil, s.newShardClosedErrorWithShardID())
 	}
 
 	switch s.state {
@@ -1869,9 +1871,8 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		case contextRequestAcquired:
 			s.state = contextStateAcquired
 			if request.engine != nil {
-				// engineFuture.Set should only be called inside stateLock when state is
-				// Acquiring, so that other code (i.e. FinishStop) can know that after a state
-				// transition to Stopping/Stopped, engineFuture cannot be Set.
+				// Publish the engine inside stateLock while Acquiring, so that after a
+				// transition to Stopping/Stopped, an engine can no longer be published.
 				if s.engineFuture.Ready() {
 					// defensive check, this should never happen
 					s.contextTaggedLogger.Warn("transition to acquired with engine set twice")
