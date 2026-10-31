@@ -463,6 +463,16 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		}
 	}
 
+	// components in chasm
+	if ms.ChasmEnabled() {
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+		if err != nil {
+			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+			ms.logger.Error("failed to check CHASM workflow time skipping eligibility", tag.Error(err))
+			return nil
+		}
+	}
+
 	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
 	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 	if !tsi.GetFastForwardInfo().GetHasReached() && tsi.GetFastForwardInfo().GetTargetTime() != nil {
