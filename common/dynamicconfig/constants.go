@@ -3925,10 +3925,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
-	EnableWorkerStateTracking = NewNamespaceBoolSetting(
-		"worker.enableStateTracking",
+	EnableDurableWorkerHeartbeats = NewNamespaceBoolSetting(
+		"worker.enableDurableWorkerHeartbeats",
 		false,
-		`Enable durable worker group heartbeats through Matching and History.`,
+		`Enable forwarding worker heartbeats from Matching to the worker state machine.`,
 	)
 	WorkerStateTrackingLeaseDuration = NewNamespaceDurationSetting(
 		"worker.stateTrackingLeaseDuration",

@@ -619,7 +619,7 @@ func (h *Handler) RecordWorkerHeartbeat(
 	principal := headers.GetPrincipal(ctx)
 
 	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, principal, request.GetHeartbeartRequest().GetWorkerHeartbeat())
-	if h.config.EnableWorkerStateTracking(nsName.String()) {
+	if h.config.EnableDurableWorkerHeartbeats(nsName.String()) {
 		if err := h.recordDurableWorkerHeartbeats(ctx, request); err != nil {
 			return nil, err
 		}
@@ -627,8 +627,10 @@ func (h *Handler) RecordWorkerHeartbeat(
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
-// recordDurableWorkerHeartbeats forwards one batch per SDK grouping key to History.
+// recordDurableWorkerHeartbeats forwards each group to its worker state machine.
 func (h *Handler) recordDurableWorkerHeartbeats(ctx context.Context, request *matchingservice.RecordWorkerHeartbeatRequest) error {
+	// SDK heartbeats are normally grouped already. Regroup for robustness so
+	// mixed-group requests reach the correct worker state machines.
 	groups := make(map[string][]*workerpb.WorkerHeartbeat)
 	for _, heartbeat := range request.GetHeartbeartRequest().GetWorkerHeartbeat() {
 		groupingKey := heartbeat.GetHostInfo().GetWorkerGroupingKey()

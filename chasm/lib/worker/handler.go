@@ -24,7 +24,7 @@ type handler struct {
 func newHandler(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry, logger log.Logger) *handler {
 	return &handler{
 		namespaceRegistry: namespaceRegistry,
-		enabled:           dynamicconfig.EnableWorkerStateTracking.Get(dc),
+		enabled:           dynamicconfig.EnableDurableWorkerHeartbeats.Get(dc),
 		leaseDuration:     dynamicconfig.WorkerStateTrackingLeaseDuration.Get(dc),
 		logger:            logger,
 	}

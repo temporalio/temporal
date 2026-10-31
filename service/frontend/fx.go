@@ -91,7 +91,7 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	chasmtests.Module,
-	// Register persisted worker types for admin inspection; serving stays in History.
+	// Register persisted worker types for admin inspection.
 	fx.Invoke(func(registry *chasm.Registry) error {
 		return registry.Register(chasmworker.NewNilLibrary())
 	}),

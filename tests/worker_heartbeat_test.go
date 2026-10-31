@@ -21,7 +21,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// TestWorkerHeartbeatLifecycle exercises Frontend → Matching → History and reads
+// TestWorkerHeartbeatLifecycle exercises the public heartbeat path and reads
 // persisted state through the admin API, rather than accessing the live CHASM engine.
 func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	t.Parallel()
@@ -122,7 +122,7 @@ func newWorkerHeartbeatEnv(t *testing.T, enabled bool, lease time.Duration) *tes
 		testcore.WithWorkerService("delete namespace workflow"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableWorkerStateTracking, enabled),
+		testcore.WithDynamicConfig(dynamicconfig.EnableDurableWorkerHeartbeats, enabled),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerStateTrackingLeaseDuration, lease),
 	)
 }
