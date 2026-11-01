@@ -25,10 +25,14 @@ const (
 )
 
 var (
-	// ErrNotFlushed is the result of a PipelinedTx call made before Flush.
-	ErrNotFlushed = errors.New("pipelined statement result is not available before flush")
+	// ErrNoPipelinedResults is returned by PipelinedTx reads and by the results of
+	// its queued statements.
+	ErrNoPipelinedResults = errors.New("pipelined statements return no results")
 	// ErrPipelineUnsupported is returned when the plugin or its connection cannot pipeline.
 	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
+	// ErrPipelineRejected wraps the database error a PipelinedTx statement
+	// returned. Nothing the transaction queued was written.
+	ErrPipelineRejected = errors.New("pipelined transaction rejected")
 )
 
 type VersionedBlob struct {
@@ -107,18 +111,21 @@ type (
 		Rollback() error
 	}
 
-	// PipelinedTx is a transaction that queues its statements until Flush sends
-	// them in one round trip. After Flush, the same calls made in the same order
-	// return the flushed results. It implements the optional updaters, so a call
-	// recorded before Flush takes the same update branch as its replay.
+	// PipelinedTx is a transaction that queues its statements until Commit sends
+	// them in one round trip, as one implicit transaction. Its reads return no
+	// results, so the checks a caller would make on them are statements that fail
+	// the transaction instead, and its UpdateExecutionsWithCondition fails the
+	// transaction when it updates no row. Commit returns ErrPipelineRejected when a
+	// statement failed. Any other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		HistoryExecutionConditionalUpdater
 		HistoryCurrentExecutionConditionalUpdater
-		Flush() error
-		// Diverged reports whether the calls after Flush differed from the queued
-		// statements.
-		Diverged() bool
+		// ReadLockShardsWithRangeID fails the transaction unless the shard has rangeID.
+		ReadLockShardsWithRangeID(ctx context.Context, filter ShardsFilter, rangeID int64) error
+		// LockCurrentExecutionsWithRunID fails the transaction unless the current
+		// execution has filter.RunID.
+		LockCurrentExecutionsWithRunID(ctx context.Context, filter CurrentExecutionsFilter) error
 	}
 
 	// TxPipeliner lets SQL plugins run a transaction as a PipelinedTx.

@@ -1,19 +1,28 @@
 package tests
 
 import (
-	"database/sql"
+	"context"
+	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
+)
+
+const (
+	divisionByZeroCode  = "22012"
+	uniqueViolationCode = "23505"
 )
 
 type (
@@ -44,122 +53,225 @@ func (s *pipelineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *pipelineSuite) TestReads() {
-	shardFilter, currentFilter, executionFilter, _ := s.insertExecution()
+func (s *pipelineSuite) TestReadLockShardsWithRangeID() {
+	shard := s.newShardRow()
+	_, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
+	s.NoError(err)
+	filter := sqlplugin.ShardsFilter{ShardID: shard.ShardID}
 
-	tx := s.beginPipelinedTx()
-	_, err := tx.ReadLockShards(newExecutionContext(), shardFilter)
-	s.ErrorIs(err, sqlplugin.ErrNotFlushed)
-	_, err = tx.LockCurrentExecutions(newExecutionContext(), currentFilter)
-	s.ErrorIs(err, sqlplugin.ErrNotFlushed)
-	_, _, err = tx.WriteLockExecutions(newExecutionContext(), executionFilter)
-	s.ErrorIs(err, sqlplugin.ErrNotFlushed)
-	s.NoError(tx.Flush())
-	rangeID, err := tx.ReadLockShards(newExecutionContext(), shardFilter)
+	written, err := s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
+		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID))
+	})
 	s.NoError(err)
-	current, err := tx.LockCurrentExecutions(newExecutionContext(), currentFilter)
-	s.NoError(err)
-	dbRecordVersion, nextEventID, err := tx.WriteLockExecutions(newExecutionContext(), executionFilter)
-	s.NoError(err)
-	s.NoError(tx.Commit())
+	s.True(written)
 
-	sequentialTx, err := s.store.BeginTx(newExecutionContext())
-	s.NoError(err)
-	expectedRangeID, err := sequentialTx.ReadLockShards(newExecutionContext(), shardFilter)
-	s.NoError(err)
-	expectedCurrent, err := sequentialTx.LockCurrentExecutions(newExecutionContext(), currentFilter)
-	s.NoError(err)
-	expectedDBRecordVersion, expectedNextEventID, err := sequentialTx.WriteLockExecutions(newExecutionContext(), executionFilter)
-	s.NoError(err)
-	s.NoError(sequentialTx.Rollback())
-
-	s.Equal(expectedRangeID, rangeID)
-	s.Equal(expectedCurrent, current)
-	s.Equal(expectedDBRecordVersion, dbRecordVersion)
-	s.Equal(expectedNextEventID, nextEventID)
+	written, err = s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
+		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID+1))
+	})
+	s.requireRejected(err, divisionByZeroCode)
+	s.False(written)
 }
 
-func (s *pipelineSuite) TestFirstErrorWins() {
-	shard := s.newShardRow()
-	other := s.newShardRow()
-
-	tx := s.beginPipelinedTx()
-	insert := func() []error {
-		var errs []error
-		for _, row := range []*sqlplugin.ShardsRow{&shard, &shard, &other} {
-			_, err := tx.InsertIntoShards(newExecutionContext(), row)
-			errs = append(errs, err)
+func (s *pipelineSuite) TestLockCurrentExecutionsWithRunID() {
+	for _, archetypeID := range []chasm.ArchetypeID{chasm.WorkflowArchetypeID, math.MaxUint32} {
+		current, _ := s.insertExecution(archetypeID)
+		filter := sqlplugin.CurrentExecutionsFilter{
+			ShardID:     current.ShardID,
+			NamespaceID: current.NamespaceID,
+			WorkflowID:  current.WorkflowID,
+			RunID:       current.RunID,
+			ArchetypeID: archetypeID,
 		}
-		return errs
-	}
-	s.Equal([]error{nil, nil, nil}, insert())
-	s.NoError(tx.Flush())
-	errs := insert()
-	s.NoError(errs[0])
-	s.True(s.store.IsDupEntryError(errs[1]))
-	s.Error(errs[2])
-	s.NoError(tx.Rollback())
 
-	for _, row := range []sqlplugin.ShardsRow{shard, other} {
-		_, err := s.store.SelectFromShards(newExecutionContext(), sqlplugin.ShardsFilter{ShardID: row.ShardID})
-		s.ErrorIs(err, sql.ErrNoRows)
+		written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
+		})
+		s.NoError(err)
+		s.True(written)
+
+		filter.RunID = primitives.NewUUID()
+		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
+		})
+		s.requireRejected(err, divisionByZeroCode)
+		s.False(written)
 	}
 }
 
-func (s *pipelineSuite) TestCommitFailure() {
-	shard := s.newShardRow()
+func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
+	_, execution := s.insertExecution(chasm.WorkflowArchetypeID)
+	filter := sqlplugin.ExecutionsFilter{
+		ShardID:     execution.ShardID,
+		NamespaceID: execution.NamespaceID,
+		WorkflowID:  execution.WorkflowID,
+		RunID:       execution.RunID,
+	}
+	update := sqlplugin.ExecutionsUpdate{ExecutionsRow: execution, Condition: execution.NextEventID}
 
-	tx := s.beginPipelinedTx()
-	_, err := tx.InsertIntoShards(newExecutionContext(), &shard)
+	update.DBRecordVersion = execution.DBRecordVersion + 2
+	written, err := s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
+		s.NoError(err)
+	})
+	s.requireRejected(err, divisionByZeroCode)
+	s.False(written)
+	stored, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
-	s.NoError(tx.Flush())
-	_, err = tx.InsertIntoShards(newExecutionContext(), &shard)
+	s.Equal(execution.DBRecordVersion, stored.DBRecordVersion)
+
+	update.DBRecordVersion = execution.DBRecordVersion + 1
+	written, err = s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
+		s.NoError(err)
+	})
 	s.NoError(err)
-
-	// The timeout makes pg_terminate_backend wait until the backend has exited.
-	s.NoError(s.admin.Exec(`SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity
-WHERE datname = current_database() AND state = 'idle in transaction' AND pid <> pg_backend_pid()`))
-	s.Error(tx.Commit())
-	s.False(tx.Diverged())
-
-	_, err = s.store.SelectFromShards(newExecutionContext(), sqlplugin.ShardsFilter{ShardID: shard.ShardID})
-	s.ErrorIs(err, sql.ErrNoRows)
+	s.True(written)
+	stored, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
+	s.NoError(err)
+	s.Equal(update.DBRecordVersion, stored.DBRecordVersion)
 }
 
 func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
-	_, currentFilter, _, current := s.insertExecution()
+	current, _ := s.insertExecution(chasm.WorkflowArchetypeID)
 	changed := current
 	changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	changed.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
-	tx := s.beginPipelinedTx()
-	rows := []*sqlplugin.CurrentExecutionsRow{&current, &changed}
-	for _, row := range rows {
-		_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
-		s.NoError(err)
-	}
-	s.NoError(tx.Flush())
-	var rowsAffected []int64
-	for _, row := range rows {
-		result, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
-		s.NoError(err)
-		affected, err := result.RowsAffected()
-		s.NoError(err)
-		rowsAffected = append(rowsAffected, affected)
-	}
-	s.NoError(tx.Commit())
-	s.Equal([]int64{0, 1}, rowsAffected)
+	written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
+			_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
+			s.NoError(err)
+		}
+	})
+	s.NoError(err)
+	s.True(written)
 
-	stored, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), currentFilter)
+	stored, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), sqlplugin.CurrentExecutionsFilter{
+		ShardID:     current.ShardID,
+		NamespaceID: current.NamespaceID,
+		WorkflowID:  current.WorkflowID,
+		ArchetypeID: current.ArchetypeID,
+	})
 	s.NoError(err)
 	s.Equal(changed.State, stored.State)
 	s.Equal(changed.Status, stored.Status)
 }
 
-func (s *pipelineSuite) beginPipelinedTx() sqlplugin.PipelinedTx {
+func (s *pipelineSuite) TestDuplicateInsert() {
+	shardID := rand.Int31()
+	task := []sqlplugin.TransferTasksRow{{
+		ShardID:      shardID,
+		TaskID:       rand.Int63(),
+		Data:         shuffle.Bytes(testHistoryTransferTaskData),
+		DataEncoding: testHistoryTransferTaskEncoding,
+	}}
+
+	written, err := s.commit(shardID, func(tx sqlplugin.PipelinedTx) {
+		for range 2 {
+			_, err := tx.InsertIntoTransferTasks(newExecutionContext(), task)
+			s.NoError(err)
+		}
+	})
+	pgErr := s.requireRejected(err, uniqueViolationCode)
+	s.True(s.store.IsDupEntryError(pgErr))
+	s.False(written)
+
+	// The rejected batch left its connection idle in the pool.
+	written, err = s.commit(shardID, func(tx sqlplugin.PipelinedTx) {
+		_, err := tx.InsertIntoTransferTasks(newExecutionContext(), task)
+		s.NoError(err)
+	})
+	s.NoError(err)
+	s.True(written)
+}
+
+// A canceled batch is not a rejection, since Postgres may still run and commit
+// the statements it received.
+func (s *pipelineSuite) TestCanceledContext() {
+	shard := s.newShardRow()
+	_, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
+	s.NoError(err)
+	filter := sqlplugin.ShardsFilter{ShardID: shard.ShardID}
+	lockTx, err := s.store.BeginTx(newExecutionContext())
+	s.NoError(err)
+	_, err = lockTx.WriteLockShards(newExecutionContext(), filter)
+	s.NoError(err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	tx := s.beginPipelinedTx(ctx)
+	s.NoError(tx.ReadLockShardsWithRangeID(ctx, filter, shard.RangeID))
+	err = tx.Commit()
+	s.Error(err)
+	s.NotErrorIs(err, sqlplugin.ErrPipelineRejected)
+	s.NoError(lockTx.Rollback())
+}
+
+// An error at the implicit commit is not a rejection, since it can follow a
+// commit that happened.
+func (s *pipelineSuite) TestCommitError() {
+	shardID := rand.Int31()
+	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_fail_commit() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test commit failure'; END $$`))
+	defer func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_fail_commit()`)) }()
+	s.NoError(s.admin.Exec(fmt.Sprintf(`CREATE CONSTRAINT TRIGGER pipeline_test_fail_commit
+AFTER INSERT ON history_node DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit()`, shardID)))
+	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_commit ON history_node`)) }()
+
+	written, err := s.commit(shardID, func(sqlplugin.PipelinedTx) {})
+	s.Error(err)
+	s.NotErrorIs(err, sqlplugin.ErrPipelineRejected)
+	s.False(written)
+}
+
+// commit queues a history node, then the statements queue adds, and commits.
+// It returns whether the history node was written and the Commit error.
+func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedTx)) (bool, error) {
+	node := sqlplugin.HistoryNodeRow{
+		ShardID:      shardID,
+		TreeID:       primitives.NewUUID(),
+		BranchID:     primitives.NewUUID(),
+		NodeID:       rand.Int63(),
+		PrevTxnID:    rand.Int63(),
+		TxnID:        rand.Int63(),
+		Data:         shuffle.Bytes(testHistoryNodeData),
+		DataEncoding: testHistoryNodeEncoding,
+	}
+
+	tx := s.beginPipelinedTx(newExecutionContext())
+	_, err := tx.InsertIntoHistoryNode(newExecutionContext(), &node)
+	s.NoError(err)
+	queue(tx)
+	commitErr := tx.Commit()
+
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), sqlplugin.HistoryNodeSelectFilter{
+		ShardID:   shardID,
+		TreeID:    node.TreeID,
+		BranchID:  node.BranchID,
+		MinNodeID: node.NodeID,
+		MinTxnID:  sql.MinTxnID,
+		MaxNodeID: math.MaxInt64,
+		PageSize:  1,
+	})
+	s.NoError(err)
+	return len(rows) > 0, commitErr
+}
+
+// requireRejected requires a rejection by the Postgres error with code, and
+// returns that error.
+func (s *pipelineSuite) requireRejected(err error, code string) *pgconn.PgError {
+	s.ErrorIs(err, sqlplugin.ErrPipelineRejected)
+	var pgErr *pgconn.PgError
+	s.ErrorAs(err, &pgErr)
+	s.Equal(code, pgErr.Code)
+	return pgErr
+}
+
+func (s *pipelineSuite) beginPipelinedTx(ctx context.Context) sqlplugin.PipelinedTx {
 	pipeliner, ok := s.store.(sqlplugin.TxPipeliner)
 	s.True(ok)
-	tx, err := pipeliner.BeginPipelinedTx(newExecutionContext())
+	tx, err := pipeliner.BeginPipelinedTx(ctx)
 	s.NoError(err)
 	return tx
 }
@@ -173,28 +285,24 @@ func (s *pipelineSuite) newShardRow() sqlplugin.ShardsRow {
 	}
 }
 
-// insertExecution inserts a shard, a current execution and its execution, and
-// returns the filters that lock them and the current execution row.
-func (s *pipelineSuite) insertExecution() (
-	sqlplugin.ShardsFilter,
-	sqlplugin.CurrentExecutionsFilter,
-	sqlplugin.ExecutionsFilter,
+// insertExecution inserts a current execution and its execution, and returns
+// their rows.
+func (s *pipelineSuite) insertExecution(archetypeID chasm.ArchetypeID) (
 	sqlplugin.CurrentExecutionsRow,
+	sqlplugin.ExecutionsRow,
 ) {
-	shard := s.newShardRow()
+	shardID := rand.Int31()
 	namespaceID := primitives.NewUUID()
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	startTime := time.Now().UTC()
 
-	_, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
-	s.NoError(err)
 	current := sqlplugin.CurrentExecutionsRow{
-		ShardID:          shard.ShardID,
+		ShardID:          shardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
-		ArchetypeID:      chasm.WorkflowArchetypeID,
+		ArchetypeID:      archetypeID,
 		CreateRequestID:  primitives.NewUUID().String(),
 		StartTime:        &startTime,
 		LastWriteVersion: rand.Int63(),
@@ -203,10 +311,10 @@ func (s *pipelineSuite) insertExecution() (
 		Data:             shuffle.Bytes(testHistoryExecutionStateData),
 		DataEncoding:     testHistoryExecutionStateEncoding,
 	}
-	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &current)
+	_, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &current)
 	s.NoError(err)
-	_, err = s.store.InsertIntoExecutions(newExecutionContext(), &sqlplugin.ExecutionsRow{
-		ShardID:          shard.ShardID,
+	execution := sqlplugin.ExecutionsRow{
+		ShardID:          shardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
@@ -217,21 +325,9 @@ func (s *pipelineSuite) insertExecution() (
 		State:            shuffle.Bytes(testHistoryExecutionStateData),
 		StateEncoding:    testHistoryExecutionStateEncoding,
 		DBRecordVersion:  rand.Int63(),
-	})
+	}
+	_, err = s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 
-	return sqlplugin.ShardsFilter{ShardID: shard.ShardID},
-		sqlplugin.CurrentExecutionsFilter{
-			ShardID:     shard.ShardID,
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			ArchetypeID: chasm.WorkflowArchetypeID,
-		},
-		sqlplugin.ExecutionsFilter{
-			ShardID:     shard.ShardID,
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			RunID:       runID,
-		},
-		current
+	return current, execution
 }

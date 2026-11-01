@@ -2,12 +2,9 @@ package sql
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
-	"maps"
-	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -532,12 +529,7 @@ func applyTasks(
 ) error {
 
 	var err error
-	// Categories go in ID order so a pipelined replay queues the statements its
-	// record pass queued.
-	for _, category := range slices.SortedFunc(maps.Keys(insertTasks), func(a, b tasks.Category) int {
-		return cmp.Compare(a.ID(), b.ID())
-	}) {
-		tasksByCategory := insertTasks[category]
+	for category, tasksByCategory := range insertTasks {
 		switch category.Type() {
 		case tasks.CategoryTypeImmediate:
 			err = createImmediateTasks(ctx, tx, shardID, category.ID(), tasksByCategory)

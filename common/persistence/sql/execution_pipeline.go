@@ -14,19 +14,19 @@ import (
 )
 
 // expectingTx answers the reads and row counts that updateWorkflowExecutionTx
-// checks with the values a successful update sees, so a record pass over a
-// PipelinedTx queues every statement of the update.
+// checks with the values a successful update sees, and queues the statements
+// that fail the transaction otherwise, so a pass over a PipelinedTx queues every
+// statement of the update.
 type expectingTx struct {
 	sqlplugin.PipelinedTx
-	rangeID int64
-	runID   primitives.UUID
+	runID primitives.UUID
 }
 
-// updateWorkflowExecutionPipelined runs the UpdateWorkflowExecution transaction
-// in one round trip when the plugin supports it. It records the transaction's
-// statements, flushes them, then runs the transaction again against the flushed
-// results, so today's checks build today's errors. It returns false when the
-// caller must run the sequential transaction.
+// updateWorkflowExecutionPipelined appends the history and runs the
+// UpdateWorkflowExecution transaction in one round trip when the plugin
+// supports it. It returns false when nothing was written and the caller must
+// run the sequential path, which returns today's errors when the database
+// rejected the pipelined transaction.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -35,12 +35,11 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if !ok || request.Mode != p.UpdateWorkflowModeUpdateCurrent || request.NewWorkflowSnapshot != nil {
 		return false, nil
 	}
-
-	update := func(tx sqlplugin.Tx) error {
-		if err := readLockShard(ctx, tx, request.ShardID, request.RangeID); err != nil {
-			return err
+	for _, req := range request.UpdateWorkflowNewEvents {
+		// A new branch also inserts its history_tree row in its own transaction.
+		if req.IsNewBranch {
+			return false, nil
 		}
-		return m.updateWorkflowExecutionTx(ctx, tx, request)
 	}
 
 	tx, err := pipeliner.BeginPipelinedTx(ctx)
@@ -50,39 +49,53 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if err != nil {
 		return true, serviceerror.NewUnavailablef("UpdateWorkflowExecution failed. Failed to start transaction. Error: %v", err)
 	}
-	mutation := request.UpdateWorkflowMutation
-	if err := update(&expectingTx{
-		PipelinedTx: tx,
-		rangeID:     request.RangeID,
-		runID:       primitives.MustParseUUID(mutation.ExecutionState.RunId),
-	}); err != nil {
+	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
 		m.logger.Warn("UpdateWorkflowExecution pipeline recording failed", tag.ShardID(request.ShardID), tag.Error(err))
 		return false, nil
 	}
-	if err := tx.Flush(); err != nil {
-		if errors.Is(err, sqlplugin.ErrPipelineUnsupported) {
-			return false, nil
-		}
-		return true, serviceerror.NewUnavailablef("UpdateWorkflowExecution failed. Failed to start transaction. Error: %v", err)
-	}
 
-	err = m.finishTx(tx, "UpdateWorkflowExecution", update(tx))
-	if tx.Diverged() {
-		m.logger.Warn("UpdateWorkflowExecution pipeline replay diverged", tag.ShardID(request.ShardID), tag.Error(err))
+	err = tx.Commit()
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, sqlplugin.ErrPipelineUnsupported):
 		return false, nil
+	case errors.Is(err, sqlplugin.ErrPipelineRejected):
+		m.logger.Warn("UpdateWorkflowExecution pipeline rejected", tag.ShardID(request.ShardID), tag.Error(err))
+		return false, nil
+	default:
+		return true, convertSQLError("UpdateWorkflowExecution", "failed to commit transaction", err)
 	}
-	return true, err
 }
 
-func (t *expectingTx) ReadLockShards(ctx context.Context, filter sqlplugin.ShardsFilter) (int64, error) {
-	if _, err := t.PipelinedTx.ReadLockShards(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
-		return 0, err
+// recordUpdateWorkflowExecution queues the history nodes and the statements of
+// the sequential transaction, in the same order.
+func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
+	ctx context.Context,
+	tx sqlplugin.PipelinedTx,
+	request *p.InternalUpdateWorkflowExecutionRequest,
+) error {
+	for _, req := range request.UpdateWorkflowNewEvents {
+		nodeRow, err := historyNodeRow(req)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.InsertIntoHistoryNode(ctx, nodeRow); err != nil {
+			return err
+		}
 	}
-	return t.rangeID, nil
+	if err := tx.ReadLockShardsWithRangeID(ctx, sqlplugin.ShardsFilter{ShardID: request.ShardID}, request.RangeID); err != nil {
+		return err
+	}
+	return m.updateWorkflowExecutionTx(ctx, &expectingTx{
+		PipelinedTx: tx,
+		runID:       primitives.MustParseUUID(request.UpdateWorkflowMutation.ExecutionState.RunId),
+	}, request)
 }
 
 func (t *expectingTx) LockCurrentExecutions(ctx context.Context, filter sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
-	if _, err := t.PipelinedTx.LockCurrentExecutions(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
+	filter.RunID = t.runID
+	if err := t.LockCurrentExecutionsWithRunID(ctx, filter); err != nil {
 		return nil, err
 	}
 	return &sqlplugin.CurrentExecutionsRow{RunID: t.runID}, nil

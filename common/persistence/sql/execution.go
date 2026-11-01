@@ -335,6 +335,10 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
+	if handled, err := m.updateWorkflowExecutionPipelined(ctx, request); handled {
+		return err
+	}
+
 	// first append history
 	for _, req := range request.UpdateWorkflowNewEvents {
 		if err := m.AppendHistoryNodes(ctx, req); err != nil {
@@ -348,9 +352,6 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	}
 
 	// then update mutable state
-	if handled, err := m.updateWorkflowExecutionPipelined(ctx, request); handled {
-		return err
-	}
 	return m.txExecuteShardLocked(ctx,
 		"UpdateWorkflowExecution",
 		request.ShardID,

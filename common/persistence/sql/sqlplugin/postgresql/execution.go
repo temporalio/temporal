@@ -22,6 +22,10 @@ const (
 	updateExecutionWithConditionQuery = updateExecutionQuery + `
  AND ((CAST(:db_record_version AS BIGINT) != 0 AND db_record_version = CAST(:db_record_version AS BIGINT) - 1)
       OR (CAST(:db_record_version AS BIGINT) = 0 AND next_event_id = :condition))`
+	// updateExecutionWithConditionOrRejectQuery divides by the updated row count,
+	// so a condition mismatch fails the statement.
+	updateExecutionWithConditionOrRejectQuery = `WITH updated AS (` + updateExecutionWithConditionQuery + `
+ RETURNING 1) SELECT 1/count(*) FROM updated`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
  WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
@@ -65,6 +69,10 @@ WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.business_id = $3 AND ce.a
 
 	lockCurrentExecutionQuery      = getCurrentExecutionQuery + ` FOR UPDATE`
 	lockCurrentChasmExecutionQuery = getCurrentChasmExecutionQuery + ` FOR UPDATE`
+	// The WithRunID queries divide by the matching row count, so a run ID mismatch
+	// fails the statement.
+	lockCurrentExecutionWithRunIDQuery      = `SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c WHERE run_id = $4`
+	lockCurrentChasmExecutionWithRunIDQuery = `SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c WHERE run_id = $5`
 
 	updateCurrentExecutionsBase = ` SET
 run_id = :run_id,

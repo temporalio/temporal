@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,108 +18,89 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	// fakePipelineDB begins its pipelined and sequential transactions from fakes.
+	// fakePipelineDB begins its pipelined and sequential transactions from fakes,
+	// and counts the history nodes appended outside a transaction.
 	fakePipelineDB struct {
 		sqlplugin.DB
-		pipelined  *fakeUpdateTx
-		sequential *fakeUpdateTx
+		pipelined    *fakeUpdateTx
+		sequential   *fakeUpdateTx
+		historyNodes int
 	}
 
 	// fakeUpdateTx answers the calls of a minimal UpdateCurrent update the way a
-	// successful update sees them. As a pipelined transaction it answers reads with
-	// ErrNotFlushed until Flush, and after Flush it marks itself diverged when a
-	// call is not the one recorded at that position, as the Postgres pipeline does.
-	// Its replay finds the current row the recorded update wrote, as an update
-	// that changes no state or status does.
+	// successful update sees them.
 	fakeUpdateTx struct {
 		sqlplugin.PipelinedTx
-		request   *p.InternalUpdateWorkflowExecutionRequest
-		pipelined bool
+		request *p.InternalUpdateWorkflowExecutionRequest
 
 		updateExecutionsErr error
-		flushErr            error
-		diverged            bool
+		commitErr           error
 
-		recorded   []string
-		replayed   int
-		currentRow *sqlplugin.CurrentExecutionsRow
-		flushed    bool
-		committed  bool
-	}
-
-	// taskOrderTx records the task table each insert goes to.
-	taskOrderTx struct {
-		sqlplugin.Tx
-		inserts []string
+		begun        bool
+		historyNodes int
+		committed    bool
 	}
 )
 
-// A pipelined replay must queue the statements its record pass queued, so
-// applyTasks must not follow map iteration order.
-func TestApplyTasks_InsertsCategoriesInIDOrder(t *testing.T) {
-	task := []p.InternalHistoryTask{{Blob: &commonpb.DataBlob{}}}
-	insertTasks := map[tasks.Category][]p.InternalHistoryTask{
-		tasks.CategoryVisibility:  task,
-		tasks.CategoryReplication: task,
-		tasks.CategoryTimer:       task,
-		tasks.CategoryTransfer:    task,
-	}
-	// Map iteration order changes between loops, so repeat to catch one that follows it.
-	for range 100 {
-		tx := &taskOrderTx{}
-		require.NoError(t, applyTasks(context.Background(), tx, 1, insertTasks))
-		require.Equal(t, []string{"transfer", "timer", "replication", "visibility"}, tx.inserts)
-	}
-}
-
-func TestUpdateWorkflowExecutionPipelined_ReplayMatchesRecord(t *testing.T) {
-	request := newPipelineTestRequest()
+func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
+	request := newPipelineTestRequest(false)
 	db := newFakePipelineDB(request)
 
 	require.NoError(t, updateWithFakes(db, request))
-	require.False(t, db.pipelined.diverged)
+	require.Equal(t, 1, db.pipelined.historyNodes)
 	require.True(t, db.pipelined.committed)
-	require.False(t, db.sequential.committed)
+	require.Zero(t, db.historyNodes)
+	require.False(t, db.sequential.begun)
 }
 
-func TestUpdateWorkflowExecutionPipelined_RecordErrorRunsSequential(t *testing.T) {
-	request := newPipelineTestRequest()
+func TestUpdateWorkflowExecutionPipelined_RejectedRunsSequential(t *testing.T) {
+	request := newPipelineTestRequest(false)
 	db := newFakePipelineDB(request)
-	db.pipelined.updateExecutionsErr = errors.New("record failed")
+	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineRejected, errors.New("division by zero"))
 
 	require.NoError(t, updateWithFakes(db, request))
-	require.False(t, db.pipelined.flushed)
+	require.Equal(t, 1, db.historyNodes)
 	require.True(t, db.sequential.committed)
 }
 
-func TestUpdateWorkflowExecutionPipelined_DivergedReplayRunsSequential(t *testing.T) {
-	request := newPipelineTestRequest()
+func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing.T) {
+	request := newPipelineTestRequest(false)
 	db := newFakePipelineDB(request)
-	db.pipelined.diverged = true
-
-	require.NoError(t, updateWithFakes(db, request))
-	require.True(t, db.pipelined.flushed)
-	require.False(t, db.pipelined.committed)
-	require.True(t, db.sequential.committed)
-}
-
-func TestUpdateWorkflowExecutionPipelined_FlushErrorIsStartFailure(t *testing.T) {
-	request := newPipelineTestRequest()
-	db := newFakePipelineDB(request)
-	db.pipelined.flushErr = errors.New("connection refused")
+	db.pipelined.commitErr = errors.New("connection reset")
 
 	err := updateWithFakes(db, request)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
-	require.Equal(t, "UpdateWorkflowExecution failed. Failed to start transaction. Error: connection refused", unavailable.Message)
-	require.False(t, db.sequential.committed)
+	require.Equal(t, "UpdateWorkflowExecution: failed to commit transaction: connection reset", unavailable.Message)
+	require.Zero(t, db.historyNodes)
+	require.False(t, db.sequential.begun)
 }
 
-func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
+func TestUpdateWorkflowExecutionPipelined_NewBranchRunsSequential(t *testing.T) {
+	request := newPipelineTestRequest(true)
+	db := newFakePipelineDB(request)
+
+	require.NoError(t, updateWithFakes(db, request))
+	require.False(t, db.pipelined.begun)
+	require.Equal(t, 1, db.sequential.historyNodes)
+	require.True(t, db.sequential.committed)
+}
+
+func TestUpdateWorkflowExecutionPipelined_RecordErrorRunsSequential(t *testing.T) {
+	request := newPipelineTestRequest(false)
+	db := newFakePipelineDB(request)
+	db.pipelined.updateExecutionsErr = errors.New("record failed")
+
+	require.NoError(t, updateWithFakes(db, request))
+	require.False(t, db.pipelined.committed)
+	require.Equal(t, 1, db.historyNodes)
+	require.True(t, db.sequential.committed)
+}
+
+func newPipelineTestRequest(isNewBranch bool) *p.InternalUpdateWorkflowExecutionRequest {
 	return &p.InternalUpdateWorkflowExecutionRequest{
 		ShardID:     1,
 		RangeID:     5,
@@ -134,12 +116,22 @@ func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
 			DBRecordVersion:    3,
 			Condition:          10,
 		},
+		UpdateWorkflowNewEvents: []*p.InternalAppendHistoryNodesRequest{{
+			IsNewBranch: isNewBranch,
+			BranchInfo: &persistencespb.HistoryBranch{
+				TreeId:   primitives.NewUUID().String(),
+				BranchId: primitives.NewUUID().String(),
+			},
+			TreeInfo: &commonpb.DataBlob{},
+			Node:     p.InternalHistoryNode{NodeID: 10, Events: &commonpb.DataBlob{}},
+			ShardID:  1,
+		}},
 	}
 }
 
 func newFakePipelineDB(request *p.InternalUpdateWorkflowExecutionRequest) *fakePipelineDB {
 	return &fakePipelineDB{
-		pipelined:  &fakeUpdateTx{request: request, pipelined: true},
+		pipelined:  &fakeUpdateTx{request: request},
 		sequential: &fakeUpdateTx{request: request},
 	}
 }
@@ -155,83 +147,61 @@ func updateWithFakes(db *fakePipelineDB, request *p.InternalUpdateWorkflowExecut
 }
 
 func (d *fakePipelineDB) BeginPipelinedTx(context.Context) (sqlplugin.PipelinedTx, error) {
+	d.pipelined.begun = true
 	return d.pipelined, nil
 }
 
 func (d *fakePipelineDB) BeginTx(context.Context) (sqlplugin.Tx, error) {
+	d.sequential.begun = true
 	return d.sequential, nil
 }
 
-func (t *fakeUpdateTx) recording() bool {
-	return t.pipelined && !t.flushed
+func (d *fakePipelineDB) InsertIntoHistoryNode(context.Context, *sqlplugin.HistoryNodeRow) (sql.Result, error) {
+	d.historyNodes++
+	return driver.RowsAffected(1), nil
 }
 
-// call records a pipelined call before Flush and checks it against the
-// recorded call at its position after Flush.
-func (t *fakeUpdateTx) call(name string) {
-	if !t.pipelined {
-		return
-	}
-	if !t.flushed {
-		t.recorded = append(t.recorded, name)
-		return
-	}
-	if t.replayed >= len(t.recorded) || t.recorded[t.replayed] != name {
-		t.diverged = true
-	}
-	t.replayed++
+func (t *fakeUpdateTx) InsertIntoHistoryNode(context.Context, *sqlplugin.HistoryNodeRow) (sql.Result, error) {
+	t.historyNodes++
+	return driver.RowsAffected(1), nil
+}
+
+func (t *fakeUpdateTx) InsertIntoHistoryTree(context.Context, *sqlplugin.HistoryTreeRow) (sql.Result, error) {
+	return driver.RowsAffected(1), nil
 }
 
 func (t *fakeUpdateTx) ReadLockShards(context.Context, sqlplugin.ShardsFilter) (int64, error) {
-	t.call("ReadLockShards")
-	if t.recording() {
-		return 0, sqlplugin.ErrNotFlushed
-	}
 	return t.request.RangeID, nil
 }
 
+func (t *fakeUpdateTx) ReadLockShardsWithRangeID(context.Context, sqlplugin.ShardsFilter, int64) error {
+	return nil
+}
+
 func (t *fakeUpdateTx) LockCurrentExecutions(context.Context, sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
-	t.call("LockCurrentExecutions")
-	if t.recording() {
-		return nil, sqlplugin.ErrNotFlushed
-	}
-	if t.currentRow != nil {
-		row := *t.currentRow
-		return &row, nil
-	}
 	return &sqlplugin.CurrentExecutionsRow{
 		RunID: primitives.MustParseUUID(t.request.UpdateWorkflowMutation.ExecutionState.RunId),
 	}, nil
 }
 
-func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(_ context.Context, row *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
-	t.call("UpdateCurrentExecutionsIfChanged")
-	if t.recording() {
-		t.currentRow = row
-	}
+func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(context.Context, sqlplugin.CurrentExecutionsFilter) error {
+	return nil
+}
+
+func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(context.Context, *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
 	return driver.RowsAffected(1), nil
 }
 
 func (t *fakeUpdateTx) UpdateExecutionsWithCondition(context.Context, *sqlplugin.ExecutionsUpdate) (sql.Result, error) {
-	t.call("UpdateExecutionsWithCondition")
 	if t.updateExecutionsErr != nil {
 		return nil, t.updateExecutionsErr
 	}
 	return driver.RowsAffected(1), nil
 }
 
-func (t *fakeUpdateTx) Flush() error {
-	t.flushed = true
-	return t.flushErr
-}
-
-func (t *fakeUpdateTx) Diverged() bool {
-	return t.diverged
-}
-
 func (t *fakeUpdateTx) Commit() error {
-	if t.diverged {
-		return errors.New("diverged")
+	if t.commitErr != nil {
+		return t.commitErr
 	}
 	t.committed = true
 	return nil
@@ -239,24 +209,4 @@ func (t *fakeUpdateTx) Commit() error {
 
 func (t *fakeUpdateTx) Rollback() error {
 	return nil
-}
-
-func (t *taskOrderTx) InsertIntoTransferTasks(_ context.Context, rows []sqlplugin.TransferTasksRow) (sql.Result, error) {
-	t.inserts = append(t.inserts, "transfer")
-	return driver.RowsAffected(len(rows)), nil
-}
-
-func (t *taskOrderTx) InsertIntoTimerTasks(_ context.Context, rows []sqlplugin.TimerTasksRow) (sql.Result, error) {
-	t.inserts = append(t.inserts, "timer")
-	return driver.RowsAffected(len(rows)), nil
-}
-
-func (t *taskOrderTx) InsertIntoReplicationTasks(_ context.Context, rows []sqlplugin.ReplicationTasksRow) (sql.Result, error) {
-	t.inserts = append(t.inserts, "replication")
-	return driver.RowsAffected(len(rows)), nil
-}
-
-func (t *taskOrderTx) InsertIntoVisibilityTasks(_ context.Context, rows []sqlplugin.VisibilityTasksRow) (sql.Result, error) {
-	t.inserts = append(t.inserts, "visibility")
-	return driver.RowsAffected(len(rows)), nil
 }
