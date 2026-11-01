@@ -955,6 +955,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	serializer serialization.Serializer,
 ) error {
+	conditionalUpdater, supportsConditionalUpdate := tx.(sqlplugin.HistoryCurrentExecutionConditionalUpdater)
 	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
@@ -979,7 +980,9 @@ func assertRunIDAndUpdateCurrentExecution(
 				StartTime:           currentRow.StartTime,
 			}
 		}
-		shouldUpdate = !currentExecutionsEqual(currentRow, &row)
+		if !supportsConditionalUpdate {
+			shouldUpdate = !currentExecutionsEqual(currentRow, &row)
+		}
 		return nil
 	}
 	if err := assertCurrentExecution(ctx,
@@ -991,6 +994,13 @@ func assertRunIDAndUpdateCurrentExecution(
 		assertFn,
 	); err != nil {
 		return err
+	}
+	if supportsConditionalUpdate {
+		// The row is locked and its run ID checked, so 0 rows affected means it is unchanged.
+		if _, err := conditionalUpdater.UpdateCurrentExecutionsIfChanged(ctx, &row); err != nil {
+			return serviceerror.NewUnavailablef("updateCurrentExecution failed. Error: %v", err)
+		}
+		return nil
 	}
 	if !shouldUpdate {
 		return nil

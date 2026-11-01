@@ -82,6 +82,12 @@ namespace_id = :namespace_id
 	updateCurrentExecutionsQuery      = `UPDATE current_executions` + updateCurrentExecutionsBase + ` AND workflow_id = :workflow_id`
 	updateCurrentChasmExecutionsQuery = `UPDATE current_chasm_executions` + updateCurrentExecutionsBase + ` AND business_id = :workflow_id AND archetype_id = :archetype_id`
 
+	updateCurrentExecutionsIfChangedCondition = `
+ AND (run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding)
+ IS DISTINCT FROM (:run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
+	updateCurrentExecutionsIfChangedQuery      = updateCurrentExecutionsQuery + updateCurrentExecutionsIfChangedCondition
+	updateCurrentChasmExecutionsIfChangedQuery = updateCurrentChasmExecutionsQuery + updateCurrentExecutionsIfChangedCondition
+
 	createHistoryImmediateTasksQuery = `INSERT INTO history_immediate_tasks(shard_id, category_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :category_id, :task_id, :data, :data_encoding)`
 

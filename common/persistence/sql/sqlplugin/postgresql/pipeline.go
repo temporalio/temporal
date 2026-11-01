@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -89,6 +90,30 @@ func (t pipelinedTx) Flush() error {
 
 func (t pipelinedTx) Diverged() bool {
 	return t.pipe.diverged
+}
+
+// UpdateCurrentExecutionsIfChanged updates a current execution row only when it
+// differs. A sequential transaction decides that from the row it locked, which a
+// pipeline cannot read before Flush.
+func (t pipelinedTx) UpdateCurrentExecutionsIfChanged(
+	ctx context.Context,
+	row *sqlplugin.CurrentExecutionsRow,
+) (sql.Result, error) {
+	if err := t.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if row.ArchetypeID == chasm.WorkflowArchetypeID {
+		return t.NamedExecContext(ctx,
+			updateCurrentExecutionsIfChangedQuery,
+			row,
+		)
+	}
+
+	return t.NamedExecContext(ctx,
+		updateCurrentChasmExecutionsIfChangedQuery,
+		row,
+	)
 }
 
 func (t pipelinedTx) Commit() error {

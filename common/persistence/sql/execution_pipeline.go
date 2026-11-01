@@ -17,11 +17,9 @@ import (
 // checks with the values a successful update sees, so a record pass over a
 // PipelinedTx queues every statement of the update.
 type expectingTx struct {
-	sqlplugin.Tx
-	rangeID         int64
-	runID           primitives.UUID
-	dbRecordVersion int64
-	condition       int64
+	sqlplugin.PipelinedTx
+	rangeID int64
+	runID   primitives.UUID
 }
 
 // updateWorkflowExecutionPipelined runs the UpdateWorkflowExecution transaction
@@ -54,11 +52,9 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	}
 	mutation := request.UpdateWorkflowMutation
 	if err := update(&expectingTx{
-		Tx:              tx,
-		rangeID:         request.RangeID,
-		runID:           primitives.MustParseUUID(mutation.ExecutionState.RunId),
-		dbRecordVersion: mutation.DBRecordVersion,
-		condition:       mutation.Condition,
+		PipelinedTx: tx,
+		rangeID:     request.RangeID,
+		runID:       primitives.MustParseUUID(mutation.ExecutionState.RunId),
 	}); err != nil {
 		m.logger.Warn("UpdateWorkflowExecution pipeline recording failed", tag.ShardID(request.ShardID), tag.Error(err))
 		return false, nil
@@ -79,65 +75,51 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 }
 
 func (t *expectingTx) ReadLockShards(ctx context.Context, filter sqlplugin.ShardsFilter) (int64, error) {
-	if _, err := t.Tx.ReadLockShards(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
+	if _, err := t.PipelinedTx.ReadLockShards(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
 		return 0, err
 	}
 	return t.rangeID, nil
 }
 
 func (t *expectingTx) LockCurrentExecutions(ctx context.Context, filter sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
-	if _, err := t.Tx.LockCurrentExecutions(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
+	if _, err := t.PipelinedTx.LockCurrentExecutions(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
 		return nil, err
 	}
 	return &sqlplugin.CurrentExecutionsRow{RunID: t.runID}, nil
 }
 
-// WriteLockExecutions returns values that pass lockAndCheckExecution whether it
-// checks the record version or the next event ID.
-func (t *expectingTx) WriteLockExecutions(ctx context.Context, filter sqlplugin.ExecutionsFilter) (int64, int64, error) {
-	if _, _, err := t.Tx.WriteLockExecutions(ctx, filter); !errors.Is(err, sqlplugin.ErrNotFlushed) {
-		return 0, 0, err
-	}
-	return t.dbRecordVersion - 1, t.condition, nil
-}
-
-func (t *expectingTx) UpdateCurrentExecutions(ctx context.Context, row *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
-	_, err := t.Tx.UpdateCurrentExecutions(ctx, row)
-	return queuedRows(err, 1)
-}
-
-func (t *expectingTx) UpdateExecutions(ctx context.Context, row *sqlplugin.ExecutionsRow) (sql.Result, error) {
-	_, err := t.Tx.UpdateExecutions(ctx, row)
+func (t *expectingTx) UpdateExecutionsWithCondition(ctx context.Context, update *sqlplugin.ExecutionsUpdate) (sql.Result, error) {
+	_, err := t.PipelinedTx.UpdateExecutionsWithCondition(ctx, update)
 	return queuedRows(err, 1)
 }
 
 func (t *expectingTx) InsertIntoHistoryImmediateTasks(ctx context.Context, rows []sqlplugin.HistoryImmediateTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoHistoryImmediateTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoHistoryImmediateTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 
 func (t *expectingTx) InsertIntoHistoryScheduledTasks(ctx context.Context, rows []sqlplugin.HistoryScheduledTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoHistoryScheduledTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoHistoryScheduledTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 
 func (t *expectingTx) InsertIntoTransferTasks(ctx context.Context, rows []sqlplugin.TransferTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoTransferTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoTransferTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 
 func (t *expectingTx) InsertIntoTimerTasks(ctx context.Context, rows []sqlplugin.TimerTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoTimerTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoTimerTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 
 func (t *expectingTx) InsertIntoReplicationTasks(ctx context.Context, rows []sqlplugin.ReplicationTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoReplicationTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoReplicationTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 
 func (t *expectingTx) InsertIntoVisibilityTasks(ctx context.Context, rows []sqlplugin.VisibilityTasksRow) (sql.Result, error) {
-	_, err := t.Tx.InsertIntoVisibilityTasks(ctx, rows)
+	_, err := t.PipelinedTx.InsertIntoVisibilityTasks(ctx, rows)
 	return queuedRows(err, len(rows))
 }
 

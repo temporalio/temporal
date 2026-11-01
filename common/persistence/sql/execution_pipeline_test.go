@@ -30,7 +30,10 @@ type (
 
 	// fakeUpdateTx answers the calls of a minimal UpdateCurrent update the way a
 	// successful update sees them. As a pipelined transaction it answers reads with
-	// ErrNotFlushed until Flush.
+	// ErrNotFlushed until Flush, and after Flush it marks itself diverged when a
+	// call is not the one recorded at that position, as the Postgres pipeline does.
+	// Its replay finds the current row the recorded update wrote, as an update
+	// that changes no state or status does.
 	fakeUpdateTx struct {
 		sqlplugin.PipelinedTx
 		request   *p.InternalUpdateWorkflowExecutionRequest
@@ -40,8 +43,11 @@ type (
 		flushErr            error
 		diverged            bool
 
-		flushed   bool
-		committed bool
+		recorded   []string
+		replayed   int
+		currentRow *sqlplugin.CurrentExecutionsRow
+		flushed    bool
+		committed  bool
 	}
 
 	// taskOrderTx records the task table each insert goes to.
@@ -67,6 +73,16 @@ func TestApplyTasks_InsertsCategoriesInIDOrder(t *testing.T) {
 		require.NoError(t, applyTasks(context.Background(), tx, 1, insertTasks))
 		require.Equal(t, []string{"transfer", "timer", "replication", "visibility"}, tx.inserts)
 	}
+}
+
+func TestUpdateWorkflowExecutionPipelined_ReplayMatchesRecord(t *testing.T) {
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+
+	require.NoError(t, updateWithFakes(db, request))
+	require.False(t, db.pipelined.diverged)
+	require.True(t, db.pipelined.committed)
+	require.False(t, db.sequential.committed)
 }
 
 func TestUpdateWorkflowExecutionPipelined_RecordErrorRunsSequential(t *testing.T) {
@@ -150,7 +166,24 @@ func (t *fakeUpdateTx) recording() bool {
 	return t.pipelined && !t.flushed
 }
 
+// call records a pipelined call before Flush and checks it against the
+// recorded call at its position after Flush.
+func (t *fakeUpdateTx) call(name string) {
+	if !t.pipelined {
+		return
+	}
+	if !t.flushed {
+		t.recorded = append(t.recorded, name)
+		return
+	}
+	if t.replayed >= len(t.recorded) || t.recorded[t.replayed] != name {
+		t.diverged = true
+	}
+	t.replayed++
+}
+
 func (t *fakeUpdateTx) ReadLockShards(context.Context, sqlplugin.ShardsFilter) (int64, error) {
+	t.call("ReadLockShards")
 	if t.recording() {
 		return 0, sqlplugin.ErrNotFlushed
 	}
@@ -158,27 +191,29 @@ func (t *fakeUpdateTx) ReadLockShards(context.Context, sqlplugin.ShardsFilter) (
 }
 
 func (t *fakeUpdateTx) LockCurrentExecutions(context.Context, sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
+	t.call("LockCurrentExecutions")
 	if t.recording() {
 		return nil, sqlplugin.ErrNotFlushed
+	}
+	if t.currentRow != nil {
+		row := *t.currentRow
+		return &row, nil
 	}
 	return &sqlplugin.CurrentExecutionsRow{
 		RunID: primitives.MustParseUUID(t.request.UpdateWorkflowMutation.ExecutionState.RunId),
 	}, nil
 }
 
-func (t *fakeUpdateTx) WriteLockExecutions(context.Context, sqlplugin.ExecutionsFilter) (int64, int64, error) {
+func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(_ context.Context, row *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
+	t.call("UpdateCurrentExecutionsIfChanged")
 	if t.recording() {
-		return 0, 0, sqlplugin.ErrNotFlushed
+		t.currentRow = row
 	}
-	mutation := t.request.UpdateWorkflowMutation
-	return mutation.DBRecordVersion - 1, mutation.Condition, nil
-}
-
-func (t *fakeUpdateTx) UpdateCurrentExecutions(context.Context, *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
 	return driver.RowsAffected(1), nil
 }
 
-func (t *fakeUpdateTx) UpdateExecutions(context.Context, *sqlplugin.ExecutionsRow) (sql.Result, error) {
+func (t *fakeUpdateTx) UpdateExecutionsWithCondition(context.Context, *sqlplugin.ExecutionsUpdate) (sql.Result, error) {
+	t.call("UpdateExecutionsWithCondition")
 	if t.updateExecutionsErr != nil {
 		return nil, t.updateExecutionsErr
 	}

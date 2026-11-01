@@ -45,7 +45,7 @@ func (s *pipelineSuite) SetupTest() {
 }
 
 func (s *pipelineSuite) TestReads() {
-	shardFilter, currentFilter, executionFilter := s.insertExecution()
+	shardFilter, currentFilter, executionFilter, _ := s.insertExecution()
 
 	tx := s.beginPipelinedTx()
 	_, err := tx.ReadLockShards(newExecutionContext(), shardFilter)
@@ -126,6 +126,36 @@ WHERE datname = current_database() AND state = 'idle in transaction' AND pid <> 
 	s.ErrorIs(err, sql.ErrNoRows)
 }
 
+func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
+	_, currentFilter, _, current := s.insertExecution()
+	changed := current
+	changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	changed.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+	tx := s.beginPipelinedTx()
+	rows := []*sqlplugin.CurrentExecutionsRow{&current, &changed}
+	for _, row := range rows {
+		_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
+		s.NoError(err)
+	}
+	s.NoError(tx.Flush())
+	var rowsAffected []int64
+	for _, row := range rows {
+		result, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
+		s.NoError(err)
+		affected, err := result.RowsAffected()
+		s.NoError(err)
+		rowsAffected = append(rowsAffected, affected)
+	}
+	s.NoError(tx.Commit())
+	s.Equal([]int64{0, 1}, rowsAffected)
+
+	stored, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), currentFilter)
+	s.NoError(err)
+	s.Equal(changed.State, stored.State)
+	s.Equal(changed.Status, stored.Status)
+}
+
 func (s *pipelineSuite) beginPipelinedTx() sqlplugin.PipelinedTx {
 	pipeliner, ok := s.store.(sqlplugin.TxPipeliner)
 	s.True(ok)
@@ -144,11 +174,12 @@ func (s *pipelineSuite) newShardRow() sqlplugin.ShardsRow {
 }
 
 // insertExecution inserts a shard, a current execution and its execution, and
-// returns the filters that lock them.
+// returns the filters that lock them and the current execution row.
 func (s *pipelineSuite) insertExecution() (
 	sqlplugin.ShardsFilter,
 	sqlplugin.CurrentExecutionsFilter,
 	sqlplugin.ExecutionsFilter,
+	sqlplugin.CurrentExecutionsRow,
 ) {
 	shard := s.newShardRow()
 	namespaceID := primitives.NewUUID()
@@ -158,7 +189,7 @@ func (s *pipelineSuite) insertExecution() (
 
 	_, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
 	s.NoError(err)
-	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &sqlplugin.CurrentExecutionsRow{
+	current := sqlplugin.CurrentExecutionsRow{
 		ShardID:          shard.ShardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
@@ -171,7 +202,8 @@ func (s *pipelineSuite) insertExecution() (
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Data:             shuffle.Bytes(testHistoryExecutionStateData),
 		DataEncoding:     testHistoryExecutionStateEncoding,
-	})
+	}
+	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &current)
 	s.NoError(err)
 	_, err = s.store.InsertIntoExecutions(newExecutionContext(), &sqlplugin.ExecutionsRow{
 		ShardID:          shard.ShardID,
@@ -200,5 +232,6 @@ func (s *pipelineSuite) insertExecution() (
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
 			RunID:       runID,
-		}
+		},
+		current
 }

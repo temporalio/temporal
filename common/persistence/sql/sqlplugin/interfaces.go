@@ -109,9 +109,12 @@ type (
 
 	// PipelinedTx is a transaction that queues its statements until Flush sends
 	// them in one round trip. After Flush, the same calls made in the same order
-	// return the flushed results.
+	// return the flushed results. It implements the optional updaters, so a call
+	// recorded before Flush takes the same update branch as its replay.
 	PipelinedTx interface {
 		Tx
+		HistoryExecutionConditionalUpdater
+		HistoryCurrentExecutionConditionalUpdater
 		Flush() error
 		// Diverged reports whether the calls after Flush differed from the queued
 		// statements.
