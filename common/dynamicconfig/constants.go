@@ -3231,6 +3231,31 @@ Changing the implementation selected for a stream restarts that stream.`,
 A lane stream receiver advertises lane support to its sender only when this is true. It has no
 effect on legacy stream receivers. Changing it restarts lane stream receivers.`,
 	)
+	ReplicationStreamSenderLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderLanesEnabled",
+		false,
+		`ReplicationStreamSenderLanesEnabled allows lane stream senders to send replication lanes.
+A lane stream sender sends a lane only when this is true, the stream's lane policy asks for the
+lane, and the receiver advertises lane support. It has no effect on legacy stream senders.
+Changing it restarts lane stream senders.`,
+	)
+	ReplicationLaneIsolation = NewGlobalTypedSetting(
+		"history.ReplicationLaneIsolation",
+		([]ReplicationLaneIsolationEntry)(nil),
+		`ReplicationLaneIsolation lists the namespaces whose HIGH priority replication traffic lane
+stream senders move onto their own lanes, when the open-source lane policy is in use. Each entry
+has RemoteCluster, NamespaceID, and TasksPerSecond. TasksPerSecond is the lane's send rate limit
+on each source shard's stream, not a total for the namespace: a namespace whose traffic
+concentrates on one shard sends at most this rate there. If any entry is invalid, no namespace
+is isolated.`,
+	)
+	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderMaxLanes",
+		4,
+		`ReplicationStreamSenderMaxLanes is the maximum number of lanes on one lane stream sender. The
+sender ignores requests for more lanes, keeping the lanes the policy lists first. The open-source
+policy lists lanes in namespace ID order.`,
+	)
 	ReplicationStreamReceiverMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamReceiverMaxLanes",
 		8,
@@ -3247,6 +3272,13 @@ retires. Changing it restarts lane stream receivers.`,
 on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
 watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
 Changes take effect on the next ack without restarting the stream.`,
+	)
+	ReplicationLaneEvaluateErrorGrace = NewGlobalDurationSetting(
+		"history.ReplicationLaneEvaluateErrorGrace",
+		time.Minute,
+		`ReplicationLaneEvaluateErrorGrace is how long a lane stream sender keeps a lane policy's last
+answer while the policy keeps failing, before it retires all lanes. A policy can choose another
+reaction for an error by returning a LaneEvaluateError.`,
 	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
