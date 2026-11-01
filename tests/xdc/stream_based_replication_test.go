@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,10 +37,13 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -56,6 +60,7 @@ type (
 		serializer    serialization.Serializer
 		generator     test.Generator
 		once          sync.Once
+		laneStreams   bool
 	}
 )
 
@@ -64,6 +69,7 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
+		laneStreams             bool
 	}{
 		{
 			name:                    "DisableTransitionHistory",
@@ -73,10 +79,16 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 			name:                    "EnableTransitionHistory",
 			enableTransitionHistory: true,
 		},
+		{
+			name:                    "EnableTransitionHistory_LaneStreams",
+			enableTransitionHistory: true,
+			laneStreams:             true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &streamBasedReplicationTestSuite{
 				namespaceName: "replication-test-" + common.GenerateRandomString(5),
+				laneStreams:   tc.laneStreams,
 			}
 			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
@@ -100,6 +112,57 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		testcore.WithClusterHistoryTaskRecorder(),
 		testcore.WithReplicationStreamRecorder(),
 	)
+	if s.laneStreams {
+		s.switchToLaneStreams()
+	}
+}
+
+// switchToLaneStreams selects the lane stream implementation for every stream between the
+// clusters, and waits until each cluster has created lane senders and receivers.
+func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		captures[i] = captureHandler.StartCapture()
+		s.T().Cleanup(func() { captureHandler.StopCapture(captures[i]) })
+	}
+	for _, c := range s.clusters {
+		var rules []dynamicconfig.ReplicationStreamImplementationRule
+		for _, remote := range s.clusters {
+			if remote.ClusterName() != c.ClusterName() {
+				rules = append(rules, dynamicconfig.ReplicationStreamImplementationRule{
+					RemoteCluster:  remote.ClusterName(),
+					Implementation: "lane",
+					ShardPercent:   100,
+				})
+			}
+		}
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
+			Sender:   rules,
+			Receiver: rules,
+		})
+	}
+	// SetupSuite's T lives for the whole suite, so wait on a background context: a context
+	// bound to the suite's T would fail the suite once the suite outlasts its timeout.
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		for _, capture := range captures {
+			var laneSender, laneReceiver bool
+			for _, recording := range capture.SnapshotMetric(metrics.ReplicationStreamImplementationSelected.Name()) {
+				if recording.Tags["replication_stream_implementation"] != "lane" {
+					continue
+				}
+				switch recording.Tags["operation"] {
+				case "ReplicationStreamSender":
+					laneSender = true
+				case "ReplicationStreamReceiver":
+					laneReceiver = true
+				default:
+				}
+			}
+			require.True(t, laneSender && laneReceiver, "clusters did not create lane stream senders and receivers")
+		}
+	}, 30*time.Second, 200*time.Millisecond)
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
