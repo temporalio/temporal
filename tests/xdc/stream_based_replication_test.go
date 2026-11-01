@@ -30,6 +30,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -104,6 +106,10 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
 	}
+	if s.laneStreams {
+		// Replication lanes split HIGH priority traffic, which requires the tiered stack.
+		s.dynamicConfigOverrides[dynamicconfig.EnableReplicationTaskTieredProcessing.Key()] = true
+	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 
@@ -118,8 +124,8 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 }
 
 // switchToLaneStreams selects the lane stream implementation for every stream between the
-// clusters, with lane receivers advertising lane support, and waits until each cluster has
-// created lane senders and receivers.
+// clusters, with lanes enabled on both ends, and waits until each cluster has created lane
+// senders and receivers.
 func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
 	captures := make([]*metricstest.Capture, len(s.clusters))
 	for i, c := range s.clusters {
@@ -140,6 +146,7 @@ func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
 			}
 		}
 		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverLanesEnabled, true)
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamSenderLanesEnabled, true)
 		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
 			Sender:   rules,
 			Receiver: rules,
@@ -1506,4 +1513,85 @@ func (s *streamBasedReplicationTestSuite) dumpRecorders() {
 			s.T().Logf("Wrote cluster %d replication stream to %s", i, replicationFile)
 		}
 	}
+}
+
+// TestLaneIsolation isolates the suite's namespace onto a replication lane, checks that its
+// tasks replicate on the lane, and checks that the lane retires once the namespace is no
+// longer isolated.
+func (s *streamBasedReplicationTestSuite) TestLaneIsolation() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	var stopIsolating []func()
+	for _, c := range s.clusters {
+		var entries []dynamicconfig.ReplicationLaneIsolationEntry
+		for _, remote := range s.clusters {
+			if remote.ClusterName() != c.ClusterName() {
+				entries = append(entries, dynamicconfig.ReplicationLaneIsolationEntry{
+					RemoteCluster:  remote.ClusterName(),
+					NamespaceID:    s.namespaceID,
+					TasksPerSecond: 1000,
+				})
+			}
+		}
+		stopIsolating = append(stopIsolating, c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, entries))
+	}
+
+	// The lane is created on the next ack, so keep starting workflows until their tasks
+	// are sent on a lane.
+	var workflowID string
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		workflowID = "lane-isolation-" + uuid.NewString()
+		_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    s.namespaceName,
+			WorkflowId:   workflowID,
+			WorkflowType: &commonpb.WorkflowType{Name: "lane-isolation-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "lane-isolation-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.True(t, s.sawLaneMessage(func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetLaneId() != "" && len(messages.GetReplicationTasks()) > 0
+		}), "no replication tasks were sent on a lane")
+	}, 60*time.Second, time.Second)
+	// The workflow started last, while the namespace was isolated, replicates to the standby.
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		_, err := s.clusters[1].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespaceName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		})
+		require.NoError(t, err)
+	}, 60*time.Second, time.Second)
+
+	for _, stop := range stopIsolating {
+		stop()
+	}
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneMessage(func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetRetire()
+		}), "the lane did not retire")
+	}, 60*time.Second, time.Second)
+}
+
+// sawLaneMessage reports whether any cluster recorded a replication stream message that
+// matches.
+func (s *streamBasedReplicationTestSuite) sawLaneMessage(match func(*replicationspb.WorkflowReplicationMessages) bool) bool {
+	for _, c := range s.clusters {
+		for _, captured := range c.GetReplicationStreamRecorder().GetMessages() {
+			for _, msg := range []proto.Message{captured.Request, captured.Response} {
+				var messages *replicationspb.WorkflowReplicationMessages
+				switch resp := msg.(type) {
+				case *adminservice.StreamWorkflowReplicationMessagesResponse:
+					messages = resp.GetMessages()
+				case *historyservice.StreamWorkflowReplicationMessagesResponse:
+					messages = resp.GetMessages()
+				default:
+				}
+				if messages != nil && match(messages) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
