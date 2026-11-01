@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -86,6 +87,11 @@ import (
 )
 
 type (
+	replacementEventCheckingShard struct {
+		historyi.ShardContext
+		checkLocksReleased func()
+	}
+
 	engine2Suite struct {
 		suite.Suite
 		*require.Assertions
@@ -116,6 +122,11 @@ type (
 		tv            *testvars.TestVars
 	}
 )
+
+func (s *replacementEventCheckingShard) GetEventLogger() otellog.Logger {
+	s.checkLocksReleased()
+	return s.ShardContext.GetEventLogger()
+}
 
 // noopWorkerDeploymentClient is a minimal stub for workerdeployment.Client used in tests.
 // Only SignalVersionReactivation is implemented since it's the only method referenced
@@ -1684,6 +1695,41 @@ func makeMockStartRequest(
 	}
 }
 
+func makeMockSignalWithStartRequest(
+	tv *testvars.TestVars,
+	wfReusePolicy enumspb.WorkflowIdReusePolicy,
+) *historyservice.SignalWithStartWorkflowExecutionRequest {
+	return &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: tv.NamespaceID().String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                tv.NamespaceID().String(),
+			WorkflowId:               tv.WorkflowID(),
+			WorkflowType:             tv.WorkflowType(),
+			TaskQueue:                tv.TaskQueue(),
+			WorkflowExecutionTimeout: durationpb.New(time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 tv.WorkerIdentity(),
+			RequestId:                tv.RequestID(),
+			WorkflowIdReusePolicy:    wfReusePolicy,
+			SignalName:               tv.SignalName(),
+		},
+	}
+}
+
+func makeOrphanedCurrentExecutionConflict(
+	tv *testvars.TestVars,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) *persistence.CurrentWorkflowConditionFailedError {
+	return &persistence.CurrentWorkflowConditionFailedError{
+		Msg:              "random message",
+		RunID:            tv.RunID(),
+		State:            state,
+		Status:           status,
+		LastWriteVersion: common.EmptyVersion,
+	}
+}
+
 func makeCurrentWorkflowConditionFailedError(
 	tv *testvars.TestVars,
 	startTime *timestamppb.Timestamp,
@@ -1796,6 +1842,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RequestDedup() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	s.setupStartWorkflowExecutionForRunning()
 	startRequest := makeMockStartRequest(
 		s.tv,
@@ -1810,9 +1857,44 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RequestDe
 	s.NoError(err)
 	s.True(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommitObservability() {
+	for _, tc := range []struct {
+		name       string
+		emitEvents bool
+	}{
+		{name: "wide events enabled", emitEvents: true},
+		{name: "wide events disabled"},
+	} {
+		s.Run(tc.name, func() {
+			s.testOrphanedChildReplacementPostCommitObservability(tc.emitEvents)
+		})
+	}
+}
+
+func (s *engine2Suite) testOrphanedChildReplacementPostCommitObservability(emitEvents bool) {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(emitEvents)
+	locksChecked := false
+	s.historyEngine.shardContext = &replacementEventCheckingShard{
+		ShardContext: s.mockShard,
+		checkLocksReleased: func() {
+			ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
+			defer cancel()
+			release, err := s.workflowCache.GetOrCreateCurrentExecution(
+				ctx, s.mockShard, s.tv.NamespaceID(), s.tv.WorkflowID(), chasm.WorkflowArchetypeID, locks.PriorityHigh,
+			)
+			s.NoError(err, "the workflow-ID lock must be released before emitting")
+			release(nil)
+			_, release, err = s.workflowCache.GetOrCreateWorkflowExecution(
+				ctx, s.mockShard, s.tv.NamespaceID(), s.tv.WorkflowExecution(), locks.PriorityHigh,
+			)
+			s.NoError(err, "the orphan run lock must be released before emitting")
+			release(nil)
+			locksChecked = true
+		},
+	}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -1879,6 +1961,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommi
 	s.ErrorIs(err, persistenceErr)
 	s.Nil(resp)
 	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture), "failed persistence must not emit a replacement event")
+	s.False(locksChecked)
 
 	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 	s.NoError(err)
@@ -1888,9 +1972,39 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommi
 	s.Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
 	s.Equal("replaced", recordings[0].Tags["outcome"])
+	wideRecords := parentChildRecords(s.parentChildEventCapture)
+	s.Equal(emitEvents, locksChecked)
+	if !emitEvents {
+		s.Empty(wideRecords)
+		return
+	}
+	s.Len(wideRecords, 1)
+	attributes := wideEventAttributes(wideRecords[0])
+	s.Equal(string(wideevents.ReplicationApplied), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeReplaced, attributes["outcome"].AsString())
+	s.Equal(enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION.String(), attributes["task_type"].AsString())
+	s.Equal(s.tv.NamespaceID().String(), attributes["namespace_id"].AsString())
+	s.Equal(s.tv.WorkflowID(), attributes["workflow_id"].AsString())
+	s.Equal(s.tv.RunID(), attributes["run_id"].AsString())
+	s.Equal(resp.GetRunId(), attributes["new_run_id"].AsString())
+	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(parentExecution.GetRunId(), attributes["parent_run_id"].AsString())
+	s.Equal(int64(72), attributes["parent_initiated_id"].AsInt64())
+	s.Equal(map[string]any{
+		"event_type":                           wideevents.ParentChildLifecycleEventType,
+		"phase":                                wideevents.ParentChildPhaseOrphanedChildReplacement,
+		"outcome":                              wideevents.ParentChildOutcomeReplaced,
+		"child_workflow_state":                 enumsspb.WORKFLOW_EXECUTION_STATE_CREATED.String(),
+		"child_workflow_status":                enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		"first_workflow_task_scheduled":        false,
+		"parent_initiated_version":             float64(892),
+		"replacement_parent_initiated_id":      float64(75),
+		"replacement_parent_initiated_version": float64(925),
+	}, wideEventDetails(wideRecords[0]))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_ClosedAfterSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -1955,6 +2069,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_ClosedAft
 	s.Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
 	s.Equal("rejected_race_closed", recordings[0].Tags["outcome"])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequestID() {
@@ -1993,7 +2108,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_PolicyFail() {
 	s.Nil(resp)
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCompletedSnapshot() {
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresCompletedSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2012,13 +2128,12 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCo
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
-	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
-	s.Len(recordings, 1)
-	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED.String(), recordings[0].Tags["workflow_state"])
+	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRunningSnapshot() {
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_IgnoresRunningSnapshot() {
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -2033,10 +2148,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRu
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
-	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
-	s.Len(recordings, 1)
-	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING.String(), recordings[0].Tags["workflow_state"])
+	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+	s.Empty(parentChildRecords(s.parentChildEventCapture))
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
@@ -3028,6 +3141,161 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.Nil(resp)
 	s.NotNil(err)
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	var currentExecutionLastRunningClock int64
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})).DoAndReturn(
+		func(_ context.Context, _ *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return nil, conditionFailedErr
+		},
+	)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
+			request.PreviousRunID == s.tv.RunID() &&
+			request.PreviousLastWriteVersion == common.EmptyVersion
+	})).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.True(resp.Started)
+	s.NotEmpty(resp.GetRunId())
+	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+	s.Equal(resp.GetRunId(), resp.GetFirstExecutionRunId())
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution_RejectDuplicate() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
+	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
+		nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Nil(resp)
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &alreadyStarted)
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution_EmptyRunID() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	)
+	conditionFailedErr.RunID = ""
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})).Return(nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Nil(resp)
+	var conditionFailed *persistence.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailed)
+	s.Empty(conditionFailed.RunID)
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution_NamespaceNotActive() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	)
+	conditionFailedErr.LastWriteVersion = tests.Version + 1
+	s.mockClusterMetadata.EXPECT().
+		ClusterNameForFailoverVersion(true, tests.Version+1).
+		Return(cluster.TestAlternativeClusterName).
+		AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})).Return(nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Nil(resp)
+	var namespaceNotActive *serviceerror.NamespaceNotActive
+	s.ErrorAs(err, &namespaceNotActive)
+}
+
+// Concurrent SignalWithStart also lands here (BrandNew vs a running current row). Don't overwrite it.
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedRunningCurrentExecution() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
+		nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Nil(resp)
+	var conditionFailed *persistence.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailed)
 }
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted() {

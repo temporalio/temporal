@@ -8,7 +8,6 @@ import (
 
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
-	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -147,20 +146,16 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 
 	if historyArchiver == nil {
 		switch scheme {
-		case filestore.URIScheme:
+		case archiver.URISchemeFilestore:
 			if p.historyArchiverConfigs.Filestore == nil {
 				return nil, ErrArchiverConfigNotFound
 			}
 			historyArchiver, err = filestore.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Filestore)
 
-		case gcloud.URIScheme:
-			if p.historyArchiverConfigs.Gstorage == nil {
-				return nil, ErrArchiverConfigNotFound
-			}
+		case archiver.URISchemeGstorage:
+			historyArchiver, err = p.newGstorageHistoryArchiver()
 
-			historyArchiver, err = gcloud.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Gstorage)
-
-		case s3store.URIScheme:
+		case archiver.URISchemeS3store:
 			if p.historyArchiverConfigs.S3store == nil {
 				return nil, ErrArchiverConfigNotFound
 			}
@@ -212,21 +207,18 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 
 	if visibilityArchiver == nil {
 		switch scheme {
-		case filestore.URIScheme:
+		case archiver.URISchemeFilestore:
 			if p.visibilityArchiverConfigs.Filestore == nil {
 				return nil, ErrArchiverConfigNotFound
 			}
 			visibilityArchiver, err = filestore.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Filestore)
-		case s3store.URIScheme:
+		case archiver.URISchemeS3store:
 			if p.visibilityArchiverConfigs.S3store == nil {
 				return nil, ErrArchiverConfigNotFound
 			}
 			visibilityArchiver, err = s3store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.S3store)
-		case gcloud.URIScheme:
-			if p.visibilityArchiverConfigs.Gstorage == nil {
-				return nil, ErrArchiverConfigNotFound
-			}
-			visibilityArchiver, err = gcloud.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Gstorage)
+		case archiver.URISchemeGstorage:
+			visibilityArchiver, err = p.newGstorageVisibilityArchiver()
 
 		default:
 			return nil, ErrUnknownScheme

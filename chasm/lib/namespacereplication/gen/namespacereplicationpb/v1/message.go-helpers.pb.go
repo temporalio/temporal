@@ -182,6 +182,7 @@ var (
 		"Committed":     2,
 		"Failed":        3,
 		"Indeterminate": 4,
+		"SkippedShadow": 5,
 	}
 )
 
@@ -205,6 +206,8 @@ var (
 		"FailedRetriable": 4,
 		"FailedTerminal":  5,
 		"NotAdmitted":     6,
+		"ShadowMatch":     7,
+		"ShadowMismatch":  8,
 	}
 )
 

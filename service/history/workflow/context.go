@@ -547,7 +547,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
 		if rl := shardContext.BusinessIDReuseRateLimiter(
-			namespace.ID(c.workflowKey.NamespaceID),
+			newMutableState.GetNamespaceEntry().Name(),
 			c.workflowKey.WorkflowID,
 			c.archetypeID,
 		); rl != nil && !rl.Allow() {
@@ -977,7 +977,7 @@ func (c *ContextImpl) prepareMutableStateTransaction(
 			execInfo := newMutableState.GetExecutionInfo()
 			newArchetypeID := newContext.GetArchetypeID()
 			if rl := shardContext.BusinessIDReuseRateLimiter(
-				namespace.ID(execInfo.NamespaceId),
+				newMutableState.GetNamespaceEntry().Name(),
 				execInfo.WorkflowId,
 				newArchetypeID,
 			); rl != nil && !rl.Allow() {
@@ -1344,7 +1344,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
+			if ShouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

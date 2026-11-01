@@ -632,6 +632,7 @@ func transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				SkipParentVerification:    closeTask.SkipParentVerification,
 			},
 		},
 	}
@@ -646,10 +647,11 @@ func transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:    closeTask.VisibilityTime.AsTime(),
+		TaskID:                 closeTask.TaskId,
+		Version:                closeTask.Version,
+		DeleteAfterClose:       closeTask.DeleteAfterClose,
+		SkipParentVerification: closeTask.GetCloseExecutionTaskDetails().GetSkipParentVerification(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}

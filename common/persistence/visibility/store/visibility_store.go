@@ -9,6 +9,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -46,12 +47,12 @@ type (
 
 		AdminListExecutions(
 			ctx context.Context,
-			request *manager.AdminListExecutionsRequest,
+			request *adminservice.ListExecutionsRequest,
 		) (*InternalListExecutionsResponse, error)
 
 		AdminCountExecutions(
 			ctx context.Context,
-			request *manager.AdminCountExecutionsRequest,
+			request *adminservice.CountExecutionsRequest,
 		) (*InternalCountExecutionsResponse, error)
 
 		// AddSearchAttributes makes schema changes to add the search attributes. This function must be

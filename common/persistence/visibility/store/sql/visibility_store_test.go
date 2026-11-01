@@ -10,6 +10,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -19,7 +20,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -260,8 +260,8 @@ func TestListExecutions(t *testing.T) {
 
 			resp, err := visStore.AdminListExecutions(
 				context.Background(),
-				&manager.AdminListExecutionsRequest{
-					Namespace: tc.nsName,
+				&adminservice.ListExecutionsRequest{
+					Namespace: tc.nsName.String(),
 					Query:     "ExecutionStatus = 'Completed'",
 					PageSize:  10,
 				},
@@ -306,7 +306,7 @@ func TestListExecutions_NamespaceNotFound(t *testing.T) {
 
 	_, err := visStore.AdminListExecutions(
 		context.Background(),
-		&manager.AdminListExecutionsRequest{Namespace: testNamespaceName, PageSize: 10},
+		&adminservice.ListExecutionsRequest{Namespace: testNamespaceName.String(), PageSize: 10},
 	)
 	r.ErrorIs(err, nsNotFoundErr)
 }
@@ -360,8 +360,8 @@ func TestCountExecutions(t *testing.T) {
 
 			resp, err := visStore.AdminCountExecutions(
 				context.Background(),
-				&manager.AdminCountExecutionsRequest{
-					Namespace: tc.nsName,
+				&adminservice.CountExecutionsRequest{
+					Namespace: tc.nsName.String(),
 					Query:     "ExecutionStatus = 'Completed'",
 				},
 			)
@@ -385,7 +385,7 @@ func TestCountExecutions_NamespaceNotFound(t *testing.T) {
 
 	_, err := visStore.AdminCountExecutions(
 		context.Background(),
-		&manager.AdminCountExecutionsRequest{Namespace: testNamespaceName},
+		&adminservice.CountExecutionsRequest{Namespace: testNamespaceName.String()},
 	)
 	r.ErrorIs(err, nsNotFoundErr)
 }

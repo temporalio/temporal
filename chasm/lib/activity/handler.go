@@ -106,7 +106,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			return newActivity, nil
 		},
 		frontendReq,
-		chasm.WithRequestID(frontendReq.GetRequestId()),
+		chasm.WithStartRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
@@ -174,7 +174,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil
 			},
 			nil,
-			chasm.WithRequestID(requestID),
+			// This update completes the start request, so a retry of the start must find its request ID
+			// on the current record, including after the activity closed.
+			chasm.WithStartRequestID(requestID),
 		)
 		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err
@@ -228,18 +230,21 @@ func (h *handler) newActivityForStartExecution(
 		}
 	}
 
-	if request.GetRequestEagerExecution() {
-		err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
+	eager := request.GetRequestEagerExecution()
+	if eager {
+		if err := TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
 			requestID: request.GetRequestId(),
-			identity:  request.GetIdentity(),
-		})
+		}); err != nil {
+			return nil, nil, err
+		}
+		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
 	} else {
 		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	if !request.GetRequestEagerExecution() {
+	if !eager {
 		return newActivity, nil, nil
 	}
 
@@ -283,6 +288,7 @@ func (h *handler) grantEagerActivityDispatch(
 		h.matchingClient,
 		namespaceID,
 		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetPriority(),
 		nil,
 	)

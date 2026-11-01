@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -28,7 +29,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
@@ -72,7 +73,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
-	fx.Provide(callbackValidatorProvider),
+	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
@@ -130,6 +131,7 @@ var Module = fx.Options(
 	activity.HistoryModule,
 	scheduler.Module,
 	callback.Module,
+	namespacereplication.Module,
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
@@ -164,9 +166,9 @@ func NexusOperationDestinationBlockedProvider(
 	}
 }
 
-// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
+func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
 	cfg := commoncallbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
 		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
@@ -429,8 +431,8 @@ func RateLimitInterceptorProvider(
 
 func ESProcessorConfigProvider(
 	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
+) *esconfig.ProcessorConfig {
+	return &esconfig.ProcessorConfig{
 		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -479,7 +481,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func VisibilityManagerConfigProvider(
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+	esProcessorConfig *esconfig.ProcessorConfig,
 	serviceConfig *configs.Config,
 ) *visibility.ManagerConfig {
 	return &visibility.ManagerConfig{

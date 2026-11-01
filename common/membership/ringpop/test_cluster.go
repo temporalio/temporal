@@ -2,6 +2,9 @@ package ringpop
 
 import (
 	"context"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +42,7 @@ func newTestCluster(
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
 	joinTimes []time.Time,
+	evictBeforeStart []bool,
 	testInitialBootstrapFailure bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
@@ -154,6 +158,10 @@ func newTestCluster(
 			joinTime,
 			100,
 		)
+		if i < len(evictBeforeStart) && evictBeforeStart[i] {
+			// Tests assert on the outcome (membership), not the error.
+			_ = cluster.rings[i].EvictSelf()
+		}
 		cluster.rings[i].Start()
 	}
 	return cluster
@@ -214,4 +222,118 @@ func (c *testCluster) FindHostByAddr(addr string) (membership.HostInfo, bool) {
 		}
 	}
 	return nil, false
+}
+
+// gatedTestMonitor is a monitor that isn't started yet, and whose bootstrap blocks fetching
+// bootstrap hosts until release is called (or the monitor is stopped). This lets tests act on
+// the monitor while Start is in the middle of bootstrapping.
+type gatedTestMonitor struct {
+	*monitor
+	addr    string
+	channel *tchannel.Channel
+	// entered is closed once Start has reached bootstrap.
+	entered     chan struct{}
+	gate        chan struct{}
+	releaseOnce sync.Once
+}
+
+func newGatedTestMonitor(
+	t *testing.T,
+	ringPopApp string,
+	seed string,
+	serviceName primitives.ServiceName,
+	logger log.Logger,
+) *gatedTestMonitor {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+
+	ch, err := tchannel.NewChannel(ringPopApp, nil)
+	if err != nil {
+		t.Fatalf("failed to create tchannel: %v", err)
+	}
+	if err = ch.ListenAndServe("127.0.0.1:0"); err != nil {
+		t.Fatalf("tchannel listen failed: %v", err)
+	}
+	resolver := func() (string, error) {
+		return buildBroadcastHostPort(ch.PeerInfo(), "127.0.0.1")
+	}
+	addr, err := resolver()
+	if err != nil {
+		t.Fatalf("failed to build broadcast hostport: %v", err)
+	}
+	seedAddress, seedPort, err := splitHostPortTyped(seed)
+	if err != nil {
+		t.Fatalf("unable to split seed host port: %v", err)
+	}
+	seedHostID, _ := uuid.New().MarshalBinary()
+	seedMember := &persistence.ClusterMember{
+		HostID:        seedHostID,
+		RPCAddress:    seedAddress,
+		RPCPort:       seedPort,
+		SessionStart:  time.Now().UTC(),
+		LastHeartbeat: time.Now().UTC(),
+	}
+
+	m := &gatedTestMonitor{
+		addr:    addr,
+		channel: ch,
+		entered: make(chan struct{}),
+		gate:    make(chan struct{}),
+	}
+	var enteredOnce sync.Once
+	mockMgr := persistence.NewMockClusterMetadataManager(ctrl)
+	mockMgr.EXPECT().PruneClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockMgr.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
+			enteredOnce.Do(func() { close(m.entered) })
+			select {
+			case <-m.gate:
+				return &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}).AnyTimes()
+
+	rp, err := ringpop.New(ringPopApp, ringpop.Channel(ch), ringpop.AddressResolverFunc(resolver))
+	if err != nil {
+		t.Fatalf("failed to create ringpop instance: %v", err)
+	}
+	_, port, _ := splitHostPortTyped(addr)
+	m.monitor = newMonitor(
+		serviceName,
+		config.ServicePortMap{serviceName: int(port)},
+		rp,
+		logger,
+		mockMgr,
+		resolver,
+		2*time.Second,
+		3*time.Second,
+		time.Time{},
+		100,
+	)
+	t.Cleanup(func() {
+		m.release()
+		m.Stop()
+		ch.Close()
+	})
+	return m
+}
+
+// release unblocks bootstrap.
+func (m *gatedTestMonitor) release() {
+	m.releaseOnce.Do(func() { close(m.gate) })
+}
+
+// fatalRecordingLogger records Fatal calls instead of exiting the process. Like a real Fatal, it
+// doesn't return: it ends the calling goroutine, so it must only be called off the test goroutine.
+type fatalRecordingLogger struct {
+	log.Logger
+	fatals atomic.Int32
+}
+
+func (l *fatalRecordingLogger) Fatal(msg string, tags ...tag.Tag) {
+	l.fatals.Add(1)
+	l.Error(msg, tags...)
+	runtime.Goexit()
 }

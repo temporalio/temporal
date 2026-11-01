@@ -158,6 +158,12 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 		Version:             rand.Int63(),
 	}
 	s.assertEqualTasks(closeTask)
+	closeTask.SkipParentVerification = true
+	s.assertEqualTasks(closeTask)
+
+	legacyTask := transferCloseTaskToProto(closeTask)
+	legacyTask.TaskDetails = nil
+	s.False(transferCloseTaskFromProto(legacyTask).SkipParentVerification)
 }
 
 func (s *taskSerializerSuite) TestTransferResetTask() {

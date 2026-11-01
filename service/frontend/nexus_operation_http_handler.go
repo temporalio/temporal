@@ -45,6 +45,7 @@ type NexusOperationHTTPHandler struct {
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
+	callerRateLimitInterceptor           interceptor.CallerRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	httpServerHandlerInstrumenter        telemetry.HTTPServerHandlerInstrumenter
@@ -64,6 +65,7 @@ func NewNexusOperationHTTPHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
+	callerRateLimitInterceptor interceptor.CallerRateLimitInterceptor,
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
@@ -82,6 +84,7 @@ func NewNexusOperationHTTPHandler(
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
+		callerRateLimitInterceptor:           callerRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
@@ -158,7 +161,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	logger := log.With(
 		h.logger,
 		tag.WorkflowNamespace(params.Namespace),
-		tag.NexusTaskQueueName(params.TaskQueue),
+		tag.WorkflowTaskQueueName(params.TaskQueue),
 	)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
@@ -262,6 +265,7 @@ func (h *NexusOperationHTTPHandler) baseNexusContext(apiName string, header http
 	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
+		callerRateLimitInterceptor:           h.callerRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		apiName:                              apiName,
