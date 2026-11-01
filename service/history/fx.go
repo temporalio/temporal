@@ -239,6 +239,7 @@ func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
+		streamSenderFactory:              args.StreamSenderFactory,
 	}
 
 	// Build the Nexus handler in OnStart rather than here so that it runs after all
