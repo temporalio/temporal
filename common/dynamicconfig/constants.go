@@ -3188,6 +3188,15 @@ replicationReaderGroup abstraction, a refactor of the per-priority cursor arithm
 stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
 refactored path. Changing it restarts replication streams.`,
 	)
+	ReplicationStreamImplementation = NewGlobalTypedSetting(
+		"history.ReplicationStreamImplementation",
+		ReplicationStreamImplementationSettings{},
+		`ReplicationStreamImplementation selects the replication stream implementation for each stream.
+Fields: Sender and Receiver, each a list of rules. A rule has RemoteCluster, Implementation
+("legacy" or "lane"), and either ShardIDs or ShardPercent (1-100) to select local shards.
+Streams that match no rule use legacy. If any rule is invalid, every stream uses legacy.
+Changing the implementation selected for a stream restarts that stream.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,

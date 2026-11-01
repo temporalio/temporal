@@ -1173,24 +1173,28 @@ var (
 		"describe_workflow_signal_backlinks",
 		WithDescription("The number of signal backlinks resolved from the CHASM IncomingSignals map in DescribeWorkflow responses."),
 	)
-	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
-	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
-	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
-	WorkflowDelayedStartBackoffTimerCount = NewCounterDef("workflow_delayed_start_backoff_timer")
-	WorkflowCleanupDeleteCount            = NewCounterDef("workflow_cleanup_delete")
-	WorkflowSuccessCount                  = NewCounterDef("workflow_success")
-	WorkflowCancelCount                   = NewCounterDef("workflow_cancel")
-	WorkflowFailedCount                   = NewCounterDef("workflow_failed")
-	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
-	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
-	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
-	WorkflowScheduleToCloseLatency        = NewTimerDef("workflow_schedule_to_close_latency")
-	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
-	ReplicationStreamError                = NewCounterDef("replication_stream_error")
-	ReplicationServiceError               = NewCounterDef("replication_service_error")
-	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
-	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
-	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	WorkflowBackoffCount                    = NewCounterDef("workflow_backoff_timer")
+	WorkflowRetryBackoffTimerCount          = NewCounterDef("workflow_retry_backoff_timer")
+	WorkflowCronBackoffTimerCount           = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount   = NewCounterDef("workflow_delayed_start_backoff_timer")
+	WorkflowCleanupDeleteCount              = NewCounterDef("workflow_cleanup_delete")
+	WorkflowSuccessCount                    = NewCounterDef("workflow_success")
+	WorkflowCancelCount                     = NewCounterDef("workflow_cancel")
+	WorkflowFailedCount                     = NewCounterDef("workflow_failed")
+	WorkflowTimeoutCount                    = NewCounterDef("workflow_timeout")
+	WorkflowTerminateCount                  = NewCounterDef("workflow_terminate")
+	WorkflowContinuedAsNewCount             = NewCounterDef("workflow_continued_as_new")
+	WorkflowScheduleToCloseLatency          = NewTimerDef("workflow_schedule_to_close_latency")
+	ReplicationStreamPanic                  = NewCounterDef("replication_stream_panic")
+	ReplicationStreamError                  = NewCounterDef("replication_stream_error")
+	ReplicationServiceError                 = NewCounterDef("replication_service_error")
+	ReplicationStreamStuck                  = NewCounterDef("replication_stream_stuck")
+	ReplicationStreamImplementationSelected = NewCounterDef(
+		"replication_stream_implementation_selected",
+		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
+	)
+	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
+	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
 	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
 	// through to persistence while the buffer was enabled. With N streams/lanes scanning the

@@ -327,6 +327,28 @@ type LatencyHealthChecksPerPercentile struct {
 	PercentileSettings []LatencyHealthCheckSettings
 }
 
+// ReplicationStreamImplementationSettings selects replication stream implementations. Streams
+// that match no rule use the legacy implementation.
+type ReplicationStreamImplementationSettings struct {
+	// Sender rules apply to streams this cluster sends to remote clusters.
+	Sender []ReplicationStreamImplementationRule
+	// Receiver rules apply to streams this cluster receives from remote clusters.
+	Receiver []ReplicationStreamImplementationRule
+}
+
+// ReplicationStreamImplementationRule selects the implementation for streams with one remote
+// cluster on a subset of local shards.
+type ReplicationStreamImplementationRule struct {
+	// RemoteCluster is the name of the remote cluster.
+	RemoteCluster string
+	// Implementation is "legacy" or "lane".
+	Implementation string
+	// ShardIDs lists the local shards the rule applies to. Set either ShardIDs or ShardPercent.
+	ShardIDs []int32
+	// ShardPercent applies the rule to this percentage of local shards, from 1 to 100.
+	ShardPercent int
+}
+
 const (
 	HistoryReplicationRateLimiterScopeAll                  = "all"
 	HistoryReplicationRateLimiterScopeOpenForceReplication = "openForceReplication"
