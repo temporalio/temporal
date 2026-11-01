@@ -2091,9 +2091,17 @@ before calling remote for missing events`,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
 	)
-	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSettingWithConstrainedDefault(
 		"history.ChasmStandbyTaskDiscardDelay",
-		24*time.Hour,
+		[]TypedConstrainedValue[time.Duration]{
+			// Short discard delay to limit standby retries. See Validate in
+			// worker_command_task_handler.go for details.
+			{
+				Constraints: Constraints{ChasmTaskType: "activity.workerCommandDispatch"},
+				Value:       1 * time.Minute,
+			},
+			{Value: 24 * time.Hour},
+		},
 		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
 before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
 The default is intentionally much higher than the non CHASM standby discard delay because

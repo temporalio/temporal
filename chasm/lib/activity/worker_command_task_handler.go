@@ -82,14 +82,17 @@ func (h *workerCommandDispatchTaskHandler) Validate(
 		return false, nil
 	}
 
-	// TODO: Send worker commands when an activity is terminated. There is no later
-	// status change to invalidate the logical task after dispatch. We could write
-	// a completion flag to activity state, but that adds a persistence write for
-	// each command. We need to decide whether to accept that cost or find another
-	// way to clean up the task.
 	switch task.GetCommand().(type) {
 	case *activitypb.WorkerCommandDispatchTask_Cancel:
-		return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, nil
+		// For CANCEL_REQUESTED, the activity eventually transitions to a terminal state
+		// (worker responds or timeout fires), which invalidates the logical task.
+		//
+		// For TERMINATED, the status is permanent — no later state change invalidates
+		// the logical task after dispatch. We avoid the cost of a persistence write-back
+		// and instead rely on a short ChasmStandbyTaskDiscardDelay scoped to
+		// "activity.workerCommandDispatch" to clean up the task on standby.
+		return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+			activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, nil
 	default:
 		h.logger.Warn("Unknown worker command type in dispatch task, dropping",
 			tag.NewStringTag("command_type", fmt.Sprintf("%T", task.GetCommand())),
