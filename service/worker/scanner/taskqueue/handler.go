@@ -27,54 +27,77 @@ const scannerTaskQueuePrefix = "temporal-sys-tl-scanner"
 // is more work to do subsequently, this handler will return StatusDefer
 // with the assumption that the executor will schedule this task later
 //
-// Each loop of the handler proceeds as follows
-//   - Retrieve the next batch of tasks sorted by task_id for this task queue from persistence
-//   - If there are 0 tasks for this task queue, try deleting the task queue if its idle
-//   - If any of the tasks in the batch isn't expired, we are done. Since tasks are retrieved
-//     in sorted order, if one of the tasks isn't expired, chances are, none of the tasks above
-//     it are expired as well - so, we give up and wait for the next run
+// Each loop of the handler proceeds as follows, for every subqueue of the
+// task queue (tasks are partitioned into subqueues to implement priority and
+// fairness, so expired tasks must be scavenged from all of them and the queue
+// itself may only be deleted once all of its subqueues are empty)
+//   - Retrieve the next batch of tasks sorted by task_id for this subqueue from persistence
+//   - If there are 0 tasks for this subqueue, move on to the next subqueue
+//   - If any of the tasks in the batch isn't expired, we are done with this subqueue.
+//     Since tasks are retrieved in sorted order, if one of the tasks isn't expired,
+//     chances are, none of the tasks above it are expired as well - so, we give up
+//     and wait for the next run. A live task in any subqueue also keeps the task
+//     queue itself alive
 //   - Delete the entire batch of tasks
-//   - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task queue
-//     Try deleting the task queue if its idle
+//   - If the number of tasks retrieved is less than batchSize, there are no more tasks
+//     in the subqueue. Move on to the next subqueue, and try deleting the task queue
+//     if its idle once all subqueues have been processed
 func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) handlerStatus {
 	var err error
 	var nProcessed, nDeleted int
 
 	defer func() { s.deleteHandlerLog(key, state, nProcessed, nDeleted, err) }()
 
-	for nProcessed < maxTasksPerJob {
-		resp, err1 := s.getTasks(s.lifecycleCtx, key, taskBatchSize)
-		if err1 != nil {
-			err = err1
-			return handlerStatusErr
-		}
+	allSubqueuesEmpty := true
+	for subqueue := 0; subqueue < state.subqueues; subqueue++ {
+		for nProcessed < maxTasksPerJob {
+			resp, err1 := s.getTasks(s.lifecycleCtx, key, subqueue, taskBatchSize)
+			if err1 != nil {
+				err = err1
+				return handlerStatusErr
+			}
 
-		nTasks := len(resp.Tasks)
-		if nTasks == 0 {
-			s.tryDeleteTaskQueue(key, state)
-			return handlerStatusDone
-		}
+			nTasks := len(resp.Tasks)
+			if nTasks == 0 {
+				// this subqueue is empty, continue with the next one
+				break
+			}
 
-		for _, task := range resp.Tasks {
-			nProcessed++
-			if !matching.IsTaskExpired(task) {
-				return handlerStatusDone
+			subqueueHasLiveTask := false
+			for _, task := range resp.Tasks {
+				nProcessed++
+				if !matching.IsTaskExpired(task) {
+					subqueueHasLiveTask = true
+					break
+				}
+			}
+			if subqueueHasLiveTask {
+				// a live task in any subqueue keeps the task queue alive, but
+				// the remaining subqueues may still hold expired tasks
+				allSubqueuesEmpty = false
+				break
+			}
+
+			lastTaskID := resp.Tasks[nTasks-1].GetTaskId()
+			if _, err = s.completeTasks(s.lifecycleCtx, key, subqueue, lastTaskID+1, nTasks); err != nil {
+				return handlerStatusErr
+			}
+
+			nDeleted += nTasks
+			if nTasks < taskBatchSize {
+				// drained this subqueue, continue with the next one
+				break
 			}
 		}
-
-		lastTaskID := resp.Tasks[nTasks-1].GetTaskId()
-		if _, err = s.completeTasks(s.lifecycleCtx, key, lastTaskID+1, nTasks); err != nil {
-			return handlerStatusErr
-		}
-
-		nDeleted += nTasks
-		if nTasks < taskBatchSize {
-			s.tryDeleteTaskQueue(key, state)
-			return handlerStatusDone
+		if nProcessed >= maxTasksPerJob {
+			return handlerStatusDefer
 		}
 	}
 
-	return handlerStatusDefer
+	if allSubqueuesEmpty {
+		s.tryDeleteTaskQueue(key, state)
+	}
+	return handlerStatusDone
 }
 
 func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueState) {

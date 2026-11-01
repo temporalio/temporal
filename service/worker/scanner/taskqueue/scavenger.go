@@ -34,6 +34,11 @@ type (
 	taskQueueState struct {
 		rangeID     int64
 		lastUpdated time.Time
+		// number of subqueues of this task queue that must be scanned; tasks are
+		// partitioned into subqueues to implement priority and fairness, and the
+		// zero subqueue is always present (queues that predate subqueues only have
+		// the zero subqueue, without an explicit metadata entry for it)
+		subqueues int
 	}
 
 	stats struct {
@@ -200,6 +205,7 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
 			lastUpdated: info.Data.LastUpdateTime.AsTime(),
+			subqueues:   max(1, len(info.Data.GetSubqueues())),
 		},
 		scvg: s,
 	}
