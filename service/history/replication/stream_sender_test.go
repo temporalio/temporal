@@ -157,6 +157,56 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 	s.NoError(err)
 }
 
+// TestCatchupBeginWatermark_WithLaneState checks that the legacy sender resumes from the
+// scopes a lane sender persisted, which are held back to the slowest lane, so a sender
+// that ignores lanes re-sends every lane's tasks.
+func (s *streamSenderSuite) TestCatchupBeginWatermark_WithLaneState() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	scope := func(inclusiveMin int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(inclusiveMin)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	// The HIGH scope is held back to the lane's resume position (700), behind the
+	// default lane cursor (950), so a sender that ignores lanes re-covers the lane.
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{scope(700), scope(700), scope(900)},
+				Lanes: []*persistencespb.QueueReaderLane{
+					{LogicalKey: "namespace-id", Scope: scope(700)},
+				},
+				ReplicationLaneDefaultCursor: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(950)),
+			},
+		},
+	}, true).AnyTimes()
+	s.streamSender.isTieredStackEnabled = true
+
+	for _, tc := range []struct {
+		name        string
+		readerGroup *replicationReaderGroup
+	}{
+		{name: "ReaderGroupDisabled"},
+		{name: "ReaderGroupEnabled", readerGroup: newReplicationReaderGroup(s.shardContext, s.clientShardKey, true, log.NewNoopLogger())},
+	} {
+		s.Run(tc.name, func() {
+			s.streamSender.readerGroup = tc.readerGroup
+			s.Equal(int64(700), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 1000))
+			s.Equal(int64(900), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_LOW, 1000))
+		})
+	}
+}
+
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
 // every ack shape, the reader-group path persists exactly the QueueReaderState and
 // failover watermark the legacy path does.

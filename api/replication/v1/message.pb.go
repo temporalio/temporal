@@ -21,6 +21,7 @@ import (
 	v17 "go.temporal.io/server/api/workflow/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -424,23 +425,42 @@ type SyncReplicationState struct {
 	InclusiveLowWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=inclusive_low_watermark_time,json=inclusiveLowWatermarkTime,proto3" json:"inclusive_low_watermark_time,omitempty"`
 	HighPriorityState         *ReplicationState      `protobuf:"bytes,3,opt,name=high_priority_state,json=highPriorityState,proto3" json:"high_priority_state,omitempty"`
 	LowPriorityState          *ReplicationState      `protobuf:"bytes,4,opt,name=low_priority_state,json=lowPriorityState,proto3" json:"low_priority_state,omitempty"`
-	// Namespace IDs the receiver reports as overwhelming the HIGH (live) lane. The
-	// sender isolates these namespaces' HIGH traffic onto throttled severity-tier
-	// lanes. The priority lives in the field name: a future LOW-lane extension adds
-	// its own throttle_low_namespace_ids rather than widening this one.
+	// Namespace IDs the receiver reports as overwhelming the HIGH (live) traffic of this
+	// stream's shard. A sender's lane policy may use them to decide which lanes exist.
+	// The open-source receiver reports none; a LaneFeedbackProvider supplies them.
 	ThrottleHighNamespaceIds []string `protobuf:"bytes,5,rep,name=throttle_high_namespace_ids,json=throttleHighNamespaceIds,proto3" json:"throttle_high_namespace_ids,omitempty"`
-	// Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
-	// Absence of a key is ambiguous: it means either "the receiver has not tracked
-	// this lane yet" or "the lane retired and drained". A sender must therefore never
-	// treat absence alone as proof a lane drained — it must correlate with its own
-	// lane state (e.g. only conclude drain for lanes it has retired).
+	// Obsolete: no sender reads it. Receivers from before replication lanes set it, so
+	// the number must never be reused. Lanes report progress in lane_states.
 	IsolatedLaneStates map[string]*ReplicationState `protobuf:"bytes,6,rep,name=isolated_lane_states,json=isolatedLaneStates,proto3" json:"isolated_lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// True when the receiver understands per-namespace lane isolation (routing of
-	// isolated_namespace_id-tagged messages). The sender requires this before it emits
-	// lane-tagged traffic, so an old receiver is never sent lanes it would misroute.
+	// Obsolete: no sender reads it, and it must never be taken as lane support.
+	// Receivers from before replication lanes set it to true in tiered mode, so the
+	// number must never be reused. Lane support is lane_protocol_version.
 	SupportsNamespaceIsolation bool `protobuf:"varint,7,opt,name=supports_namespace_isolation,json=supportsNamespaceIsolation,proto3" json:"supports_namespace_isolation,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Low watermarks of the lanes identified by WorkflowReplicationMessages.lane_info,
+	// keyed by lane ID. A missing lane ID does not show that the lane has drained. The
+	// sender only treats a lane as drained after it has retired that lane. Each state's
+	// flow_control_command pauses or resumes that lane alone; the sender also stops every
+	// lane while high_priority_state is paused.
+	LaneStates map[string]*ReplicationState `protobuf:"bytes,8,rep,name=lane_states,json=laneStates,proto3" json:"lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Version of the replication lane protocol that the receiver supports. Zero means
+	// the receiver does not support lanes. The sender sets
+	// WorkflowReplicationMessages.lane_info only when this is at least 1.
+	LaneProtocolVersion int32 `protobuf:"varint,9,opt,name=lane_protocol_version,json=laneProtocolVersion,proto3" json:"lane_protocol_version,omitempty"`
+	// Feedback from the receiver for the sender's lane policy, such as per-namespace
+	// health. Open source never sets or reads it: a LaneFeedbackProvider on the receiver
+	// produces it and a lane policy on the sender consumes it. The type URL versions the
+	// contents, and a policy ignores types it does not know. At most 4 KB, because it
+	// rides on stream acks.
+	// (-- api-linter: core::0146::any=disabled
+	//     aip.dev/not-precedent: This is not public. --)
+	LaneFeedback *anypb.Any `protobuf:"bytes,10,opt,name=lane_feedback,json=laneFeedback,proto3" json:"lane_feedback,omitempty"`
+	// The most lanes the receiver tracks on this stream. Set whenever
+	// lane_protocol_version is at least 1; zero means the receiver accepts no lanes. The
+	// sender never has more lanes open than this, and the receiver fails the stream when
+	// a message opens a lane beyond it.
+	MaxLanes      int32 `protobuf:"varint,11,opt,name=max_lanes,json=maxLanes,proto3" json:"max_lanes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncReplicationState) Reset() {
@@ -520,6 +540,34 @@ func (x *SyncReplicationState) GetSupportsNamespaceIsolation() bool {
 		return x.SupportsNamespaceIsolation
 	}
 	return false
+}
+
+func (x *SyncReplicationState) GetLaneStates() map[string]*ReplicationState {
+	if x != nil {
+		return x.LaneStates
+	}
+	return nil
+}
+
+func (x *SyncReplicationState) GetLaneProtocolVersion() int32 {
+	if x != nil {
+		return x.LaneProtocolVersion
+	}
+	return 0
+}
+
+func (x *SyncReplicationState) GetLaneFeedback() *anypb.Any {
+	if x != nil {
+		return x.LaneFeedback
+	}
+	return nil
+}
+
+func (x *SyncReplicationState) GetMaxLanes() int32 {
+	if x != nil {
+		return x.MaxLanes
+	}
+	return 0
 }
 
 type ReplicationState struct {
@@ -659,17 +707,19 @@ type WorkflowReplicationMessages struct {
 	ExclusiveHighWatermark     int64                  `protobuf:"varint,2,opt,name=exclusive_high_watermark,json=exclusiveHighWatermark,proto3" json:"exclusive_high_watermark,omitempty"`
 	ExclusiveHighWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=exclusive_high_watermark_time,json=exclusiveHighWatermarkTime,proto3" json:"exclusive_high_watermark_time,omitempty"`
 	Priority                   v1.TaskPriority        `protobuf:"varint,4,opt,name=priority,proto3,enum=temporal.server.api.enums.v1.TaskPriority" json:"priority,omitempty"`
-	// When set, this batch belongs to the named namespace's isolated lane rather
-	// than the shared priority lane. Used by the receiver only for tracker routing;
-	// scheduler priority still comes from `priority`. Each isolated lane is a
-	// monotonic stream for the life of the stream connection.
+	// Obsolete: no sender sets it. Receivers from before replication lanes route on
+	// it, so the number must never be reused. Lanes use lane_info.
 	IsolatedNamespaceId string `protobuf:"bytes,5,opt,name=isolated_namespace_id,json=isolatedNamespaceId,proto3" json:"isolated_namespace_id,omitempty"`
-	// True on the final message of an isolated lane: the sender has merged the
-	// namespace back to the shared lane and will send no further traffic on this
-	// lane. The receiver drops the lane's tracking once its pending work drains.
+	// Obsolete: no sender sets it. Receivers from before replication lanes read it, so
+	// the number must never be reused. Lanes use lane_info.retire.
 	RetireIsolatedLane bool `protobuf:"varint,6,opt,name=retire_isolated_lane,json=retireIsolatedLane,proto3" json:"retire_isolated_lane,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Set when this batch belongs to a lane instead of the default lane of `priority`.
+	// The receiver tracks and acknowledges each lane separately, in
+	// SyncReplicationState.lane_states. Lanes carry HIGH priority traffic only, and a
+	// receiver rejects lane_info on any other priority.
+	LaneInfo      *ReplicationLaneInfo `protobuf:"bytes,7,opt,name=lane_info,json=laneInfo,proto3" json:"lane_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkflowReplicationMessages) Reset() {
@@ -744,6 +794,69 @@ func (x *WorkflowReplicationMessages) GetRetireIsolatedLane() bool {
 	return false
 }
 
+func (x *WorkflowReplicationMessages) GetLaneInfo() *ReplicationLaneInfo {
+	if x != nil {
+		return x.LaneInfo
+	}
+	return nil
+}
+
+// ReplicationLaneInfo identifies a lane within one replication stream.
+type ReplicationLaneInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lane ID chosen by the sender. It is unique only within the current stream.
+	LaneId string `protobuf:"bytes,1,opt,name=lane_id,json=laneId,proto3" json:"lane_id,omitempty"`
+	// True on the last message of the lane. The sender sends no further messages on
+	// the lane, and the receiver stops tracking it after its pending tasks complete.
+	Retire        bool `protobuf:"varint,2,opt,name=retire,proto3" json:"retire,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplicationLaneInfo) Reset() {
+	*x = ReplicationLaneInfo{}
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplicationLaneInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplicationLaneInfo) ProtoMessage() {}
+
+func (x *ReplicationLaneInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplicationLaneInfo.ProtoReflect.Descriptor instead.
+func (*ReplicationLaneInfo) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ReplicationLaneInfo) GetLaneId() string {
+	if x != nil {
+		return x.LaneId
+	}
+	return ""
+}
+
+func (x *ReplicationLaneInfo) GetRetire() bool {
+	if x != nil {
+		return x.Retire
+	}
+	return false
+}
+
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
 type ReplicationTaskInfo struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -763,7 +876,7 @@ type ReplicationTaskInfo struct {
 
 func (x *ReplicationTaskInfo) Reset() {
 	*x = ReplicationTaskInfo{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -775,7 +888,7 @@ func (x *ReplicationTaskInfo) String() string {
 func (*ReplicationTaskInfo) ProtoMessage() {}
 
 func (x *ReplicationTaskInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -788,7 +901,7 @@ func (x *ReplicationTaskInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicationTaskInfo.ProtoReflect.Descriptor instead.
 func (*ReplicationTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ReplicationTaskInfo) GetNamespaceId() string {
@@ -878,7 +991,7 @@ type NamespaceTaskAttributes struct {
 
 func (x *NamespaceTaskAttributes) Reset() {
 	*x = NamespaceTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +1003,7 @@ func (x *NamespaceTaskAttributes) String() string {
 func (*NamespaceTaskAttributes) ProtoMessage() {}
 
 func (x *NamespaceTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1016,7 @@ func (x *NamespaceTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NamespaceTaskAttributes.ProtoReflect.Descriptor instead.
 func (*NamespaceTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *NamespaceTaskAttributes) GetNamespaceOperation() v1.NamespaceOperation {
@@ -980,7 +1093,7 @@ type SyncShardStatusTaskAttributes struct {
 
 func (x *SyncShardStatusTaskAttributes) Reset() {
 	*x = SyncShardStatusTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -992,7 +1105,7 @@ func (x *SyncShardStatusTaskAttributes) String() string {
 func (*SyncShardStatusTaskAttributes) ProtoMessage() {}
 
 func (x *SyncShardStatusTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1005,7 +1118,7 @@ func (x *SyncShardStatusTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncShardStatusTaskAttributes.ProtoReflect.Descriptor instead.
 func (*SyncShardStatusTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{9}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SyncShardStatusTaskAttributes) GetSourceCluster() string {
@@ -1071,7 +1184,7 @@ type SyncActivityTaskAttributes struct {
 
 func (x *SyncActivityTaskAttributes) Reset() {
 	*x = SyncActivityTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[10]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1196,7 @@ func (x *SyncActivityTaskAttributes) String() string {
 func (*SyncActivityTaskAttributes) ProtoMessage() {}
 
 func (x *SyncActivityTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[10]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1209,7 @@ func (x *SyncActivityTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncActivityTaskAttributes.ProtoReflect.Descriptor instead.
 func (*SyncActivityTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{10}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SyncActivityTaskAttributes) GetNamespaceId() string {
@@ -1300,7 +1413,7 @@ type HistoryTaskAttributes struct {
 
 func (x *HistoryTaskAttributes) Reset() {
 	*x = HistoryTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1425,7 @@ func (x *HistoryTaskAttributes) String() string {
 func (*HistoryTaskAttributes) ProtoMessage() {}
 
 func (x *HistoryTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1438,7 @@ func (x *HistoryTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryTaskAttributes.ProtoReflect.Descriptor instead.
 func (*HistoryTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{11}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HistoryTaskAttributes) GetNamespaceId() string {
@@ -1402,7 +1515,7 @@ type SyncWorkflowStateTaskAttributes struct {
 
 func (x *SyncWorkflowStateTaskAttributes) Reset() {
 	*x = SyncWorkflowStateTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[12]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1414,7 +1527,7 @@ func (x *SyncWorkflowStateTaskAttributes) String() string {
 func (*SyncWorkflowStateTaskAttributes) ProtoMessage() {}
 
 func (x *SyncWorkflowStateTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[12]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1427,7 +1540,7 @@ func (x *SyncWorkflowStateTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncWorkflowStateTaskAttributes.ProtoReflect.Descriptor instead.
 func (*SyncWorkflowStateTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{12}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SyncWorkflowStateTaskAttributes) GetWorkflowState() *v12.WorkflowMutableState {
@@ -1462,7 +1575,7 @@ type TaskQueueUserDataAttributes struct {
 
 func (x *TaskQueueUserDataAttributes) Reset() {
 	*x = TaskQueueUserDataAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[13]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1474,7 +1587,7 @@ func (x *TaskQueueUserDataAttributes) String() string {
 func (*TaskQueueUserDataAttributes) ProtoMessage() {}
 
 func (x *TaskQueueUserDataAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[13]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1487,7 +1600,7 @@ func (x *TaskQueueUserDataAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueUserDataAttributes.ProtoReflect.Descriptor instead.
 func (*TaskQueueUserDataAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{13}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TaskQueueUserDataAttributes) GetNamespaceId() string {
@@ -1524,7 +1637,7 @@ type SyncHSMAttributes struct {
 
 func (x *SyncHSMAttributes) Reset() {
 	*x = SyncHSMAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[14]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1536,7 +1649,7 @@ func (x *SyncHSMAttributes) String() string {
 func (*SyncHSMAttributes) ProtoMessage() {}
 
 func (x *SyncHSMAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[14]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1549,7 +1662,7 @@ func (x *SyncHSMAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncHSMAttributes.ProtoReflect.Descriptor instead.
 func (*SyncHSMAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{14}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SyncHSMAttributes) GetNamespaceId() string {
@@ -1601,7 +1714,7 @@ type BackfillHistoryTaskAttributes struct {
 
 func (x *BackfillHistoryTaskAttributes) Reset() {
 	*x = BackfillHistoryTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[15]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +1726,7 @@ func (x *BackfillHistoryTaskAttributes) String() string {
 func (*BackfillHistoryTaskAttributes) ProtoMessage() {}
 
 func (x *BackfillHistoryTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[15]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +1739,7 @@ func (x *BackfillHistoryTaskAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillHistoryTaskAttributes.ProtoReflect.Descriptor instead.
 func (*BackfillHistoryTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{15}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *BackfillHistoryTaskAttributes) GetNamespaceId() string {
@@ -1681,7 +1794,7 @@ type NewRunInfo struct {
 
 func (x *NewRunInfo) Reset() {
 	*x = NewRunInfo{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[16]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1693,7 +1806,7 @@ func (x *NewRunInfo) String() string {
 func (*NewRunInfo) ProtoMessage() {}
 
 func (x *NewRunInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[16]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1706,7 +1819,7 @@ func (x *NewRunInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NewRunInfo.ProtoReflect.Descriptor instead.
 func (*NewRunInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{16}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *NewRunInfo) GetRunId() string {
@@ -1733,7 +1846,7 @@ type SyncWorkflowStateMutationAttributes struct {
 
 func (x *SyncWorkflowStateMutationAttributes) Reset() {
 	*x = SyncWorkflowStateMutationAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[17]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1745,7 +1858,7 @@ func (x *SyncWorkflowStateMutationAttributes) String() string {
 func (*SyncWorkflowStateMutationAttributes) ProtoMessage() {}
 
 func (x *SyncWorkflowStateMutationAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[17]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1758,7 +1871,7 @@ func (x *SyncWorkflowStateMutationAttributes) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SyncWorkflowStateMutationAttributes.ProtoReflect.Descriptor instead.
 func (*SyncWorkflowStateMutationAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{17}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SyncWorkflowStateMutationAttributes) GetExclusiveStartVersionedTransition() *v12.VersionedTransition {
@@ -1784,7 +1897,7 @@ type SyncWorkflowStateSnapshotAttributes struct {
 
 func (x *SyncWorkflowStateSnapshotAttributes) Reset() {
 	*x = SyncWorkflowStateSnapshotAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[18]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1796,7 +1909,7 @@ func (x *SyncWorkflowStateSnapshotAttributes) String() string {
 func (*SyncWorkflowStateSnapshotAttributes) ProtoMessage() {}
 
 func (x *SyncWorkflowStateSnapshotAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[18]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1809,7 +1922,7 @@ func (x *SyncWorkflowStateSnapshotAttributes) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SyncWorkflowStateSnapshotAttributes.ProtoReflect.Descriptor instead.
 func (*SyncWorkflowStateSnapshotAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{18}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SyncWorkflowStateSnapshotAttributes) GetState() *v12.WorkflowMutableState {
@@ -1835,7 +1948,7 @@ type VerifyVersionedTransitionTaskAttributes struct {
 
 func (x *VerifyVersionedTransitionTaskAttributes) Reset() {
 	*x = VerifyVersionedTransitionTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[19]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1847,7 +1960,7 @@ func (x *VerifyVersionedTransitionTaskAttributes) String() string {
 func (*VerifyVersionedTransitionTaskAttributes) ProtoMessage() {}
 
 func (x *VerifyVersionedTransitionTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[19]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1860,7 +1973,7 @@ func (x *VerifyVersionedTransitionTaskAttributes) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use VerifyVersionedTransitionTaskAttributes.ProtoReflect.Descriptor instead.
 func (*VerifyVersionedTransitionTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{19}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *VerifyVersionedTransitionTaskAttributes) GetNamespaceId() string {
@@ -1926,7 +2039,7 @@ type SyncVersionedTransitionTaskAttributes struct {
 
 func (x *SyncVersionedTransitionTaskAttributes) Reset() {
 	*x = SyncVersionedTransitionTaskAttributes{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[20]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1938,7 +2051,7 @@ func (x *SyncVersionedTransitionTaskAttributes) String() string {
 func (*SyncVersionedTransitionTaskAttributes) ProtoMessage() {}
 
 func (x *SyncVersionedTransitionTaskAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[20]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1951,7 +2064,7 @@ func (x *SyncVersionedTransitionTaskAttributes) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SyncVersionedTransitionTaskAttributes.ProtoReflect.Descriptor instead.
 func (*SyncVersionedTransitionTaskAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SyncVersionedTransitionTaskAttributes) GetVersionedTransitionArtifact() *VersionedTransitionArtifact {
@@ -2007,7 +2120,7 @@ type VersionedTransitionArtifact struct {
 
 func (x *VersionedTransitionArtifact) Reset() {
 	*x = VersionedTransitionArtifact{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[21]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2019,7 +2132,7 @@ func (x *VersionedTransitionArtifact) String() string {
 func (*VersionedTransitionArtifact) ProtoMessage() {}
 
 func (x *VersionedTransitionArtifact) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[21]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2032,7 +2145,7 @@ func (x *VersionedTransitionArtifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionedTransitionArtifact.ProtoReflect.Descriptor instead.
 func (*VersionedTransitionArtifact) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *VersionedTransitionArtifact) GetStateAttributes() isVersionedTransitionArtifact_StateAttributes {
@@ -2131,7 +2244,7 @@ type MigrationExecutionInfo struct {
 
 func (x *MigrationExecutionInfo) Reset() {
 	*x = MigrationExecutionInfo{}
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[22]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2143,7 +2256,7 @@ func (x *MigrationExecutionInfo) String() string {
 func (*MigrationExecutionInfo) ProtoMessage() {}
 
 func (x *MigrationExecutionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[22]
+	mi := &file_temporal_server_api_replication_v1_message_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2156,7 +2269,7 @@ func (x *MigrationExecutionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrationExecutionInfo.ProtoReflect.Descriptor instead.
 func (*MigrationExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *MigrationExecutionInfo) GetBusinessId() string {
@@ -2184,7 +2297,7 @@ var File_temporal_server_api_replication_v1_message_proto protoreflect.FileDescr
 
 const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"0temporal/server/api/replication/v1/message.proto\x12\"temporal.server.api.replication.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a,temporal/server/api/history/v1/message.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a-temporal/server/api/workflow/v1/message.proto\"\xa1\x0f\n" +
+	"0temporal/server/api/replication/v1/message.proto\x12\"temporal.server.api.replication.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a,temporal/server/api/history/v1/message.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a-temporal/server/api/workflow/v1/message.proto\"\xa1\x0f\n" +
 	"\x0fReplicationTask\x12N\n" +
 	"\ttask_type\x18\x01 \x01(\x0e21.temporal.server.api.enums.v1.ReplicationTaskTypeR\btaskType\x12$\n" +
 	"\x0esource_task_id\x18\x02 \x01(\x03R\fsourceTaskId\x12y\n" +
@@ -2213,7 +2326,7 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x1elast_processed_visibility_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x1blastProcessedVisibilityTime\"N\n" +
 	"\x0fSyncShardStatus\x12;\n" +
 	"\vstatus_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"statusTime\"\xf8\x05\n" +
+	"statusTime\"\xe4\b\n" +
 	"\x14SyncReplicationState\x126\n" +
 	"\x17inclusive_low_watermark\x18\x01 \x01(\x03R\x15inclusiveLowWatermark\x12[\n" +
 	"\x1cinclusive_low_watermark_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x19inclusiveLowWatermarkTime\x12d\n" +
@@ -2221,8 +2334,17 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\x12=\n" +
 	"\x1bthrottle_high_namespace_ids\x18\x05 \x03(\tR\x18throttleHighNamespaceIds\x12\x82\x01\n" +
 	"\x14isolated_lane_states\x18\x06 \x03(\v2P.temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntryR\x12isolatedLaneStates\x12@\n" +
-	"\x1csupports_namespace_isolation\x18\a \x01(\bR\x1asupportsNamespaceIsolation\x1a{\n" +
+	"\x1csupports_namespace_isolation\x18\a \x01(\bR\x1asupportsNamespaceIsolation\x12i\n" +
+	"\vlane_states\x18\b \x03(\v2H.temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntryR\n" +
+	"laneStates\x122\n" +
+	"\x15lane_protocol_version\x18\t \x01(\x05R\x13laneProtocolVersion\x129\n" +
+	"\rlane_feedback\x18\n" +
+	" \x01(\v2\x14.google.protobuf.AnyR\flaneFeedback\x12\x1b\n" +
+	"\tmax_lanes\x18\v \x01(\x05R\bmaxLanes\x1a{\n" +
 	"\x17IsolatedLaneStatesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12J\n" +
+	"\x05value\x18\x02 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x05value:\x028\x01\x1as\n" +
+	"\x0fLaneStatesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12J\n" +
 	"\x05value\x18\x02 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x05value:\x028\x01\"\x96\x02\n" +
 	"\x10ReplicationState\x126\n" +
@@ -2233,14 +2355,18 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x11replication_tasks\x18\x01 \x03(\v23.temporal.server.api.replication.v1.ReplicationTaskR\x10replicationTasks\x129\n" +
 	"\x19last_retrieved_message_id\x18\x02 \x01(\x03R\x16lastRetrievedMessageId\x12\x19\n" +
 	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12_\n" +
-	"\x11sync_shard_status\x18\x04 \x01(\v23.temporal.server.api.replication.v1.SyncShardStatusR\x0fsyncShardStatus\"\xc6\x03\n" +
+	"\x11sync_shard_status\x18\x04 \x01(\v23.temporal.server.api.replication.v1.SyncShardStatusR\x0fsyncShardStatus\"\x9c\x04\n" +
 	"\x1bWorkflowReplicationMessages\x12`\n" +
 	"\x11replication_tasks\x18\x01 \x03(\v23.temporal.server.api.replication.v1.ReplicationTaskR\x10replicationTasks\x128\n" +
 	"\x18exclusive_high_watermark\x18\x02 \x01(\x03R\x16exclusiveHighWatermark\x12]\n" +
 	"\x1dexclusive_high_watermark_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x1aexclusiveHighWatermarkTime\x12F\n" +
 	"\bpriority\x18\x04 \x01(\x0e2*.temporal.server.api.enums.v1.TaskPriorityR\bpriority\x122\n" +
 	"\x15isolated_namespace_id\x18\x05 \x01(\tR\x13isolatedNamespaceId\x120\n" +
-	"\x14retire_isolated_lane\x18\x06 \x01(\bR\x12retireIsolatedLane\"\xa8\x03\n" +
+	"\x14retire_isolated_lane\x18\x06 \x01(\bR\x12retireIsolatedLane\x12T\n" +
+	"\tlane_info\x18\a \x01(\v27.temporal.server.api.replication.v1.ReplicationLaneInfoR\blaneInfo\"F\n" +
+	"\x13ReplicationLaneInfo\x12\x17\n" +
+	"\alane_id\x18\x01 \x01(\tR\x06laneId\x12\x16\n" +
+	"\x06retire\x18\x02 \x01(\bR\x06retire\"\xa8\x03\n" +
 	"\x13ReplicationTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -2390,7 +2516,7 @@ func file_temporal_server_api_replication_v1_message_proto_rawDescGZIP() []byte 
 	return file_temporal_server_api_replication_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_replication_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_temporal_server_api_replication_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_temporal_server_api_replication_v1_message_proto_goTypes = []any{
 	(*ReplicationTask)(nil),                         // 0: temporal.server.api.replication.v1.ReplicationTask
 	(*ReplicationToken)(nil),                        // 1: temporal.server.api.replication.v1.ReplicationToken
@@ -2399,126 +2525,133 @@ var file_temporal_server_api_replication_v1_message_proto_goTypes = []any{
 	(*ReplicationState)(nil),                        // 4: temporal.server.api.replication.v1.ReplicationState
 	(*ReplicationMessages)(nil),                     // 5: temporal.server.api.replication.v1.ReplicationMessages
 	(*WorkflowReplicationMessages)(nil),             // 6: temporal.server.api.replication.v1.WorkflowReplicationMessages
-	(*ReplicationTaskInfo)(nil),                     // 7: temporal.server.api.replication.v1.ReplicationTaskInfo
-	(*NamespaceTaskAttributes)(nil),                 // 8: temporal.server.api.replication.v1.NamespaceTaskAttributes
-	(*SyncShardStatusTaskAttributes)(nil),           // 9: temporal.server.api.replication.v1.SyncShardStatusTaskAttributes
-	(*SyncActivityTaskAttributes)(nil),              // 10: temporal.server.api.replication.v1.SyncActivityTaskAttributes
-	(*HistoryTaskAttributes)(nil),                   // 11: temporal.server.api.replication.v1.HistoryTaskAttributes
-	(*SyncWorkflowStateTaskAttributes)(nil),         // 12: temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes
-	(*TaskQueueUserDataAttributes)(nil),             // 13: temporal.server.api.replication.v1.TaskQueueUserDataAttributes
-	(*SyncHSMAttributes)(nil),                       // 14: temporal.server.api.replication.v1.SyncHSMAttributes
-	(*BackfillHistoryTaskAttributes)(nil),           // 15: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes
-	(*NewRunInfo)(nil),                              // 16: temporal.server.api.replication.v1.NewRunInfo
-	(*SyncWorkflowStateMutationAttributes)(nil),     // 17: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes
-	(*SyncWorkflowStateSnapshotAttributes)(nil),     // 18: temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes
-	(*VerifyVersionedTransitionTaskAttributes)(nil), // 19: temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes
-	(*SyncVersionedTransitionTaskAttributes)(nil),   // 20: temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes
-	(*VersionedTransitionArtifact)(nil),             // 21: temporal.server.api.replication.v1.VersionedTransitionArtifact
-	(*MigrationExecutionInfo)(nil),                  // 22: temporal.server.api.replication.v1.MigrationExecutionInfo
-	nil,                                             // 23: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
-	(v1.ReplicationTaskType)(0),                     // 24: temporal.server.api.enums.v1.ReplicationTaskType
-	(*v11.DataBlob)(nil),                            // 25: temporal.api.common.v1.DataBlob
-	(*timestamppb.Timestamp)(nil),                   // 26: google.protobuf.Timestamp
-	(v1.TaskPriority)(0),                            // 27: temporal.server.api.enums.v1.TaskPriority
-	(*v12.VersionedTransition)(nil),                 // 28: temporal.server.api.persistence.v1.VersionedTransition
-	(*v12.ReplicationTaskInfo)(nil),                 // 29: temporal.server.api.persistence.v1.ReplicationTaskInfo
-	(v1.ReplicationFlowControlCommand)(0),           // 30: temporal.server.api.enums.v1.ReplicationFlowControlCommand
-	(v1.TaskType)(0),                                // 31: temporal.server.api.enums.v1.TaskType
-	(v1.NamespaceOperation)(0),                      // 32: temporal.server.api.enums.v1.NamespaceOperation
-	(*v13.NamespaceInfo)(nil),                       // 33: temporal.api.namespace.v1.NamespaceInfo
-	(*v13.NamespaceConfig)(nil),                     // 34: temporal.api.namespace.v1.NamespaceConfig
-	(*v14.NamespaceReplicationConfig)(nil),          // 35: temporal.api.replication.v1.NamespaceReplicationConfig
-	(*v14.FailoverStatus)(nil),                      // 36: temporal.api.replication.v1.FailoverStatus
-	(*v12.NamespaceRestoreInfo)(nil),                // 37: temporal.server.api.persistence.v1.NamespaceRestoreInfo
-	(*v11.Payloads)(nil),                            // 38: temporal.api.common.v1.Payloads
-	(*v15.Failure)(nil),                             // 39: temporal.api.failure.v1.Failure
-	(*v16.VersionHistory)(nil),                      // 40: temporal.server.api.history.v1.VersionHistory
-	(*v17.BaseExecutionInfo)(nil),                   // 41: temporal.server.api.workflow.v1.BaseExecutionInfo
-	(*durationpb.Duration)(nil),                     // 42: google.protobuf.Duration
-	(*v16.VersionHistoryItem)(nil),                  // 43: temporal.server.api.history.v1.VersionHistoryItem
-	(*v12.WorkflowMutableState)(nil),                // 44: temporal.server.api.persistence.v1.WorkflowMutableState
-	(*v12.TaskQueueUserData)(nil),                   // 45: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*v12.StateMachineNode)(nil),                    // 46: temporal.server.api.persistence.v1.StateMachineNode
-	(*v12.WorkflowMutableStateMutation)(nil),        // 47: temporal.server.api.persistence.v1.WorkflowMutableStateMutation
+	(*ReplicationLaneInfo)(nil),                     // 7: temporal.server.api.replication.v1.ReplicationLaneInfo
+	(*ReplicationTaskInfo)(nil),                     // 8: temporal.server.api.replication.v1.ReplicationTaskInfo
+	(*NamespaceTaskAttributes)(nil),                 // 9: temporal.server.api.replication.v1.NamespaceTaskAttributes
+	(*SyncShardStatusTaskAttributes)(nil),           // 10: temporal.server.api.replication.v1.SyncShardStatusTaskAttributes
+	(*SyncActivityTaskAttributes)(nil),              // 11: temporal.server.api.replication.v1.SyncActivityTaskAttributes
+	(*HistoryTaskAttributes)(nil),                   // 12: temporal.server.api.replication.v1.HistoryTaskAttributes
+	(*SyncWorkflowStateTaskAttributes)(nil),         // 13: temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes
+	(*TaskQueueUserDataAttributes)(nil),             // 14: temporal.server.api.replication.v1.TaskQueueUserDataAttributes
+	(*SyncHSMAttributes)(nil),                       // 15: temporal.server.api.replication.v1.SyncHSMAttributes
+	(*BackfillHistoryTaskAttributes)(nil),           // 16: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes
+	(*NewRunInfo)(nil),                              // 17: temporal.server.api.replication.v1.NewRunInfo
+	(*SyncWorkflowStateMutationAttributes)(nil),     // 18: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes
+	(*SyncWorkflowStateSnapshotAttributes)(nil),     // 19: temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes
+	(*VerifyVersionedTransitionTaskAttributes)(nil), // 20: temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes
+	(*SyncVersionedTransitionTaskAttributes)(nil),   // 21: temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes
+	(*VersionedTransitionArtifact)(nil),             // 22: temporal.server.api.replication.v1.VersionedTransitionArtifact
+	(*MigrationExecutionInfo)(nil),                  // 23: temporal.server.api.replication.v1.MigrationExecutionInfo
+	nil,                                             // 24: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
+	nil,                                             // 25: temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry
+	(v1.ReplicationTaskType)(0),                     // 26: temporal.server.api.enums.v1.ReplicationTaskType
+	(*v11.DataBlob)(nil),                            // 27: temporal.api.common.v1.DataBlob
+	(*timestamppb.Timestamp)(nil),                   // 28: google.protobuf.Timestamp
+	(v1.TaskPriority)(0),                            // 29: temporal.server.api.enums.v1.TaskPriority
+	(*v12.VersionedTransition)(nil),                 // 30: temporal.server.api.persistence.v1.VersionedTransition
+	(*v12.ReplicationTaskInfo)(nil),                 // 31: temporal.server.api.persistence.v1.ReplicationTaskInfo
+	(*anypb.Any)(nil),                               // 32: google.protobuf.Any
+	(v1.ReplicationFlowControlCommand)(0),           // 33: temporal.server.api.enums.v1.ReplicationFlowControlCommand
+	(v1.TaskType)(0),                                // 34: temporal.server.api.enums.v1.TaskType
+	(v1.NamespaceOperation)(0),                      // 35: temporal.server.api.enums.v1.NamespaceOperation
+	(*v13.NamespaceInfo)(nil),                       // 36: temporal.api.namespace.v1.NamespaceInfo
+	(*v13.NamespaceConfig)(nil),                     // 37: temporal.api.namespace.v1.NamespaceConfig
+	(*v14.NamespaceReplicationConfig)(nil),          // 38: temporal.api.replication.v1.NamespaceReplicationConfig
+	(*v14.FailoverStatus)(nil),                      // 39: temporal.api.replication.v1.FailoverStatus
+	(*v12.NamespaceRestoreInfo)(nil),                // 40: temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	(*v11.Payloads)(nil),                            // 41: temporal.api.common.v1.Payloads
+	(*v15.Failure)(nil),                             // 42: temporal.api.failure.v1.Failure
+	(*v16.VersionHistory)(nil),                      // 43: temporal.server.api.history.v1.VersionHistory
+	(*v17.BaseExecutionInfo)(nil),                   // 44: temporal.server.api.workflow.v1.BaseExecutionInfo
+	(*durationpb.Duration)(nil),                     // 45: google.protobuf.Duration
+	(*v16.VersionHistoryItem)(nil),                  // 46: temporal.server.api.history.v1.VersionHistoryItem
+	(*v12.WorkflowMutableState)(nil),                // 47: temporal.server.api.persistence.v1.WorkflowMutableState
+	(*v12.TaskQueueUserData)(nil),                   // 48: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*v12.StateMachineNode)(nil),                    // 49: temporal.server.api.persistence.v1.StateMachineNode
+	(*v12.WorkflowMutableStateMutation)(nil),        // 50: temporal.server.api.persistence.v1.WorkflowMutableStateMutation
 }
 var file_temporal_server_api_replication_v1_message_proto_depIdxs = []int32{
-	24, // 0: temporal.server.api.replication.v1.ReplicationTask.task_type:type_name -> temporal.server.api.enums.v1.ReplicationTaskType
-	8,  // 1: temporal.server.api.replication.v1.ReplicationTask.namespace_task_attributes:type_name -> temporal.server.api.replication.v1.NamespaceTaskAttributes
-	9,  // 2: temporal.server.api.replication.v1.ReplicationTask.sync_shard_status_task_attributes:type_name -> temporal.server.api.replication.v1.SyncShardStatusTaskAttributes
-	10, // 3: temporal.server.api.replication.v1.ReplicationTask.sync_activity_task_attributes:type_name -> temporal.server.api.replication.v1.SyncActivityTaskAttributes
-	11, // 4: temporal.server.api.replication.v1.ReplicationTask.history_task_attributes:type_name -> temporal.server.api.replication.v1.HistoryTaskAttributes
-	12, // 5: temporal.server.api.replication.v1.ReplicationTask.sync_workflow_state_task_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes
-	13, // 6: temporal.server.api.replication.v1.ReplicationTask.task_queue_user_data_attributes:type_name -> temporal.server.api.replication.v1.TaskQueueUserDataAttributes
-	14, // 7: temporal.server.api.replication.v1.ReplicationTask.sync_hsm_attributes:type_name -> temporal.server.api.replication.v1.SyncHSMAttributes
-	15, // 8: temporal.server.api.replication.v1.ReplicationTask.backfill_history_task_attributes:type_name -> temporal.server.api.replication.v1.BackfillHistoryTaskAttributes
-	19, // 9: temporal.server.api.replication.v1.ReplicationTask.verify_versioned_transition_task_attributes:type_name -> temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes
-	20, // 10: temporal.server.api.replication.v1.ReplicationTask.sync_versioned_transition_task_attributes:type_name -> temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes
-	25, // 11: temporal.server.api.replication.v1.ReplicationTask.data:type_name -> temporal.api.common.v1.DataBlob
-	26, // 12: temporal.server.api.replication.v1.ReplicationTask.visibility_time:type_name -> google.protobuf.Timestamp
-	27, // 13: temporal.server.api.replication.v1.ReplicationTask.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
-	28, // 14: temporal.server.api.replication.v1.ReplicationTask.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	29, // 15: temporal.server.api.replication.v1.ReplicationTask.raw_task_info:type_name -> temporal.server.api.persistence.v1.ReplicationTaskInfo
-	26, // 16: temporal.server.api.replication.v1.ReplicationToken.last_processed_visibility_time:type_name -> google.protobuf.Timestamp
-	26, // 17: temporal.server.api.replication.v1.SyncShardStatus.status_time:type_name -> google.protobuf.Timestamp
-	26, // 18: temporal.server.api.replication.v1.SyncReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
+	26, // 0: temporal.server.api.replication.v1.ReplicationTask.task_type:type_name -> temporal.server.api.enums.v1.ReplicationTaskType
+	9,  // 1: temporal.server.api.replication.v1.ReplicationTask.namespace_task_attributes:type_name -> temporal.server.api.replication.v1.NamespaceTaskAttributes
+	10, // 2: temporal.server.api.replication.v1.ReplicationTask.sync_shard_status_task_attributes:type_name -> temporal.server.api.replication.v1.SyncShardStatusTaskAttributes
+	11, // 3: temporal.server.api.replication.v1.ReplicationTask.sync_activity_task_attributes:type_name -> temporal.server.api.replication.v1.SyncActivityTaskAttributes
+	12, // 4: temporal.server.api.replication.v1.ReplicationTask.history_task_attributes:type_name -> temporal.server.api.replication.v1.HistoryTaskAttributes
+	13, // 5: temporal.server.api.replication.v1.ReplicationTask.sync_workflow_state_task_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes
+	14, // 6: temporal.server.api.replication.v1.ReplicationTask.task_queue_user_data_attributes:type_name -> temporal.server.api.replication.v1.TaskQueueUserDataAttributes
+	15, // 7: temporal.server.api.replication.v1.ReplicationTask.sync_hsm_attributes:type_name -> temporal.server.api.replication.v1.SyncHSMAttributes
+	16, // 8: temporal.server.api.replication.v1.ReplicationTask.backfill_history_task_attributes:type_name -> temporal.server.api.replication.v1.BackfillHistoryTaskAttributes
+	20, // 9: temporal.server.api.replication.v1.ReplicationTask.verify_versioned_transition_task_attributes:type_name -> temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes
+	21, // 10: temporal.server.api.replication.v1.ReplicationTask.sync_versioned_transition_task_attributes:type_name -> temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes
+	27, // 11: temporal.server.api.replication.v1.ReplicationTask.data:type_name -> temporal.api.common.v1.DataBlob
+	28, // 12: temporal.server.api.replication.v1.ReplicationTask.visibility_time:type_name -> google.protobuf.Timestamp
+	29, // 13: temporal.server.api.replication.v1.ReplicationTask.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
+	30, // 14: temporal.server.api.replication.v1.ReplicationTask.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	31, // 15: temporal.server.api.replication.v1.ReplicationTask.raw_task_info:type_name -> temporal.server.api.persistence.v1.ReplicationTaskInfo
+	28, // 16: temporal.server.api.replication.v1.ReplicationToken.last_processed_visibility_time:type_name -> google.protobuf.Timestamp
+	28, // 17: temporal.server.api.replication.v1.SyncShardStatus.status_time:type_name -> google.protobuf.Timestamp
+	28, // 18: temporal.server.api.replication.v1.SyncReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
 	4,  // 19: temporal.server.api.replication.v1.SyncReplicationState.high_priority_state:type_name -> temporal.server.api.replication.v1.ReplicationState
 	4,  // 20: temporal.server.api.replication.v1.SyncReplicationState.low_priority_state:type_name -> temporal.server.api.replication.v1.ReplicationState
-	23, // 21: temporal.server.api.replication.v1.SyncReplicationState.isolated_lane_states:type_name -> temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
-	26, // 22: temporal.server.api.replication.v1.ReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
-	30, // 23: temporal.server.api.replication.v1.ReplicationState.flow_control_command:type_name -> temporal.server.api.enums.v1.ReplicationFlowControlCommand
-	0,  // 24: temporal.server.api.replication.v1.ReplicationMessages.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	2,  // 25: temporal.server.api.replication.v1.ReplicationMessages.sync_shard_status:type_name -> temporal.server.api.replication.v1.SyncShardStatus
-	0,  // 26: temporal.server.api.replication.v1.WorkflowReplicationMessages.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	26, // 27: temporal.server.api.replication.v1.WorkflowReplicationMessages.exclusive_high_watermark_time:type_name -> google.protobuf.Timestamp
-	27, // 28: temporal.server.api.replication.v1.WorkflowReplicationMessages.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
-	31, // 29: temporal.server.api.replication.v1.ReplicationTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	27, // 30: temporal.server.api.replication.v1.ReplicationTaskInfo.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
-	32, // 31: temporal.server.api.replication.v1.NamespaceTaskAttributes.namespace_operation:type_name -> temporal.server.api.enums.v1.NamespaceOperation
-	33, // 32: temporal.server.api.replication.v1.NamespaceTaskAttributes.info:type_name -> temporal.api.namespace.v1.NamespaceInfo
-	34, // 33: temporal.server.api.replication.v1.NamespaceTaskAttributes.config:type_name -> temporal.api.namespace.v1.NamespaceConfig
-	35, // 34: temporal.server.api.replication.v1.NamespaceTaskAttributes.replication_config:type_name -> temporal.api.replication.v1.NamespaceReplicationConfig
-	36, // 35: temporal.server.api.replication.v1.NamespaceTaskAttributes.failover_history:type_name -> temporal.api.replication.v1.FailoverStatus
-	37, // 36: temporal.server.api.replication.v1.NamespaceTaskAttributes.restore_info:type_name -> temporal.server.api.persistence.v1.NamespaceRestoreInfo
-	26, // 37: temporal.server.api.replication.v1.SyncShardStatusTaskAttributes.status_time:type_name -> google.protobuf.Timestamp
-	26, // 38: temporal.server.api.replication.v1.SyncActivityTaskAttributes.scheduled_time:type_name -> google.protobuf.Timestamp
-	26, // 39: temporal.server.api.replication.v1.SyncActivityTaskAttributes.started_time:type_name -> google.protobuf.Timestamp
-	26, // 40: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_heartbeat_time:type_name -> google.protobuf.Timestamp
-	38, // 41: temporal.server.api.replication.v1.SyncActivityTaskAttributes.details:type_name -> temporal.api.common.v1.Payloads
-	39, // 42: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_failure:type_name -> temporal.api.failure.v1.Failure
-	40, // 43: temporal.server.api.replication.v1.SyncActivityTaskAttributes.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	41, // 44: temporal.server.api.replication.v1.SyncActivityTaskAttributes.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
-	26, // 45: temporal.server.api.replication.v1.SyncActivityTaskAttributes.first_scheduled_time:type_name -> google.protobuf.Timestamp
-	26, // 46: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	42, // 47: temporal.server.api.replication.v1.SyncActivityTaskAttributes.retry_initial_interval:type_name -> google.protobuf.Duration
-	42, // 48: temporal.server.api.replication.v1.SyncActivityTaskAttributes.retry_maximum_interval:type_name -> google.protobuf.Duration
-	43, // 49: temporal.server.api.replication.v1.HistoryTaskAttributes.version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	25, // 50: temporal.server.api.replication.v1.HistoryTaskAttributes.events:type_name -> temporal.api.common.v1.DataBlob
-	25, // 51: temporal.server.api.replication.v1.HistoryTaskAttributes.new_run_events:type_name -> temporal.api.common.v1.DataBlob
-	41, // 52: temporal.server.api.replication.v1.HistoryTaskAttributes.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
-	25, // 53: temporal.server.api.replication.v1.HistoryTaskAttributes.events_batches:type_name -> temporal.api.common.v1.DataBlob
-	44, // 54: temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes.workflow_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	45, // 55: temporal.server.api.replication.v1.TaskQueueUserDataAttributes.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	40, // 56: temporal.server.api.replication.v1.SyncHSMAttributes.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	46, // 57: temporal.server.api.replication.v1.SyncHSMAttributes.state_machine_node:type_name -> temporal.server.api.persistence.v1.StateMachineNode
-	43, // 58: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.event_version_history:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	25, // 59: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.event_batches:type_name -> temporal.api.common.v1.DataBlob
-	16, // 60: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.new_run_info:type_name -> temporal.server.api.replication.v1.NewRunInfo
-	25, // 61: temporal.server.api.replication.v1.NewRunInfo.event_batch:type_name -> temporal.api.common.v1.DataBlob
-	28, // 62: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes.exclusive_start_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	47, // 63: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes.state_mutation:type_name -> temporal.server.api.persistence.v1.WorkflowMutableStateMutation
-	44, // 64: temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes.state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	43, // 65: temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes.event_version_history:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	21, // 66: temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
-	17, // 67: temporal.server.api.replication.v1.VersionedTransitionArtifact.sync_workflow_state_mutation_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes
-	18, // 68: temporal.server.api.replication.v1.VersionedTransitionArtifact.sync_workflow_state_snapshot_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes
-	25, // 69: temporal.server.api.replication.v1.VersionedTransitionArtifact.event_batches:type_name -> temporal.api.common.v1.DataBlob
-	16, // 70: temporal.server.api.replication.v1.VersionedTransitionArtifact.new_run_info:type_name -> temporal.server.api.replication.v1.NewRunInfo
-	4,  // 71: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationState
-	72, // [72:72] is the sub-list for method output_type
-	72, // [72:72] is the sub-list for method input_type
-	72, // [72:72] is the sub-list for extension type_name
-	72, // [72:72] is the sub-list for extension extendee
-	0,  // [0:72] is the sub-list for field type_name
+	24, // 21: temporal.server.api.replication.v1.SyncReplicationState.isolated_lane_states:type_name -> temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
+	25, // 22: temporal.server.api.replication.v1.SyncReplicationState.lane_states:type_name -> temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry
+	32, // 23: temporal.server.api.replication.v1.SyncReplicationState.lane_feedback:type_name -> google.protobuf.Any
+	28, // 24: temporal.server.api.replication.v1.ReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
+	33, // 25: temporal.server.api.replication.v1.ReplicationState.flow_control_command:type_name -> temporal.server.api.enums.v1.ReplicationFlowControlCommand
+	0,  // 26: temporal.server.api.replication.v1.ReplicationMessages.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	2,  // 27: temporal.server.api.replication.v1.ReplicationMessages.sync_shard_status:type_name -> temporal.server.api.replication.v1.SyncShardStatus
+	0,  // 28: temporal.server.api.replication.v1.WorkflowReplicationMessages.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	28, // 29: temporal.server.api.replication.v1.WorkflowReplicationMessages.exclusive_high_watermark_time:type_name -> google.protobuf.Timestamp
+	29, // 30: temporal.server.api.replication.v1.WorkflowReplicationMessages.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
+	7,  // 31: temporal.server.api.replication.v1.WorkflowReplicationMessages.lane_info:type_name -> temporal.server.api.replication.v1.ReplicationLaneInfo
+	34, // 32: temporal.server.api.replication.v1.ReplicationTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	29, // 33: temporal.server.api.replication.v1.ReplicationTaskInfo.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
+	35, // 34: temporal.server.api.replication.v1.NamespaceTaskAttributes.namespace_operation:type_name -> temporal.server.api.enums.v1.NamespaceOperation
+	36, // 35: temporal.server.api.replication.v1.NamespaceTaskAttributes.info:type_name -> temporal.api.namespace.v1.NamespaceInfo
+	37, // 36: temporal.server.api.replication.v1.NamespaceTaskAttributes.config:type_name -> temporal.api.namespace.v1.NamespaceConfig
+	38, // 37: temporal.server.api.replication.v1.NamespaceTaskAttributes.replication_config:type_name -> temporal.api.replication.v1.NamespaceReplicationConfig
+	39, // 38: temporal.server.api.replication.v1.NamespaceTaskAttributes.failover_history:type_name -> temporal.api.replication.v1.FailoverStatus
+	40, // 39: temporal.server.api.replication.v1.NamespaceTaskAttributes.restore_info:type_name -> temporal.server.api.persistence.v1.NamespaceRestoreInfo
+	28, // 40: temporal.server.api.replication.v1.SyncShardStatusTaskAttributes.status_time:type_name -> google.protobuf.Timestamp
+	28, // 41: temporal.server.api.replication.v1.SyncActivityTaskAttributes.scheduled_time:type_name -> google.protobuf.Timestamp
+	28, // 42: temporal.server.api.replication.v1.SyncActivityTaskAttributes.started_time:type_name -> google.protobuf.Timestamp
+	28, // 43: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_heartbeat_time:type_name -> google.protobuf.Timestamp
+	41, // 44: temporal.server.api.replication.v1.SyncActivityTaskAttributes.details:type_name -> temporal.api.common.v1.Payloads
+	42, // 45: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_failure:type_name -> temporal.api.failure.v1.Failure
+	43, // 46: temporal.server.api.replication.v1.SyncActivityTaskAttributes.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	44, // 47: temporal.server.api.replication.v1.SyncActivityTaskAttributes.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
+	28, // 48: temporal.server.api.replication.v1.SyncActivityTaskAttributes.first_scheduled_time:type_name -> google.protobuf.Timestamp
+	28, // 49: temporal.server.api.replication.v1.SyncActivityTaskAttributes.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	45, // 50: temporal.server.api.replication.v1.SyncActivityTaskAttributes.retry_initial_interval:type_name -> google.protobuf.Duration
+	45, // 51: temporal.server.api.replication.v1.SyncActivityTaskAttributes.retry_maximum_interval:type_name -> google.protobuf.Duration
+	46, // 52: temporal.server.api.replication.v1.HistoryTaskAttributes.version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	27, // 53: temporal.server.api.replication.v1.HistoryTaskAttributes.events:type_name -> temporal.api.common.v1.DataBlob
+	27, // 54: temporal.server.api.replication.v1.HistoryTaskAttributes.new_run_events:type_name -> temporal.api.common.v1.DataBlob
+	44, // 55: temporal.server.api.replication.v1.HistoryTaskAttributes.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
+	27, // 56: temporal.server.api.replication.v1.HistoryTaskAttributes.events_batches:type_name -> temporal.api.common.v1.DataBlob
+	47, // 57: temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes.workflow_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	48, // 58: temporal.server.api.replication.v1.TaskQueueUserDataAttributes.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	43, // 59: temporal.server.api.replication.v1.SyncHSMAttributes.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	49, // 60: temporal.server.api.replication.v1.SyncHSMAttributes.state_machine_node:type_name -> temporal.server.api.persistence.v1.StateMachineNode
+	46, // 61: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.event_version_history:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	27, // 62: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.event_batches:type_name -> temporal.api.common.v1.DataBlob
+	17, // 63: temporal.server.api.replication.v1.BackfillHistoryTaskAttributes.new_run_info:type_name -> temporal.server.api.replication.v1.NewRunInfo
+	27, // 64: temporal.server.api.replication.v1.NewRunInfo.event_batch:type_name -> temporal.api.common.v1.DataBlob
+	30, // 65: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes.exclusive_start_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	50, // 66: temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes.state_mutation:type_name -> temporal.server.api.persistence.v1.WorkflowMutableStateMutation
+	47, // 67: temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes.state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	46, // 68: temporal.server.api.replication.v1.VerifyVersionedTransitionTaskAttributes.event_version_history:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	22, // 69: temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	18, // 70: temporal.server.api.replication.v1.VersionedTransitionArtifact.sync_workflow_state_mutation_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributes
+	19, // 71: temporal.server.api.replication.v1.VersionedTransitionArtifact.sync_workflow_state_snapshot_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes
+	27, // 72: temporal.server.api.replication.v1.VersionedTransitionArtifact.event_batches:type_name -> temporal.api.common.v1.DataBlob
+	17, // 73: temporal.server.api.replication.v1.VersionedTransitionArtifact.new_run_info:type_name -> temporal.server.api.replication.v1.NewRunInfo
+	4,  // 74: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationState
+	4,  // 75: temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationState
+	76, // [76:76] is the sub-list for method output_type
+	76, // [76:76] is the sub-list for method input_type
+	76, // [76:76] is the sub-list for extension type_name
+	76, // [76:76] is the sub-list for extension extendee
+	0,  // [0:76] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_replication_v1_message_proto_init() }
@@ -2538,7 +2671,7 @@ func file_temporal_server_api_replication_v1_message_proto_init() {
 		(*ReplicationTask_VerifyVersionedTransitionTaskAttributes)(nil),
 		(*ReplicationTask_SyncVersionedTransitionTaskAttributes)(nil),
 	}
-	file_temporal_server_api_replication_v1_message_proto_msgTypes[21].OneofWrappers = []any{
+	file_temporal_server_api_replication_v1_message_proto_msgTypes[22].OneofWrappers = []any{
 		(*VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes)(nil),
 		(*VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes)(nil),
 	}
@@ -2548,7 +2681,7 @@ func file_temporal_server_api_replication_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_replication_v1_message_proto_rawDesc), len(file_temporal_server_api_replication_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

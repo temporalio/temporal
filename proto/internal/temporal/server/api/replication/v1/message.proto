@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.api.replication.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
@@ -68,21 +69,40 @@ message SyncReplicationState {
   google.protobuf.Timestamp inclusive_low_watermark_time = 2;
   ReplicationState high_priority_state = 3;
   ReplicationState low_priority_state = 4;
-  // Namespace IDs the receiver reports as overwhelming the HIGH (live) lane. The
-  // sender isolates these namespaces' HIGH traffic onto throttled severity-tier
-  // lanes. The priority lives in the field name: a future LOW-lane extension adds
-  // its own throttle_low_namespace_ids rather than widening this one.
+  // Namespace IDs the receiver reports as overwhelming the HIGH (live) traffic of this
+  // stream's shard. A sender's lane policy may use them to decide which lanes exist.
+  // The open-source receiver reports none; a LaneFeedbackProvider supplies them.
   repeated string throttle_high_namespace_ids = 5;
-  // Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
-  // Absence of a key is ambiguous: it means either "the receiver has not tracked
-  // this lane yet" or "the lane retired and drained". A sender must therefore never
-  // treat absence alone as proof a lane drained — it must correlate with its own
-  // lane state (e.g. only conclude drain for lanes it has retired).
+  // Obsolete: no sender reads it. Receivers from before replication lanes set it, so
+  // the number must never be reused. Lanes report progress in lane_states.
   map<string, ReplicationState> isolated_lane_states = 6;
-  // True when the receiver understands per-namespace lane isolation (routing of
-  // isolated_namespace_id-tagged messages). The sender requires this before it emits
-  // lane-tagged traffic, so an old receiver is never sent lanes it would misroute.
+  // Obsolete: no sender reads it, and it must never be taken as lane support.
+  // Receivers from before replication lanes set it to true in tiered mode, so the
+  // number must never be reused. Lane support is lane_protocol_version.
   bool supports_namespace_isolation = 7;
+  // Low watermarks of the lanes identified by WorkflowReplicationMessages.lane_info,
+  // keyed by lane ID. A missing lane ID does not show that the lane has drained. The
+  // sender only treats a lane as drained after it has retired that lane. Each state's
+  // flow_control_command pauses or resumes that lane alone; the sender also stops every
+  // lane while high_priority_state is paused.
+  map<string, ReplicationState> lane_states = 8;
+  // Version of the replication lane protocol that the receiver supports. Zero means
+  // the receiver does not support lanes. The sender sets
+  // WorkflowReplicationMessages.lane_info only when this is at least 1.
+  int32 lane_protocol_version = 9;
+  // Feedback from the receiver for the sender's lane policy, such as per-namespace
+  // health. Open source never sets or reads it: a LaneFeedbackProvider on the receiver
+  // produces it and a lane policy on the sender consumes it. The type URL versions the
+  // contents, and a policy ignores types it does not know. At most 4 KB, because it
+  // rides on stream acks.
+  // (-- api-linter: core::0146::any=disabled
+  //     aip.dev/not-precedent: This is not public. --)
+  google.protobuf.Any lane_feedback = 10;
+  // The most lanes the receiver tracks on this stream. Set whenever
+  // lane_protocol_version is at least 1; zero means the receiver accepts no lanes. The
+  // sender never has more lanes open than this, and the receiver fails the stream when
+  // a message opens a lane beyond it.
+  int32 max_lanes = 11;
 }
 message ReplicationState {
   int64 inclusive_low_watermark = 1;
@@ -105,15 +125,26 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
-  // When set, this batch belongs to the named namespace's isolated lane rather
-  // than the shared priority lane. Used by the receiver only for tracker routing;
-  // scheduler priority still comes from `priority`. Each isolated lane is a
-  // monotonic stream for the life of the stream connection.
+  // Obsolete: no sender sets it. Receivers from before replication lanes route on
+  // it, so the number must never be reused. Lanes use lane_info.
   string isolated_namespace_id = 5;
-  // True on the final message of an isolated lane: the sender has merged the
-  // namespace back to the shared lane and will send no further traffic on this
-  // lane. The receiver drops the lane's tracking once its pending work drains.
+  // Obsolete: no sender sets it. Receivers from before replication lanes read it, so
+  // the number must never be reused. Lanes use lane_info.retire.
   bool retire_isolated_lane = 6;
+  // Set when this batch belongs to a lane instead of the default lane of `priority`.
+  // The receiver tracks and acknowledges each lane separately, in
+  // SyncReplicationState.lane_states. Lanes carry HIGH priority traffic only, and a
+  // receiver rejects lane_info on any other priority.
+  ReplicationLaneInfo lane_info = 7;
+}
+
+// ReplicationLaneInfo identifies a lane within one replication stream.
+message ReplicationLaneInfo {
+  // Lane ID chosen by the sender. It is unique only within the current stream.
+  string lane_id = 1;
+  // True on the last message of the lane. The sender sends no further messages on
+  // the lane, and the receiver stops tracking it after its pending tasks complete.
+  bool retire = 2;
 }
 
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
