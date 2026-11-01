@@ -25,6 +25,11 @@ const (
 	UnknownStateWorkflowID   = "temporal-sys-schedule-invariants-unknown-state-scanner"
 	UnknownStateTaskQueue    = "temporal-sys-schedule-invariants-unknown-state-scanner-taskqueue-0"
 
+	StaleRunningWorkflowsWorkflowName = "schedule-invariants-stale-running-workflows-scanner"
+	StaleRunningWorkflowsActivityName = "scan-schedule-invariants-stale-running-workflows"
+	StaleRunningWorkflowsWorkflowID   = "temporal-sys-schedule-invariants-stale-running-workflows-scanner"
+	StaleRunningWorkflowsTaskQueue    = "temporal-sys-schedule-invariants-stale-running-workflows-scanner-taskqueue-0"
+
 	// activityStartToCloseTimeout is "effectively infinite" - the activity runs an
 	// internal scan ticker forever and is only ever expected to exit on transient
 	// failures (worker restart, network glitch, etc.).
@@ -64,6 +69,12 @@ var (
 		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    workflowRunTimeout,
 	}
+	StaleRunningWorkflowsWFStartOptions = client.StartWorkflowOptions{
+		ID:                    StaleRunningWorkflowsWorkflowID,
+		TaskQueue:             StaleRunningWorkflowsTaskQueue,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:    workflowRunTimeout,
+	}
 )
 
 // OverdueNextActionTimeWorkflow scans for schedules whose TemporalScheduleNextActionTime
@@ -88,6 +99,14 @@ func UnknownStateWorkflow(ctx workflow.Context) error {
 	var a *Activities
 	runScanActivity(ctx, a.ScanUnknownState)
 	return workflow.NewContinueAsNewError(ctx, UnknownStateWorkflow)
+}
+
+// StaleRunningWorkflowsWorkflow scans for schedules whose running-workflows list holds a
+// workflow that no longer exists or has closed without the scheduler noticing.
+func StaleRunningWorkflowsWorkflow(ctx workflow.Context) error {
+	var a *Activities
+	runScanActivity(ctx, a.ScanStaleRunningWorkflows)
+	return workflow.NewContinueAsNewError(ctx, StaleRunningWorkflowsWorkflow)
 }
 
 // runScanActivity executes the long-running scan activity. The activity is expected
