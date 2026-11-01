@@ -53,6 +53,7 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	replicationStreamImplementation                = "replication_stream_implementation"
+	replicationLane                                = "replication_lane"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -187,6 +188,12 @@ func FromClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: fromCluster, Value: value}
+}
+
+// ReplicationLaneTag returns a new replication lane tag: the lane's key, which its policy
+// chooses. A stream has a bounded number of lanes.
+func ReplicationLaneTag(laneKey string) Tag {
+	return Tag{Key: replicationLane, Value: laneKey}
 }
 
 // ReplicationStreamImplementationTag returns a new replication stream implementation tag.
