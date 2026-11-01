@@ -112,7 +112,8 @@ func (s *laneStreamReceiverSuite) TestAckMessage_Noop() {
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 
-	s.streamReceiver.ackMessage(s.stream)
+	_, err := s.streamReceiver.ackMessage(s.stream)
+	s.NoError(err)
 
 	s.Empty(s.stream.requests)
 }
@@ -679,7 +680,7 @@ func (s *laneStreamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 }
 
 func (s *laneStreamReceiverSuite) TestGetTaskScheduler() {
-	tests := []struct {
+	testCases := []struct {
 		name         string
 		priority     enumsspb.TaskPriority
 		task         TrackableExecutableTask
@@ -720,7 +721,7 @@ func (s *laneStreamReceiverSuite) TestGetTaskScheduler() {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		s.Run(tt.name, func() {
 			priority, err := s.streamReceiver.getTaskSchedulerPriority(tt.priority, tt.task)
 			if tt.expectErr {
@@ -751,11 +752,11 @@ func (s *laneStreamReceiverSuite) TestSendEventLoop_Panic_Captured() {
 		panic("panic")
 	})
 
-	s.streamReceiver.sendEventLoop() // should not cause panic
+	s.NoError(s.streamReceiver.sendEventLoop()) // should not cause panic
 }
 
 func (s *laneStreamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
-	s.streamReceiver.recvEventLoop() // should not cause panic
+	s.NoError(s.streamReceiver.recvEventLoop()) // should not cause panic
 }
 
 func (s *laneStreamReceiverSuite) TestLivenessMonitor() {
