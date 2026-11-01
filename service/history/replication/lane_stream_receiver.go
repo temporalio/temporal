@@ -301,6 +301,7 @@ func (r *laneStreamReceiver) ackMessage(
 		}
 		inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
 		inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
+	default:
 	}
 	if inclusiveLowWaterMark == -1 {
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
@@ -310,7 +311,7 @@ func (r *laneStreamReceiver) ackMessage(
 	if receiverMode == ReceiverModeTieredStack {
 		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
 	}
-	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
+	err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationspb.SyncReplicationState{
 				InclusiveLowWatermark:     inclusiveLowWaterMark,
@@ -325,7 +326,8 @@ func (r *laneStreamReceiver) ackMessage(
 				SupportsNamespaceIsolation: receiverMode == ReceiverModeTieredStack,
 			},
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, NewStreamError("stream_receiver failed to send", err)
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
@@ -342,6 +344,7 @@ func (r *laneStreamReceiver) ackMessage(
 	return inclusiveLowWaterMark, nil
 }
 
+//nolint:revive // cognitive complexity matches StreamReceiverImpl.processMessages, which this copies.
 func (r *laneStreamReceiver) processMessages(
 	stream Stream,
 ) error {
@@ -628,6 +631,7 @@ func (r *laneStreamReceiver) validateAndSetReceiverMode(priority enumsspb.TaskPr
 		if priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("ReceiverModeTieredStack cannot process non-prioritized task")
 		}
+	default:
 	}
 	return nil
 }
@@ -641,5 +645,6 @@ func (r *laneStreamReceiver) setReceiverMode(priority enumsspb.TaskPriority) {
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeSingleStack))
 	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW:
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeTieredStack))
+	default:
 	}
 }
