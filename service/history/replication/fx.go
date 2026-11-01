@@ -69,6 +69,7 @@ var Module = fx.Provide(
 	executableTaskConverterProvider,
 	NewStreamSenderFactory,
 	NewStreamReceiverFactory,
+	NewNoopLaneFeedbackProvider,
 	streamReceiverMonitorProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,

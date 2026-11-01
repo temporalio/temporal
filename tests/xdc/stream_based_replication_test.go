@@ -118,7 +118,8 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 }
 
 // switchToLaneStreams selects the lane stream implementation for every stream between the
-// clusters, and waits until each cluster has created lane senders and receivers.
+// clusters, with lane receivers advertising lane support, and waits until each cluster has
+// created lane senders and receivers.
 func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
 	captures := make([]*metricstest.Capture, len(s.clusters))
 	for i, c := range s.clusters {
@@ -138,6 +139,7 @@ func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
 				})
 			}
 		}
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverLanesEnabled, true)
 		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
 			Sender:   rules,
 			Receiver: rules,

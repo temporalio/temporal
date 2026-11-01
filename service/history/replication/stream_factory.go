@@ -66,7 +66,9 @@ type (
 	}
 
 	streamSenderFactory   struct{}
-	streamReceiverFactory struct{}
+	streamReceiverFactory struct {
+		laneFeedback LaneFeedbackProvider
+	}
 
 	// selectedStreamSender is invalid once the implementation selected for its stream changes.
 	// The stream receiver monitor then stops it, and the stream reconnects with the newly
@@ -94,9 +96,10 @@ func NewStreamSenderFactory() StreamSenderFactory {
 }
 
 // NewStreamReceiverFactory returns a factory that creates the receiver implementation selected
-// by the ReplicationStreamImplementation dynamic config.
-func NewStreamReceiverFactory() StreamReceiverFactory {
-	return streamReceiverFactory{}
+// by the ReplicationStreamImplementation dynamic config. Lane receivers report laneFeedback to
+// their senders.
+func NewStreamReceiverFactory(laneFeedback LaneFeedbackProvider) StreamReceiverFactory {
+	return streamReceiverFactory{laneFeedback: laneFeedback}
 }
 
 func (streamSenderFactory) NewStreamSender(
@@ -166,7 +169,7 @@ func (streamSenderFactory) NewStreamSender(
 	}
 }
 
-func (streamReceiverFactory) NewStreamReceiver(
+func (f streamReceiverFactory) NewStreamReceiver(
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
 	clientShardKey ClusterShardKey,
@@ -192,7 +195,7 @@ func (streamReceiverFactory) NewStreamReceiver(
 
 	var receiver ManagedStreamReceiver
 	if implementation == streamImplementationLane {
-		receiver = newLaneStreamReceiver(processToolBox, taskConverter, clientShardKey, serverShardKey)
+		receiver = newLaneStreamReceiver(processToolBox, taskConverter, clientShardKey, serverShardKey, f.laneFeedback)
 	} else {
 		receiver = NewStreamReceiver(processToolBox, taskConverter, clientShardKey, serverShardKey)
 	}

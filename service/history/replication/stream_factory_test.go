@@ -183,7 +183,7 @@ func TestStreamReceiverFactory(t *testing.T) {
 		MetricsHandler:  metrics.NoopMetricsHandler,
 		Logger:          log.NewNoopLogger(),
 	}
-	factory := NewStreamReceiverFactory()
+	factory := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider())
 	newReceiver := func() *selectedStreamReceiver {
 		receiver := factory.NewStreamReceiver(processToolBox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1))
 		return receiver.(*selectedStreamReceiver)
@@ -221,7 +221,7 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 
 	clusterMetadata := cluster.NewMockMetadata(ctrl)
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
-	NewStreamReceiverFactory().NewStreamReceiver(ProcessToolBox{
+	NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()).NewStreamReceiver(ProcessToolBox{
 		Config:          config,
 		ClusterMetadata: clusterMetadata,
 		MetricsHandler:  captureHandler,
