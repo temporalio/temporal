@@ -213,7 +213,7 @@ func TestStreamReceiverFactory(t *testing.T) {
 		MetricsHandler:  metrics.NoopMetricsHandler,
 		Logger:          log.NewNoopLogger(),
 	}
-	factory := NewStreamReceiverFactory()
+	factory := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider())
 	newReceiver := func() *selectedStreamReceiver {
 		receiver := factory.NewStreamReceiver(processToolBox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1))
 		return receiver.(*selectedStreamReceiver)
@@ -253,7 +253,7 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 
 	clusterMetadata := cluster.NewMockMetadata(ctrl)
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
-	NewStreamReceiverFactory().NewStreamReceiver(ProcessToolBox{
+	NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()).NewStreamReceiver(ProcessToolBox{
 		Config:          config,
 		ClusterMetadata: clusterMetadata,
 		MetricsHandler:  captureHandler,
@@ -364,7 +364,7 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 						metadata := cluster.NewMockMetadata(ctrl)
 						metadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
 						toolbox := ProcessToolBox{Config: config, ClusterMetadata: metadata, MetricsHandler: metrics.NoopMetricsHandler, Logger: log.NewNoopLogger(), ThrottledLogger: throttled}
-						receiver := NewStreamReceiverFactory().NewStreamReceiver(toolbox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1)).(*selectedStreamReceiver)
+						receiver := NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()).NewStreamReceiver(toolbox, nil, NewClusterShardKey(1, 7), NewClusterShardKey(2, 1)).(*selectedStreamReceiver)
 						selected, selectImplementation = receiver.implementation, receiver.selectImplementation
 						if tc.implementation == "lane" {
 							require.IsType(t, &laneStreamReceiver{}, receiver.ManagedStreamReceiver)

@@ -3227,6 +3227,22 @@ legacy only for that cluster in that direction. Entries without RemoteCluster ar
 a diagnostic. Whole-setting conversion failures use the default, selecting legacy everywhere.
 Changing the implementation selected for a stream restarts that stream.`,
 	)
+	ReplicationStreamReceiverLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamReceiverLanesEnabled",
+		false,
+		`ReplicationStreamReceiverLanesEnabled allows lane stream receivers to accept replication lanes.
+A lane stream receiver advertises lane support to its sender only when this is true. It has no
+effect on legacy stream receivers. Changing it restarts lane stream receivers.`,
+	)
+	ReplicationStreamReceiverMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverMaxLanes",
+		8,
+		`ReplicationStreamReceiverMaxLanes is the most replication lanes a lane stream receiver tracks
+at once on one stream. The receiver advertises it to its sender, which never opens more, and fails
+the stream if a sender does. A lane counts until the sender sends its retirement marker, so this
+default leaves room above the sender's default of 4 for a lane to be replaced while another
+retires. Changing it restarts lane stream receivers.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
