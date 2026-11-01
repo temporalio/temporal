@@ -41,11 +41,11 @@ func TestWorkerCommandDispatchTaskHandler_Validate(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "cancel: terminated (not yet supported)",
+			name:     "cancel: terminated",
 			status:   activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 			task:     cancelTask,
 			attempt:  1,
-			expected: false,
+			expected: true,
 		},
 		{
 			name:     "cancel: scheduled",
