@@ -107,16 +107,30 @@ func (s *HandlerTestSuite) TestCreateKeyspaceDatacenter() {
 			args:     []string{"--dc", "dc1", "create-keyspace", "-k", "foo", "--dc", "dc2"},
 			expected: "dc2",
 		},
+		{
+			name:     "command flag overrides env var",
+			env:      "dc1",
+			args:     []string{"create-keyspace", "-k", "foo", "--dc", "dc2"},
+			expected: "dc2",
+		},
+		{
+			name:     "global flag overrides env var",
+			env:      "dc1",
+			args:     []string{"--dc", "dc2", "create-keyspace", "-k", "foo"},
+			expected: "dc2",
+		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			// s.Assertions is bound to the parent test, so a failure there would stop the remaining cases.
+			r := s.Require()
 			s.T().Setenv("CASSANDRA_DATACENTER", tc.env)
 
 			backExit := osExit
 			defer func() { osExit = backExit }()
 			osExit = func(code int) {
-				s.Failf("unexpected exit", "exit code %d", code)
+				r.Failf("unexpected exit", "exit code %d", code)
 			}
 
 			var datacenter string
@@ -127,8 +141,8 @@ func (s *HandlerTestSuite) TestCreateKeyspaceDatacenter() {
 				return nil
 			}
 
-			s.NoError(buildCLIOptions().Run(append([]string{"./tool"}, tc.args...)))
-			s.Equal(tc.expected, datacenter)
+			r.NoError(buildCLIOptions().Run(append([]string{"./tool"}, tc.args...)))
+			r.Equal(tc.expected, datacenter)
 		})
 	}
 }

@@ -128,11 +128,11 @@ func validateHealth(cli *cli.Context, logger log.Logger) error {
 
 // keyspaceDatacenter returns the create-keyspace --datacenter value, falling back to the
 // global flag, which is also where CASSANDRA_DATACENTER is applied.
-func keyspaceDatacenter(cli *cli.Context) string {
-	if datacenter := cli.String(schema.CLIOptDatacenter); datacenter != "" {
+func keyspaceDatacenter(ctx *cli.Context) string {
+	if datacenter := ctx.String(schema.CLIOptDatacenter); datacenter != "" {
 		return datacenter
 	}
-	return cli.GlobalString(schema.CLIOptDatacenter)
+	return ctx.GlobalString(schema.CLIOptDatacenter)
 }
 
 func doCreateKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error {
