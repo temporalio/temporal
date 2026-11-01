@@ -52,6 +52,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
+	replicationStreamImplementation                = "replication_stream_implementation"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -186,6 +187,11 @@ func FromClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: fromCluster, Value: value}
+}
+
+// ReplicationStreamImplementationTag returns a new replication stream implementation tag.
+func ReplicationStreamImplementationTag(value string) Tag {
+	return Tag{Key: replicationStreamImplementation, Value: value}
 }
 
 // ToClusterTag returns a new to cluster tag keyed by cluster name.
