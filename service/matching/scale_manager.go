@@ -182,19 +182,17 @@ func (sm *scaleManager) callScaler() {
 	settings := sm.settings()
 	shadowMode := !settings.Enabled
 
-	// Entering shadow mode on top of a previously-applied managed target releases
-	// control back to the dynamic-config baseline: zero the managed target once so
-	// the write side follows dynamic config again (and tracks future config
-	// changes), and cold-start the shadow simulation from the baseline. BacklogState
-	// is preserved, so read partitions are not dropped here (reclaiming them is left
-	// to the drain path). This is the only state shadow mode writes; it still never
-	// applies the scaler's hypothetical decisions.
-	if shadowMode && sm.scaleState.GetTarget() != 0 {
-		sm.releaseManagedState(settings)
-	}
-
 	// grab current batch (may be zero)
 	tasks := int(sm.batch.Swap(0))
+
+	// Only enabled mode applies what the scaler says, so in shadow mode managed scaling is
+	// off: apply a disabled decision (the zero value) before anything else. It's
+	// idempotent, breaking cleanly back to the dynamic config baseline the first time and
+	// changing nothing after that, and doing it up front is what lets the shadow scaler
+	// below observe that baseline rather than leftover managed state.
+	if shadowMode {
+		sm.applyDecision(PartitionScalerDecision{}, settings, shadowMode)
+	}
 
 	decision := sm.partitionScaler.OnTasks(PartitionScalerInput{
 		NumTasks:      tasks,
@@ -202,12 +200,23 @@ func (sm *scaleManager) callScaler() {
 		BacklogCounts: sm.scaleState.GetBacklogCounts(),
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
+
+	if shadowMode {
+		sm.observeShadowDecision(decision, settings)
+	} else {
+		sm.applyDecision(decision, settings, shadowMode)
+	}
+}
+
+// applyDecision persists decision and pushes it to ephemeral data, if it changes anything.
+// Called from callScaler only.
+func (sm *scaleManager) applyDecision(
+	decision PartitionScalerDecision,
+	settings dynamicconfig.PartitionScaleManagerSettings,
+	shadowMode bool,
+) {
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
-	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
-		(len(sm.scaleState.GetBacklogState()) > 0 ||
-			len(sm.scaleState.GetBacklogCounts()) > 0 ||
-			sm.scaleState.GetBacklogCap() != 0 ||
-			sm.scaleState.GetPrivateScalerState() != nil)
+	disabledStateNeedsCleanup := decision.NewTarget == 0 && hasManagedStateBesidesTarget(sm.scaleState)
 	if decision.NoChange ||
 		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
 			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) &&
@@ -249,29 +258,13 @@ func (sm *scaleManager) callScaler() {
 		newState.BacklogState = bitSet(newState.BacklogState).set(i)
 	}
 
-	if shadowMode {
-		if settings.ShadowModeLogInterval <= 0 || // no logging
-			sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
-			sm.prevShadowTarget == target || // only log new changes
-			target <= 0 { // only log if scaler is enabled
-			// emit scale event metric as a heartbeat even if no shadow log
-			metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
-			return
-		}
-		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
-		// Emit only when the target decision changed (like in real mode).
-		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
-		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
-		sm.prevShadowTarget = target
-	} else {
-		// we must successfully write to the db before making new state active
-		if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
-			sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("scale"))
-			return
-		}
-
-		sm.setState(newState, settings) // emits partition_scale_{read,write,target}
+	// we must successfully write to the db before making new state active
+	if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
+		sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("scale"))
+		return
 	}
+
+	sm.setState(newState, settings) // emits partition_scale_{read,write,target}
 
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
@@ -279,15 +272,54 @@ func (sm *scaleManager) callScaler() {
 	if target == 0 {
 		sm.logger.Info("disabled managed scaling",
 			tag.Int32("prev-read", prevRead),
-			tag.Int32("prev-write", prevWrite))
+			tag.Int32("prev-write", prevWrite),
+			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	} else {
 		sm.logger.Info("new target",
 			tag.Int32("target", target),
 			tag.Int32("prev-target", prevTarget),
 			tag.Int32("max-target", newState.MaxTarget),
-			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+			tag.Bool(metrics.ScalerShadowModeTagName, false))
 	}
-	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
+	if !shadowMode {
+		// in shadow mode, observeShadowDecision emits the per-call event instead
+		metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(false))).Record(1)
+	}
+}
+
+// observeShadowDecision logs and emits metrics for a decision the scaler would have made,
+// without applying any of it. It's rate limited to one log per ShadowModeLogInterval, and
+// only logs when the hypothetical target changes, to keep the volume down.
+// Called from callScaler only, in shadow mode.
+func (sm *scaleManager) observeShadowDecision(
+	decision PartitionScalerDecision,
+	settings dynamicconfig.PartitionScaleManagerSettings,
+) {
+	target := int32(decision.NewTarget)
+	if settings.ShadowModeLogInterval <= 0 || // no logging
+		decision.NoChange || // scaler has nothing to say yet
+		target <= 0 || // only log if scaler is enabled
+		sm.prevShadowTarget == target || // only log new changes
+		sm.timeSource.Now().Before(sm.nextShadowLog) { // too early
+		// emit scale event metric as a heartbeat even if no shadow log
+		metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(true))).Record(1)
+		return
+	}
+
+	// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
+	// Emit only when the target decision changed (like in real mode).
+	sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
+	sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
+	sm.prevShadowTarget = target
+	// A logged shadow decision starts the cooldown, just as an applied one does, so that
+	// MaxRate limits the simulation at the same rate it would limit the real thing.
+	sm.nextDecision = sm.timeSource.Now().Add(time.Duration(float32(time.Second) / settings.MaxRate))
+
+	// same message as an applied decision, distinguished by the shadow mode tag
+	sm.logger.Info("new target",
+		tag.Int32("target", target),
+		tag.Bool(metrics.ScalerShadowModeTagName, true))
+	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(true))).Record(1)
 }
 
 func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
@@ -296,34 +328,6 @@ func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
 		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(write)
 		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(target)
 	}
-}
-
-// releaseManagedState relinquishes a previously-applied managed scale target back
-// to the dynamic-config baseline by zeroing Target and PrivateScalerState. With
-// Target == 0 the write side falls back to dynamic config (PartitionScaleInfo.Write
-// is 0), and the scaler simulates from a cold start on subsequent calls.
-// BacklogState is preserved, so read partitions are unchanged until drained.
-// Called from callScaler only, in shadow mode, once, when a managed target exists.
-func (sm *scaleManager) releaseManagedState(settings dynamicconfig.PartitionScaleManagerSettings) {
-	newState := common.CloneProto(sm.scaleState)
-	if newState == nil {
-		return
-	}
-	prevTarget := newState.Target
-	newState.Target = 0
-	newState.PrivateScalerState = nil
-	newState.TargetVersion = sm.timeSource.Now().UnixNano()
-
-	// we must successfully write to the db before making new state active
-	if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
-		sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("release"))
-		return
-	}
-	sm.setState(newState, settings)
-
-	sm.logger.Info("released managed scale state to baseline",
-		tag.Int32("prev-target", prevTarget),
-		tag.Bool(metrics.ScalerShadowModeTagName, true))
 }
 
 // setState updates the current scale state and syncs it to ephemeral data.
@@ -534,6 +538,16 @@ func totalBacklogFromDescribeResponse(res *matchingservice.DescribeTaskQueuePart
 		}
 	}
 	return
+}
+
+// hasManagedStateBesidesTarget reports whether scaleState holds managed scaling state
+// other than Target, i.e. whether zeroing Target alone would leave something behind that
+// still drives read partitions or the scaler.
+func hasManagedStateBesidesTarget(scaleState *persistencespb.PartitionScaleState) bool {
+	return len(scaleState.GetBacklogState()) > 0 ||
+		len(scaleState.GetBacklogCounts()) > 0 ||
+		scaleState.GetBacklogCap() != 0 ||
+		scaleState.GetPrivateScalerState() != nil
 }
 
 func scaleStateToReadCount(scaleState *persistencespb.PartitionScaleState) int32 {
