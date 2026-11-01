@@ -231,11 +231,12 @@ func (s *laneStreamSender) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 	if err != nil {
 		return fmt.Errorf("streamSender unable to catch up replication tasks: %w", err)
 	}
-	if err = s.sendLive(
+	err = s.sendLive(
 		priority,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("streamSender unable to stream replication tasks: %w", err)
 	}
 	return nil
@@ -341,6 +342,7 @@ func (s *laneStreamSender) recvSyncReplicationState(
 				},
 			},
 		}
+	default:
 	}
 
 	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
@@ -355,10 +357,11 @@ func (s *laneStreamSender) recvSyncReplicationState(
 		s.clientShardKey.ShardID,
 	)
 
-	if err := s.shardContext.UpdateReplicationQueueReaderState(
+	err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -383,11 +386,12 @@ func (s *laneStreamSender) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
-	if err := s.sendTasks(
+	err := s.sendTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 	return catchupEndExclusiveWatermark, nil
@@ -435,11 +439,12 @@ func (s *laneStreamSender) sendLive(
 	defer syncStatusTimer.Stop()
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		if err := s.sendTasks(
+		err := s.sendTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
@@ -469,6 +474,7 @@ func (s *laneStreamSender) sendLive(
 	}
 }
 
+//nolint:revive // cyclomatic complexity matches StreamSenderImpl.sendTasks, which this copies.
 func (s *laneStreamSender) sendTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
@@ -522,7 +528,7 @@ Loop:
 		// so it will not ACK back to sender, sender will not update the ACK level.
 		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
 		if skipCount > TaskMaxSkipCount {
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+			err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
 						ExclusiveHighWatermark:     item.GetTaskID(),
@@ -530,7 +536,8 @@ Loop:
 						Priority:                   priority,
 					},
 				},
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
 			skipCount = 0
@@ -603,22 +610,23 @@ Loop:
 					nsName = namespace.EmptyName
 				}
 				rlStartTime := time.Now().UTC()
-				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
+				waitErr := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
 					task.TaskType.String(),
 					taskSchedulerToken,
 					nsName.String(),
 					headers.SystemPreemptableCallerInfo.CallerType,
 					0,
 					"",
-				)); err != nil {
-					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
+				))
+				if waitErr != nil {
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", waitErr))
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
 			if s.config.EmitReplicationLifecycleEvents() {
 				s.emitReplicationSent(task, item)
 			}
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+			sendErr := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
 						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
@@ -627,8 +635,9 @@ Loop:
 						Priority:                   priority,
 					},
 				},
-			}); err != nil {
-				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
+			})
+			if sendErr != nil {
+				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", sendErr))
 			}
 			skipCount = 0
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
