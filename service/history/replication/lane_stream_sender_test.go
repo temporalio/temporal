@@ -105,6 +105,8 @@ func (s *laneStreamSenderSuite) SetupTest() {
 		s.clientShardKey,
 		s.serverShardKey,
 		s.config,
+		nil,
+		newLaneRestartTracker(),
 	)
 	s.senderFlowController = NewMockSenderFlowController(s.controller)
 	s.streamSender.flowController = s.senderFlowController
@@ -1021,6 +1023,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_GradualConnectSkipsConversionAndAd
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	))
 }
 
@@ -1038,6 +1041,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_Noop() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1067,6 +1071,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_WithoutTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1159,6 +1164,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_WithTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1237,6 +1243,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		enumsspb.TASK_PRIORITY_HIGH,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1332,6 +1339,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		enumsspb.TASK_PRIORITY_LOW,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1364,6 +1372,7 @@ func (s *laneStreamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnSt
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.Error(err, "rpc error")
 	s.ErrorAs(err, new(*StreamError))
@@ -1480,6 +1489,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_EscalatesWorkflowLockPriorityAfter
 				enumsspb.TASK_PRIORITY_UNSPECIFIED,
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
+				nil,
 			)
 			s.Require().NoError(err)
 		})
@@ -1501,6 +1511,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1521,6 +1532,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		beginInclusiveWatermark+100,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1553,6 +1565,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_Disabled() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.Error(err)
 }
@@ -1598,7 +1611,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_AfterRetryExhaustion
 			}
 			gomock.InOrder(calls...)
 
-			err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, begin, end)
+			err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, begin, end, nil)
 			if tc.skip {
 				s.Require().NoError(err)
 			} else {
@@ -1620,6 +1633,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_NonRetryableNotSkipp
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.Error(err)
 }
@@ -1704,6 +1718,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_StreamKeepsFlowingPa
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1758,6 +1773,7 @@ func (s *laneStreamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkippe
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.Error(err)
 }

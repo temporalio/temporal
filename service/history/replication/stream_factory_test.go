@@ -168,7 +168,7 @@ func TestStreamSenderFactory(t *testing.T) {
 	shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	dc := dynamicconfig.NewMemoryClient()
 	config := configs.NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()), 1)
-	factory := NewStreamSenderFactory()
+	factory := NewStreamSenderFactory(nil)
 	newSender := func() *selectedStreamSender {
 		sender := factory.NewStreamSender(
 			nil,
@@ -249,7 +249,7 @@ func TestStreamFactoriesRecordSameImplementationTags(t *testing.T) {
 	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 	shardContext.EXPECT().GetMetricsHandler().Return(captureHandler).AnyTimes()
-	NewStreamSenderFactory().NewStreamSender(nil, shardContext, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config)
+	NewStreamSenderFactory(nil).NewStreamSender(nil, shardContext, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config)
 
 	clusterMetadata := cluster.NewMockMetadata(ctrl)
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("remote").AnyTimes()
@@ -353,7 +353,7 @@ func TestStreamFactoriesScopeInvalidRules(t *testing.T) {
 						if tc.diagnostic {
 							shard.EXPECT().GetThrottledLogger().Return(throttled)
 						}
-						sender := NewStreamSenderFactory().NewStreamSender(nil, shard, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config).(*selectedStreamSender)
+						sender := NewStreamSenderFactory(nil).NewStreamSender(nil, shard, nil, nil, nil, "remote", 1, NewClusterShardKey(2, 1), NewClusterShardKey(1, 7), config).(*selectedStreamSender)
 						selected, selectImplementation = sender.implementation, sender.selectImplementation
 						if tc.implementation == "lane" {
 							require.IsType(t, &laneStreamSender{}, sender.ManagedStreamSender)
