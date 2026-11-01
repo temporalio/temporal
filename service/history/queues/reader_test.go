@@ -1,6 +1,7 @@
 package queues
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -10,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -375,6 +378,27 @@ func (s *readerSuite) TestLoadAndSubmitTasks_Throttled() {
 	// should be no-op
 	reader.loadAndSubmitTasks()
 	s.False(completionFnCalled)
+}
+
+// TestPauseDurationForError is a regression test verifying that transient congestion
+// errors (Unavailable / DeadlineExceeded, e.g. during a database failover) take the
+// same fixed throttle delay as ResourceExhausted, instead of the fast retrier which
+// would put every reader in the fleet on the fast retry path at once.
+func (s *readerSuite) TestPauseDurationForError() {
+	reader := s.newTestReader([]Scope{}, nil, NoopReaderCompletionFn)
+
+	s.Equal(throttleRetryDelay, reader.pauseDurationForError(&serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "persistence rate limit exceeded",
+	}))
+	s.Equal(throttleRetryDelay, reader.pauseDurationForError(serviceerror.NewUnavailable("database failover")))
+	s.Equal(throttleRetryDelay, reader.pauseDurationForError(serviceerror.NewDeadlineExceeded("deadline exceeded")))
+
+	// non-congestion errors still use the fast exponential retrier
+	fastDelay := reader.pauseDurationForError(errors.New("some random error"))
+	s.Greater(fastDelay, time.Duration(0))
+	s.Less(fastDelay, throttleRetryDelay)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {

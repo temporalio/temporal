@@ -41,6 +41,23 @@ func TestIsContextDeadlineExceededErr(t *testing.T) {
 	require.False(t, IsContextDeadlineExceededErr(ctx.Err()))
 }
 
+func TestIsCongestionError(t *testing.T) {
+	require.True(t, IsCongestionError(&serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "persistence rate limit exceeded",
+	}))
+	require.True(t, IsCongestionError(serviceerror.NewUnavailable("database failover")))
+	require.True(t, IsCongestionError(fmt.Errorf("wrapped: %w", serviceerror.NewUnavailable("database failover"))))
+	require.True(t, IsCongestionError(serviceerror.NewDeadlineExceeded("deadline exceeded")))
+	require.True(t, IsCongestionError(context.DeadlineExceeded))
+
+	require.False(t, IsCongestionError(nil))
+	require.False(t, IsCongestionError(errors.New("some random error")))
+	require.False(t, IsCongestionError(serviceerror.NewNotFound("not found")))
+	require.False(t, IsCongestionError(context.Canceled))
+}
+
 func TestIsContextCanceledErr(t *testing.T) {
 	require.True(t, IsContextCanceledErr(serviceerror.NewCanceled("something")))
 	require.False(t, IsContextCanceledErr(errors.New("some random error")))
