@@ -12,6 +12,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *clientImpl {
@@ -21,7 +22,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) *clientImpl {
 
 	serverURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	c, err := newClient(&Config{URL: *serverURL, DisableGzip: true}, server.Client(), log.NewNoopLogger())
+	c, err := newClient(&esconfig.Config{URL: *serverURL, DisableGzip: true}, server.Client(), log.NewNoopLogger())
 	require.NoError(t, err)
 	return c
 }

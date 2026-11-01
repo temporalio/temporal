@@ -8,12 +8,10 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 
 ### Build prerequisites
 
-- [Go Lang](https://go.dev/) (minimum version required listed in `go.mod` [file](go.mod)):
-  - Install on macOS with `brew install go`.
-  - Install on Ubuntu with `sudo apt install golang`.
-- [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
-  - Install on macOS with `brew install protobuf`.
-  - Download all other versions from [protoc release page](https://github.com/protocolbuffers/protobuf/releases).
+- [mise](https://mise.jdx.dev/) 2026.10.9 or newer:
+  - Manages the required toolchain, including Go, protoc, and the protobuf plugins.
+  - Install on macOS with `brew install mise`.
+  - See [installing mise](https://mise.jdx.dev/installing-mise.html) for all other platforms.
 - [Temporal CLI](https://github.com/temporalio/cli)
   - Homebrew `brew install temporal`
   - Or download it from here https://github.com/temporalio/cli
@@ -49,6 +47,14 @@ Temporal uses go modules, there is no dependency on `$GOPATH` variable. Clone th
 ```bash
 git clone https://github.com/temporalio/temporal.git
 ```
+
+From the repository directory, install the required toolchain, including Go and protobuf tools, with:
+
+```bash
+mise install
+```
+
+Tools are configured in [mise.toml](./mise.toml), with the Go version read from [go.mod](./go.mod).
 
 ## Build
 

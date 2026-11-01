@@ -1304,14 +1304,15 @@ func TestApplyPeerTask_RecordOutcomeIgnoresStaleAttempt(t *testing.T) {
 		c.PeerApply["cellB"].AttemptCount = 2
 	})
 
-	require.NoError(t, env.peerHandler.recordPeerOutcome(
+	_, err := env.peerHandler.recordPeerOutcome(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 1},
 		namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 		serviceerror.NewUnavailable("stale result"),
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	peer := component.GetPeerApply()["cellB"]
