@@ -93,6 +93,9 @@ type laneStreamSender struct {
 	// lanePacedAt is when each lane's limiter last refused a send.
 	lanePacedAt   map[string]time.Time
 	laneLoopsOnce sync.Once
+	// handoverInProgress is whether the shard had a namespace handover in progress at the
+	// last ack. Lanes then send without rate limits.
+	handoverInProgress atomic.Bool
 }
 
 func newLaneStreamSender(
@@ -624,7 +627,15 @@ Loop:
 		if !s.shouldProcessTask(item) {
 			continue Loop
 		}
-		if target.skippingOwner(item) != "" || !target.accepts(item) {
+		if owner := target.skippingOwner(item); owner != "" {
+			metrics.ReplicationLaneTasksSkippedByDefault.With(s.metrics).Record(
+				1,
+				metrics.ToClusterTag(s.clientClusterName),
+				metrics.ReplicationLaneTag(owner),
+			)
+			continue Loop
+		}
+		if !target.accepts(item) {
 			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
@@ -724,6 +735,13 @@ Loop:
 				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", sendErr))
 			}
 			skipCount = 0
+			if target.getLaneInfo() != nil {
+				metrics.ReplicationLaneTasksSent.With(s.metrics).Record(
+					1,
+					metrics.ToClusterTag(s.clientClusterName),
+					metrics.ReplicationLaneTag(target.logicalKey),
+				)
+			}
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
 				int64(1),
 				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),

@@ -37,8 +37,10 @@ const (
 
 // laneSendTarget directs sendTasks to send on a lane, or to filter the default lane.
 type laneSendTarget struct {
-	// laneInfo is set on every message. Nil sends on the default lane.
-	laneInfo *replicationspb.ReplicationLaneInfo
+	// laneInfo is set on every message, and logicalKey is the lane's key. Nil sends on the
+	// default lane.
+	laneInfo   *replicationspb.ReplicationLaneInfo
+	logicalKey string
 	// accept reports whether a task is sent. Nil accepts every task.
 	accept func(tasks.Task) bool
 	// laneOwner, on the default lane, returns the key of the lane that owns a task, which the
@@ -248,6 +250,7 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 			s.startLanePolicy()
 		}
 		s.laneRegistry.ObserveAcks(attr.GetLaneStates())
+		s.recordLaneLag()
 		if err := s.reconcileLanes(attr, first); err != nil {
 			return err
 		}
@@ -276,6 +279,9 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 // A lane that is no longer requested sends without a rate limit until it retires. On the
 // stream's first ack, it also drops the restored lanes beyond the receiver's lane limit.
 func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationState, first bool) error {
+	if _, handovers, err := s.shardContext.GetReplicationStatus([]string{s.clientClusterName}); err == nil {
+		s.handoverInProgress.Store(len(handovers) > 0)
+	}
 	signals := s.laneSignals(attr)
 	desired := s.evaluateLanes(signals)
 	if first {
@@ -290,8 +296,16 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 			s.laneRegistry.SetPolicyState(lane.Key, lane.PolicyState)
 			continue
 		}
-		if _, _, err := s.laneRegistry.Create(lane.Key, lane.Filter, signals.DefaultAcked, lane.PolicyState); err != nil {
+		_, created, err := s.laneRegistry.Create(lane.Key, lane.Filter, signals.DefaultAcked, lane.PolicyState)
+		if err != nil {
 			return err
+		}
+		if created {
+			metrics.ReplicationLaneCreated.With(s.metrics).Record(
+				1,
+				metrics.ToClusterTag(s.clientClusterName),
+				metrics.ReplicationLaneTag(lane.Key),
+			)
 		}
 	}
 	s.setRequestedLanes(requested)
@@ -348,6 +362,7 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 		ReceiverMaxLanes:      int(attr.GetMaxLanes()),
 		SourceHighWatermark:   s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID,
 		DefaultAcked:          attr.GetHighPriorityState().GetInclusiveLowWatermark(),
+		HandoverInProgress:    s.handoverInProgress.Load(),
 		Lanes:                 lanes,
 	}
 }
@@ -498,9 +513,14 @@ func (s *laneStreamSender) setRequestedLanes(requested map[string]struct{}) {
 	}
 }
 
-// lanePaced reports whether a lane's sends go through its limiter. Lanes are not paced once the
-// policy no longer requests them, so that they can catch up to the default lane and retire.
+// lanePaced reports whether a lane's sends go through its limiter. Lanes are not paced while
+// a namespace handover is in progress on the shard, so that handover and failover do not wait
+// on rate-limited lanes, or once the policy no longer requests them, so that they can catch up
+// to the default lane and retire.
 func (s *laneStreamSender) lanePaced(logicalKey string) bool {
+	if s.handoverInProgress.Load() {
+		return false
+	}
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
 	_, requested := s.requestedLanes[logicalKey]
@@ -553,6 +573,11 @@ func (s *laneStreamSender) sendReadyLaneRetirements() error {
 			return serviceerror.NewInternalf("replication lane %q changed while its retirement marker was sent", lane.id)
 		}
 		s.laneRetired(lane.logicalKey)
+		metrics.ReplicationLaneRetired.With(s.metrics).Record(
+			1,
+			metrics.ToClusterTag(s.clientClusterName),
+			metrics.ReplicationLaneTag(lane.logicalKey),
+		)
 	}
 	return nil
 }
@@ -693,8 +718,9 @@ func (s *laneStreamSender) sendLaneRange(lane senderLaneSnapshot) error {
 		return nil
 	}
 	err := s.sendTasks(enumsspb.TASK_PRIORITY_HIGH, lane.cursor, end, &laneSendTarget{
-		laneInfo: &replicationspb.ReplicationLaneInfo{LaneId: lane.id},
-		accept:   lane.scope.Contains,
+		laneInfo:   &replicationspb.ReplicationLaneInfo{LaneId: lane.id},
+		logicalKey: lane.logicalKey,
+		accept:     lane.scope.Contains,
 		rateLimit: func(ctx context.Context) error {
 			return s.paceLane(ctx, lane.logicalKey)
 		},
@@ -741,4 +767,38 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 		}
 	}
 	return nil
+}
+
+// recordLaneLag records how far each lane is behind, and reports lanes behind by more than
+// ReplicationLaneMaxLag. The report carries the lane's live state, which is otherwise only in
+// memory, so that a lagging lane can be told apart from a stuck one.
+func (s *laneStreamSender) recordLaneLag() {
+	maxLag := s.config.ReplicationLaneMaxLag()
+	now := time.Now()
+	for _, lane := range s.laneRegistry.Snapshots() {
+		if lane.ackedTime.IsZero() {
+			continue
+		}
+		lag := now.Sub(lane.ackedTime)
+		laneTag := metrics.ReplicationLaneTag(lane.logicalKey)
+		metrics.ReplicationLaneLag.With(s.metrics).Record(lag, metrics.ToClusterTag(s.clientClusterName), laneTag)
+		if maxLag > 0 && lag > maxLag {
+			metrics.ReplicationLaneMaxLagExceeded.With(s.metrics).Record(1, metrics.ToClusterTag(s.clientClusterName), laneTag)
+			s.laneStateMu.Lock()
+			_, requested := s.requestedLanes[lane.logicalKey]
+			pacedAt, paced := s.lanePacedAt[lane.logicalKey]
+			s.laneStateMu.Unlock()
+			s.shardContext.GetThrottledLogger().Warn("Replication lane is behind by more than ReplicationLaneMaxLag.",
+				tag.NewStringTag("lane", lane.logicalKey),
+				tag.NewDurationTag("lag", lag),
+				tag.NewDurationTag("max-lag", maxLag),
+				tag.NewInt64("lane-sent-cursor", lane.cursor),
+				tag.NewInt64("lane-acked", lane.acked),
+				tag.NewInt64("source-high-watermark", s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID),
+				tag.NewBoolTag("lane-requested", requested),
+				tag.NewBoolTag("lane-paced", paced && now.Sub(pacedAt) < lanePacedWindow),
+				tag.NewBoolTag("lane-retiring", lane.retiring),
+				tag.NewBoolTag("handover-in-progress", s.handoverInProgress.Load()))
+		}
+	}
 }

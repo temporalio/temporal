@@ -49,9 +49,9 @@ type (
 
 	// LaneStreamPolicy decides the lanes of one stream. The stream never calls it from two
 	// goroutines at once, and it must answer from memory, without blocking or I/O. Whatever it
-	// answers, the stream enforces lane limits and valid, disjoint filters. If a method or one
-	// of the policy's limiters panics, the stream calls nothing more on the policy except Close,
-	// and runs without lanes until it restarts.
+	// answers, the stream enforces lane limits, valid and disjoint filters, and lifts lane rate
+	// limits during a handover. If a method or one of the policy's limiters panics, the stream
+	// calls nothing more on the policy except Close, and runs without lanes until it restarts.
 	LaneStreamPolicy interface {
 		// Evaluate returns the lanes the stream should have, in priority order: when there
 		// are more than the stream allows, the first ones win. The stream calls it on each
@@ -103,6 +103,9 @@ type (
 		// DefaultAcked is the receiver's acknowledged HIGH priority position. New lanes start
 		// here.
 		DefaultAcked int64
+		// HandoverInProgress is whether a namespace handover is in progress on the shard.
+		// Lanes then send without rate limits, whatever the policy answers.
+		HandoverInProgress bool
 		// Lanes are the stream's current lanes, including retiring ones.
 		Lanes []LaneStatus
 	}
