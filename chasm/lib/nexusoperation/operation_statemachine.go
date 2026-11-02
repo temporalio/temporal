@@ -234,7 +234,7 @@ var TransitionFailed = chasm.NewTransition(
 		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		// Completion failures describe the operation outcome, regardless of their failure type.
+		// A failed completion always uses operation_error, even if its cause is a handler error.
 		reason := FailedReasonOperationError
 		if fromAttempt {
 			reason = OperationFailedReason(event.Failure)
