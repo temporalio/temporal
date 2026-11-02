@@ -30,6 +30,18 @@ namespaceDefaults:
       URI: "s3://<bucket-name>"
 ```
 
+Set the optional `storageClass` under either `archival.history.provider.s3store`
+or `archival.visibility.provider.s3store` to choose the class for new objects,
+for example `storageClass: "STANDARD_IA"`. These are separate settings for
+history and visibility. When omitted or empty, the upload does not specify a
+storage class, preserving the S3 default. Invalid values fail configuration
+validation; values must match the AWS SDK storage class names exactly.
+
+Existing objects skipped by archival deduplication retain their storage class.
+Bucket rules and supported classes still apply. Classes such as `GLACIER` and
+`DEEP_ARCHIVE` require an external restore before Temporal can read the objects;
+Temporal does not restore archived objects automatically.
+
 ## Visibility query syntax
 You can query the visibility store by using the `tctl workflow listarchived` command
 
