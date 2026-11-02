@@ -120,6 +120,9 @@ func randomSpec(r *rand.Rand) iface.ScalingGroupSpec {
 	for range r.IntN(3) {
 		spec.TaskTypes = append(spec.TaskTypes, enumspb.TaskQueueType(1+r.IntN(3)))
 	}
+	for range r.IntN(3) {
+		spec.RegionIds = append(spec.RegionIds, randomString(r))
+	}
 	if r.IntN(2) == 0 {
 		spec.Scaling = &iface.ScalingAlgorithmSpec{ScalingAlgorithm: iface.ScalingAlgorithmType(randomString(r)), Config: maybePayload(r)}
 	}

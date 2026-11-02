@@ -267,6 +267,29 @@ func TestE2E_UnsupportedProviderStaysWorkflow(t *testing.T) {
 	require.ErrorIs(t, err, ErrProviderNotSupportedOnCHASM)
 }
 
+func TestE2E_RegionScopedSpecsStayWorkflows(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	regional := groupUpsert("test-invoke")
+	regional["g"].Spec.RegionIds = []string{"us-east-1"}
+
+	_, err := e.update(regional)
+	require.ErrorIs(t, err, ErrRegionsNotSupportedOnCHASM)
+	require.Empty(t, e.compute.calls, "rejected before any provider call")
+	require.ErrorIs(t, e.prepareSpecs(testToken, time.Minute, map[string]*wcipb.ScalingGroupSpec{"g": regional["g"].GetSpec()}), ErrRegionsNotSupportedOnCHASM, "the handover is declined")
+
+	var notFound *serviceerror.NotFound
+	_, err = e.describe()
+	require.ErrorAs(t, err, &notFound, "nothing was created")
+}
+
+func TestE2E_CreateFromMigrationStateValidatesSpec(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	specs := groupUpsertSpecs("test-invoke")
+	specs["h"] = specs["g"]
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, e.prepareSpecs(testToken, time.Minute, specs), &invalid, "two groups claim the same task type")
+}
+
 func TestE2E_UpdateValidatesOnlyChangedCompute(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
@@ -580,11 +603,15 @@ func TestCheckConflictToken(t *testing.T) {
 const testToken = "run-1"
 
 func (e *e2e) prepare(token string, expireIn time.Duration) error {
+	return e.prepareSpecs(token, expireIn, groupUpsertSpecs("test-invoke"))
+}
+
+func (e *e2e) prepareSpecs(token string, expireIn time.Duration, specs map[string]*wcipb.ScalingGroupSpec) error {
 	_, err := e.handler.CreateFromMigrationState(e.ctx, &wcipb.CreateFromMigrationStateRequest{
 		NamespaceId: testNamespaceID, InstanceId: testInstanceID,
 		State: &wcipb.WorkerControllerInstanceState{
 			DeploymentName: "dep", BuildId: "build",
-			ScalingGroupSpecs: groupUpsertSpecs("test-invoke"),
+			ScalingGroupSpecs: specs,
 		},
 		ScalingGroups:   map[string]*wcipb.ScalingGroupState{"g": NewScalingGroup("g").ScalingGroupState},
 		PendingTaskAdds: []*wcipb.TaskAddEvent{{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}},

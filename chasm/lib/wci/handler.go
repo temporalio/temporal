@@ -102,9 +102,12 @@ func (h *handler) algorithmContext(ctx context.Context) context.Context {
 	return scalingalgorithm.WithLogger(ctx, log.NewSdkLogger(h.logger))
 }
 
-// checkSupported rejects provider types CHASM cannot run, so the caller keeps the WCI a workflow.
+// checkSupported rejects specs CHASM cannot run, so the caller keeps the WCI a workflow.
 func (h *handler) checkSupported(namespaceName string, spec *iface.WorkerControllerInstanceSpec) error {
 	for _, group := range spec.ScalingGroupSpecs {
+		if len(group.RegionIds) > 0 {
+			return ErrRegionsNotSupportedOnCHASM
+		}
 		if !h.compute.Supports(namespaceName, string(group.Compute.ProviderType)) {
 			return ErrProviderNotSupportedOnCHASM
 		}
@@ -367,6 +370,9 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 	}
 	if err := h.checkSupported(name.String(), spec); err != nil {
 		return nil, err
+	}
+	if err := spec.Validate(); err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 	if req.GetMigrationToken() == "" || req.GetExpireTime() == nil {
 		return nil, serviceerror.NewInvalidArgument("migration token and expire time are required")

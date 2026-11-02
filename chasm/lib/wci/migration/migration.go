@@ -160,6 +160,7 @@ func TaskAddToWorkflow(event *wcipb.TaskAddEvent) *iface.SignalTaskAddRequest {
 func SpecToCHASM(spec iface.ScalingGroupSpec) *wcipb.ScalingGroupSpec {
 	out := &wcipb.ScalingGroupSpec{
 		TaskTypes: slices.Clone(spec.TaskTypes),
+		RegionIds: slices.Clone(spec.RegionIds),
 		Compute: &wcipb.ComputeProviderSpec{
 			ProviderType:  string(spec.Compute.ProviderType),
 			Config:        common.CloneProto(spec.Compute.Config),
@@ -179,6 +180,7 @@ func SpecToCHASM(spec iface.ScalingGroupSpec) *wcipb.ScalingGroupSpec {
 func SpecToWorkflow(spec *wcipb.ScalingGroupSpec) iface.ScalingGroupSpec {
 	out := iface.ScalingGroupSpec{
 		TaskTypes: slices.Clone(spec.GetTaskTypes()),
+		RegionIds: slices.Clone(spec.GetRegionIds()),
 		Compute: iface.ComputeProviderSpec{
 			ProviderType:  iface.ComputeProviderType(spec.GetCompute().GetProviderType()),
 			Config:        common.CloneProto(spec.GetCompute().GetConfig()),
