@@ -268,8 +268,8 @@ func (h *CompletionHandler) deferredCompletionMetric(
 		case opFailedError.State == nexus.OperationStateCanceled:
 			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
 		default:
-			// A completion reports a failed operation, not a rejected start request.
-			// Use operation_error even if the operation's failure contains a handler error.
+			// A failed completion means the request was accepted, but the operation failed.
+			// Use FailedReasonOperationError; FailedReasonHandlerError is for rejected start requests.
 			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, chasmnexus.FailedReasonOperationError, closeTime)
 		}
 	}
