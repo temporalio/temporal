@@ -169,10 +169,14 @@ LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
 
-# Path to a tool pinned in mise.toml, installing it if missing.
+# Return the path to binary $(1) from mise tool $(2), installing it if needed.
+# Require an entry in mise.toml to prevent falling back to latest.
+# Include Go for all tools because Go-based tools need it during installation.
 mise-tool = $(or \
-	$(shell mise exec go $(2) -c 'command -v $(1)'), \
-	$(error Cannot resolve $(1); install mise and run mise install))
+	$(shell mise config get --file mise.toml 'tools."$(2)"' >/dev/null && \
+		mise exec go $(2) -c 'command -v $(1)'), \
+	$(error Cannot resolve $(1); check mise.toml and run mise install))
+
 GOLANGCI_LINT = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
