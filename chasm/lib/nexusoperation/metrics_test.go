@@ -125,21 +125,6 @@ func TestOperationFailedReason(t *testing.T) {
 			want: FailedReasonHandlerError,
 		},
 		{
-			name:    "synchronous operation failure uses operation_error",
-			failure: operationFailure,
-			want:    FailedReasonOperationError,
-		},
-		{
-			name: "nested handler failure does not change operation_error",
-			failure: &failurepb.Failure{
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "OperationError"},
-				},
-				Cause: handlerFailure,
-			},
-			want: FailedReasonOperationError,
-		},
-		{
 			name: "server failure uses caller_error",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -156,6 +141,21 @@ func TestOperationFailedReason(t *testing.T) {
 				},
 			},
 			want: FailedReasonCallerError,
+		},
+		{
+			name:    "synchronous operation failure uses operation_error",
+			failure: operationFailure,
+			want:    FailedReasonOperationError,
+		},
+		{
+			name: "nested handler failure does not change operation_error",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "OperationError"},
+				},
+				Cause: handlerFailure,
+			},
+			want: FailedReasonOperationError,
 		},
 		{
 			name:    "nil failure defaults to operation_error",
