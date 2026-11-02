@@ -33,18 +33,16 @@ const FailedReasonCallerError metrics.ReasonString = "caller_error"
 // FailedReasonOperationError means the handler reported the operation as failed, at start or completion.
 const FailedReasonOperationError metrics.ReasonString = "operation_error"
 
-// AttemptFailedReason classifies a terminal start-attempt failure for [NexusOperationFailedCount].
+// AttemptFailedReason returns the metric reason when a start attempt permanently fails the operation.
 // Pass the unwrapped failure, not the NexusOperationFailure recorded in history.
 //
-// Only the top-level failure is inspected. Caller errors use server failures in both backends;
-// HSM also uses "CallError" application failures. Other failures, including nil, use
-// FailedReasonOperationError.
+// Only the top-level failure is inspected. Other failures, including nil, use FailedReasonOperationError.
 func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 	switch {
 	case failure.GetNexusHandlerFailureInfo() != nil:
 		return FailedReasonHandlerError
 	case failure.GetServerFailureInfo() != nil,
-		failure.GetApplicationFailureInfo().GetType() == "CallError":
+		failure.GetApplicationFailureInfo().GetType() == "CallError": // HSM specific check
 		return FailedReasonCallerError
 	default:
 		return FailedReasonOperationError
