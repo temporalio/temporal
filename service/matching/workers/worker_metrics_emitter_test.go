@@ -2,7 +2,6 @@ package workers
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/wideevents"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -502,6 +500,26 @@ func TestUnknownEnumValues(t *testing.T) {
 	require.Empty(t, crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
 }
 
+// singleEventAttrs returns the attributes of the only recorded event, with integers as int64 and
+// strings as string.
+func singleEventAttrs(t *testing.T, logger *captureEventLogger) map[string]any {
+	t.Helper()
+	require.Len(t, logger.records, 1)
+	attrs := map[string]any{}
+	logger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		switch kv.Value.Kind() {
+		case otellog.KindInt64:
+			attrs[kv.Key] = kv.Value.AsInt64()
+		case otellog.KindString:
+			attrs[kv.Key] = kv.Value.AsString()
+		default:
+			attrs[kv.Key] = kv.Value
+		}
+		return true
+	})
+	return attrs
+}
+
 func TestEmitWorkerMetricsEvent(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 	emitter := &workerMetricsEmitter{
@@ -531,41 +549,28 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		TotalStickyCacheHit:    500,
 		TotalStickyCacheMiss:   20,
 	}
+	// The registry passes the last-interval counts summed since the previous event.
+	intervalTasks := workerIntervalTaskCounts{workflow: intervalTaskCounts{processed: 250, failed: 4}}
 
-	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb, intervalTasks)
 
-	require.Len(t, eventLogger.records, 1)
 	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
-
-	attrs := map[string]otellog.Value{}
-	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		attrs[kv.Key] = kv.Value
-		return true
-	})
-	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
-
-	var stats map[string]wideevents.WorkerTaskTypeStats
-	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
-	require.Equal(t, wideevents.WorkerTaskTypeStats{
-		TotalSlots:                 new(int32(10)),
-		UsedSlots:                  new(int32(2)),
-		CurrentPollers:             new(int32(3)),
-		CurrentStickyPollers:       new(int32(2)),
-		TotalProcessedTasks:        new(int32(1000)),
-		TotalFailedTasks:           new(int32(10)),
-		LastIntervalProcessedTasks: new(int32(50)),
-		LastIntervalFailureTasks:   new(int32(1)),
-	}, stats["workflow"])
-
-	var details struct {
-		StickyCacheSize int32 `json:"sticky_cache_size"`
-		StickyCacheHit  int32 `json:"sticky_cache_hit"`
-		StickyCacheMiss int32 `json:"sticky_cache_miss"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(attrs["details"].AsString()), &details))
-	require.Equal(t, int32(100), details.StickyCacheSize)
-	require.Equal(t, int32(500), details.StickyCacheHit)
-	require.Equal(t, int32(20), details.StickyCacheMiss)
+	require.Equal(t, map[string]any{
+		"namespace":                              "ns",
+		"task_queue":                             "my-queue",
+		"worker_instance_key":                    "w1",
+		"workflow_total_slots":                   int64(10),
+		"workflow_used_slots":                    int64(2),
+		"workflow_current_pollers":               int64(3),
+		"workflow_current_sticky_pollers":        int64(2),
+		"workflow_total_processed_tasks":         int64(1000),
+		"workflow_total_failed_tasks":            int64(10),
+		"workflow_last_interval_processed_tasks": int64(250),
+		"workflow_last_interval_failure_tasks":   int64(4),
+		"sticky_cache_size":                      int64(100),
+		"sticky_cache_hit":                       int64(500),
+		"sticky_cache_miss":                      int64(20),
+	}, singleEventAttrs(t, eventLogger))
 }
 
 func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
@@ -579,21 +584,17 @@ func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey:      "w1",
 		CurrentStickyCacheSize: 50,
-	})
+	}, workerIntervalTaskCounts{})
 
 	// Event is emitted even without slots — sticky cache data is still useful
-	require.Len(t, eventLogger.records, 1)
-	attrs := map[string]otellog.Value{}
-	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		attrs[kv.Key] = kv.Value
-		return true
-	})
-	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
-	var details struct {
-		StickyCacheSize int32 `json:"sticky_cache_size"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(attrs["details"].AsString()), &details))
-	require.Equal(t, int32(50), details.StickyCacheSize)
+	require.Equal(t, map[string]any{
+		"namespace":           "ns",
+		"task_queue":          "",
+		"worker_instance_key": "w1",
+		"sticky_cache_size":   int64(50),
+		"sticky_cache_hit":    int64(0),
+		"sticky_cache_miss":   int64(0),
+	}, singleEventAttrs(t, eventLogger))
 }
 
 func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
@@ -610,18 +611,11 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 			CurrentAvailableSlots: -1,
 			CurrentUsedSlots:      5,
 		},
-	})
+	}, workerIntervalTaskCounts{})
 
-	require.Len(t, eventLogger.records, 1)
-	attrs := map[string]otellog.Value{}
-	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		attrs[kv.Key] = kv.Value
-		return true
-	})
-	var stats map[string]wideevents.WorkerTaskTypeStats
-	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
-	require.Equal(t, new(int32(-1)), stats["workflow"].TotalSlots)
-	require.Equal(t, new(int32(5)), stats["workflow"].UsedSlots)
+	attrs := singleEventAttrs(t, eventLogger)
+	require.Equal(t, int64(-1), attrs["workflow_total_slots"])
+	require.Equal(t, int64(5), attrs["workflow_used_slots"])
 }
 
 func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
@@ -638,24 +632,32 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 5,
 		},
-	})
+	}, workerIntervalTaskCounts{})
 
-	require.Len(t, eventLogger.records, 1)
-	attrs := map[string]otellog.Value{}
-	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		attrs[kv.Key] = kv.Value
-		return true
-	})
-	var stats map[string]wideevents.WorkerTaskTypeStats
-	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
+	// Activity only has pollers, and the task types without messages have no attributes at all.
+	require.Equal(t, map[string]any{
+		"namespace":                "ns",
+		"task_queue":               "",
+		"worker_instance_key":      "w1",
+		"activity_current_pollers": int64(5),
+		"sticky_cache_size":        int64(0),
+		"sticky_cache_hit":         int64(0),
+		"sticky_cache_miss":        int64(0),
+	}, singleEventAttrs(t, eventLogger))
+}
 
-	// Activity should have pollers but no slot fields
-	act := stats["activity"]
-	require.Equal(t, new(int32(5)), act.CurrentPollers)
-	require.Nil(t, act.TotalSlots)
-	require.Nil(t, act.UsedSlots)
+func TestWorkerIntervalTaskCountsAdd(t *testing.T) {
+	var counts workerIntervalTaskCounts
+	hb := &workerpb.WorkerHeartbeat{
+		WorkflowTaskSlotsInfo:  &workerpb.WorkerSlotsInfo{LastIntervalProcessedTasks: 3, LastIntervalFailureTasks: 1},
+		LocalActivitySlotsInfo: &workerpb.WorkerSlotsInfo{LastIntervalProcessedTasks: 7},
+	}
+	counts.add(hb)
+	counts.add(hb)
 
-	// Workflow/nexus/local_activity should be absent (no messages)
-	_, hasWorkflow := stats["workflow"]
-	require.False(t, hasWorkflow)
+	// Missing slot messages count as zero.
+	require.Equal(t, workerIntervalTaskCounts{
+		workflow:      intervalTaskCounts{processed: 6, failed: 2},
+		localActivity: intervalTaskCounts{processed: 14},
+	}, counts)
 }

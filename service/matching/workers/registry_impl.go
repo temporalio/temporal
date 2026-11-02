@@ -39,6 +39,14 @@ type (
 		elem                *list.Element
 		isSystemWorker      bool
 		lastMetricsEmitTime time.Time
+		// intervalTasks sums last_interval_* task counts since the last worker_metrics event.
+		intervalTasks workerIntervalTaskCounts
+	}
+	// metricsEvent is a heartbeat selected for a worker_metrics event, with the
+	// last_interval_* task counts summed since the worker's previous event.
+	metricsEvent struct {
+		hb            *workerpb.WorkerHeartbeat
+		intervalTasks workerIntervalTaskCounts
 	}
 	// nsEntries holds all worker entries for a single namespace.
 	nsEntries struct {
@@ -99,7 +107,7 @@ func newBucket() *bucket {
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the count of added and removed entries separately, and the heartbeats
 // from workers not previously seen by this registry (first heartbeat from that worker).
-// Also returns heartbeats eligible for metrics event emission.
+// Also returns the metrics events to emit, at most one per worker per metricsEventInterval.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
 func (b *bucket) upsertHeartbeats(
 	nsID namespace.ID,
@@ -108,7 +116,7 @@ func (b *bucket) upsertHeartbeats(
 	heartbeats []*workerpb.WorkerHeartbeat,
 	enableMetricsEvents bool,
 	metricsEventInterval time.Duration,
-) (added int64, removed int64, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor []*workerpb.WorkerHeartbeat) {
+) (added int64, removed int64, heartbeatsFromNewWorkers []*workerpb.WorkerHeartbeat, metricsEvents []metricsEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	now := time.Now()
@@ -154,13 +162,20 @@ func (b *bucket) upsertHeartbeats(
 			added++
 			heartbeatsFromNewWorkers = append(heartbeatsFromNewWorkers, hb)
 		}
-		if enableMetricsEvents && (e.lastMetricsEmitTime.IsZero() || now.Sub(e.lastMetricsEmitTime) >= metricsEventInterval) {
+		if !enableMetricsEvents {
+			// Don't carry counts over to an event emitted after the events are re-enabled.
+			e.intervalTasks = workerIntervalTaskCounts{}
+			continue
+		}
+		e.intervalTasks.add(hb)
+		if e.lastMetricsEmitTime.IsZero() || now.Sub(e.lastMetricsEmitTime) >= metricsEventInterval {
 			e.lastMetricsEmitTime = now
-			heartbeatsToEmitMetricsFor = append(heartbeatsToEmitMetricsFor, hb)
+			metricsEvents = append(metricsEvents, metricsEvent{hb: hb, intervalTasks: e.intervalTasks})
+			e.intervalTasks = workerIntervalTaskCounts{}
 		}
 	}
 
-	return added, removed, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor
+	return added, removed, heartbeatsFromNewWorkers, metricsEvents
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -306,7 +321,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 		metricsEventInterval = m.workerMetricsEventInterval(nsName.String())
 		enableMetricsEvents = metricsEventInterval > 0
 	}
-	added, removed, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, enableMetricsEvents, metricsEventInterval)
+	added, removed, heartbeatsFromNewWorkers, metricsEvents := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, enableMetricsEvents, metricsEventInterval)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -321,8 +336,8 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 			emitWorkerConfigEvent(m.eventLogger, nsName, hb)
 		}
 	}
-	for _, hb := range heartbeatsToEmitMetricsFor {
-		m.metricsEmitter.emitWorkerMetricsEvent(nsName, hb)
+	for _, ev := range metricsEvents {
+		m.metricsEmitter.emitWorkerMetricsEvent(nsName, ev.hb, ev.intervalTasks)
 	}
 }
 
