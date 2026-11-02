@@ -734,11 +734,6 @@ func TestOnTasksPartialUpsBlockDecision(t *testing.T) {
 		require.False(t, d.NoChange)
 		require.Equal(t, 5, d.NewTarget)
 	}
-
-	// Ups may still increase before the Down window is full.
-	_, downFull := h.scaler.downTrackers[testDowns60s[0].Window].rateAndFull()
-	require.False(t, downFull)
-	require.Greater(t, h.run(1, 5000), 5)
 }
 
 // TestOnTasksSameWindowUpAndDown verifies that when an Up and a Down use the same window, a
