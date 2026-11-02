@@ -724,9 +724,10 @@ func TestOnTasksPartialUpsBlockDecision(t *testing.T) {
 	require.Greater(t, h.run(1, 5000), 5)
 }
 
-// TestOnTasksIncreaseResetsOnlyDownTrackers verifies that an Up and a Down with the same
-// window keep separate trackers, and an increase restarts only the Down.
-func TestOnTasksIncreaseResetsOnlyDownTrackers(t *testing.T) {
+// TestOnTasksSameWindowUpAndDown verifies that when an Up and a Down use the same window, a
+// rising load raises the target on consecutive ticks: the Down hold after an increase must not
+// hold back the Up.
+func TestOnTasksSameWindowUpAndDown(t *testing.T) {
 	t.Parallel()
 	const window = 10 * time.Second
 	h := newScalerHarness(
@@ -735,14 +736,11 @@ func TestOnTasksIncreaseResetsOnlyDownTrackers(t *testing.T) {
 		1)
 
 	h.run(20, 80)
-	before := h.target
-	require.Greater(t, h.run(1, 1000), before, "spike raises the target")
-
-	upRate, upFull := h.scaler.upTrackers[window].rateAndFull()
-	require.True(t, upFull, "Up tracker keeps its history")
-	require.Greater(t, upRate, float32(80))
-	_, downFull := h.scaler.downTrackers[window].rateAndFull()
-	require.False(t, downFull, "Down tracker restarted on increase")
+	for _, rate := range []int{1000, 2000, 3000} {
+		before := h.target
+		h.tick(rate)
+		require.Greater(t, h.target, before, "load rose to %d/s", rate)
+	}
 }
 
 // TestOnTasksNoPriorTargetDoesNotResetDowns verifies that without a prior add target (as in
