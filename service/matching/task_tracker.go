@@ -96,9 +96,8 @@ func (s *taskTracker) inc(n int) {
 	s.tasks.inc(n)
 }
 
-// incOver adds n tasks spread uniformly over (from, now]. Batched adds represent tasks that
-// arrived over that whole interval, so attributing them all to the current bucket would bias
-// short windows high.
+// incOver adds n tasks spread uniformly over (from, now]. This is used to accurately
+// account for a batch of tasks that arrived over an interval.
 func (s *taskTracker) incOver(n int, from time.Time) {
 	now := s.clock.Now()
 	s.advanceAndReset(now.Sub(s.bucketStartTime))
