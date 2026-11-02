@@ -91,7 +91,7 @@ func (e *TaskNotInvalidatedError) LogTags() []tag.Tag {
 	}
 
 	if e.TaskType != "" {
-		tags = append(tags, tag.String("chasm-task-type", e.TaskType))
+		tags = append(tags, tag.ChasmTaskType(e.TaskType))
 	}
 	if e.TaskTypeID != 0 {
 		tags = append(tags, tag.UInt32("chasm-task-type-id", e.TaskTypeID))

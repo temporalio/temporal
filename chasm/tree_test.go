@@ -6336,7 +6336,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 			testlogger.Debug,
 			"a pending task blocks chasm time skipping",
 			tag.Archetype(testTimeSkippingComponentName),
-			tag.String("chasm-task-type", testPureTaskFQN),
+			tag.ChasmTaskType(testPureTaskFQN),
 		)
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))

@@ -4337,7 +4337,7 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 					archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 					n.logger.Debug("a pending task blocks chasm time skipping",
 						tag.Archetype(archetypeName),
-						tag.String("chasm-task-type", taskType))
+						tag.ChasmTaskType(taskType))
 					return nil
 				}
 				transition.TrackEarliestFutureTime(scheduledTime)

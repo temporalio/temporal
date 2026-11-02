@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -19,7 +20,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -49,6 +50,7 @@ type (
 		mockClusterMetadata   *cluster.MockMetadata
 		chasmRegistry         *chasm.Registry
 		metricsHandler        *metricstest.CaptureHandler
+		logger                *testlogger.TestLogger
 
 		timeSource *clock.EventTimeSource
 	}
@@ -59,7 +61,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
-		logger                     log.Logger
+		task                       tasks.Task
 	}
 	option func(*params)
 )
@@ -79,6 +81,7 @@ func (s *executableSuite) SetupTest() {
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metricsHandler = metricstest.NewCaptureHandler()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
@@ -1140,25 +1143,64 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 // The failure log reports the attempt that failed, not the one that will run next.
 func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
 	const numAttempts = 3
+	executable := s.newTestExecutable()
+	logCapture := s.logger.StartCapture()
 
-	var loggedAttempts []int32
-	logger := log.NewMockLogger(s.controller)
-	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
-		for _, t := range tags {
-			if t.Key() == "attempt" {
-				loggedAttempts = append(loggedAttempts, t.Value().(int32))
-			}
-		}
-	}).Times(numAttempts)
-
-	executable := s.newTestExecutable(func(p *params) {
-		p.logger = logger
-	})
 	for range numAttempts {
 		s.Error(executable.HandleErr(errors.New("random error")))
 	}
 
+	var loggedAttempts []int32
+	for _, record := range logCapture.Snapshot() {
+		if record.Message != "Fail to process task" {
+			continue
+		}
+		for _, t := range record.Tags {
+			if t.Key() == "attempt" {
+				loggedAttempts = append(loggedAttempts, t.Value().(int32))
+			}
+		}
+	}
 	s.Equal([]int32{1, 2, 3}, loggedAttempts)
+}
+
+// Logs name CHASM tasks by their fully qualified CHASM task type, and only CHASM tasks.
+func (s *executableSuite) TestHandleErr_LogsChasmTaskType() {
+	s.NoError(s.chasmRegistry.Register(&chasm.CoreLibrary{}))
+
+	s.Run("CHASM task", func() {
+		executable := s.newTestExecutable(func(p *params) {
+			p.task = &tasks.ChasmTask{
+				WorkflowKey: definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+				Category:    tasks.CategoryTransfer,
+				Info:        &persistencespb.ChasmTaskInfo{TypeId: chasm.GenerateTypeID("core.visTask")},
+			}
+		})
+		logCapture := s.logger.StartCapture()
+
+		s.Error(executable.HandleErr(errors.New("random error")))
+
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Warn,
+			Message: "Fail to process task",
+			Tags:    map[string]any{"chasm-task-type": "core.visTask"},
+		})
+	})
+
+	s.Run("non-CHASM task", func() {
+		executable := s.newTestExecutable()
+		logCapture := s.logger.StartCapture()
+
+		s.Error(executable.HandleErr(errors.New("random error")))
+
+		records := logCapture.Snapshot()
+		s.NotEmpty(records)
+		for _, record := range records {
+			for _, t := range record.Tags {
+				s.NotEqual("chasm-task-type", t.Key())
+			}
+		}
+	})
 }
 
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
@@ -1525,14 +1567,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqErrorPattern: func() string {
 			return ""
 		},
-		logger: log.NewTestLogger(),
-	}
-	for _, opt := range opts {
-		opt(&p)
-	}
-	return queues.NewExecutable(
-		queues.DefaultReaderId,
-		tasks.NewFakeTask(
+		task: tasks.NewFakeTask(
 			definition.NewWorkflowKey(
 				tests.NamespaceID.String(),
 				tests.WorkflowID,
@@ -1541,6 +1576,13 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			tasks.CategoryTransfer,
 			s.timeSource.Now(),
 		),
+	}
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
+		p.task,
 		s.mockExecutor,
 		s.mockScheduler,
 		s.mockRescheduler,
@@ -1550,7 +1592,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
-		p.logger,
+		s.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {
