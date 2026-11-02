@@ -974,7 +974,7 @@ func newMetricsEventTestRegistry(t *testing.T) (*registryImpl, *captureEventLogg
 	params.EventLogger = logger
 	params.EnableWorkerConfigEvents = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	params.EnableWorkerMetricsEvents = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-	params.WorkerMetricsEventInterval = dynamicconfig.MatchingWorkerMetricsEventInterval.Get(dynamicconfig.NewNoopCollection())
+	params.WorkerMetricsEventInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(5 * time.Minute)
 	registry := newRegistryImpl(params)
 	t.Cleanup(registry.Stop)
 	return registry, logger
@@ -1030,7 +1030,7 @@ func TestWorkerMetricsEventInterval(t *testing.T) {
 		require.NoError(t, err)
 		require.Same(t, latest, description, "throttling must not skip registry updates")
 
-		// No second event is emitted just before the default five-minute interval expires.
+		// No second event is emitted just before the configured five-minute interval expires.
 		<-time.After(5*time.Minute - 5*time.Second - time.Nanosecond)
 		record(3)
 		require.Len(t, emittedMetricsWorkers(logger), 1)
@@ -1048,7 +1048,7 @@ func TestWorkerMetricsEventIntervalIndependentWorkersAndNamespaces(t *testing.T)
 	synctest.Test(t, func(t *testing.T) {
 		registry, logger := newMetricsEventTestRegistry(t)
 		registry.workerMetricsEventInterval = func(ns string) time.Duration {
-			if ns == "short" {
+			if ns == "ns-short" {
 				return time.Minute
 			}
 			return 5 * time.Minute
@@ -1062,14 +1062,14 @@ func TestWorkerMetricsEventIntervalIndependentWorkersAndNamespaces(t *testing.T)
 		}
 
 		// Both namespaces emit the first event for workers with the same instance key.
-		record("long", "w1")
-		record("short", "w1")
+		record("ns-long", "w1")
+		record("ns-short", "w1")
 
 		// After one minute, only the new worker and the worker with the shorter interval emit.
 		<-time.After(time.Minute)
-		record("long", "w1", "w2")
-		record("short", "w1")
-		require.Equal(t, []string{"long/w1", "short/w1", "long/w2", "short/w1"}, emittedMetricsWorkers(logger))
+		record("ns-long", "w1", "w2")
+		record("ns-short", "w1")
+		require.Equal(t, []string{"ns-long/w1", "ns-short/w1", "ns-long/w2", "ns-short/w1"}, emittedMetricsWorkers(logger))
 	})
 }
 
