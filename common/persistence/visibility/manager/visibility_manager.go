@@ -79,6 +79,7 @@ type (
 		Execution        *commonpb.WorkflowExecution
 		WorkflowTypeName string
 		StartTime        time.Time
+		CreateTime       time.Time // StartTime minus any inherited skipped time
 		Status           enumspb.WorkflowExecutionStatus
 		ExecutionTime    time.Time
 		TaskID           int64 // used as condition update version for ES and _version for SQL stores
@@ -164,6 +165,7 @@ type (
 		TaskID            int64
 		CloseTime         *time.Time
 		StartTime         time.Time
+		CreateTime        time.Time // zero if unknown
 		IsRetentionDelete bool
 	}
 
