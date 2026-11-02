@@ -71,6 +71,10 @@ func (l *SdkLogger) Error(msg string, keyvals ...any) {
 }
 
 func (l *SdkLogger) With(keyvals ...any) log.Logger {
-	return NewSdkLogger(
-		With(l.logger, l.tags(keyvals)...))
+	// Wrap directly rather than via NewSdkLogger: the underlying logger already
+	// carries any SDK skip adjustment, and With() adds no new stack frame, so
+	// re-applying Skip here would misattribute logging-call-at (and compound per call).
+	return &SdkLogger{
+		logger: With(l.logger, l.tags(keyvals)...),
+	}
 }

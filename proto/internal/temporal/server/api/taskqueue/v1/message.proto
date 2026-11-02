@@ -76,6 +76,9 @@ message InternalTaskQueueStatus {
   // check. Consumers must use version-based validation (see scaleManager) to
   // ensure correctness.
   bool backlog_drained = 11;
+  // Estimate of the number of distinct fairness keys seen recently by this
+  // subqueue (fairness only).
+  int64 fairness_key_count_estimate = 12;
 }
 
 message TaskQueueVersionInfoInternal {

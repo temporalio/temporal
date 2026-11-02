@@ -8,10 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -111,6 +113,15 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 		GetUpdateOutcome(gomock.Any(), gomock.Any()).
 		Return(&updatepb.Outcome{}, nil)
 
+	nexusSerializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	s.currentMutableState.EXPECT().
+		GetUpdateNexusSerializationContext(testUpdateID).
+		Return(nexusSerializationContext)
+
 	s.currentMutableState.EXPECT().
 		GetExecutionState().
 		Return(executionState).
@@ -157,6 +168,8 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 	s.False(startResp.Started)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, startResp.Status)
 	s.True(releaseCalledWithNilErr.Load(), "release function should have been called with nil error")
+	protorequire.ProtoEqual(s.T(), nexusSerializationContext,
+		resp.Responses[1].GetUpdateWorkflow().GetResponse().GetPropagatedNexusSerializationContext())
 }
 
 func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutionRequest {

@@ -15,7 +15,6 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -265,18 +264,9 @@ func (w *Workflow) NexusOperationInvocationData(
 	}, nil
 }
 
-func (w *Workflow) GetNexusCompletion(
-	ctx chasm.Context,
-	requestID string,
-) (nexusrpc.CompleteOperationOptions, error) {
-	// Retrieve the completion data from the underlying mutable state via MSPointer
-	return w.MSPointer.GetNexusCompletion(ctx, requestID)
-}
-
 // BuildPendingNexusOperationInfos reads nexus operations from the workflow and converts them to API format.
 func (w *Workflow) BuildPendingNexusOperationInfos(
 	ctx chasm.Context,
-	circuitBreaker func(endpoint string) bool,
 ) ([]*workflowpb.PendingNexusOperationInfo, error) {
 	var result []*workflowpb.PendingNexusOperationInfo
 	for key, field := range w.Operations {
@@ -293,7 +283,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 		}
 
 		blockedReason := ""
-		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && circuitBreaker(op.GetEndpoint()) {
+		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && op.DestinationBlocked(ctx) {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
 		}
@@ -321,7 +311,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 			state := nexusoperation.CancellationAPIState(cancel.Status)
 			blockedReason := ""
 
-			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreaker(info.Endpoint) {
+			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && op.DestinationBlocked(ctx) {
 				state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 				blockedReason = "The circuit breaker is open."
 			}

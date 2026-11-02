@@ -35,6 +35,10 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 }
 
 type (
+	eagerStartEvent struct {
+		requestID string
+	}
+
 	rescheduleEvent struct {
 		retryInterval       time.Duration
 		retryIntervalSource activitypb.ActivityRetryIntervalSource
@@ -98,7 +102,22 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		return a.applyScheduled(ctx)
+		return a.applyScheduled(ctx, true)
+	},
+)
+
+// TransitionEagerStarted atomically schedules and starts the first attempt without creating a
+// Matching dispatch task. The task itself is returned by StartActivityExecution.
+var TransitionEagerStarted = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	func(a *Activity, ctx chasm.MutableContext, event eagerStartEvent) error {
+		if err := a.applyScheduled(ctx, false); err != nil {
+			return err
+		}
+		return a.applyEagerStarted(ctx, event)
 	},
 )
 
@@ -346,7 +365,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 // The methods below are transition bodies, invoked from the transitions above once the
 // source state has been validated. Do not call them from outside this file.
 
-func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
+func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error {
 	attempt := a.LastAttempt.Get(ctx)
 
 	attempt.Count++
@@ -357,7 +376,7 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	dispatchTime := a.firstDispatchTime()
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); dispatch && timeout > 0 {
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
@@ -378,15 +397,44 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 	}
 
-	dispatchAttrs := chasm.TaskAttributes{}
-	if dispatchTime.After(a.ScheduleTime.AsTime()) {
-		dispatchAttrs.ScheduledTime = dispatchTime
+	if dispatch {
+		dispatchAttrs := chasm.TaskAttributes{}
+		if dispatchTime.After(a.ScheduleTime.AsTime()) {
+			dispatchAttrs.ScheduledTime = dispatchTime
+		}
+		ctx.AddTask(
+			a,
+			dispatchAttrs,
+			a.newActivityDispatchTask(ctx))
 	}
+
+	return nil
+}
+
+func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	a.EagerExecutionAccepted = true
+	attempt.StartedTime = timestamppb.New(ctx.Now(a))
+	attempt.StartedStamp = attempt.GetStamp()
+	if a.FirstAttemptStartedTime == nil {
+		a.FirstAttemptStartedTime = attempt.GetStartedTime()
+	}
+	attempt.StartRequestId = event.requestID
+	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
+	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+	// TODO: Populate LastDeploymentVersion when standalone eager start supports worker versioning.
+	startTime := attempt.GetStartedTime().AsTime()
 	ctx.AddTask(
 		a,
-		dispatchAttrs,
-		a.newActivityDispatchTask(ctx))
+		chasm.TaskAttributes{ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration())},
+		&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()})
 
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: startTime.Add(heartbeatTimeout)},
+			&activitypb.HeartbeatTimeoutTask{Stamp: attempt.GetStamp()})
+	}
 	return nil
 }
 
@@ -429,7 +477,6 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = request.GetRequestId()
-	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
@@ -477,7 +524,6 @@ func (a *Activity) applyCompleted(ctx chasm.MutableContext, event completeEvent)
 			}
 		}
 		attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-		attempt.LastWorkerIdentity = req.GetIdentity()
 		outcome := a.Outcome.Get(ctx)
 		outcome.Variant = &activitypb.ActivityOutcome_Successful_{
 			Successful: &activitypb.ActivityOutcome_Successful{
@@ -498,9 +544,6 @@ func (a *Activity) applyFailed(ctx chasm.MutableContext, event failedEvent) erro
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		req := event.req.GetFailedRequest()
 		a.Outcome.Get(ctx).RetryState = event.retryState
-
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.LastWorkerIdentity = req.GetIdentity()
 
 		// A worker may respond failed without a Failure. Synthesize a generic terminal failure so
 		// the closed activity still exposes a consumable outcome; otherwise PollActivityExecution

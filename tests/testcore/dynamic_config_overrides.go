@@ -14,8 +14,8 @@ var (
 	//
 	// There are 4 ways to override a setting:
 	// 1. Globally using this file. Every test suite creates a new test cluster using this overrides.
-	// 2. Per test suite using FunctionalTestBase.SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
-	// 3. Per test using FunctionalTestBase.OverrideDynamicConfig() method.
+	// 2. Per test using testcore.WithDynamicConfig() option passed to testcore.NewEnv().
+	// 3. Per test using TestEnv.OverrideDynamicConfig() method.
 	// 4. Per specific cluster per test (if test has more than one cluster) using TestCluster.OverrideDynamicConfig() method.
 	//
 	// NOTE1: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level,

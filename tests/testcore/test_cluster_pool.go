@@ -69,7 +69,7 @@ type clusterPool struct {
 type clusterPoolSlot struct {
 	sync.Mutex
 	idx          int
-	cluster      *FunctionalTestBase
+	cluster      *functionalTestBase
 	activeLeases int // how many tests are currently using this cluster
 	leaseCount   int // how often it has been leased
 	maxLeases    int // max tests per cluster before recreate (0 = unlimited)
@@ -97,7 +97,7 @@ func newClusterPool(size int, exclusive bool, maxLeases int) *clusterPool {
 // get returns a cluster from the [clusterPool], creating it lazily if needed.
 // For exclusive pools, blocks until a slot is available and registers cleanup.
 // For shared pools, uses round-robin.
-func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+func (p *clusterPool) get(t *testing.T, createCluster func() *functionalTestBase) *functionalTestBase {
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
 	t.Cleanup(slot.release)
@@ -121,7 +121,7 @@ func (p *clusterPool) nextSlot() *clusterPoolSlot {
 	return slot
 }
 
-func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *functionalTestBase) *functionalTestBase {
 	s.Lock()
 	defer s.Unlock()
 
@@ -187,7 +187,7 @@ type clusterRouter struct {
 // suiteScopedCluster owns one lazily created legacy suite cluster.
 type suiteScopedCluster struct {
 	once    sync.Once
-	cluster *FunctionalTestBase
+	cluster *functionalTestBase
 }
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
@@ -290,7 +290,7 @@ func (r clusterRequest) recordCreation(t *testing.T) {
 	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
 }
 
-func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
+func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *functionalTestBase) {
 	defer func() {
 		if tb != nil {
 			tb.RegisterTest(t)
@@ -305,8 +305,8 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTes
 	return p.getShared(t)
 }
 
-func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
-	return p.shared.get(t, func() *FunctionalTestBase {
+func (p *clusterRouter) getShared(t *testing.T) *functionalTestBase {
+	return p.shared.get(t, func() *functionalTestBase {
 		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
 	})
 }
@@ -317,7 +317,7 @@ func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
 	return ok
 }
 
-func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
+func (p *clusterRouter) getSuiteScoped(t *testing.T) *functionalTestBase {
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if _, ok := p.suiteScoped.Load(rootName); !ok {
 		return nil
@@ -335,7 +335,7 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	return suiteCluster.cluster
 }
 
-func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
+func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *functionalTestBase {
 	req.kind = clusterKindDedicated
 	if req.mustBeFresh() {
 		// Custom config or fx options require a fresh cluster (can't reuse).
@@ -353,13 +353,13 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 	}
 
 	// If no custom config is provided, reuse an existing cluster.
-	return p.dedicated.get(t, func() *FunctionalTestBase {
+	return p.dedicated.get(t, func() *functionalTestBase {
 		return p.createCluster(t, req)
 	})
 }
 
-func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
-	tbase := &FunctionalTestBase{}
+func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *functionalTestBase {
+	tbase := &functionalTestBase{}
 	tbase.SetT(t)
 
 	// The worker service is off unless the request explicitly needs it.

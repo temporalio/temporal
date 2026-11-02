@@ -55,7 +55,7 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		},
 		CreateScheduler,
 		req,
-		chasm.WithRequestID(req.FrontendRequest.RequestId),
+		chasm.WithStartRequestID(req.FrontendRequest.RequestId),
 	)
 
 	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {

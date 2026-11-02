@@ -1,0 +1,181 @@
+package namespacereplication
+
+import (
+	"errors"
+
+	"go.temporal.io/server/chasm"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+// NamespaceMutationComponent is a CHASM component that processes a single
+// namespace mutation: an authoritative local CAS commit or a shadow-mode skip,
+// then parallel peer fan-out via the cross-cluster admin RPC.
+//
+// One component per mutation invocation. BusinessID = namespace_id:mutation_uuid
+// (unique per invocation), so concurrent mutations on the same namespace each get
+// their own component rather than blocking one another; the component is started
+// with chasm.StartExecution and awaited with chasm.PollComponent. Authoritative
+// same-namespace mutations are serialized by the metadata store's version-CAS in
+// ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
+type NamespaceMutationComponent struct {
+	chasm.UnimplementedComponent
+
+	*namespacereplicationpb.NamespaceMutationState
+
+	// Visibility is installed before the repair tooling exists so the eventual
+	// operator CLI can discover every in-flight mutation by namespace, including
+	// executions created while shadow mode is being validated. Consumers still
+	// update each exact business/run ID returned by this durable index.
+	Visibility chasm.Field[*chasm.Visibility]
+}
+
+var _ chasm.RootComponent = (*NamespaceMutationComponent)(nil)
+var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMutationComponent)(nil)
+var _ chasm.VisibilitySearchAttributesProvider = (*NamespaceMutationComponent)(nil)
+var _ chasm.VisibilityMemoProvider = (*NamespaceMutationComponent)(nil)
+
+const (
+	NamespaceIDSearchAttributeName   = "ReplicatedNamespaceId"
+	NamespaceNameSearchAttributeName = "ReplicatedNamespaceName"
+)
+
+var namespaceIDSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceIDSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword01,
+)
+
+var namespaceNameSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceNameSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword02,
+)
+
+// NewNamespaceMutationComponent constructs a fresh component with the mutation set
+// and per-peer status entries initialized to PENDING.
+func NewNamespaceMutationComponent(
+	mutation *namespacereplicationpb.NamespaceMutation,
+) *NamespaceMutationComponent {
+	peerApply := make(map[string]*namespacereplicationpb.PeerApplyStatus, len(mutation.GetPeerCells()))
+	for _, cell := range mutation.GetPeerCells() {
+		peerApply[cell] = &namespacereplicationpb.PeerApplyStatus{
+			Outcome: namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+		}
+	}
+	return &NamespaceMutationComponent{
+		NamespaceMutationState: &namespacereplicationpb.NamespaceMutationState{
+			Mutation: mutation,
+			Status:   namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			LocalApply: &namespacereplicationpb.LocalApplyStatus{
+				Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+			},
+			PeerApply: peerApply,
+		},
+	}
+}
+
+// initializeVisibility attaches the framework visibility component while the
+// execution is being created. It is intentionally separate from the pure state
+// constructor so state-machine unit tests do not need a mutable CHASM context.
+func (c *NamespaceMutationComponent) initializeVisibility(ctx chasm.MutableContext) {
+	c.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+}
+
+// SearchAttributes indexes the namespace being mutated for eventual CLI-based
+// repair and manual discovery. The CHASM execution itself lives in
+// temporal-system, so its storage namespace cannot be used to find all mutation
+// executions for an application namespace. Repair remains keyed by the stable
+// namespace ID; the name is a human-friendly discovery alias.
+func (c *NamespaceMutationComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		namespaceIDSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
+		namespaceNameSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetName()),
+	}
+}
+
+// Memo supplies an explicitly empty CHASM memo. ListExecutions always decodes
+// the registered memo type, so visibility records need a payload even though
+// namespace-indexed discovery has no memo fields to project.
+func (c *NamespaceMutationComponent) Memo(chasm.Context) proto.Message {
+	return &emptypb.Empty{}
+}
+
+// LifecycleState implements the chasm.Component interface.
+// COMPONENT_STATUS_RUNNING → LifecycleStateRunning (the component is doing work).
+// COMPONENT_STATUS_COMPLETED → LifecycleStateCompleted (all tasks reached terminal state).
+// COMPONENT_STATUS_FAILED → LifecycleStateFailed (local apply failed or remained indeterminate).
+func (c *NamespaceMutationComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	switch c.GetStatus() {
+	case namespacereplicationpb.COMPONENT_STATUS_COMPLETED:
+		return chasm.LifecycleStateCompleted
+	case namespacereplicationpb.COMPONENT_STATUS_FAILED:
+		return chasm.LifecycleStateFailed
+	default:
+		return chasm.LifecycleStateRunning
+	}
+}
+
+func (c *NamespaceMutationComponent) StateMachineState() namespacereplicationpb.ComponentStatus {
+	return c.GetStatus()
+}
+
+func (c *NamespaceMutationComponent) SetStateMachineState(status namespacereplicationpb.ComponentStatus) {
+	c.Status = status
+}
+
+// ContextMetadata implements chasm.RootComponent. Returns metadata to propagate
+// on the request context. For namespace replication we don't need extra metadata
+// today; returning nil is fine.
+func (c *NamespaceMutationComponent) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+// Terminate implements chasm.RootComponent. Allows the framework to force-close
+// the component (e.g., on execution state size limits). For the namespace
+// replication transport, terminate marks the component as failed; any in-flight
+// tasks will see the closed lifecycle on next validate and skip. If termination
+// happens before the local apply resolves, record an indeterminate local outcome
+// so a caller polling that outcome can observe a terminal result without being
+// told the metadata write definitely failed.
+//
+// Apply-if-higher on receivers makes future mutations safe even when a
+// component was terminated mid-flight.
+func (c *NamespaceMutationComponent) Terminate(
+	ctx chasm.MutableContext,
+	request chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	if c.GetLocalApply().GetOutcome() == namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING {
+		reason := "namespace mutation terminated while local apply outcome was unresolved"
+		if request.Reason != "" {
+			reason += ": " + request.Reason
+		}
+		// Termination cannot establish whether an in-flight local mutation
+		// committed. Keep that uncertainty explicit in the persisted outcome.
+		return chasm.TerminateComponentResponse{}, TransitionLocalIndeterminate.Apply(c, ctx, EventLocalIndeterminate{
+			Time: ctx.Now(c),
+			Err:  errors.New(reason),
+		})
+	}
+	c.SetStateMachineState(namespacereplicationpb.COMPONENT_STATUS_FAILED)
+	return chasm.TerminateComponentResponse{}, nil
+}
+
+// allPeersTerminal reports whether every peer has reached a terminal outcome
+// (Applied, ShadowMatch, ShadowMismatch, NoOpStale, NotAdmitted, or
+// FailedTerminal). Used to decide when to move the component to COMPLETED.
+func (c *NamespaceMutationComponent) allPeersTerminal() bool {
+	for _, status := range c.GetPeerApply() {
+		switch status.GetOutcome() {
+		case namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL:
+			// terminal
+		default:
+			return false
+		}
+	}
+	return true
+}

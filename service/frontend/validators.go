@@ -1,10 +1,15 @@
 package frontend
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/priorities"
 )
 
@@ -45,6 +50,16 @@ func validateStringField(fieldName string, value string, maxLen int, required bo
 		return serviceerror.NewInvalidArgumentf("%s field too long (max %d characters).", fieldName, maxLen)
 	}
 	return nil
+}
+
+func validatePropagatedNexusSerializationContext(nsCtx *nexuspb.PropagatedSerializationContext, maxIDLength int) error {
+	if err := validateStringField("Nexus serialization context endpoint", nsCtx.GetEndpoint(), maxIDLength, false); err != nil {
+		return err
+	}
+	if err := validateStringField("Nexus serialization context service", nsCtx.GetService(), maxIDLength, false); err != nil {
+		return err
+	}
+	return validateStringField("Nexus serialization context operation", nsCtx.GetOperation(), maxIDLength, false)
 }
 
 func validateFairnessWeightUpdate(
@@ -89,6 +104,26 @@ func validateFairnessWeightUpdate(
 				"fairness weight override key %q present in both set and unset lists", u)
 		}
 	}
+	return nil
+}
 
+// validateTimeSkippingStatePropagation rejects external principals while CHASM Schedules
+// start Workflows through Frontend. A nil principal is allowed for OSS noop authorization.
+// TODO: Delete this function once they start Workflows directly from History.
+func validateTimeSkippingStatePropagation(
+	ctx context.Context,
+	state *commonpb.TimeSkippingStatePropagation,
+) error {
+	if state == nil {
+		return nil
+	}
+	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
+		return nil
+	}
+	if principal.GetType() != authorization.InternalPrincipalType ||
+		principal.GetName() != authorization.InternalPrincipalName {
+		return errTimeSkippingStatePropagationNotInternal
+	}
 	return nil
 }

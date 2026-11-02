@@ -1,12 +1,16 @@
 package matching
 
 import (
+	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -32,11 +36,15 @@ func newSimplePartitionScalerFactory(
 }
 
 func (s *simplePartitionScalerFactory) New(
-	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType,
+	nsName namespace.Name,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
 	legacyCount := func() int { return s.legacyCount(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource())
+	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource(), logger, metricsHandler)
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
@@ -44,34 +52,58 @@ type simplePartitionScaler struct {
 	cfg scalerCfg
 	// legacyCount returns the "legacy" static partition count that the *AsMultipleOfLegacy
 	// settings are relative to. May be nil, which disables those settings.
-	legacyCount dynamicconfig.IntPropertyFn
-	ts          clock.TimeSource
-	trackers    map[time.Duration]*taskTracker
+	legacyCount               dynamicconfig.IntPropertyFn
+	ts                        clock.TimeSource
+	logger                    log.Logger
+	metricsHandler            metrics.Handler
+	upTrackers                map[time.Duration]*taskTracker
+	downTrackers              map[time.Duration]*taskTracker
+	lastLoggedTargetBeforeMax int
+	lastCall                  time.Time
 }
 
-func newSimplePartitionScaler(cfg scalerCfg, legacyCount dynamicconfig.IntPropertyFn, ts clock.TimeSource) *simplePartitionScaler {
+func newSimplePartitionScaler(
+	cfg scalerCfg,
+	legacyCount dynamicconfig.IntPropertyFn,
+	ts clock.TimeSource,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *simplePartitionScaler {
 	return &simplePartitionScaler{
-		cfg:         cfg,
-		legacyCount: legacyCount,
-		ts:          ts,
-		trackers:    make(map[time.Duration]*taskTracker),
+		cfg:            cfg,
+		legacyCount:    legacyCount,
+		ts:             ts,
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		upTrackers:     make(map[time.Duration]*taskTracker),
+		downTrackers:   make(map[time.Duration]*taskTracker),
 	}
 }
 
-func (s *simplePartitionScaler) getTracker(interval time.Duration) *taskTracker {
-	if t, ok := s.trackers[interval]; ok {
+func (s *simplePartitionScaler) getTracker(trackers map[time.Duration]*taskTracker, interval time.Duration) *taskTracker {
+	if t, ok := trackers[interval]; ok {
 		return t
 	}
 	t := newTaskTracker(s.ts, interval/simplePartitionScalerTrackerBuckets, interval)
-	s.trackers[interval] = t
+	trackers[interval] = t
 	return t
 }
 
 func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScalerDecision {
+	// in.NumTasks arrived since the previous call, so track that interval even across calls
+	// that return early.
+	now := s.ts.Now()
+	prevCall := s.lastCall
+	if prevCall.IsZero() {
+		prevCall = now
+	}
+	s.lastCall = now
+
 	cfg := s.cfg()
 
 	if !cfg.Enabled {
-		return PartitionScalerDecision{NewTarget: 0}
+		s.lastLoggedTargetBeforeMax = 0
+		return PartitionScalerDecision{NewTarget: 0, Reason: "disabled"}
 	}
 
 	var legacyCount int // read at most once per call
@@ -86,23 +118,28 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 
 	if cfg.Fixed > 0 {
-		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
+		s.lastLoggedTargetBeforeMax = 0
+		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap), Reason: "fixed"}
 	} else if fixed := multiplied(cfg.FixedAsMultipleOfLegacy); fixed > 0 {
-		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
+		s.lastLoggedTargetBeforeMax = 0
+		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap), Reason: "fixed as multiple of legacy"}
 	}
 
 	// init trackers in use
 	for _, down := range cfg.Downs {
-		_ = s.getTracker(down.Window)
+		_ = s.getTracker(s.downTrackers, down.Window)
 	}
 	for _, up := range cfg.Ups {
-		_ = s.getTracker(up.Window)
+		_ = s.getTracker(s.upTrackers, up.Window)
 	}
 
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
-	for _, t := range s.trackers {
-		t.inc(in.NumTasks)
+	for _, t := range s.upTrackers {
+		t.incOver(in.NumTasks, prevCall)
+	}
+	for _, t := range s.downTrackers {
+		t.incOver(in.NumTasks, prevCall)
 	}
 
 	// unmarshal our state
@@ -113,7 +150,7 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 
 	// update add target based on rates
-	addTarget, fullInterval := s.updateAddTarget(cfg, int(state.AddTarget))
+	addTarget, addReason, fullInterval := s.updateAddTarget(cfg, int(state.AddTarget))
 	if !fullInterval {
 		return PartitionScalerDecision{NoChange: true}
 	}
@@ -131,11 +168,21 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	if multipliedMin := multiplied(cfg.MinAsMultipleOfLegacy); multipliedMin > 0 {
 		totalTarget = max(totalTarget, multipliedMin)
 	}
+	targetBeforeMax := totalTarget
 	if cfg.Max > 0 {
 		totalTarget = min(totalTarget, int(cfg.Max))
 	}
 	if multipliedMax := multiplied(cfg.MaxAsMultipleOfLegacy); multipliedMax > 0 {
 		totalTarget = min(totalTarget, multipliedMax)
+	}
+	if totalTarget >= targetBeforeMax {
+		s.lastLoggedTargetBeforeMax = 0
+	} else if targetBeforeMax != s.lastLoggedTargetBeforeMax {
+		s.lastLoggedTargetBeforeMax = targetBeforeMax
+		metrics.PartitionScaleMaxClamped.With(s.metricsHandler).Record(1)
+		s.logger.Info("partition scale target clamped by maximum",
+			tag.Int("target-before-max", targetBeforeMax),
+			tag.Int("target", totalTarget))
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
@@ -143,47 +190,99 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 		NewTarget:    totalTarget,
 		BacklogCap:   int(cfg.BacklogCap),
 		PrivateState: privateState,
+		Reason:       addReason,
 	}
 }
 
 func (*simplePartitionScaler) Stop() {
 }
 
+// windowRate is the rate measured in one Ups or Downs window and the add target it implies.
+type windowRate struct {
+	kind   string // "ups" or "downs"; empty means unset
+	index  int
+	window time.Duration
+	rate   float32
+	want   int
+}
+
+// String formats the window for logging, e.g. "ups[1] (10s) rate=550.0 wants=6".
+func (w windowRate) String() string {
+	return fmt.Sprintf("%s[%d] (%v) rate=%.1f wants=%d", w.kind, w.index, w.window, w.rate, w.want)
+}
+
+// updateAddTarget returns the new add target, a description of which window determined it
+// (for logging), and whether all Ups windows were full.
 func (s *simplePartitionScaler) updateAddTarget(
 	cfg dynamicconfig.SimplePartitionScalerSettings,
-	target int,
-) (int, bool) {
-	// TODO(dp): we should return some information about which window made the change and put
-	// a log of those in the scale state
-	for _, down := range cfg.Downs {
-		rate, full := s.getTracker(down.Window).rateAndFull()
+	prevTarget int,
+) (int, string, bool) {
+	target := prevTarget
+	// decider is the window that moved the target. if no window moved it, closestDown and
+	// closestUp are the windows nearest to moving it, i.e. what held it in place.
+	var decider, closestDown, closestUp windowRate
+
+	for i, down := range cfg.Downs {
+		rate, full := s.getTracker(s.downTrackers, down.Window).rateAndFull()
 		if !full {
-			return 0, false
+			// A decrease requires a full window of data since the last increase or since startup.
+			continue
 		}
 		// decrease target so that each partition is ~= target rate
-		target = max(1, min(
-			target,
-			int(rate/float32(down.TargetRate)+0.5),
-		))
+		wr := windowRate{kind: "downs", index: i, window: down.Window, rate: rate,
+			want: max(1, int(rate/float32(down.TargetRate)+0.5))}
+		if closestDown.kind == "" || wr.want < closestDown.want {
+			closestDown = wr
+		}
+		if wr.want < target {
+			target, decider = wr.want, wr
+		}
 	}
 
-	for _, up := range cfg.Ups {
-		rate, full := s.getTracker(up.Window).rateAndFull()
+	for i, up := range cfg.Ups {
+		rate, full := s.getTracker(s.upTrackers, up.Window).rateAndFull()
 		if !full {
-			return 0, false
+			return 0, "", false
 		}
 		// increase target so that each partition is ~= target rate
-		target = max(
-			target,
-			int(rate/float32(up.TargetRate)+0.5),
-			1,
-		)
+		wr := windowRate{kind: "ups", index: i, window: up.Window, rate: rate,
+			want: max(1, int(rate/float32(up.TargetRate)+0.5))}
+		if closestUp.kind == "" || wr.want > closestUp.want {
+			closestUp = wr
+		}
+		if wr.want > target {
+			target, decider = wr.want, wr
+		}
 	}
 
 	// always keep min of 1 even if we have no Ups/Downs
-	target = max(target, 1)
+	if target < 1 {
+		target = 1
+		if decider.kind == "" && closestDown.kind == "" && closestUp.kind == "" {
+			return target, "no rate windows, floor of 1", true
+		}
+	}
 
-	return target, true
+	if prevTarget > 0 && target > prevTarget {
+		// Down windows include load from before this increase, so they would immediately
+		// pull the target back down. Restart them so a decrease needs a full window of new data.
+		for _, t := range s.downTrackers {
+			t.clear()
+		}
+	}
+
+	switch {
+	case decider.kind != "":
+		return target, "set by " + decider.String(), true
+	case closestDown.kind != "" && closestUp.kind != "":
+		return target, "held between " + closestDown.String() + " and " + closestUp.String(), true
+	case closestDown.kind != "":
+		return target, "held by " + closestDown.String(), true
+	case closestUp.kind != "":
+		return target, "held by " + closestUp.String(), true
+	default:
+		return target, "no rate windows", true
+	}
 }
 
 func updateBacklogTarget(

@@ -1879,12 +1879,12 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", prevCurrentVersion, err)
+		return false, describeVersionFailedPrecondition(prevCurrentVersion, err)
 	}
 
 	newVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, newVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", newVersion, err)
+		return false, describeVersionFailedPrecondition(newVersion, err)
 	}
 
 	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
@@ -1910,6 +1910,17 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 
 	// all expected task queues are present in the new version
 	return false, nil
+}
+
+func describeVersionFailedPrecondition(version string, err error) error {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return serviceerror.NewFailedPreconditionf("Version %s not found in deployment", version)
+	}
+	return serviceerror.NewFailedPreconditionf(
+		"Failed to describe version %s while checking for missing task queues: %v",
+		version,
+		err,
+	)
 }
 
 // isTaskQueueExpectedInNewVersion checks if a task queue is expected in the new version. A task queue is expected in the new version if:
@@ -2030,7 +2041,17 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to a non-retryable error
-		return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		var details deploymentspb.MaxTaskQueuesInVersionFailureDetails
+		if err := sdk.PreferProtoDataConverter.FromPayloads(failure.GetApplicationFailureInfo().GetDetails(), &details); err != nil {
+			d.logger.Error("failed to decode max task queues failure details", tag.Error(err))
+			return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		}
+		return temporal.NewNonRetryableApplicationError(
+			failure.Message,
+			errMaxTaskQueuesInVersionType,
+			serviceerror.NewFailedPrecondition(failure.Message),
+			&details,
+		)
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
