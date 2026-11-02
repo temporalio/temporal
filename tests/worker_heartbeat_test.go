@@ -32,25 +32,29 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	second := workerHeartbeatForGroup(env.Tv().Any().String(), groupKey)
 	other := workerHeartbeatForGroup(env.Tv().Any().String(), otherGroupKey)
 
-	// Workers in one batch are persisted under their respective grouping keys.
+	// Workers sharing a grouping key renew one lease; mixed groups get separate runs.
 	sendWorkerHeartbeats(t, env, first, second, other)
 	group, ctx := readWorkerGroup(t, env, groupKey, "")
-	require.Len(t, group.Workers, 2)
-	require.Equal(t, first.WorkerInstanceKey, group.Workers[first.WorkerInstanceKey].Get(ctx).WorkerHeartbeat.WorkerInstanceKey)
+	require.Equal(t, groupKey, group.WorkerGroupingKey)
 	otherGroup, _ := readWorkerGroup(t, env, otherGroupKey, "")
-	require.Len(t, otherGroup.Workers, 1)
+	require.Equal(t, otherGroupKey, otherGroup.WorkerGroupingKey)
 	firstRunID := ctx.ExecutionKey().RunID
 	firstDeadline := group.LeaseExpirationTime.AsTime()
 
-	// A later heartbeat updates metadata and renews the same group run. Omitted
-	// workers remain registered under the shared lease.
+	// A heartbeat from one member renews the same shared lease.
 	first.WorkerIdentity = "updated-worker"
 	sendWorkerHeartbeats(t, env, first)
 	group, ctx = readWorkerGroup(t, env, groupKey, "")
 	require.Equal(t, firstRunID, ctx.ExecutionKey().RunID)
-	require.Len(t, group.Workers, 2)
-	require.Equal(t, first.WorkerIdentity, group.Workers[first.WorkerInstanceKey].Get(ctx).WorkerHeartbeat.WorkerIdentity)
+
 	require.True(t, group.LeaseExpirationTime.AsTime().After(firstDeadline))
+
+	// Metadata is still updated in the existing in-memory registry.
+	response, err := env.FrontendClient().DescribeWorker(t.Context(), &workflowservice.DescribeWorkerRequest{
+		Namespace: env.Namespace().String(), WorkerInstanceKey: first.WorkerInstanceKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.WorkerIdentity, response.GetWorkerInfo().GetWorkerHeartbeat().GetWorkerIdentity())
 }
 
 // TestWorkerHeartbeatExpiryAndReconnect verifies that the real expiry task closes
@@ -76,7 +80,6 @@ func TestWorkerHeartbeatExpiryAndReconnect(t *testing.T) {
 	group, ctx := readWorkerGroup(t, env, groupKey, "")
 	require.NotEqual(t, oldRunID, ctx.ExecutionKey().RunID)
 	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_ACTIVE, group.Status)
-	require.Contains(t, group.Workers, heartbeat.WorkerInstanceKey)
 	oldGroup, _ := readWorkerGroup(t, env, groupKey, oldRunID)
 	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_INACTIVE, oldGroup.Status)
 }
