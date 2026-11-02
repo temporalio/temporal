@@ -127,11 +127,11 @@ service ConcurrencyService {
   rpc Batch(ConcurrencyServiceBatchRequest) returns (ConcurrencyServiceBatchResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "key";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-  };
+  }
 
   // Wait is a long-poll RPC that returns when at least one slot is free, or timeout.
   rpc Wait(ConcurrencyServiceWaitRequest) returns (ConcurrencyServiceWaitResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "key";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-  };
+  }
 }
