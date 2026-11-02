@@ -289,6 +289,7 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, action)
+	require.True(t, action.Noop, "a completed Update has nothing to persist")
 	require.False(t, action.CreateWorkflowTask)
 }
 

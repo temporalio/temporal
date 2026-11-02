@@ -32,6 +32,7 @@ type Config struct {
 	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
+	EnableHistoryNodeTransactionIDValidation    dynamicconfig.BoolPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -217,6 +218,8 @@ type Config struct {
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	EnableChasmRequestIDDataNode     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaximumRequestIDsInChasmDataNode dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -359,7 +362,7 @@ type Config struct {
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
 	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
-	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryReplicationRateLimiter                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -524,6 +527,8 @@ func NewConfig(
 		EnableOrphanedChildWorkflowReplacement: dynamicconfig.EnableOrphanedChildWorkflowReplacement.Get(dc),
 		MaxAutoResetPoints:                     dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:             dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+
+		EnableHistoryNodeTransactionIDValidation: dynamicconfig.EnableHistoryNodeTransactionIDValidation.Get(dc),
 
 		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
 
@@ -709,13 +714,15 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
 		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
-		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
+		HistoryReplicationRateLimiter:                       dynamicconfig.HistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
 		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
+		EnableChasmRequestIDDataNode:     dynamicconfig.EnableChasmRequestIDDataNode.Get(dc),
+		MaximumRequestIDsInChasmDataNode: dynamicconfig.MaximumRequestIDsInChasmDataNode.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),

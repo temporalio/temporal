@@ -76,11 +76,18 @@ type (
 		historySerializer            serialization.Serializer
 		transactionMgr               TransactionManager
 		persistenceRateLimiter       quotas.RequestRateLimiter
-		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		persistenceRateLimiterConfig dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.HistoryReplicationRateLimiterSettings]
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
 		testHooks                    testhooks.TestHooks
+	}
+
+	replicationTaskInfoContextKey struct{}
+
+	replicationTaskInfo struct {
+		isForceReplication bool
+		workflowStatus     enumspb.WorkflowExecutionStatus
 	}
 )
 
@@ -105,7 +112,7 @@ func NewWorkflowStateReplicator(
 		historySerializer:            eventSerializer,
 		transactionMgr:               NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
 		persistenceRateLimiter:       persistenceRateLimiter,
-		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
+		persistenceRateLimiterConfig: shardContext.GetConfig().HistoryReplicationRateLimiter,
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
@@ -132,6 +139,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	if executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
+	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
+		isForceReplication: request.GetIsForceReplication(),
+		workflowStatus:     executionState.GetStatus(),
+	})
 
 	// SyncWorkflowState is not used by new state-based replication stack,
 	// but CHASM only uses state-based replication, so we can continue to use
@@ -295,6 +306,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if err != nil {
 		return err
 	}
+	ctx = withReplicationTaskInfo(ctx, replicationTaskInfo{
+		isForceReplication: versionedTransitionArtifact.GetIsForceReplication(),
+		workflowStatus:     executionState.GetStatus(),
+	})
 
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
@@ -1569,14 +1584,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
-			if r.enablePersistenceRateLimiter(nsName) {
+			if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 				if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 					return err
 				}
 			}
 
-			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-				ShardID:           r.shardContext.GetShardID(),
+			_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 				IsNewBranch:       isNewBranch,
 				BranchToken:       versionHistoryToAppend.BranchToken,
 				History:           historyBlob.rawHistory,
@@ -1640,13 +1654,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
-		if r.enablePersistenceRateLimiter(nsName) {
+		if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return newBranchToken, err
 			}
 		}
-		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shardContext.GetShardID(),
+		_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 			IsNewBranch:       isNewBranch,
 			BranchToken:       versionHistoryToAppend.BranchToken,
 			History:           eventBlobs[i],
@@ -2158,13 +2171,12 @@ BackfillLoop:
 			return err
 		}
 
-		if r.enablePersistenceRateLimiter(nsName) {
+		if r.shouldRateLimitHistoryAppend(ctx, nsName) {
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return err
 			}
 		}
-		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shardContext.GetShardID(),
+		_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 			IsNewBranch:       prevBranchID != branchID,
 			BranchToken:       filteredHistoryBranch,
 			History:           historyBlob.rawHistory,
@@ -2186,6 +2198,35 @@ BackfillLoop:
 
 	mutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return mutableState.SetCurrentBranchToken(backfillBranchToken)
+}
+
+func withReplicationTaskInfo(ctx context.Context, info replicationTaskInfo) context.Context {
+	return context.WithValue(ctx, replicationTaskInfoContextKey{}, info)
+}
+
+func replicationTaskInfoFromContext(ctx context.Context) replicationTaskInfo {
+	if info, ok := ctx.Value(replicationTaskInfoContextKey{}).(replicationTaskInfo); ok {
+		return info
+	}
+	return replicationTaskInfo{}
+}
+
+func (r *WorkflowStateReplicatorImpl) shouldRateLimitHistoryAppend(ctx context.Context, nsName string) bool {
+	settings := r.persistenceRateLimiterConfig(nsName)
+	if !settings.Enabled {
+		return false
+	}
+	info := replicationTaskInfoFromContext(ctx)
+	switch settings.Scope {
+	case dynamicconfig.HistoryReplicationRateLimiterScopeAll:
+		return true
+	case dynamicconfig.HistoryReplicationRateLimiterScopeOpenForceReplication:
+		return info.isForceReplication &&
+			(info.workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+				info.workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)
+	default:
+		return false
+	}
 }
 
 func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(

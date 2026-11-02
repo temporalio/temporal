@@ -18,12 +18,15 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmcb "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payloads"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -528,6 +531,128 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 	  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
 	 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
 	`, events)
+		})
+	}
+}
+
+// TestUnprocessedUpdateWithBufferedCallbacks verifies that an Update is rejected when the worker
+// does not process it, even if a second request buffered its callbacks while the Update was admitted.
+func (s *WorkflowUpdateSuite) TestUnprocessedUpdateWithBufferedCallbacks() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+	)
+	tv := env.Tv().WithRunID(mustStartWorkflow(env, env.Tv()))
+
+	// The internal API supports waiting for admission, so both requests are applied before polling.
+	for _, callbackURL := range []string{"http://cb1", "http://cb2"} {
+		resp, err := env.GetTestCluster().HistoryClient().UpdateWorkflowExecution(s.Context(),
+			&historyservice.UpdateWorkflowExecutionRequest{
+				NamespaceId: env.NamespaceID().String(),
+				Request: &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         env.Namespace().String(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED},
+					Request: &updatepb.Request{
+						Meta:      &updatepb.Meta{UpdateId: tv.UpdateID()},
+						Input:     &updatepb.Input{Name: tv.HandlerName(), Args: payloads.EncodeString("args")},
+						RequestId: tv.Sub(callbackURL).RequestID(),
+						CompletionCallbacks: []*commonpb.Callback{{
+							Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+						}},
+					},
+				},
+			})
+		s.NoError(err)
+		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.GetResponse().GetStage())
+	}
+
+	// The worker completes the workflow task without processing the Update message.
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.Len(task.Messages, 1)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+		})
+	s.NoError(err)
+
+	_, err = env.FrontendClient().PollWorkflowExecutionUpdate(s.Context(),
+		&workflowservice.PollWorkflowExecutionUpdateRequest{
+			Namespace:  env.Namespace().String(),
+			UpdateRef:  tv.UpdateRef(),
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
+		})
+	s.ErrorAs(err, new(*serviceerror.NotFound), "rejected updates must be removed from the registry")
+}
+
+// TestSpeculativeWorkflowTask_RejectedWithBufferedCallbacks verifies that buffering callbacks of a
+// duplicate request does not convert the speculative workflow task to a normal one, so a rejected
+// Update leaves no workflow task events in history.
+func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_RejectedWithBufferedCallbacks() {
+	for _, tc := range []struct {
+		name string
+		// sent sends the duplicate while the worker processes the speculative workflow task.
+		sent bool
+	}{
+		{name: "duplicate while admitted"},
+		{name: "duplicate while sent", sent: true},
+	} {
+		s.Run(tc.name, func(s *WorkflowUpdateSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+				testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+					[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+			)
+			tv := env.Tv().WithRunID(mustStartWorkflow(env, env.Tv()))
+			_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+			s.NoError(err)
+
+			// The internal API supports waiting for admission, so each request is applied before it returns.
+			sendUpdate := func(callbackURL string) {
+				_, err := env.GetTestCluster().HistoryClient().UpdateWorkflowExecution(s.Context(),
+					&historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: env.NamespaceID().String(),
+						Request: &workflowservice.UpdateWorkflowExecutionRequest{
+							Namespace:         env.Namespace().String(),
+							WorkflowExecution: tv.WorkflowExecution(),
+							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED},
+							Request: &updatepb.Request{
+								Meta:      &updatepb.Meta{UpdateId: tv.UpdateID()},
+								Input:     &updatepb.Input{Name: tv.HandlerName(), Args: payloads.EncodeString("args")},
+								RequestId: tv.Sub(callbackURL).RequestID(),
+								CompletionCallbacks: []*commonpb.Callback{{
+									Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+								}},
+							},
+						},
+					})
+				s.NoError(err)
+			}
+			sendUpdate("http://cb1")
+			if !tc.sent {
+				sendUpdate("http://cb2")
+			}
+
+			_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					if tc.sent {
+						sendUpdate("http://cb2")
+					}
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: env.UpdateRejectMessages(tv, task.Messages[0]),
+					}, nil
+				})
+			s.NoError(err)
+
+			s.EqualHistoryEvents(`
+	  1 WorkflowExecutionStarted
+	  2 WorkflowTaskScheduled
+	  3 WorkflowTaskStarted
+	  4 WorkflowTaskCompleted`, env.GetHistory(env.Namespace().String(), tv.WorkflowExecution()))
 		})
 	}
 }

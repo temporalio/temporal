@@ -17,6 +17,7 @@ type (
 		GeneratorBufferReserveSize        int           // Minimum number of spaces in `BufferedStarts` reserved for automated actions.
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
+		EnableGeneratorJitterFix          bool          // Preserve pending jittered actions across empty generator wakeups; disable to restore the legacy cursor behavior.
 		EnableVersioningOverride          bool          // Whether to forward versioning overrides to started workflows
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
@@ -93,6 +94,7 @@ var (
 		CanceledTerminatedCountAsFailures: false,
 		MaxActionsPerExecution:            5,
 		EnableVersioningOverride:          true,
+		EnableGeneratorJitterFix:          true,
 		IdleTime:                          7 * 24 * time.Hour,
 		EventLogMaxEntries:                30,
 		EventLogMaxMessageLen:             1000,

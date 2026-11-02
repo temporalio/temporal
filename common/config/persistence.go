@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 )
 
 const (
@@ -128,7 +128,7 @@ func (c *Persistence) GetSecondaryVisibilityStoreConfig() DataStore {
 		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
 			esConfig := *ds.Elasticsearch
 			esConfig.Indices = map[string]string{
-				client.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
+				esconfig.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
 			}
 			ds.Elasticsearch = &esConfig
 			return ds
@@ -188,6 +188,9 @@ func (ds *DataStore) Validate() error {
 		}
 	}
 	if ds.Elasticsearch != nil {
+		if err := validateElasticsearch(ds.Elasticsearch); err != nil {
+			return err
+		}
 		if err := ds.Elasticsearch.Validate(); err != nil {
 			return err
 		}

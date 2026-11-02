@@ -194,15 +194,9 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
-	}
-	if callbacksAttached {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
-		}, nil
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
@@ -210,7 +204,9 @@ func (u *Updater) applyRequest(
 	// If update is duplicate, then WT for this update was already created.
 	if alreadyExisted || ms.HasPendingWorkflowTask() {
 		return &api.UpdateWorkflowAction{
-			Noop:               true,
+			// Persist only the event written by AttachCallbacks, if any. Persisting mutable state
+			// otherwise would convert a speculative workflow task to a normal one.
+			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
 		}, nil
 	}

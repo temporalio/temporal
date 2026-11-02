@@ -13,12 +13,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 )
 
 type esTestCluster struct {
-	cfg    *esclient.Config
+	cfg    *esconfig.Config
 	logger log.Logger
 
 	indexName string
@@ -40,13 +41,13 @@ func newEsTestCluster(
 		panic(err)
 	}
 	return &esTestCluster{
-		cfg: &esclient.Config{
+		cfg: &esconfig.Config{
 			Version:  environment.GetESVersion(),
 			URL:      *addr,
 			Username: username,
 			Password: password,
 			Indices: map[string]string{
-				esclient.VisibilityAppName: indexName,
+				esconfig.VisibilityAppName: indexName,
 			},
 		},
 		logger:    logger,
@@ -80,7 +81,7 @@ func (c *esTestCluster) TearDownTestDatabase() {
 	}
 }
 
-func SetupEsIndex(esConfig *esclient.Config, logger log.Logger) error {
+func SetupEsIndex(esConfig *esconfig.Config, logger log.Logger) error {
 	ctx := context.Background()
 	var esClient esclient.IntegrationTestsClient
 	op := func() error {
@@ -168,7 +169,7 @@ func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string)
 	return nil
 }
 
-func DeleteEsIndex(esConfig *esclient.Config, logger log.Logger) error {
+func DeleteEsIndex(esConfig *esconfig.Config, logger log.Logger) error {
 	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
