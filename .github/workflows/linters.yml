@@ -3,6 +3,8 @@ on:
   pull_request:
 permissions:
   contents: read
+env:
+  MISE_HTTP_TIMEOUT: 60s
 jobs:
   lint-actions:
     runs-on: ubuntu-24.04-arm

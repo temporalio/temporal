@@ -43,6 +43,7 @@ permissions:
   contents: read
 
 env:
+  MISE_HTTP_TIMEOUT: 60s
   COMMIT: ${{ inputs.commit }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
