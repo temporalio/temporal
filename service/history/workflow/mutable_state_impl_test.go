@@ -146,6 +146,8 @@ var (
 		},
 	}
 	emptyOptions = &workflowpb.WorkflowExecutionOptions{}
+
+	localPersistenceMetadata = []byte("local-persistence-metadata")
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -2518,6 +2520,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}}
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
+	mutableState.executionInfo.PersistenceMetadata = []byte("persistence-metadata")
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2535,6 +2538,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
+	s.Nil(sanitizedMutableState.executionInfo.PersistenceMetadata)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -6127,6 +6131,7 @@ func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.
 	proto.Merge(state.ExecutionState, &persistencespb.WorkflowExecutionState{
 		State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	})
+	state.ExecutionInfo.PersistenceMetadata = localPersistenceMetadata
 
 	state.ActivityInfos[90].TimerTaskStatus = TimerTaskStatusCreated
 	state.TimerInfos["25"].ExpiryTime = timestamp.TimeNowPtrUtcAddDuration(time.Hour)
@@ -6617,6 +6622,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			s.True(isTimeSkippingTimeSource)
 
 			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
 	}
@@ -6861,6 +6867,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
 			s.True(isTimeSkippingTimeSource)
 			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
 	}
