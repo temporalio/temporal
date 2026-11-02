@@ -78,6 +78,7 @@ func overTheWire(err error) error {
 func TestErrorMapping(t *testing.T) {
 	require.ErrorIs(t, mapError(overTheWire(wci.ErrClosed)), wciclient.ErrInstanceClosed)
 	require.ErrorIs(t, mapError(overTheWire(wci.ErrProviderNotSupportedOnCHASM)), wciclient.ErrProviderNotSupportedOnCHASM)
+	require.ErrorIs(t, mapError(overTheWire(wci.ErrRegionsNotSupportedOnCHASM)), wciclient.ErrProviderNotSupportedOnCHASM)
 
 	var notFound *serviceerror.NotFound
 	require.ErrorAs(t, mapError(overTheWire(serviceerror.NewNotFound("missing"))), &notFound)
@@ -155,6 +156,28 @@ func TestCreateFromWorkflowState(t *testing.T) {
 	svc.err = overTheWire(wci.ErrProviderNotSupportedOnCHASM)
 	err = New(Params{Service: svc}).CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{DeploymentName: "dep", BuildId: "build"}, "run-1", expire)
 	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the workflow stays a workflow")
+}
+
+// A history that predates the rejection would drop region IDs; the client must not send them.
+func TestRegionScopedSpecsNeverReachCHASM(t *testing.T) {
+	svc := &fakeService{}
+	c := New(Params{Service: svc})
+	regional := iface.ScalingGroupSpec{RegionIds: []string{"us-east-1"}, Compute: iface.ComputeProviderSpec{ProviderType: "test-invoke"}}
+	upserts := map[string]iface.ScalingGroupSpecUpdate{"g": {Spec: regional}}
+
+	_, err := c.UpdateWorkerControllerInstance(t.Context(), testNS, testVersion, nil, "me", upserts, nil)
+	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the router creates a workflow instead")
+	require.Nil(t, svc.update)
+
+	// fakeService doesn't implement Validate, so reaching the service would panic.
+	require.ErrorIs(t, c.ValidateWorkerControllerInstanceSpec(t.Context(), testNS, testVersion, "me", upserts, nil), wciclient.ErrProviderNotSupportedOnCHASM)
+
+	err = c.CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{
+		NamespaceId: "ns-id", DeploymentName: "dep", BuildId: "build",
+		State: &iface.WorkerControllerInstanceLocalState{Spec: &iface.WorkerControllerInstanceSpec{ScalingGroupSpecs: map[string]iface.ScalingGroupSpec{"g": regional}}},
+	}, "run-1", time.Unix(1_000, 0))
+	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the handover is declined")
+	require.Nil(t, svc.migration)
 }
 
 func TestActivateAndAbortMigration(t *testing.T) {

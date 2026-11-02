@@ -79,6 +79,8 @@ message ScalingGroupSpec {
   ComputeProviderSpec compute = 2;
   // Unset = no algorithm.
   ScalingAlgorithmSpec scaling = 3;
+  // CHASM rejects specs that set this until it supports regions; carried so it is never dropped.
+  repeated string region_ids = 4;
 }
 
 message ComputeProviderSpec {

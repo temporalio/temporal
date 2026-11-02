@@ -685,7 +685,9 @@ type ScalingGroupSpec struct {
 	TaskTypes []v12.TaskQueueType    `protobuf:"varint,1,rep,packed,name=task_types,json=taskTypes,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_types,omitempty"`
 	Compute   *ComputeProviderSpec   `protobuf:"bytes,2,opt,name=compute,proto3" json:"compute,omitempty"`
 	// Unset = no algorithm.
-	Scaling       *ScalingAlgorithmSpec `protobuf:"bytes,3,opt,name=scaling,proto3" json:"scaling,omitempty"`
+	Scaling *ScalingAlgorithmSpec `protobuf:"bytes,3,opt,name=scaling,proto3" json:"scaling,omitempty"`
+	// CHASM rejects specs that set this until it supports regions; carried so it is never dropped.
+	RegionIds     []string `protobuf:"bytes,4,rep,name=region_ids,json=regionIds,proto3" json:"region_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -737,6 +739,13 @@ func (x *ScalingGroupSpec) GetCompute() *ComputeProviderSpec {
 func (x *ScalingGroupSpec) GetScaling() *ScalingAlgorithmSpec {
 	if x != nil {
 		return x.Scaling
+	}
+	return nil
+}
+
+func (x *ScalingGroupSpec) GetRegionIds() []string {
+	if x != nil {
+		return x.RegionIds
 	}
 	return nil
 }
@@ -1163,12 +1172,14 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\vbacklog_age\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"backlogAge\x12\x19\n" +
 	"\badd_rate\x18\x05 \x01(\x02R\aaddRate\x12#\n" +
-	"\rdispatch_rate\x18\x06 \x01(\x02R\fdispatchRate\"\x86\x02\n" +
+	"\rdispatch_rate\x18\x06 \x01(\x02R\fdispatchRate\"\xa5\x02\n" +
 	"\x10ScalingGroupSpec\x12C\n" +
 	"\n" +
 	"task_types\x18\x01 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\ttaskTypes\x12U\n" +
 	"\acompute\x18\x02 \x01(\v2;.temporal.server.chasm.lib.wci.proto.v1.ComputeProviderSpecR\acompute\x12V\n" +
-	"\ascaling\x18\x03 \x01(\v2<.temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpecR\ascaling\"\x9a\x01\n" +
+	"\ascaling\x18\x03 \x01(\v2<.temporal.server.chasm.lib.wci.proto.v1.ScalingAlgorithmSpecR\ascaling\x12\x1d\n" +
+	"\n" +
+	"region_ids\x18\x04 \x03(\tR\tregionIds\"\x9a\x01\n" +
 	"\x13ComputeProviderSpec\x12#\n" +
 	"\rprovider_type\x18\x01 \x01(\tR\fproviderType\x127\n" +
 	"\x06config\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x06config\x12%\n" +
