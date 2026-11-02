@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -63,4 +64,135 @@ func TestAddTasksRate(t *testing.T) {
 	// a minute passes and no tasks are added
 	timeSource.Advance(60 * time.Second)
 	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
+}
+
+func TestTaskTrackerIncOver(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		age      time.Duration // time since tracker creation when incOver is called
+		n        int
+		span     time.Duration // incOver covers (now-span, now]
+		wantKept int
+		wantRate float32
+		// per-bucket counts from the current bucket backwards; nil skips the check
+		wantBuckets []int32
+	}{
+		{
+			name:        "spread over several buckets",
+			age:         4 * time.Second,
+			n:           400,
+			span:        4 * time.Second,
+			wantKept:    400,
+			wantRate:    100,
+			wantBuckets: []int32{0, 100, 100, 100, 100},
+		},
+		{
+			// the buffer covers the 0.5s current bucket plus 10 full buckets: 10.5s of 21s
+			name:     "older than buffer is dropped",
+			age:      40500 * time.Millisecond,
+			n:        2100,
+			span:     21 * time.Second,
+			wantKept: 1050,
+			wantRate: 100,
+		},
+		{
+			name:     "before start time is dropped",
+			age:      3 * time.Second,
+			n:        600,
+			span:     6 * time.Second,
+			wantKept: 300,
+			wantRate: 100,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			timeSource := clock.NewEventTimeSource()
+			timeSource.Update(time.Now())
+			tr := newTaskTracker(timeSource, time.Second, 10*time.Second)
+			timeSource.Advance(tc.age)
+
+			tr.incOver(tc.n, timeSource.Now().Add(-tc.span))
+			if tc.wantKept == tc.n {
+				require.Equal(t, tc.wantKept, tr.tasks.totalTasks())
+			} else {
+				require.InDelta(t, tc.wantKept, tr.tasks.totalTasks(), 1)
+			}
+			for _, c := range tr.tasks.buffer {
+				require.GreaterOrEqual(t, c, int32(0))
+			}
+			size := len(tr.tasks.buffer)
+			for i, want := range tc.wantBuckets {
+				require.Equal(t, want, tr.tasks.buffer[(tr.tasks.currentPos-i+size)%size])
+			}
+			rate, _ := tr.rateAndFull()
+			require.InEpsilon(t, tc.wantRate, rate, 0.01)
+		})
+	}
+
+	t.Run("no span behaves like inc", func(t *testing.T) {
+		t.Parallel()
+		timeSource := clock.NewEventTimeSource()
+		timeSource.Update(time.Now())
+		withInc := newTaskTracker(timeSource, time.Second, 10*time.Second)
+		withIncOver := newTaskTracker(timeSource, time.Second, 10*time.Second)
+
+		timeSource.Advance(2500 * time.Millisecond)
+		withInc.inc(50)
+		withIncOver.incOver(50, timeSource.Now())
+		timeSource.Advance(time.Second)
+		withInc.inc(30)
+		withIncOver.incOver(30, timeSource.Now().Add(time.Second)) // since after now
+		require.Equal(t, withInc.tasks, withIncOver.tasks)
+		require.InEpsilon(t, withInc.rate(), withIncOver.rate(), 1e-6)
+	})
+
+	t.Run("new tracker drops batch from before start", func(t *testing.T) {
+		t.Parallel()
+		timeSource := clock.NewEventTimeSource()
+		timeSource.Update(time.Now())
+		tr := newTaskTracker(timeSource, time.Second, 10*time.Second)
+
+		// the whole batch arrived before the tracker existed, so none of it is in the
+		// interval the rate measures
+		tr.incOver(50, timeSource.Now().Add(-2*time.Second))
+		require.Equal(t, 0, tr.tasks.totalTasks())
+	})
+}
+
+// TestTaskTrackerIncOverRemovesBatchBias checks that batches flushed less often than the
+// window is long are measured at their true rate. Attributing each batch to the instant it
+// was flushed overstates the rate.
+func TestTaskTrackerIncOverRemovesBatchBias(t *testing.T) {
+	t.Parallel()
+
+	const rate, batch = 150, 400
+	flushEvery := time.Second * batch / rate
+
+	readings := func(spread bool) []float32 {
+		timeSource := clock.NewEventTimeSource()
+		timeSource.Update(time.Now())
+		tr := newTaskTracker(timeSource, 200*time.Millisecond, 2*time.Second)
+		lastFlush := timeSource.Now()
+		var out []float32
+		for range 100 {
+			timeSource.Advance(flushEvery)
+			if spread {
+				tr.incOver(batch, lastFlush)
+			} else {
+				tr.inc(batch)
+			}
+			lastFlush = timeSource.Now()
+			r, full := tr.rateAndFull()
+			require.True(t, full)
+			out = append(out, r)
+		}
+		return out
+	}
+
+	for _, r := range readings(true) {
+		require.InEpsilon(t, float32(rate), r, 0.05)
+	}
+	require.GreaterOrEqual(t, slices.Max(readings(false)), float32(1.2*rate))
 }
