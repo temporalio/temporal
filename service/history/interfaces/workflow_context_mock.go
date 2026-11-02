@@ -18,6 +18,7 @@ import (
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
+	future "go.temporal.io/server/common/future"
 	locks "go.temporal.io/server/common/locks"
 	persistence0 "go.temporal.io/server/common/persistence"
 	update "go.temporal.io/server/service/history/workflow/update"
@@ -218,6 +219,20 @@ func (mr *MockWorkflowContextMockRecorder) Lock(ctx, lockPriority any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockWorkflowContext)(nil).Lock), ctx, lockPriority)
 }
 
+// LockSpeculative mocks base method.
+func (m *MockWorkflowContext) LockSpeculative(ctx context.Context, lockPriority locks.Priority) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LockSpeculative", ctx, lockPriority)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// LockSpeculative indicates an expected call of LockSpeculative.
+func (mr *MockWorkflowContextMockRecorder) LockSpeculative(ctx, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockSpeculative", reflect.TypeOf((*MockWorkflowContext)(nil).LockSpeculative), ctx, lockPriority)
+}
+
 // PersistWorkflowEvents mocks base method.
 func (m *MockWorkflowContext) PersistWorkflowEvents(ctx context.Context, shardContext ShardContext, workflowEventsSlice ...*persistence0.WorkflowEvents) (int64, error) {
 	m.ctrl.T.Helper()
@@ -236,6 +251,20 @@ func (mr *MockWorkflowContextMockRecorder) PersistWorkflowEvents(ctx, shardConte
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, shardContext}, workflowEventsSlice...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistWorkflowEvents", reflect.TypeOf((*MockWorkflowContext)(nil).PersistWorkflowEvents), varargs...)
+}
+
+// PersistenceFuture mocks base method.
+func (m *MockWorkflowContext) PersistenceFuture() future.Future[struct{}] {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PersistenceFuture")
+	ret0, _ := ret[0].(future.Future[struct{}])
+	return ret0
+}
+
+// PersistenceFuture indicates an expected call of PersistenceFuture.
+func (mr *MockWorkflowContextMockRecorder) PersistenceFuture() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistenceFuture", reflect.TypeOf((*MockWorkflowContext)(nil).PersistenceFuture))
 }
 
 // ReapplyEvents mocks base method.
@@ -321,9 +350,11 @@ func (mr *MockWorkflowContextMockRecorder) TryLock(lockPriority any) *gomock.Cal
 }
 
 // Unlock mocks base method.
-func (m *MockWorkflowContext) Unlock() {
+func (m *MockWorkflowContext) Unlock() error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Unlock")
+	ret := m.ctrl.Call(m, "Unlock")
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Unlock indicates an expected call of Unlock.

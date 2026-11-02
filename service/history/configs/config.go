@@ -11,7 +11,9 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards int32
+	NumberOfShards                int32
+	WorkflowPersistencePipeline   bool
+	WorkflowPersistenceCoalescing bool
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
 	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
@@ -549,6 +551,8 @@ func NewConfig(
 		EmitImmediateQueueBacklogAge: dynamicconfig.EmitImmediateQueueBacklogAge.Get(dc),
 		EnableDataLossMetrics:        dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
+		WorkflowPersistencePipeline:                dynamicconfig.WorkflowPersistencePipeline.Get(dc)(),
+		WorkflowPersistenceCoalescing:              dynamicconfig.WorkflowPersistenceCoalescing.Get(dc)(),
 		HistoryCacheLimitSizeBased:                 dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
 		HistoryHostLevelCacheMaxSize:               dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
 		HistoryHostLevelCacheMaxSizeBytes:          dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),

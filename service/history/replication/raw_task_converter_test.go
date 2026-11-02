@@ -145,12 +145,12 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.runID = uuid.NewString()
 	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mutableState = historyi.NewMockMutableState(s.controller)
-	s.releaseFn = func(error) { s.lockReleased = true }
+	s.releaseFn = func(err error) error { s.lockReleased = true; return err }
 
 	s.newRunID = uuid.NewString()
 	s.newWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.newMutableState = historyi.NewMockMutableState(s.controller)
-	s.newReleaseFn = func(error) { s.lockReleased = true }
+	s.newReleaseFn = func(err error) error { s.lockReleased = true; return err }
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 }
 

@@ -277,11 +277,16 @@ func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
 			return nil, nil, err
 		}
 		var releaseOnce sync.Once
-		return wfCtx, func(error) {
+		return wfCtx, func(operationErr error) error {
+			var persistenceErr error
 			releaseOnce.Do(func() {
 				wfCtx.Clear()
-				wfCtx.Unlock()
+				persistenceErr = wfCtx.Unlock()
 			})
+			if persistenceErr != nil {
+				return persistenceErr
+			}
+			return operationErr
 		}, nil
 	}
 	return r.workflowCache.GetOrCreateChasmExecution(
@@ -353,11 +358,11 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		// the apply (which mutates ms in place) and still under the workflow lock, since the apply
 		// releases via the transaction manager.
 		innerReleaseFn := releaseFn
-		releaseFn = func(err error) {
+		releaseFn = func(err error) error {
 			if err == nil && appliedMS == nil && ms != nil {
 				appliedMS = ms.CloneToProto()
 			}
-			innerReleaseFn(err)
+			return innerReleaseFn(err)
 		}
 	}
 	defer func() {

@@ -85,7 +85,7 @@ type (
 	}
 )
 
-var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(err error) {}
+var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(err error) error { return err }
 
 const (
 	cacheNotReleased int32 = 0
@@ -324,6 +324,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			c.paginationLimiter,
 			c.testHooks,
 		)
+		workflowCtx.(*workflow.ContextImpl).SetPersistencePin(func() { c.Get(cacheKey) }, func() { c.Release(cacheKey) })
 
 		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
 		existing, err := c.PutIfNotExist(cacheKey, value)
@@ -371,7 +372,11 @@ func (c *cacheImpl) lockWorkflowExecution(
 		}
 	}
 
-	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
+	lock := workflowCtx.Lock
+	if workflow.PipelinedPersistence(ctx) {
+		lock = workflowCtx.LockSpeculative
+	}
+	if err := lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(cacheKey)
 		return consts.ErrResourceExhaustedBusyWorkflow
@@ -386,24 +391,40 @@ func (c *cacheImpl) makeReleaseFunc(
 	forceClearContext bool,
 	handler metrics.Handler,
 	acquireTime time.Time,
-) func(error) {
+) historyi.ReleaseWorkflowContextFunc {
 
 	status := cacheNotReleased
-	return func(err error) {
+	pipelined := false
+	if workflowContext, ok := wfContext.(*workflow.ContextImpl); ok {
+		pipelined = workflowContext.PersistencePipelineEnabled()
+	}
+	var completed chan struct{}
+	if pipelined {
+		completed = make(chan struct{})
+	}
+	var persistenceErr error
+	return func(err error) error {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			speculative := false
+			if workflowContext, ok := wfContext.(*workflow.ContextImpl); ok {
+				speculative = workflowContext.PipelinedOperation()
+			}
+			if completed != nil {
+				defer close(completed)
+			}
 			defer func() {
 				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
 			}()
 			if rec := recover(); rec != nil {
 				wfContext.Clear()
-				wfContext.Unlock()
+				persistenceErr = wfContext.Unlock()
 				c.Release(cacheKey)
 				panic(rec)
 			} else {
-				if err != nil || forceClearContext {
+				if (err != nil && (!speculative || wfContext.IsDirty())) || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					wfContext.Clear()
-					wfContext.Unlock()
+					persistenceErr = wfContext.Unlock()
 					c.Release(cacheKey)
 				} else {
 					isDirty := wfContext.IsDirty()
@@ -416,14 +437,20 @@ func (c *cacheImpl) makeReleaseFunc(
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
 						)
 					}
-					wfContext.Unlock()
+					persistenceErr = wfContext.Unlock()
 					c.Release(cacheKey)
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")
 					}
 				}
 			}
+		} else if completed != nil {
+			<-completed
 		}
+		if persistenceErr != nil {
+			return persistenceErr
+		}
+		return err
 	}
 }
 

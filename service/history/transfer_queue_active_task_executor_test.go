@@ -3699,7 +3699,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 			mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
 				chasm.WorkflowArchetypeID, gomock.Any(),
-			).Return(mockWorkflowContext, historyi.ReleaseWorkflowContextFunc(func(err error) {
+			).Return(mockWorkflowContext, historyi.ReleaseWorkflowContextFunc(func(err error) error {
+				return err
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)

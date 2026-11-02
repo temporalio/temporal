@@ -110,7 +110,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 	released := 0
 	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
-		func(error) { released++ },
+		func(err error) error { released++; return err },
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
@@ -133,7 +133,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	released := 0
 	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
-		func(error) { released++ },
+		func(err error) error { released++; return err },
 		s.currentMutableState,
 	)
 	request := s.randomRequest()

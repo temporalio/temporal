@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -20,7 +21,7 @@ type (
 	// Make sure not to access the mutable state or workflow context after releasing back to the cache.
 	// If there is any error when using the mutable state (e.g. mutable state is mutated and dirty), call release with
 	// the error so the in-memory copy will be thrown away.
-	ReleaseWorkflowContextFunc func(err error)
+	ReleaseWorkflowContextFunc func(err error) error
 
 	WorkflowContext interface {
 		GetWorkflowKey() definition.WorkflowKey
@@ -32,7 +33,9 @@ type (
 
 		Lock(ctx context.Context, lockPriority locks.Priority) error
 		TryLock(lockPriority locks.Priority) bool
-		Unlock()
+		LockSpeculative(ctx context.Context, lockPriority locks.Priority) error
+		Unlock() error
+		PersistenceFuture() future.Future[struct{}]
 
 		IsDirty() bool
 

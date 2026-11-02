@@ -737,17 +737,20 @@ var (
 		"client_duplicated_redirects",
 		WithDescription("The number of requests forwarded from another cluster for a namespace that is passive in the receiving cluster."),
 	)
-	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
-	HistorySize                      = NewBytesHistogramDef("history_size")
-	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
-	TasksCompletedPerShardInfoUpdate = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
-	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
-	ShardInfoSize                    = NewBytesHistogramDef("shard_info_size")
-	QueueStateSize                   = NewBytesHistogramDef("queue_state_size")
-	QueueStateSizeTotal              = NewCounterDef("queue_state_size_total")
-	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
-	MemoSize                         = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows     = NewCounterDef(
+	StateTransitionCount                   = NewDimensionlessHistogramDef("state_transition_count")
+	WorkflowPersistencePipelineWrites      = NewCounterDef("workflow_persistence_pipeline_writes")
+	WorkflowPersistencePipelineSubmissions = NewCounterDef("workflow_persistence_pipeline_submissions")
+	WorkflowPersistencePipelineBatchSize   = NewDimensionlessHistogramDef("workflow_persistence_pipeline_batch_size")
+	HistorySize                            = NewBytesHistogramDef("history_size")
+	HistoryCount                           = NewDimensionlessHistogramDef("history_count")
+	TasksCompletedPerShardInfoUpdate       = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
+	TimeBetweenShardInfoUpdates            = NewTimerDef("time_between_shardinfo_update")
+	ShardInfoSize                          = NewBytesHistogramDef("shard_info_size")
+	QueueStateSize                         = NewBytesHistogramDef("queue_state_size")
+	QueueStateSizeTotal                    = NewCounterDef("queue_state_size_total")
+	SearchAttributesSize                   = NewBytesHistogramDef("search_attributes_size")
+	MemoSize                               = NewBytesHistogramDef("memo_size")
+	TooManyPendingChildWorkflows           = NewCounterDef(
 		"wf_too_many_pending_child_workflows",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
 	)

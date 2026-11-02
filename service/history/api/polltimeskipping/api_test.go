@@ -54,8 +54,10 @@ type mockLease struct {
 	ms historyi.MutableState
 }
 
-func (m mockLease) GetMutableState() historyi.MutableState            { return m.ms }
-func (m mockLease) GetReleaseFn() historyi.ReleaseWorkflowContextFunc { return func(error) {} }
+func (m mockLease) GetMutableState() historyi.MutableState { return m.ms }
+func (m mockLease) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
+	return func(err error) error { return err }
+}
 
 func fastForwardTSI(fastForwardID string, hasReached bool) *persistencespb.TimeSkippingInfo {
 	return &persistencespb.TimeSkippingInfo{

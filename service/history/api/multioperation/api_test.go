@@ -93,7 +93,7 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 	// Track that release was called with nil error (clean release, not error path).
 	var releaseCalledWithNilErr atomic.Bool
 
-	releaseFn := historyi.ReleaseWorkflowContextFunc(func(err error) {
+	releaseFn := historyi.ReleaseWorkflowContextFunc(func(err error) error {
 		if err == nil {
 			releaseCalledWithNilErr.Store(true)
 		}
@@ -101,6 +101,7 @@ func (s *updateWithStartSuite) TestInvoke_CompletedUpdate_StatusCapturedBeforeRe
 		// Wait until the writer goroutine has started writing before returning,
 		// so the subsequent Status read in Invoke overlaps with the write.
 		<-writerStarted
+		return err
 	})
 
 	lease := api.NewWorkflowLease(s.currentContext, releaseFn, s.currentMutableState)
