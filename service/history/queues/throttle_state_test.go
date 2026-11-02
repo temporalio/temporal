@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 const testThrottleWindow = time.Second
@@ -356,7 +357,7 @@ func TestThrottleState_FailsOpenPastKeyCap(t *testing.T) {
 	tracked := make([]ThrottleKey, 0, 2)
 	for i := range 2 {
 		key := testKey()
-		key.NamespaceID = string(rune('a' + i))
+		key.NamespaceName = namespace.Name(string(rune('a' + i)))
 		tracked = append(tracked, key)
 		reportThrottle(state, key, true)
 		require.True(t, admitOK(state, key))
@@ -365,7 +366,7 @@ func TestThrottleState_FailsOpenPastKeyCap(t *testing.T) {
 	require.Equal(t, 2, throttleLen(state))
 
 	overflow := testKey()
-	overflow.NamespaceID = "overflow"
+	overflow.NamespaceName = "overflow"
 	reportThrottle(state, overflow, true)
 	for range 100 {
 		require.True(t, admitOK(state, overflow), "past the cap the real limiter stays the enforcement point")
@@ -382,14 +383,14 @@ func TestThrottleState_SweepsIdleKeys(t *testing.T) {
 	state, timeSource := newTestThrottleState(overrides)
 
 	idle := testKey()
-	idle.NamespaceID = "idle"
+	idle.NamespaceName = "idle"
 	reportThrottle(state, idle, true)
 	require.Equal(t, 1, throttleLen(state))
 
 	timeSource.Update(timeSource.Now().Add(2 * time.Minute))
 
 	active := testKey()
-	active.NamespaceID = "active"
+	active.NamespaceName = "active"
 	reportThrottle(state, active, true)
 
 	require.Equal(t, 1, throttleLen(state))
@@ -436,7 +437,7 @@ func TestThrottleState_UnadmittedRejectionsDoNotAllocateKeys(t *testing.T) {
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 
 	for i := range 8 {
-		reportThrottle(state, apsKey(fmt.Sprintf("ns-%d", i)), false)
+		reportThrottle(state, apsKey(namespace.Name(fmt.Sprintf("ns-%d", i))), false)
 	}
 	require.Zero(t, throttleLen(state), "unmetered rejections must not cost key slots")
 }

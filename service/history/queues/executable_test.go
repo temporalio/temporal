@@ -1835,7 +1835,7 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Error(executable.HandleErr(throttleErr))
 	key := queues.ThrottleKeyOf(executable)
 	s.NotEqual(queues.ThrottleKey{}, key)
-	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()), key)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace), key)
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
 	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
@@ -1882,7 +1882,7 @@ func (s *executableSuite) TestNack_ParksInTheClassItFailedUnder() {
 	executable.Nack(throttleErr)
 
 	s.Equal(
-		queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()),
+		queues.NewThrottleKey(throttleErr.Cause, tests.Namespace),
 		parked,
 		"the task must be parked on the budget that refused it, not ungoverned",
 	)

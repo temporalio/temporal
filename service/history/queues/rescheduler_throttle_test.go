@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -82,8 +83,8 @@ func addThrottled(r *reschedulerImpl, e *throttledExecutable, at time.Time) {
 	r.Add(e, at, key)
 }
 
-func apsKey(namespaceID string) ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID)
+func apsKey(namespaceName namespace.Name) ThrottleKey {
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceName)
 }
 
 func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {
@@ -441,7 +442,7 @@ func TestReschedule_EveryClassIsVisitedInOnePass(t *testing.T) {
 	now := timeSource.Now()
 
 	for _, ns := range []string{"ns-1", "ns-2", "ns-3"} {
-		e := newThrottledExecutable(ctrl, apsKey(ns), true)
+		e := newThrottledExecutable(ctrl, apsKey(namespace.Name(ns)), true)
 		e.EXPECT().GetNamespaceID().Return(ns).AnyTimes()
 		addThrottled(r, e, now)
 	}

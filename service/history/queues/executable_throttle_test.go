@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -19,11 +21,14 @@ func ThrottleKeyOf(e Executable) ThrottleKey {
 
 func newThrottleTestExecutable(ctrl *gomock.Controller, state *ThrottleState) *executableImpl {
 	task := tasks.NewMockTask(ctrl)
-	task.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	task.EXPECT().GetNamespaceID().Return("ns-1-id").AnyTimes()
+	registry := namespace.NewMockRegistry(ctrl)
+	registry.EXPECT().GetNamespaceName(namespace.ID("ns-1-id")).Return(namespace.Name("ns-1"), nil).AnyTimes()
 	return &executableImpl{
 		Task:                task,
 		priority:            ctasks.PriorityHigh,
 		throttleState:       state,
+		namespaceRegistry:   registry,
 		chasmMetricsHandler: metrics.NoopMetricsHandler,
 	}
 }
@@ -121,4 +126,23 @@ func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 	)
 	require.Equal(t, ThrottleKey{}, e.throttleKey,
 		"a system scoped limit is not this namespace's budget")
+}
+
+// A namespace the registry cannot name has no budget to pace against.
+func TestExecutable_UnresolvedNamespaceStaysUngoverned(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	state, _ := newTestThrottleState(defaultThrottleOverrides())
+	e := newThrottleTestExecutable(ctrl, state)
+	registry := namespace.NewMockRegistry(ctrl)
+	registry.EXPECT().GetNamespaceName(gomock.Any()).
+		Return(namespace.EmptyName, serviceerror.NewNamespaceNotFound("ns-1-id")).AnyTimes()
+	e.namespaceRegistry = registry
+
+	e.reportThrottle(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	)
+
+	require.Equal(t, ThrottleKey{}, e.throttleKey)
+	require.Zero(t, throttleLen(state))
 }

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -21,9 +22,10 @@ const (
 type (
 	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
 	// rescheduler offers the one bucket to classes in priority order, which needs it shared.
+	// It carries the namespace name because that is what the limiters key their budgets on.
 	ThrottleKey struct {
-		Cause       enumspb.ResourceExhaustedCause
-		NamespaceID string
+		Cause         enumspb.ResourceExhaustedCause
+		NamespaceName namespace.Name
 	}
 
 	ThrottleState struct {
@@ -74,14 +76,14 @@ func IsControllerInput(
 		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
 }
 
-func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceID string) ThrottleKey {
-	return ThrottleKey{Cause: cause, NamespaceID: namespaceID}
+func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespace.Name) ThrottleKey {
+	return ThrottleKey{Cause: cause, NamespaceName: namespaceName}
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
 	return []metrics.Tag{
 		metrics.ResourceExhaustedCauseTag(k.Cause),
-		metrics.NamespaceIDTag(k.NamespaceID),
+		metrics.NamespaceTag(k.NamespaceName.String()),
 	}
 }
 

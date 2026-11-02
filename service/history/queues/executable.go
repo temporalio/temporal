@@ -918,7 +918,11 @@ func (e *executableImpl) reportThrottle(
 		// Not a budget this controller paces, so the release stays counted as clean.
 		return
 	}
-	e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
+	nsName, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	if err != nil {
+		return
+	}
+	e.throttleKey = NewThrottleKey(cause, nsName)
 	if e.throttleState == nil {
 		return
 	}
