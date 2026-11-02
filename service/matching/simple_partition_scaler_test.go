@@ -636,9 +636,9 @@ func TestOnTasksHoldsDownAfterIncrease(t *testing.T) {
 	require.Equal(t, 1, h.run(5, 20), "decreases once the Down window is full")
 }
 
-// TestOnTasksUpsGateDecision verifies that partial Up windows block any decision, while a
+// TestOnTasksPartialUpsBlockDecision verifies that partial Up windows block any decision, while a
 // partial Down window only prevents decreases.
-func TestOnTasksUpsGateDecision(t *testing.T) {
+func TestOnTasksPartialUpsBlockDecision(t *testing.T) {
 	t.Parallel()
 	h := newRateScalerHarness(testUps10s, testDowns60s, 5)
 
