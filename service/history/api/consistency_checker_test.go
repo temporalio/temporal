@@ -83,7 +83,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	wfContext := historyi.NewMockWorkflowContext(s.controller)
 	mutableState := historyi.NewMockMutableState(s.controller)
 	released := false
-	releaseFn := func(err error) { released = true }
+	releaseFn := func(err error) error { released = true; return err }
 
 	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		ctx,
@@ -111,7 +111,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	ctx := context.Background()
 
 	released := false
-	releaseFn := func(err error) { released = true }
+	releaseFn := func(err error) error { released = true; return err }
 
 	s.workflowCache.EXPECT().GetOrCreateCurrentExecution(
 		ctx,
@@ -141,7 +141,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	ctx := context.Background()
 
 	released := false
-	releaseFn := func(err error) { released = true }
+	releaseFn := func(err error) error { released = true; return err }
 
 	s.workflowCache.EXPECT().GetOrCreateCurrentExecution(
 		ctx,

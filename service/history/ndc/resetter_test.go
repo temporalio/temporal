@@ -139,8 +139,9 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
-	mockBaseWorkflowReleaseFn := func(err error) {
+	mockBaseWorkflowReleaseFn := func(err error) error {
 		mockBaseWorkflowReleaseFnCalled = true
+		return err
 	}
 	mockBaseWorkflow := NewMockWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
@@ -230,8 +231,9 @@ func (s *resetterSuite) TestResetWorkflow_NoError_BaseBranchToken_Nil() {
 	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
-	mockBaseWorkflowReleaseFn := func(err error) {
+	mockBaseWorkflowReleaseFn := func(err error) error {
 		mockBaseWorkflowReleaseFnCalled = true
+		return err
 	}
 	mockBaseWorkflow := NewMockWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
@@ -312,7 +314,8 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 
 	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
-	mockBaseWorkflowReleaseFn := func(err error) {
+	mockBaseWorkflowReleaseFn := func(err error) error {
+		return err
 	}
 	mockBaseWorkflow := NewMockWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()

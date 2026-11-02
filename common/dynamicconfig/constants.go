@@ -1978,6 +1978,14 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Second*20,
 		`HistoryLongPollExpirationInterval is the long poll expiration interval in the history service`,
 	)
+	WorkflowPersistencePipeline = NewGlobalBoolSetting(
+		"history.workflowPersistencePipeline", false,
+		`Enable persistence pipelining for audited single-run signal operations. Requires history service restart.`,
+	)
+	WorkflowPersistenceCoalescing = NewGlobalBoolSetting(
+		"history.workflowPersistenceCoalescing", false,
+		`Coalesce ready workflow persistence submissions at dispatch. Requires pipelining and history service restart.`,
+	)
 	HistoryCacheSizeBasedLimit = NewGlobalBoolSetting(
 		"history.cacheSizeBasedLimit",
 		false,

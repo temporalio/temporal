@@ -108,7 +108,7 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 
 	mockWorkflowContext := historyi.NewMockWorkflowContext(ctrl)
-	workflowLease := api.NewWorkflowLease(mockWorkflowContext, func(_ error) {}, mutableState)
+	workflowLease := api.NewWorkflowLease(mockWorkflowContext, func(err error) error { return err }, mutableState)
 
 	consistencyChecker := api.NewMockWorkflowConsistencyChecker(ctrl)
 	consistencyChecker.EXPECT().GetWorkflowLease(

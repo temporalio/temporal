@@ -170,6 +170,44 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	release(nil)
 }
 
+func (s *workflowCacheSuite) TestReleasePreservesOriginalPanic() {
+	for _, enabled := range []bool{false, true} {
+		s.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func() {
+			s.mockShard.GetConfig().WorkflowPersistencePipeline = enabled
+			cache := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+			execution := &commonpb.WorkflowExecution{WorkflowId: "panic", RunId: uuid.NewString()}
+			_, release, err := cache.GetOrCreateWorkflowExecution(s.T().Context(), s.mockShard, tests.NamespaceID, execution, locks.PriorityHigh)
+			s.NoError(err)
+			s.PanicsWithValue("original panic", func() {
+				defer release(nil) //nolint:errcheck // Recovery requires the release function itself to be deferred.
+				panic("original panic")
+			})
+			_, release, err = cache.GetOrCreateWorkflowExecution(s.T().Context(), s.mockShard, tests.NamespaceID, execution, locks.PriorityHigh)
+			s.NoError(err)
+			s.NoError(release(nil))
+		})
+	}
+}
+
+func (s *workflowCacheSuite) TestReleaseReturnsFirstDurabilityResult() {
+	for _, durabilityErr := range []error{nil, serviceerror.NewUnavailable("persistence failed")} {
+		s.Run(map[bool]string{false: "success", true: "failed"}[durabilityErr != nil], func() {
+			cache := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}).(*cacheImpl)
+			wfContext := historyi.NewMockWorkflowContext(s.controller)
+			wfContext.EXPECT().IsDirty().Return(false)
+			wfContext.EXPECT().Unlock().Return(durabilityErr)
+			release := cache.makeReleaseFunc(Key{}, s.mockShard, wfContext, false, metrics.NoopMetricsHandler, time.Now())
+			s.ErrorIs(release(nil), durabilityErr)
+			businessErr := serviceerror.NewInvalidArgument("business error")
+			want := durabilityErr
+			if want == nil {
+				want = businessErr
+			}
+			s.ErrorIs(release(businessErr), want)
+		})
+	}
+}
+
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")

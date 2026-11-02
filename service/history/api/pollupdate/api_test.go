@@ -102,7 +102,9 @@ func TestPollOutcome(t *testing.T) {
 	// test holds it while mutating an Update, as the real Update API does.
 	var wfLock sync.Mutex
 	apiCtx := mockWorkflowLeaseCtx{
-		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) { wfLock.Unlock() } },
+		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc {
+			return func(err error) error { wfLock.Unlock(); return err }
+		},
 		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},

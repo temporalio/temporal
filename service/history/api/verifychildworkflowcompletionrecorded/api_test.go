@@ -50,7 +50,7 @@ func TestVerifyChildExecution_InitiatedEventNotOnCurrentBranch(t *testing.T) {
 
 	workflowLease := ndc.NewMockWorkflow(controller)
 	workflowLease.EXPECT().GetMutableState().Return(mutableState)
-	workflowLease.EXPECT().GetReleaseFn().Return(func(error) {})
+	workflowLease.EXPECT().GetReleaseFn().Return(func(err error) error { return err })
 
 	workflowConsistencyChecker := api.NewMockWorkflowConsistencyChecker(controller)
 	workflowConsistencyChecker.EXPECT().GetWorkflowLease(

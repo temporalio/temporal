@@ -106,3 +106,7 @@ func (f *FutureImpl[T]) SetIfNotReady(
 func (f *FutureImpl[T]) Ready() bool {
 	return atomic.LoadInt32(&f.status) == ready
 }
+
+func (f *FutureImpl[T]) Done() <-chan struct{} {
+	return f.readyCh
+}

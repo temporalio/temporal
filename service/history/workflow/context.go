@@ -51,6 +51,9 @@ type (
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
 		updateRegistry update.Registry
+		pipeline       *persistencePipeline
+		operation      *operation
+		pipelineShard  historyi.ShardContext
 
 		// taskCompletionBuffer holds the intermediate pages of an in-progress
 		// pagination of RespondWorkflowTaskCompleted requests; nil when no
@@ -148,6 +151,10 @@ func NewContext(
 		paginationLimiter: paginationLimiter,
 		testHooks:         testHooks,
 	}
+	if config.WorkflowPersistencePipeline {
+		contextImpl.pipeline = &persistencePipeline{changed: make(chan struct{}), coalescing: config.WorkflowPersistenceCoalescing}
+		contextImpl.pipeline.cacheSize.Store(1)
+	}
 	softassert.That(
 		contextImpl.throttledLogger,
 		contextImpl.archetypeID != chasm.UnspecifiedArchetypeID,
@@ -161,11 +168,23 @@ func (c *ContextImpl) Lock(
 	ctx context.Context,
 	lockPriority locks.Priority,
 ) error {
-	return c.lock.Acquire(ctx, lockPriority, 1)
+	if c.pipeline == nil {
+		return c.lock.Acquire(ctx, lockPriority, 1)
+	}
+	return c.lockCommitted(ctx, lockPriority)
 }
 
-func (c *ContextImpl) Unlock() {
+func (c *ContextImpl) Unlock() error {
+	op := c.operation
+	c.operation = nil
+	if c.pipeline != nil && c.config.HistoryCacheLimitSizeBased {
+		c.pipeline.cacheSize.Store(int64(c.cacheSizeLocked()))
+	}
 	c.lock.Release(1)
+	if op == nil {
+		return nil
+	}
+	return c.completeOperation(op)
 }
 
 func (c *ContextImpl) IsDirty() bool {
@@ -176,6 +195,24 @@ func (c *ContextImpl) IsDirty() bool {
 }
 
 func (c *ContextImpl) Clear() {
+	if c.pipeline != nil {
+		p := c.pipeline
+		p.mu.Lock()
+		p.invalidate(0, pipelineDependencyError())
+		active := len(p.inFlight) != 0
+		release := p.releaseIdlePin()
+		p.mu.Unlock()
+		if release != nil {
+			release()
+		}
+		if active {
+			return
+		}
+	}
+	c.clearMutableState()
+}
+
+func (c *ContextImpl) clearMutableState() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
@@ -426,11 +463,30 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext histo
 }
 
 func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext historyi.ShardContext) (historyi.MutableState, error) {
+	loaded := false
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(c.workflowKey.NamespaceID),
 	)
 	if err != nil {
 		return nil, err
+	}
+	if c.pipeline != nil {
+		if c.pipelineShard == nil {
+			c.pipelineShard = shardContext
+		}
+		unsupported := c.MutableState == nil || namespaceEntry.IsGlobalNamespace()
+		if c.MutableState != nil {
+			_, revision := c.MutableState.GetUpdateCondition()
+			unsupported = unsupported || revision == 0 || c.MutableState.GetCurrentVersion() != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID)
+			for _, task := range []*tasks.WorkflowTaskTimeoutTask{c.MutableState.GetWorkflowTaskScheduleToStartTimeoutTask(), c.MutableState.GetWorkflowTaskStartToCloseTimeoutTask()} {
+				unsupported = unsupported || (task != nil && task.InMemory)
+			}
+		}
+		if unsupported {
+			if err := c.makeOperationCommitted(ctx, false); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	if c.MutableState == nil {
@@ -463,6 +519,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		// returned by NewMutableStateFromDB().
 		// Thus causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
 		c.MutableState = mutableState
+		loaded = true
 	}
 
 	mutableStateArchetypeID := c.MutableState.ChasmTree().ArchetypeID()
@@ -496,7 +553,22 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		return nil, err
 	}
 	if !flushBeforeReady {
+		if c.pipeline != nil && !loaded {
+			c.pipeline.mu.Lock()
+			err = c.pipeline.err
+			c.pipeline.mu.Unlock()
+			if err != nil {
+				return nil, err
+			}
+		}
+		c.refreshPersistenceBaseline(loaded)
 		return c.MutableState, nil
+	}
+	if c.operation != nil && c.operation.pipelined {
+		if err := c.makeOperationCommitted(ctx, true); err != nil {
+			return nil, err
+		}
+		return c.LoadMutableState(ctx, shardContext)
 	}
 
 	if err = c.UpdateWorkflowExecutionAsActive(
@@ -514,6 +586,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		return nil, serviceerror.NewInternal("Context counter flushBeforeReady status after loading mutable state from DB")
 	}
 
+	c.refreshPersistenceBaseline(loaded)
 	return c.MutableState, nil
 }
 
@@ -1039,6 +1112,30 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	newMutableState historyi.MutableState,
 	payload *ExecutionTransactionPayload,
 ) error {
+	if c.operation != nil && c.operation.pipelined {
+		request := &persistence.UpdateWorkflowExecutionRequest{
+			ShardID: shardContext.GetShardID(), Mode: updateMode, ArchetypeID: c.archetypeID,
+			UpdateWorkflowMutation: *payload.ExecutionMutation, UpdateWorkflowEvents: payload.ExecutionEvents,
+			NewWorkflowSnapshot: payload.NewExecutionSnapshot, NewWorkflowEvents: payload.NewExecutionEvents,
+			CheckRunAlreadyExists: payload.NewExecutionCheckRunAlreadyExists,
+		}
+		s, err := c.pipeline.submit(ctx, c.MutableState.GetCurrentVersion(), request)
+		if errors.Is(err, persistence.ErrIncompatibleWorkflowMutations) {
+			if err := c.commitPreparedMutation(ctx, payload.ExecutionMutation); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		} else {
+			c.operation.submissions = append(c.operation.submissions, s)
+			next, _ := c.MutableState.GetUpdateCondition()
+			c.pipeline.mu.Lock()
+			c.MutableState.SetUpdateCondition(next, c.pipeline.committedDBRecordVersion)
+			c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize = c.pipeline.committedHistorySize + c.pipeline.outstandingHistorySize
+			c.pipeline.mu.Unlock()
+			return nil
+		}
+	}
 	if err := c.mergeUpdateWithNewReplicationTasks(
 		payload.ExecutionMutation,
 		payload.NewExecutionSnapshot,
@@ -1087,6 +1184,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	); err != nil {
 		return err
 	}
+	c.refreshPersistenceBaseline(false)
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
@@ -1619,6 +1717,14 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	if !c.MutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
+	if c.operation != nil && c.operation.pipelined {
+		if err := c.makeOperationCommitted(ctx, true); err != nil {
+			return err
+		}
+		if _, err := c.LoadMutableState(ctx, shardContext); err != nil {
+			return err
+		}
+	}
 
 	// Abort updates before clearing context.
 	// MS is not persisted yet, but this code is executed only when something
@@ -1661,6 +1767,13 @@ func (c *ContextImpl) forceTerminateWorkflow(
 // CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
 func (c *ContextImpl) CacheSize() int {
+	if c.pipeline != nil && c.config.HistoryCacheLimitSizeBased {
+		return int(c.pipeline.cacheSize.Load())
+	}
+	return c.cacheSizeLocked()
+}
+
+func (c *ContextImpl) cacheSizeLocked() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
 	}

@@ -145,7 +145,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(err error) error { return err }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).
@@ -171,7 +171,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 				// Workflow context loads but mutable state fails
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
-					Return(s.mockWorkflowContext, func(error) {}, nil)
+					Return(s.mockWorkflowContext, func(err error) error { return err }, nil)
 
 				s.mockWorkflowContext.EXPECT().
 					LoadMutableState(gomock.Any(), gomock.Any()).

@@ -515,7 +515,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		},
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
-	).Return(wfCtx, func(err error) {}, err)
+	).Return(wfCtx, func(err error) error { return err }, err)
 	return shardCall
 }
 
