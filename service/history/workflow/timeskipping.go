@@ -710,7 +710,9 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 		return
 	}
 	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
-	ms.addTimeSkippingFastForwardTask()
+	if !ms.IsWorkflow() {
+		ms.addTimeSkippingFastForwardTask()
+	}
 }
 
 // =============================================================================

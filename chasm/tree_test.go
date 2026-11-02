@@ -6203,6 +6203,26 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	// TestComponent (the root of testComponentTree) does not implement TimeSkippingRuntimeGate,
 	// which is exactly what the "gate not implemented" cases below rely on.
+	s.Run("WorkflowWithoutTaskRegenMarkerIsNoOp", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		featureFlagChecked := false
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool {
+			featureFlagChecked = true
+			return true
+		}
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		})
+		root, err := s.newTestTree(nil)
+		s.Require().NoError(err)
+		s.Require().Equal(WorkflowArchetypeID, root.ArchetypeID())
+		root.subtreeIsDirty = true
+
+		err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.False(featureFlagChecked)
+		s.Zero(s.nodeBackend.NumTasksAdded())
+	})
 
 	s.Run("NilTimeSkippingInfoIsSafeNoOp", func() {
 		s.nodeBackend = &MockNodeBackend{}

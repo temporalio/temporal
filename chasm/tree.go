@@ -4216,10 +4216,11 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	}
 
 	if n.ArchetypeID() == WorkflowArchetypeID {
-		// marked ture when this workflow also has a chasm component (e.g. chasm nexus operation)
+		// Mutable state handles Workflow time skipping and requests CHASM timer regeneration when needed.
 		if n.needsTimeSkippingTaskRegenForWorkflows {
 			return n.regenerateTimerTasksForTimeSkipping()
 		}
+		return nil
 	}
 
 	// conf check
