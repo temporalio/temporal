@@ -458,14 +458,7 @@ func (e taskExecutor) saveResult(
 		if err != nil {
 			return err
 		}
-		emitMetrics = e.deferredOperationMetric(
-			finalOp,
-			callErr,
-			failedReason,
-			node.NamespaceName(),
-			node.WorkflowTypeName(),
-			node.WorkflowTime(),
-		)
+		emitMetrics = e.deferredOperationMetric(finalOp, callErr, failedReason, node.NamespaceName(), node.WorkflowTypeName(), node.WorkflowTime())
 		if finalOp.State() == enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT {
 			return e.deleteTimedOutOperation(node)
 		}
