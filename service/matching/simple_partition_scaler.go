@@ -194,7 +194,7 @@ func (*simplePartitionScaler) Stop() {
 
 // windowRate is the rate measured in one Ups or Downs window and the add target it implies.
 type windowRate struct {
-	kind   string // "ups" or "downs"
+	kind   string // "ups" or "downs"; empty means unset
 	index  int
 	window time.Duration
 	rate   float32
@@ -214,7 +214,7 @@ func (s *simplePartitionScaler) updateAddTarget(
 ) (int, string, bool) {
 	// decider is the window that moved the target. if no window moved it, closestDown and
 	// closestUp are the windows nearest to moving it, i.e. what held it in place.
-	var decider, closestDown, closestUp *windowRate
+	var decider, closestDown, closestUp windowRate
 
 	for i, down := range cfg.Downs {
 		rate, full := s.getTracker(down.Window).rateAndFull()
@@ -222,9 +222,9 @@ func (s *simplePartitionScaler) updateAddTarget(
 			return 0, "", false
 		}
 		// decrease target so that each partition is ~= target rate
-		wr := &windowRate{kind: "downs", index: i, window: down.Window, rate: rate,
+		wr := windowRate{kind: "downs", index: i, window: down.Window, rate: rate,
 			want: max(1, int(rate/float32(down.TargetRate)+0.5))}
-		if closestDown == nil || wr.want < closestDown.want {
+		if closestDown.kind == "" || wr.want < closestDown.want {
 			closestDown = wr
 		}
 		if wr.want < target {
@@ -238,9 +238,9 @@ func (s *simplePartitionScaler) updateAddTarget(
 			return 0, "", false
 		}
 		// increase target so that each partition is ~= target rate
-		wr := &windowRate{kind: "ups", index: i, window: up.Window, rate: rate,
+		wr := windowRate{kind: "ups", index: i, window: up.Window, rate: rate,
 			want: max(1, int(rate/float32(up.TargetRate)+0.5))}
-		if closestUp == nil || wr.want > closestUp.want {
+		if closestUp.kind == "" || wr.want > closestUp.want {
 			closestUp = wr
 		}
 		if wr.want > target {
@@ -251,19 +251,19 @@ func (s *simplePartitionScaler) updateAddTarget(
 	// always keep min of 1 even if we have no Ups/Downs
 	if target < 1 {
 		target = 1
-		if decider == nil && closestDown == nil && closestUp == nil {
+		if decider.kind == "" && closestDown.kind == "" && closestUp.kind == "" {
 			return target, "no rate windows, floor of 1", true
 		}
 	}
 
 	switch {
-	case decider != nil:
+	case decider.kind != "":
 		return target, "set by " + decider.String(), true
-	case closestDown != nil && closestUp != nil:
+	case closestDown.kind != "" && closestUp.kind != "":
 		return target, "held between " + closestDown.String() + " and " + closestUp.String(), true
-	case closestDown != nil:
+	case closestDown.kind != "":
 		return target, "held by " + closestDown.String(), true
-	case closestUp != nil:
+	case closestUp.kind != "":
 		return target, "held by " + closestUp.String(), true
 	default:
 		return target, "no rate windows", true
