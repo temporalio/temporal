@@ -151,7 +151,7 @@ func NewHostLevelCache(
 			//
 			// A refCount of zero under lru.mut means no cache caller holds or waits on this workflow lock,
 			// so TryLock must succeed. Never block here: lru.mut is held, and the normal lock order is
-			// workflow lock then lru.mut. PriorityLow makes TryLock fail if any waiter is queued.
+			// workflow lock then lru.mut.
 			if !item.wfContext.TryLock(locks.PriorityLow) {
 				// The invariant is broken. Skip Clear rather than race with the lock holder; the
 				// context's reserved limiter bytes leak until restart.
