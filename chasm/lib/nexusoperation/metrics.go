@@ -33,7 +33,7 @@ const FailedReasonCallerError metrics.ReasonString = "caller_error"
 // FailedReasonOperationError means the handler reported the operation as failed, at start or completion.
 const FailedReasonOperationError metrics.ReasonString = "operation_error"
 
-// AttemptFailedReason classifies a terminal start-attempt failure for NexusOperationFailedCount.
+// AttemptFailedReason classifies a terminal start-attempt failure for [NexusOperationFailedCount].
 // Pass the unwrapped failure, not the NexusOperationFailure recorded in history.
 //
 // Only the top-level failure is inspected. Caller errors use server failures in both backends;
