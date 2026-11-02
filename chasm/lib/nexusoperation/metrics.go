@@ -23,7 +23,7 @@ var NexusOperationFailedCount = metrics.NewCounterDef(
 )
 
 // FailedReasonHandlerError means the start request failed with a non-retryable Nexus handler error.
-// Handler error types are recorded by nexus_outbound_requests; omitting them here bounds cardinality.
+// Keep one reason for all handler errors; nexus_outbound_requests records their types.
 const FailedReasonHandlerError metrics.ReasonString = "handler_error"
 
 // FailedReasonCallerError means the caller ended the operation after a non-retryable start failure,
@@ -40,13 +40,14 @@ const FailedReasonOperationError metrics.ReasonString = "operation_error"
 // HSM also uses "CallError" application failures. Other failures, including nil, use
 // FailedReasonOperationError.
 func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
-	if failure.GetNexusHandlerFailureInfo() != nil {
+	switch {
+	case failure.GetNexusHandlerFailureInfo() != nil:
 		return FailedReasonHandlerError
-	}
-	if failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError" {
+	case failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError":
 		return FailedReasonCallerError
+	default:
+		return FailedReasonOperationError
 	}
-	return FailedReasonOperationError
 }
 
 var NexusOperationCancelCount = metrics.NewCounterDef(
