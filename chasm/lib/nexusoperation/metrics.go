@@ -43,7 +43,8 @@ func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 	switch {
 	case failure.GetNexusHandlerFailureInfo() != nil:
 		return FailedReasonHandlerError
-	case failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError":
+	case failure.GetServerFailureInfo() != nil,
+		failure.GetApplicationFailureInfo().GetType() == "CallError":
 		return FailedReasonCallerError
 	default:
 		return FailedReasonOperationError
