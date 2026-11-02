@@ -3456,7 +3456,7 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 	})
 	require.NoError(t, err)
 
-	execReq := env.pollWorkerCommand(t, ctx, controlQueueName, tv.WorkerIdentity())
+	execReq := env.pollWorkerCommand(ctx, t, controlQueueName, tv.WorkerIdentity())
 	require.Len(t, execReq.Commands, 1, "expected exactly 1 command")
 	cancelCmd := execReq.Commands[0].GetCancelActivity()
 	require.NotNil(t, cancelCmd, "expected CancelActivity command")
@@ -15609,8 +15609,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 // pollWorkerCommand polls the worker control queue for a worker command and returns the parsed
 // ExecuteCommandsRequest. Fails the test if no command arrives within the timeout.
 func (env *standaloneActivityEnv) pollWorkerCommand(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	controlQueueName string,
 	workerIdentity string,
 ) *workerservicepb.ExecuteCommandsRequest {
