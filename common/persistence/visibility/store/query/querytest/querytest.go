@@ -1374,7 +1374,12 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "function expression on right hand side",
 		in:   "WorkflowId = length('foo')",
-		err:  "operation is not supported: nested func",
+		err:  "operation is not supported: function calls are only supported with Datetime search attributes",
+	},
+	{
+		name: "non-NOW function expression on datetime",
+		in:   "StartTime = length('foo')",
+		err:  `operation is not supported: function "length('foo')"`,
 	},
 	{
 		name: "limit clause",
@@ -1389,7 +1394,17 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "arithmetic expression",
 		in:   "HistoryLength = 1 + 1",
-		err:  "invalid expression: unexpected value type *sqlparser.BinaryExpr",
+		err:  "operation is not supported: binary operators are only supported with Datetime search attributes",
+	},
+	{
+		name: "non-NOW arithmetic expression on datetime",
+		in:   "StartTime > '2026-03-31T17:00:00Z' - '5h'",
+		err:  `operation is not supported: expression "'2026-03-31T17:00:00Z' - '5h'", only NOW() and NOW() +/- 'duration' are supported`,
+	},
+	{
+		name: "chained NOW() offsets on datetime",
+		in:   "StartTime > NOW() - '1h' + '30m'",
+		err:  `operation is not supported: expression "NOW() - '1h' + '30m'", only NOW() and NOW() +/- 'duration' are supported`,
 	},
 	{
 		name: "unsupported unary operator",
