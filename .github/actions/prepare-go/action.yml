@@ -39,6 +39,13 @@ runs:
         go-version-file: "go.mod"
         cache: false # do our own caching
 
+    - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      with:
+        install: false
+        cache_save_post: true
+        minimum_release_age: 14d
+        auto_update: true
+
     - name: Resolve Go cache paths
       id: go-env
       shell: bash
