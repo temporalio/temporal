@@ -240,8 +240,7 @@ var TransitionFailed = chasm.NewTransition(
 		if fromAttempt {
 			reason = OperationFailedReason(event.Failure)
 		} else {
-			// A failed completion means the request was accepted, but the operation failed.
-			// Use FailedReasonOperationError; FailedReasonHandlerError is for rejected start requests.
+			// Use FailedReasonOperationError: the request was accepted, but the operation failed.
 			reason = FailedReasonOperationError
 		}
 		o.emitOnFailedMetrics(ctx, closeTime, reason)
