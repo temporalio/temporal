@@ -22,16 +22,16 @@ var NexusOperationFailedCount = metrics.NewCounterDef(
 	metrics.WithDescription("Nexus Operations failures."),
 )
 
-// FailedReasonOperationError means the handler reported the operation as failed, at start or completion.
-const FailedReasonOperationError metrics.ReasonString = "operation_error"
+// FailedReasonHandlerError means the start request failed with a non-retryable Nexus handler error.
+// Handler error types are recorded by nexus_outbound_requests; omitting them here bounds cardinality.
+const FailedReasonHandlerError metrics.ReasonString = "handler_error"
 
 // FailedReasonCallerError means the caller ended the operation after a non-retryable start failure,
 // such as an invalid response. It identifies where the failure was resolved, not who caused it.
 const FailedReasonCallerError metrics.ReasonString = "caller_error"
 
-// FailedReasonHandlerError means the start request failed with a non-retryable Nexus handler error.
-// Handler error types are recorded by nexus_outbound_requests; omitting them here bounds cardinality.
-const FailedReasonHandlerError metrics.ReasonString = "handler_error"
+// FailedReasonOperationError means the handler reported the operation as failed, at start or completion.
+const FailedReasonOperationError metrics.ReasonString = "operation_error"
 
 // AttemptFailedReason classifies a terminal start-attempt failure for NexusOperationFailedCount.
 // Pass the unwrapped failure, not the NexusOperationFailure recorded in history.
