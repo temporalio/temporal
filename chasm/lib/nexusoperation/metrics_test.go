@@ -111,12 +111,12 @@ func TestOperationFailedReason(t *testing.T) {
 		want    metrics.ReasonString
 	}{
 		{
-			name:    "rejected start attempt",
+			name:    "handler failure uses handler_error",
 			failure: handlerFailure,
 			want:    FailedReasonHandlerError,
 		},
 		{
-			name: "handler error type outside the spec",
+			name: "unknown handler error type uses handler_error",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 					NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{Type: "WHATEVER_THE_HANDLER_SAID"},
@@ -125,12 +125,12 @@ func TestOperationFailedReason(t *testing.T) {
 			want: FailedReasonHandlerError,
 		},
 		{
-			name:    "synchronous operation failure",
+			name:    "synchronous operation failure uses operation_error",
 			failure: operationFailure,
 			want:    FailedReasonOperationError,
 		},
 		{
-			name: "handler error as the cause of an operation failure",
+			name: "nested handler failure does not change operation_error",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "OperationError"},
@@ -140,7 +140,7 @@ func TestOperationFailedReason(t *testing.T) {
 			want: FailedReasonOperationError,
 		},
 		{
-			name: "non-retryable server failure",
+			name: "server failure uses caller_error",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ServerFailureInfo{
 					ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: true},
@@ -149,7 +149,7 @@ func TestOperationFailedReason(t *testing.T) {
 			want: FailedReasonCallerError,
 		},
 		{
-			name: "HSM call error",
+			name: "HSM CallError application failure uses caller_error",
 			failure: &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "CallError", NonRetryable: true},
@@ -158,7 +158,7 @@ func TestOperationFailedReason(t *testing.T) {
 			want: FailedReasonCallerError,
 		},
 		{
-			name:    "nil failure",
+			name:    "nil failure defaults to operation_error",
 			failure: nil,
 			want:    FailedReasonOperationError,
 		},
