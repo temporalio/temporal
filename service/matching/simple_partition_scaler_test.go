@@ -743,17 +743,29 @@ func TestOnTasksSameWindowUpAndDown(t *testing.T) {
 	}
 }
 
-// TestOnTasksNoPriorTargetDoesNotResetDowns verifies that without a prior add target (as in
-// shadow mode, which always passes CurrentTarget 0 and no private state), the Down trackers
-// are not restarted on every call.
-func TestOnTasksNoPriorTargetDoesNotResetDowns(t *testing.T) {
+// TestOnTasksFirstDecisionDoesNotHoldDown verifies that a decision with no prior target (every
+// call in shadow mode, and the first after enabling) does not count as an increase, so it does
+// not restart the Down windows and Down history from before it still applies. Otherwise shadow
+// mode would restart the Down windows on every call.
+func TestOnTasksFirstDecisionDoesNotHoldDown(t *testing.T) {
 	t.Parallel()
 	h := newScalerHarness(testUps10s, testDowns60s, 0)
 
-	for range 61 {
-		h.ts.Advance(time.Second)
-		h.scaler.OnTasks(PartitionScalerInput{NumTasks: 80})
+	// shadow mode never saves a decision, so every call has no prior target
+	shadow := func(n, rate int) {
+		for range n {
+			h.ts.Advance(time.Second)
+			h.scaler.OnTasks(PartitionScalerInput{NumTasks: rate})
+		}
 	}
-	_, full := h.scaler.downTrackers[testDowns60s[0].Window].rateAndFull()
-	require.True(t, full, "Down tracker was reset")
+	shadow(60, 20)
+	shadow(10, 500)
+
+	// enable: from here the harness saves decisions like scaleManager does
+	enabled := h.run(1, 500)
+	require.Greater(t, enabled, 1, "the burst sets the first enabled target")
+
+	// load drops back: the Down window still holds the shadow-mode history, so the target
+	// can decrease without waiting a full Down window
+	require.Less(t, h.run(10, 20), enabled)
 }
