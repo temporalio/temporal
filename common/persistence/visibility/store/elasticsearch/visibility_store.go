@@ -37,11 +37,6 @@ import (
 )
 
 const (
-	// PersistenceName is an alias of esconfig.PersistenceName.
-	//
-	// Deprecated: use esconfig.PersistenceName.
-	PersistenceName = esconfig.PersistenceName
-
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes

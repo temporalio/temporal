@@ -55,6 +55,10 @@ message NamespaceMutationState {
 
   // Per-peer apply outcomes, keyed by target cell name.
   map<string, PeerApplyStatus> peer_apply = 4;
+
+  // Source-cluster time when the initial local task was scheduled. Retained
+  // across retries to measure end-to-end latency without destination clock skew.
+  google.protobuf.Timestamp started_at = 5;
 }
 
 enum ComponentStatus {

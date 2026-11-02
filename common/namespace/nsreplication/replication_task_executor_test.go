@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
@@ -30,6 +32,113 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestNamespaceReplicationCreatesCompleteSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []enumsspb.NamespaceOperation{
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+	} {
+		t.Run(operation.String(), func(t *testing.T) {
+			t.Parallel()
+			modifiedAt := timestamppb.New(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+			task := &replicationspb.NamespaceTaskAttributes{
+				NamespaceOperation: operation,
+				Id:                 "namespace-id",
+				Info: &namespacepb.NamespaceInfo{
+					Name:        "payments",
+					State:       enumspb.NAMESPACE_STATE_REGISTERED,
+					Description: "payment workflows",
+					OwnerEmail:  "payments@example.com",
+					Data:        map[string]string{"team": "payments"},
+				},
+				Config: &namespacepb.NamespaceConfig{
+					WorkflowExecutionRetentionTtl: durationpb.New(72 * time.Hour),
+					HistoryArchivalState:          enumspb.ARCHIVAL_STATE_ENABLED,
+					HistoryArchivalUri:            "s3://history/payments",
+					VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_ENABLED,
+					VisibilityArchivalUri:         "s3://visibility/payments",
+					CustomSearchAttributeAliases:  map[string]string{"Keyword01": "PaymentId"},
+					BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+						"bad-checksum": {Reason: "incorrect payment processing", Operator: "oncall", CreateTime: modifiedAt},
+					}},
+				},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+					ActiveClusterName: "active",
+					Clusters:          []*replicationpb.ClusterReplicationConfig{{ClusterName: "active"}, {ClusterName: "standby"}},
+					State:             enumspb.REPLICATION_STATE_HANDOVER,
+				},
+				ConfigVersion:   2,
+				FailoverVersion: 11,
+				FailoverHistory: []*replicationpb.FailoverStatus{{FailoverTime: modifiedAt, FailoverVersion: 11}},
+			}
+			expected := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:          "namespace-id",
+					Name:        "payments",
+					State:       enumspb.NAMESPACE_STATE_REGISTERED,
+					Description: "payment workflows",
+					Owner:       "payments@example.com",
+					Data:        map[string]string{"team": "payments"},
+				},
+				Config: &persistencespb.NamespaceConfig{
+					Retention:                    durationpb.New(72 * time.Hour),
+					HistoryArchivalState:         enumspb.ARCHIVAL_STATE_ENABLED,
+					HistoryArchivalUri:           "s3://history/payments",
+					VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_ENABLED,
+					VisibilityArchivalUri:        "s3://visibility/payments",
+					CustomSearchAttributeAliases: map[string]string{"Keyword01": "PaymentId"},
+					BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+						"bad-checksum": {Reason: "incorrect payment processing", Operator: "oncall", CreateTime: modifiedAt},
+					}},
+				},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "active",
+					Clusters:          []string{"active", "standby"},
+					State:             enumspb.REPLICATION_STATE_HANDOVER,
+					FailoverHistory:   []*persistencespb.FailoverStatus{{FailoverTime: modifiedAt, FailoverVersion: 11}},
+				},
+				ConfigVersion:   2,
+				FailoverVersion: 11,
+			}
+			metadata := persistence.NewMockMetadataManager(gomock.NewController(t))
+			var stored *persistencespb.NamespaceDetail
+			metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+					if stored == nil {
+						return nil, serviceerror.NewNamespaceNotFound("payments")
+					}
+					return &persistence.GetNamespaceResponse{
+						Namespace: proto.Clone(stored).(*persistencespb.NamespaceDetail), IsGlobalNamespace: true,
+					}, nil
+				}).AnyTimes()
+			metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 10}, nil).AnyTimes()
+			metadata.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+					if stored != nil {
+						return nil, serviceerror.NewNamespaceAlreadyExists("payments")
+					}
+					require.True(t, request.IsGlobalNamespace)
+					stored = proto.Clone(request.Namespace).(*persistencespb.NamespaceDetail)
+					return &persistence.CreateNamespaceResponse{ID: "namespace-id"}, nil
+				}).AnyTimes()
+			executor := NewTaskExecutor("standby", metadata, NewNoopDataMerger(), NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{})
+			require.NoError(t, executor.Execute(t.Context(), task))
+			protorequire.ProtoEqual(t, expected, stored)
+
+			require.NoError(t, executor.Execute(t.Context(), task))
+			protorequire.ProtoEqual(t, expected, stored)
+
+			// A delayed older CREATE must not replace the newer snapshot.
+			olderCreate := proto.Clone(task).(*replicationspb.NamespaceTaskAttributes)
+			olderCreate.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
+			olderCreate.ConfigVersion = 1
+			olderCreate.Config.BadBinaries = nil
+			require.NoError(t, executor.Execute(t.Context(), olderCreate))
+			protorequire.ProtoEqual(t, expected, stored)
+		})
+	}
+}
 
 type (
 	namespaceDataMergerFunc func(

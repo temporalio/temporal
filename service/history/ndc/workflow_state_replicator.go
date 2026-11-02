@@ -1590,8 +1590,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				}
 			}
 
-			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-				ShardID:           r.shardContext.GetShardID(),
+			_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 				IsNewBranch:       isNewBranch,
 				BranchToken:       versionHistoryToAppend.BranchToken,
 				History:           historyBlob.rawHistory,
@@ -1660,8 +1659,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				return newBranchToken, err
 			}
 		}
-		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shardContext.GetShardID(),
+		_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 			IsNewBranch:       isNewBranch,
 			BranchToken:       versionHistoryToAppend.BranchToken,
 			History:           eventBlobs[i],
@@ -2178,8 +2176,7 @@ BackfillLoop:
 				return err
 			}
 		}
-		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shardContext.GetShardID(),
+		_, err = r.shardContext.AppendRawHistoryEvents(ctx, &persistence.AppendRawHistoryNodesRequest{
 			IsNewBranch:       prevBranchID != branchID,
 			BranchToken:       filteredHistoryBranch,
 			History:           historyBlob.rawHistory,

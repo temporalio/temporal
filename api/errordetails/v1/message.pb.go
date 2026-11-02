@@ -546,6 +546,44 @@ func (*StalePartitionCountsFailure) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{9}
 }
 
+// FlowControlBlockedFailure indicates that the task was blocked by a flow control limiter and
+// should be spooled to backlog.
+type FlowControlBlockedFailure struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowControlBlockedFailure) Reset() {
+	*x = FlowControlBlockedFailure{}
+	mi := &file_temporal_server_api_errordetails_v1_message_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowControlBlockedFailure) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowControlBlockedFailure) ProtoMessage() {}
+
+func (x *FlowControlBlockedFailure) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_errordetails_v1_message_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowControlBlockedFailure.ProtoReflect.Descriptor instead.
+func (*FlowControlBlockedFailure) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{10}
+}
+
 var File_temporal_server_api_errordetails_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_errordetails_v1_message_proto_rawDesc = "" +
@@ -583,7 +621,8 @@ const file_temporal_server_api_errordetails_v1_message_proto_rawDesc = "" +
 	"\x1eObsoleteDispatchBuildIdFailure\"\x1d\n" +
 	"\x1bObsoleteMatchingTaskFailure\"&\n" +
 	"$ActivityStartDuringTransitionFailure\"\x1d\n" +
-	"\x1bStalePartitionCountsFailureB8Z6go.temporal.io/server/api/errordetails/v1;errordetailsb\x06proto3"
+	"\x1bStalePartitionCountsFailure\"\x1b\n" +
+	"\x19FlowControlBlockedFailureB8Z6go.temporal.io/server/api/errordetails/v1;errordetailsb\x06proto3"
 
 var (
 	file_temporal_server_api_errordetails_v1_message_proto_rawDescOnce sync.Once
@@ -597,7 +636,7 @@ func file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP() []byte
 	return file_temporal_server_api_errordetails_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_errordetails_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_temporal_server_api_errordetails_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_temporal_server_api_errordetails_v1_message_proto_goTypes = []any{
 	(*TaskAlreadyStartedFailure)(nil),            // 0: temporal.server.api.errordetails.v1.TaskAlreadyStartedFailure
 	(*CurrentBranchChangedFailure)(nil),          // 1: temporal.server.api.errordetails.v1.CurrentBranchChangedFailure
@@ -609,14 +648,15 @@ var file_temporal_server_api_errordetails_v1_message_proto_goTypes = []any{
 	(*ObsoleteMatchingTaskFailure)(nil),          // 7: temporal.server.api.errordetails.v1.ObsoleteMatchingTaskFailure
 	(*ActivityStartDuringTransitionFailure)(nil), // 8: temporal.server.api.errordetails.v1.ActivityStartDuringTransitionFailure
 	(*StalePartitionCountsFailure)(nil),          // 9: temporal.server.api.errordetails.v1.StalePartitionCountsFailure
-	(*v1.VersionedTransition)(nil),               // 10: temporal.server.api.persistence.v1.VersionedTransition
-	(*v11.VersionHistories)(nil),                 // 11: temporal.server.api.history.v1.VersionHistories
+	(*FlowControlBlockedFailure)(nil),            // 10: temporal.server.api.errordetails.v1.FlowControlBlockedFailure
+	(*v1.VersionedTransition)(nil),               // 11: temporal.server.api.persistence.v1.VersionedTransition
+	(*v11.VersionHistories)(nil),                 // 12: temporal.server.api.history.v1.VersionHistories
 }
 var file_temporal_server_api_errordetails_v1_message_proto_depIdxs = []int32{
-	10, // 0: temporal.server.api.errordetails.v1.CurrentBranchChangedFailure.current_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	10, // 1: temporal.server.api.errordetails.v1.CurrentBranchChangedFailure.request_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	10, // 2: temporal.server.api.errordetails.v1.SyncStateFailure.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	11, // 3: temporal.server.api.errordetails.v1.SyncStateFailure.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	11, // 0: temporal.server.api.errordetails.v1.CurrentBranchChangedFailure.current_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	11, // 1: temporal.server.api.errordetails.v1.CurrentBranchChangedFailure.request_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	11, // 2: temporal.server.api.errordetails.v1.SyncStateFailure.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	12, // 3: temporal.server.api.errordetails.v1.SyncStateFailure.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
 	4,  // [4:4] is the sub-list for method output_type
 	4,  // [4:4] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
@@ -635,7 +675,7 @@ func file_temporal_server_api_errordetails_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_errordetails_v1_message_proto_rawDesc), len(file_temporal_server_api_errordetails_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

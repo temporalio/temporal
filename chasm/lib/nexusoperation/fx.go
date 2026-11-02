@@ -28,13 +28,18 @@ import (
 	"go.uber.org/fx"
 )
 
-var Module = fx.Module(
-	"chasm.lib.nexusoperation",
+// sharedOptions provides the dependencies that both the history service and the frontend need.
+var sharedOptions = fx.Options(
 	fx.Provide(configProvider),
 	fx.Provide(linkValidatorProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
+)
+
+var Module = fx.Module(
+	"chasm.lib.nexusoperation",
+	sharedOptions,
 	fx.Provide(defaultNexusTransportProvider),
 	fx.Provide(clientProviderFactory),
 	fx.Provide(newHandler),
@@ -51,15 +56,13 @@ var Module = fx.Module(
 
 var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
-	fx.Provide(configProvider),
-	fx.Provide(linkValidatorProvider),
+	sharedOptions,
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
-	fx.Provide(newComponentOnlyLibrary),
-	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
+	fx.Invoke(func(registry *chasm.Registry) error {
 		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
 		// need task handlers.
-		return registry.Register(l)
+		return registry.Register(NewNilLibrary())
 	}),
 )
 
