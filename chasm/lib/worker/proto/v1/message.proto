@@ -16,6 +16,9 @@ message WorkerGroupState {
   google.protobuf.Timestamp lease_expiration_time = 3;
 }
 
+// WorkerState has no heartbeat metadata. The worker is identified by its map key.
+message WorkerState {}
+
 // WorkerGroupStatus describes the lifecycle of a worker group run.
 enum WorkerGroupStatus {
   WORKER_GROUP_STATUS_UNSPECIFIED = 0;

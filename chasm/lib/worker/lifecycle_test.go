@@ -16,8 +16,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
-// TestWorkerGroupLifecycle verifies that the lease survives a reload,
-// stale expiry work is ignored, and the current deadline closes the run.
+// TestWorkerGroupLifecycle verifies that membership and the lease survive a reload,
+// stale expiry work is ignored, and detached workers remain accessible after expiry.
 func TestWorkerGroupLifecycle(t *testing.T) {
 	t.Parallel()
 	env := newLifecycleTestEnvironment(t)
@@ -35,18 +35,25 @@ func TestWorkerGroupLifecycle(t *testing.T) {
 	_, err = root.CloseTransaction(t.Context(), true)
 	require.NoError(t, err)
 	oldDeadline := group.GetLeaseExpirationTime().AsTime()
+	initialNodes := root.Snapshot(nil).Nodes
 
-	// Renew the lease before persisting again.
+	// Renew the lease and add a worker without rewriting existing worker components.
 	env.timeSource.Advance(30 * time.Second)
 	ctx = chasm.NewMutableContext(t.Context(), root)
 	component, err := root.Component(ctx, chasm.ComponentRef{})
 	require.NoError(t, err)
 	group = component.(*WorkerGroup)
+	heartbeats = append(heartbeats, workerHeartbeat("worker-3", "group-1"))
 	require.NoError(t, group.recordHeartbeat(ctx, heartbeats, time.Minute))
-	_, err = root.CloseTransaction(t.Context(), true)
+	mutation, err := root.CloseTransaction(t.Context(), true)
 	require.NoError(t, err)
 	snapshot := root.Snapshot(nil)
-	require.Len(t, snapshot.Nodes, 1, "only the group lease should be persisted")
+	workerTypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(libraryName, workerComponentName))
+	for path, node := range initialNodes {
+		if node.GetMetadata().GetComponentAttributes().GetTypeId() == workerTypeID {
+			require.NotContains(t, mutation.UpdatedNodes, path, "existing workers should not be rewritten")
+		}
+	}
 	logicalTasks := snapshot.Nodes[""].GetMetadata().GetComponentAttributes().GetPureTasks()
 	require.Len(t, logicalTasks, 1, "CHASM should remove the obsolete logical expiry task")
 	require.Equal(t, group.GetLeaseExpirationTime().AsTime(), logicalTasks[0].GetScheduledTime().AsTime())
@@ -56,6 +63,14 @@ func TestWorkerGroupLifecycle(t *testing.T) {
 	component, err = reloaded.Component(chasm.NewContext(t.Context(), reloaded), chasm.ComponentRef{})
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, group.WorkerGroupState, component.(*WorkerGroup).WorkerGroupState)
+	group = component.(*WorkerGroup)
+	require.Len(t, group.Workers, 3)
+	readCtx := chasm.NewContext(t.Context(), reloaded)
+	worker := group.Workers["worker-1"].Get(readCtx)
+	serializedRef, err := readCtx.Ref(worker)
+	require.NoError(t, err)
+	workerRef, err := chasm.DeserializeComponentRef(serializedRef)
+	require.NoError(t, err)
 	env.timeSource.Update(oldDeadline)
 	executed, err := reloaded.ExecutePureTask(t.Context(), chasm.TaskAttributes{ScheduledTime: oldDeadline}, &workerstatepb.LeaseExpiryTask{})
 	require.NoError(t, err)
@@ -72,7 +87,17 @@ func TestWorkerGroupLifecycle(t *testing.T) {
 	component, err = reloaded.Component(chasm.NewContext(t.Context(), reloaded), chasm.NewComponentRef[*WorkerGroup](chasm.ExecutionKey{}))
 	require.NoError(t, err)
 	require.Equal(t, chasm.LifecycleStateCompleted, component.LifecycleState(chasm.NewContext(t.Context(), reloaded)))
-	require.Empty(t, reloaded.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes().GetPureTasks())
+	closedSnapshot := reloaded.Snapshot(nil)
+	require.Empty(t, closedSnapshot.Nodes[""].GetMetadata().GetComponentAttributes().GetPureTasks())
+
+	// Reload the closed group and access a worker with progress intent. This would
+	// fail for an ordinary child, even though read-only access would still work.
+	closedTree := env.reloadTree(t, closedSnapshot.Nodes)
+	progressCtx := chasm.NewMutableContext(chasm.NewContextWithOperationIntent(t.Context(), chasm.OperationIntentProgress), closedTree)
+	component, err = closedTree.Component(progressCtx, workerRef)
+	require.NoError(t, err)
+	require.IsType(t, &Worker{}, component)
+	require.Equal(t, chasm.LifecycleStateRunning, component.LifecycleState(progressCtx))
 }
 
 // TestWorkerGroupOfflineRead verifies that persisted worker state and expiry task
@@ -95,9 +120,14 @@ func TestWorkerGroupOfflineRead(t *testing.T) {
 	// Decode with registration-only libraries, as an offline reader would.
 	nilRegistry := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, nilRegistry.Register(NewNilLibrary()))
-	decoded, _, err := chasm.NewDetachedExecution[*WorkerGroup](t.Context(), env.executionRecord(snapshot.Nodes), nilRegistry)
+	decoded, readCtx, err := chasm.NewDetachedExecution[*WorkerGroup](t.Context(), env.executionRecord(snapshot.Nodes), nilRegistry)
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, group.WorkerGroupState, decoded.WorkerGroupState)
+	require.Len(t, decoded.Workers, len(heartbeats))
+	for _, heartbeat := range heartbeats {
+		worker := decoded.Workers[heartbeat.GetWorkerInstanceKey()].Get(readCtx)
+		protorequire.ProtoEqual(t, &workerstatepb.WorkerState{}, worker.WorkerState)
+	}
 	logicalTasks := snapshot.Nodes[""].GetMetadata().GetComponentAttributes().GetPureTasks()
 	require.Len(t, logicalTasks, 1)
 	_, ok := nilRegistry.TaskByID(logicalTasks[0].GetTypeId())
