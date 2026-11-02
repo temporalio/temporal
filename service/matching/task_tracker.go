@@ -64,15 +64,24 @@ func newTaskTracker(
 ) *taskTracker {
 	bucketSize = max(bucketSize, time.Millisecond)
 	buckets := int(totalInterval/bucketSize) + 1
-	return &taskTracker{
-		clock:           timeSource,
-		startTime:       timeSource.Now(),
-		bucketStartTime: timeSource.Now(),
-		bucketSize:      bucketSize,
-		buckets:         buckets,
-		totalInterval:   totalInterval,
-		tasks:           newCircularTaskBuffer(buckets),
+	t := &taskTracker{
+		clock:         timeSource,
+		bucketSize:    bucketSize,
+		buckets:       buckets,
+		totalInterval: totalInterval,
+		tasks:         newCircularTaskBuffer(buckets),
 	}
+	t.clear()
+	return t
+}
+
+// clear discards all recorded tasks and restarts the interval at the current time.
+func (s *taskTracker) clear() {
+	now := s.clock.Now()
+	s.startTime = now
+	s.bucketStartTime = now
+	clear(s.tasks.buffer)
+	s.tasks.currentPos = 0
 }
 
 // advanceAndReset advances the trackers position and clears out any expired intervals.
