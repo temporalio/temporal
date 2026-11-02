@@ -372,9 +372,12 @@ type WorkflowExecutionInfo struct {
 	MutableStateRebuildTime *timestamppb.Timestamp `protobuf:"bytes,116,opt,name=mutable_state_rebuild_time,json=mutableStateRebuildTime,proto3" json:"mutable_state_rebuild_time,omitempty"`
 	// Nexus operation context retained across runs so workers can select payload serialization.
 	PropagatedNexusSerializationContext *v18.PropagatedSerializationContext `protobuf:"bytes,117,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
-	PersistenceMetadata                 []byte                              `protobuf:"bytes,118,opt,name=persistence_metadata,json=persistenceMetadata,proto3" json:"persistence_metadata,omitempty"`
-	unknownFields                       protoimpl.UnknownFields
-	sizeCache                           protoimpl.SizeCache
+	// Opaque metadata that a persistence implementation can store about this record. The server
+	// never reads or sets it. The value describes the local copy of the record, so it is not
+	// replicated, and applying a replicated snapshot or mutation keeps the local value.
+	PersistenceMetadata []byte `protobuf:"bytes,118,opt,name=persistence_metadata,json=persistenceMetadata,proto3" json:"persistence_metadata,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
