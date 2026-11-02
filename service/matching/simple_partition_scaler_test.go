@@ -616,9 +616,9 @@ func TestOnTasksReasonNamesWindow(t *testing.T) {
 	require.Regexp(t, `^set by downs\[0\] \(20s\) rate=\d+\.\d wants=\d+$`, dec.Reason)
 }
 
-// rateScalerHarness drives a simplePartitionScaler once per second, persisting the target and
+// scalerHarness drives a simplePartitionScaler once per second, persisting the target and
 // private state only when the target changes, like scaleManager does.
-type rateScalerHarness struct {
+type scalerHarness struct {
 	ts           *clock.EventTimeSource
 	scaler       *simplePartitionScaler
 	target       int
@@ -627,7 +627,7 @@ type rateScalerHarness struct {
 	lastIncrease time.Duration // elapsed at the most recent target increase
 }
 
-func newRateScalerHarness(ups, downs []dynamicconfig.SimplePartitionScalerThreshold, target int) *rateScalerHarness {
+func newScalerHarness(ups, downs []dynamicconfig.SimplePartitionScalerThreshold, target int) *scalerHarness {
 	ts := clock.NewEventTimeSource()
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
@@ -640,11 +640,11 @@ func newRateScalerHarness(ups, downs []dynamicconfig.SimplePartitionScalerThresh
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	return &rateScalerHarness{ts: ts, scaler: scaler, target: target}
+	return &scalerHarness{ts: ts, scaler: scaler, target: target}
 }
 
 // tick advances one second, reports numTasks, and returns the decision.
-func (h *rateScalerHarness) tick(numTasks int) PartitionScalerDecision {
+func (h *scalerHarness) tick(numTasks int) PartitionScalerDecision {
 	h.ts.Advance(time.Second)
 	h.elapsed += time.Second
 	d := h.scaler.OnTasks(PartitionScalerInput{
@@ -664,7 +664,7 @@ func (h *rateScalerHarness) tick(numTasks int) PartitionScalerDecision {
 
 // run ticks n times at the given per-second rate and returns the resulting target.
 // NoChange decisions leave the target as is.
-func (h *rateScalerHarness) run(n, rate int) int {
+func (h *scalerHarness) run(n, rate int) int {
 	for range n {
 		h.tick(rate)
 	}
@@ -681,7 +681,7 @@ var (
 // lower-rate history from before the increase. Then it drops to what the lower rate needs.
 func TestOnTasksHoldsDownAfterIncrease(t *testing.T) {
 	t.Parallel()
-	h := newRateScalerHarness(testUps10s, testDowns60s, 1)
+	h := newScalerHarness(testUps10s, testDowns60s, 1)
 	downWindow := testDowns60s[0].Window
 
 	require.Equal(t, 1, h.run(60, 20), "20/s needs one partition")
@@ -701,7 +701,7 @@ func TestOnTasksHoldsDownAfterIncrease(t *testing.T) {
 // partial Down window only prevents decreases.
 func TestOnTasksPartialUpsBlockDecision(t *testing.T) {
 	t.Parallel()
-	h := newRateScalerHarness(testUps10s, testDowns60s, 5)
+	h := newScalerHarness(testUps10s, testDowns60s, 5)
 
 	// trackers are created on the first call, so the Up window is full on the 11th
 	for range 10 {
@@ -729,7 +729,7 @@ func TestOnTasksPartialUpsBlockDecision(t *testing.T) {
 func TestOnTasksIncreaseResetsOnlyDownTrackers(t *testing.T) {
 	t.Parallel()
 	const window = 10 * time.Second
-	h := newRateScalerHarness(
+	h := newScalerHarness(
 		[]dynamicconfig.SimplePartitionScalerThreshold{{Window: window, TargetRate: 50}},
 		[]dynamicconfig.SimplePartitionScalerThreshold{{Window: window, TargetRate: 40}},
 		1)
@@ -750,7 +750,7 @@ func TestOnTasksIncreaseResetsOnlyDownTrackers(t *testing.T) {
 // are not restarted on every call.
 func TestOnTasksNoPriorTargetDoesNotResetDowns(t *testing.T) {
 	t.Parallel()
-	h := newRateScalerHarness(testUps10s, testDowns60s, 0)
+	h := newScalerHarness(testUps10s, testDowns60s, 0)
 
 	for range 61 {
 		h.ts.Advance(time.Second)
