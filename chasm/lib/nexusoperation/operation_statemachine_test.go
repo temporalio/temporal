@@ -477,7 +477,7 @@ func TestTransitionFailed(t *testing.T) {
 			wantReason: "operation_error",
 		},
 		{
-			name:       "from scheduled with handler error tags handler error reason",
+			name:       "scheduled handler error",
 			fromStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 			event:      EventFailed{Failure: handlerFailure},
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
@@ -486,7 +486,7 @@ func TestTransitionFailed(t *testing.T) {
 			wantReason: "handler_error",
 		},
 		{
-			name:       "from non-scheduled with handler error tags operation failed reason",
+			name:       "completed operation with handler failure uses operation_error",
 			fromStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
 			event:      EventFailed{Failure: handlerFailure},
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
