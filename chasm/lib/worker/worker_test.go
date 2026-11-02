@@ -29,9 +29,6 @@ func TestRecordHeartbeat(t *testing.T) {
 		Status:              workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		LeaseExpirationTime: timestamppb.New(now.Add(time.Minute)),
 	}, group.WorkerGroupState)
-	require.Len(t, group.Workers, 2)
-	protorequire.ProtoEqual(t, first, group.Workers["worker-1"].Get(ctx).WorkerHeartbeat)
-	protorequire.ProtoEqual(t, second, group.Workers["worker-2"].Get(ctx).WorkerHeartbeat)
 	require.Equal(t, []chasm.MockTask{{
 		Component:  group,
 		Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(time.Minute)},
@@ -39,21 +36,11 @@ func TestRecordHeartbeat(t *testing.T) {
 	}}, ctx.Tasks)
 
 	now = now.Add(30 * time.Second)
-	updated := common.CloneProto(first)
-	updated.WorkerIdentity = "updated-identity"
-	third := workerHeartbeat("worker-3", "group-1")
-	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{updated, second, third}, time.Minute))
+	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{second}, time.Minute))
 	require.Equal(t, now.Add(time.Minute), group.GetLeaseExpirationTime().AsTime())
-	require.Len(t, group.Workers, 3)
-	protorequire.ProtoEqual(t, updated, group.Workers["worker-1"].Get(ctx).WorkerHeartbeat)
-	protorequire.ProtoEqual(t, second, group.Workers["worker-2"].Get(ctx).WorkerHeartbeat)
-	protorequire.ProtoEqual(t, third, group.Workers["worker-3"].Get(ctx).WorkerHeartbeat)
 	require.Len(t, ctx.Tasks, 2)
 	require.Same(t, group, ctx.Tasks[1].Component)
 	require.Equal(t, now.Add(time.Minute), ctx.Tasks[1].Attributes.ScheduledTime)
-
-	updated.WorkerIdentity = "changed-after-heartbeat"
-	require.Equal(t, "updated-identity", group.Workers["worker-1"].Get(ctx).GetWorkerHeartbeat().GetWorkerIdentity())
 }
 
 func TestRecordHeartbeatInvalidBatch(t *testing.T) {
@@ -82,8 +69,6 @@ func TestRecordHeartbeatInvalidBatch(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			protorequire.ProtoEqual(t, before, group.WorkerGroupState)
-			require.Len(t, group.Workers, 1)
-			protorequire.ProtoEqual(t, first, group.Workers["worker-1"].Get(ctx).WorkerHeartbeat)
 			require.Len(t, ctx.Tasks, 1)
 		})
 	}
@@ -93,12 +78,11 @@ func TestRecordHeartbeatDuplicateWorker(t *testing.T) {
 	t.Parallel()
 	ctx := &chasm.MockMutableContext{}
 	first := workerHeartbeat("worker-1", "group-1")
-	last := common.CloneProto(first)
-	last.WorkerIdentity = "last-identity"
-	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first, last}, time.Minute)
+	// Duplicate entries do not change the group lease semantics.
+	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first, first}, time.Minute)
 	require.NoError(t, err)
-	require.Len(t, group.Workers, 1)
-	protorequire.ProtoEqual(t, last, group.Workers["worker-1"].Get(ctx).WorkerHeartbeat)
+	require.Equal(t, ctx.Tasks[0].Attributes.ScheduledTime.UTC(), group.GetLeaseExpirationTime().AsTime())
+	require.Len(t, ctx.Tasks, 1)
 }
 
 func TestNewWorkerGroupMissingKey(t *testing.T) {
@@ -121,7 +105,6 @@ func TestRecordHeartbeatInactiveGroup(t *testing.T) {
 	err = group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{workerHeartbeat("worker-2", "group-1")}, time.Minute)
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 	protorequire.ProtoEqual(t, before, group.WorkerGroupState)
-	require.Len(t, group.Workers, 1)
 	require.Len(t, ctx.Tasks, 1)
 }
 

@@ -12,7 +12,6 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "go.temporal.io/api/worker/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -149,63 +148,15 @@ func (x *WorkerGroupState) GetLeaseExpirationTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// WorkerState stores metadata for one worker within a group.
-type WorkerState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Last reported heartbeat, including the worker instance key and runtime metadata.
-	WorkerHeartbeat *v1.WorkerHeartbeat `protobuf:"bytes,1,opt,name=worker_heartbeat,json=workerHeartbeat,proto3" json:"worker_heartbeat,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *WorkerState) Reset() {
-	*x = WorkerState{}
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WorkerState) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WorkerState) ProtoMessage() {}
-
-func (x *WorkerState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WorkerState.ProtoReflect.Descriptor instead.
-func (*WorkerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *WorkerState) GetWorkerHeartbeat() *v1.WorkerHeartbeat {
-	if x != nil {
-		return x.WorkerHeartbeat
-	}
-	return nil
-}
-
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xe8\x01\n" +
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x01\n" +
 	"\x10WorkerGroupState\x12.\n" +
 	"\x13worker_grouping_key\x18\x01 \x01(\tR\x11workerGroupingKey\x12T\n" +
 	"\x06status\x18\x02 \x01(\x0e2<.temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatusR\x06status\x12N\n" +
-	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\"a\n" +
-	"\vWorkerState\x12R\n" +
-	"\x10worker_heartbeat\x18\x01 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat*z\n" +
+	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime*z\n" +
 	"\x11WorkerGroupStatus\x12#\n" +
 	"\x1fWORKER_GROUP_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWORKER_GROUP_STATUS_ACTIVE\x10\x01\x12 \n" +
@@ -224,23 +175,20 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_goTypes = []any{
 	(WorkerGroupStatus)(0),        // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
 	(*WorkerGroupState)(nil),      // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState
-	(*WorkerState)(nil),           // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
-	(*v1.WorkerHeartbeat)(nil),    // 4: temporal.api.worker.v1.WorkerHeartbeat
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus
-	3, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.lease_expiration_time:type_name -> google.protobuf.Timestamp
-	4, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState.worker_heartbeat:type_name -> temporal.api.worker.v1.WorkerHeartbeat
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerGroupState.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() }
@@ -254,7 +202,7 @@ func file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

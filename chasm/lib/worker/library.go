@@ -29,7 +29,6 @@ func (l *Library) Name() string {
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*WorkerGroup](groupComponentName),
-		chasm.NewRegistrableComponent[*Worker](workerComponentName),
 	}
 }
 
