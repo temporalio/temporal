@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -75,6 +76,7 @@ var Module = fx.Options(
 	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(NexusOperationDestinationBlockedProvider),
+	fx.Provide(fcpb.NewConcurrencyServiceLayeredClient),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),

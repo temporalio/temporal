@@ -20,14 +20,17 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
@@ -50,6 +53,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -74,6 +78,11 @@ import (
 )
 
 type (
+	testConcurrencyServiceClient struct {
+		fcpb.ConcurrencyServiceClient
+		batch func(context.Context, *fcpb.ConcurrencyServiceBatchRequest, ...grpc.CallOption) (*fcpb.ConcurrencyServiceBatchResponse, error)
+	}
+
 	transferQueueActiveTaskExecutorSuite struct {
 		suite.Suite
 		*require.Assertions
@@ -112,6 +121,14 @@ type (
 		transferQueueActiveTaskExecutor *transferQueueActiveTaskExecutor
 	}
 )
+
+func (c *testConcurrencyServiceClient) Batch(
+	ctx context.Context,
+	request *fcpb.ConcurrencyServiceBatchRequest,
+	opts ...grpc.CallOption,
+) (*fcpb.ConcurrencyServiceBatchResponse, error) {
+	return c.batch(ctx, request, opts...)
+}
 
 var defaultWorkflowTaskCompletionLimits = historyi.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
 
@@ -233,6 +250,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		config,
 		s.mockShard.Resource.HistoryClient,
 		s.mockShard.Resource.MatchingClient,
+		nil,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
@@ -244,6 +262,80 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_Success() {
+	var requests []*fcpb.ConcurrencyServiceBatchRequest
+	s.transferQueueActiveTaskExecutor.concurrencyServiceClient = &testConcurrencyServiceClient{
+		batch: func(
+			_ context.Context,
+			request *fcpb.ConcurrencyServiceBatchRequest,
+			_ ...grpc.CallOption,
+		) (*fcpb.ConcurrencyServiceBatchResponse, error) {
+			requests = append(requests, request)
+			return &fcpb.ConcurrencyServiceBatchResponse{}, nil
+		},
+	}
+	task := &tasks.ReleaseLimiterTask{
+		WorkflowKey: tests.WorkflowKey,
+		TaskID:      s.mustGenerateTaskID(),
+		Limiters: []*taskqueuespb.LimiterRef{
+			{
+				LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+				Key:         "limiter-1",
+				SlotId:      uuid.NewString(),
+			},
+			{
+				LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+				Key:         "limiter-2",
+				SlotId:      uuid.NewString(),
+			},
+		},
+	}
+
+	response := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(task))
+
+	s.Require().NoError(response.ExecutionErr)
+	s.Require().Len(requests, len(task.Limiters))
+	for i, limiter := range task.Limiters {
+		protorequire.ProtoEqual(s.T(), &fcpb.ConcurrencyServiceBatchRequest{
+			NamespaceId:  task.NamespaceID,
+			Key:          limiter.GetKey(),
+			ReleaseSlots: []string{limiter.GetSlotId()},
+		}, requests[i])
+	}
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_AttemptsAllReleasesOnError() {
+	releaseErr := serviceerror.NewUnavailable("release failed")
+	var requests []*fcpb.ConcurrencyServiceBatchRequest
+	s.transferQueueActiveTaskExecutor.concurrencyServiceClient = &testConcurrencyServiceClient{
+		batch: func(
+			_ context.Context,
+			request *fcpb.ConcurrencyServiceBatchRequest,
+			_ ...grpc.CallOption,
+		) (*fcpb.ConcurrencyServiceBatchResponse, error) {
+			requests = append(requests, request)
+			if request.GetKey() == "limiter-2" {
+				return nil, releaseErr
+			}
+			return &fcpb.ConcurrencyServiceBatchResponse{}, nil
+		},
+	}
+	task := &tasks.ReleaseLimiterTask{
+		WorkflowKey: tests.WorkflowKey,
+		TaskID:      s.mustGenerateTaskID(),
+		Limiters: []*taskqueuespb.LimiterRef{
+			{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-1", SlotId: uuid.NewString()},
+			{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-2", SlotId: uuid.NewString()},
+			{LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY, Key: "limiter-3", SlotId: uuid.NewString()},
+		},
+	}
+
+	response := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(task))
+
+	s.Require().ErrorIs(response.ExecutionErr, releaseErr)
+	s.Require().Len(requests, len(task.Limiters))
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
@@ -368,6 +460,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		tests.NewDynamicConfig(),
 		s.mockShard.Resource.HistoryClient,
 		s.mockShard.Resource.MatchingClient,
+		nil,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
