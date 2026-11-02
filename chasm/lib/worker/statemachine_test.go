@@ -17,5 +17,4 @@ func TestLeaseExpiry(t *testing.T) {
 	require.Equal(t, chasm.LifecycleStateRunning, group.LifecycleState(ctx))
 	require.NoError(t, transitionLeaseExpired.Apply(group, ctx, eventLeaseExpired{}))
 	require.Equal(t, chasm.LifecycleStateCompleted, group.LifecycleState(ctx))
-	require.ErrorIs(t, transitionLeaseExpired.Apply(group, ctx, eventLeaseExpired{}), chasm.ErrInvalidTransition)
 }

@@ -21,7 +21,7 @@ func TestLeaseExpiryValidation(t *testing.T) {
 	}{
 		{name: "current lease", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline, valid: true},
 		{name: "renewed lease", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline.Add(-time.Minute)},
-		{name: "later task", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline.Add(time.Minute)},
+		{name: "task deadline is after current lease deadline", status: workerpb.WORKER_GROUP_STATUS_ACTIVE, scheduledTime: deadline.Add(time.Minute)},
 		{name: "inactive group", status: workerpb.WORKER_GROUP_STATUS_INACTIVE, scheduledTime: deadline},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

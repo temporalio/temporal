@@ -15,7 +15,8 @@ func (e *leaseExpiryTaskExecutor) Validate(
 	invocation chasm.TaskInvocation,
 	_ *workerpb.LeaseExpiryTask,
 ) (bool, error) {
-	// Renewing the lease makes tasks for earlier deadlines obsolete.
+	// Ignore expiry tasks whose deadline no longer matches the current lease.
+	// The lease has already been extended, so this task must not close the group.
 	return group.Status == workerpb.WORKER_GROUP_STATUS_ACTIVE &&
 		invocation.ScheduledTime.Equal(group.GetLeaseExpirationTime().AsTime()), nil
 }
