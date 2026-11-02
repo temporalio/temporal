@@ -15,37 +15,9 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// TestSimplePartitionScalerEnabledDoesNotPanic when the scaler is enabled with any
-// Up/Down window, OnTasks lazily creates trackers by writing to the trackers map.
-// Confirm that when SimplePartitionScaler is enabled with non-empty Ups and Downs,
-// there is no nil-map panic.
-func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
-	t.Parallel()
-
-	scaler := newSimplePartitionScaler(
-		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
-			Enabled: true,
-			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
-				{Window: time.Second, TargetRate: 100},
-			},
-			Downs: []dynamicconfig.SimplePartitionScalerThreshold{
-				{Window: time.Second, TargetRate: 100},
-			},
-		}),
-		nil,
-		clock.NewEventTimeSource(),
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-
-	// The first call reaches getTracker. Must report no change because no full
-	// window has elapsed yet.
-	var dec PartitionScalerDecision
-	require.NotPanics(t, func() {
-		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 1, CurrentTarget: 1})
-	})
-	require.True(t, dec.NoChange, "first call before a full window should not change the target")
-}
+// =============================================================================
+// Pure helpers: updateBacklogTarget on its own, with no scaler or clock.
+// =============================================================================
 
 // encodeCounts builds a Compact8-encoded backlog-count slice from raw values,
 // matching the on-the-wire form updateBacklogTarget consumes.
@@ -112,6 +84,42 @@ func TestUpdateBacklogTargetClearsBelowReset(t *testing.T) {
 	require.True(t, bs.get(1), "bit in dead zone retained")
 }
 
+// =============================================================================
+// Single decisions: one OnTasks call against a given config.
+// =============================================================================
+
+// TestSimplePartitionScalerEnabledDoesNotPanic when the scaler is enabled with any
+// Up/Down window, OnTasks lazily creates trackers by writing to the trackers map.
+// Confirm that when SimplePartitionScaler is enabled with non-empty Ups and Downs,
+// there is no nil-map panic.
+func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true,
+			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: time.Second, TargetRate: 100},
+			},
+			Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: time.Second, TargetRate: 100},
+			},
+		}),
+		nil,
+		clock.NewEventTimeSource(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// The first call reaches getTracker. Must report no change because no full
+	// window has elapsed yet.
+	var dec PartitionScalerDecision
+	require.NotPanics(t, func() {
+		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 1, CurrentTarget: 1})
+	})
+	require.True(t, dec.NoChange, "first call before a full window should not change the target")
+}
+
 // TestOnTasksFixedIncludesBacklogCap verifies the fixed-target fast path now
 // propagates BacklogCap into the decision.
 func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
@@ -149,56 +157,6 @@ func TestOnTasksFloorsAddTargetAtOne(t *testing.T) {
 
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 0})
 	require.Equal(t, 1, decision.NewTarget, "add baseline must floor at 1, not disable scaling")
-}
-
-// TestOnTasksBacklogScalesUpAndDown verifies that with no rate windows, backlog
-// pressure grows the target one partition at a time (baseline 1 + occupied count)
-// and shrinks back to the baseline once partitions drain below BacklogReset.
-func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
-	t.Parallel()
-	cfg := dynamicconfig.SimplePartitionScalerSettings{
-		Enabled:      true,
-		BacklogReset: 100,
-		BacklogBase:  300,
-		BacklogCap:   1000,
-		Max:          4,
-	}
-	scaler := newSimplePartitionScaler(
-		dynamicconfig.GetTypedPropertyFn(cfg),
-		nil,
-		clock.NewEventTimeSource(),
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-
-	// One partition, occupied: baseline 1 + 1 occupied = 2.
-	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1, BacklogCounts: encodeCounts(500)})
-	require.Equal(t, 2, d.NewTarget)
-
-	// Two partitions, both occupied: baseline 1 + 2 occupied = 3.
-	d = scaler.OnTasks(PartitionScalerInput{
-		CurrentTarget: 2,
-		BacklogCounts: encodeCounts(500, 500),
-		PrivateState:  d.PrivateState,
-	})
-	require.Equal(t, 3, d.NewTarget)
-
-	// A newly-opened partition that is not yet occupied does not add more capacity:
-	// baseline 1 + 2 occupied = 3 (unchanged).
-	d = scaler.OnTasks(PartitionScalerInput{
-		CurrentTarget: 3,
-		BacklogCounts: encodeCounts(500, 500, 32),
-		PrivateState:  d.PrivateState,
-	})
-	require.Equal(t, 3, d.NewTarget)
-
-	// All drain below reset: bits clear, target falls back to the baseline of 1.
-	d = scaler.OnTasks(PartitionScalerInput{
-		CurrentTarget: 3,
-		BacklogCounts: encodeCounts(32, 32, 32),
-		PrivateState:  d.PrivateState,
-	})
-	require.Equal(t, 1, d.NewTarget)
 }
 
 func TestOnTasksReportsMaxClamping(t *testing.T) {
@@ -275,56 +233,6 @@ func TestOnTasksReportsMaxClamping(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestOnTasksReportsMaxClampingWhenUnclampedTargetChanges(t *testing.T) {
-	t.Parallel()
-
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	scaler := newSimplePartitionScaler(
-		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
-			Enabled:      true,
-			BacklogReset: 100,
-			BacklogBase:  300,
-			Max:          2,
-		}),
-		nil,
-		clock.NewEventTimeSource(),
-		log.NewNoopLogger(),
-		metricsHandler,
-	)
-	var decision PartitionScalerDecision
-	onTasks := func(wantTarget int, counts ...int64) {
-		decision = scaler.OnTasks(PartitionScalerInput{
-			CurrentTarget: 1,
-			BacklogCounts: encodeCounts(counts...),
-			PrivateState:  decision.PrivateState,
-		})
-		require.Equal(t, wantTarget, decision.NewTarget)
-	}
-	requireMetricCount := func(count int) {
-		require.Len(t, capture.SnapshotMetric(metrics.PartitionScaleMaxClamped.Name()), count)
-	}
-
-	// Entering the clamp reports once. Repeating the same calculation does not.
-	onTasks(2, 500, 500)
-	requireMetricCount(1)
-	onTasks(2, 500, 500)
-	requireMetricCount(1)
-
-	// A new unclamped target reports once, even though the clamped target is unchanged.
-	onTasks(2, 500, 500, 500)
-	requireMetricCount(2)
-	onTasks(2, 500, 500, 500)
-	requireMetricCount(2)
-
-	// Leaving the clamp resets deduplication, so re-entering reports again.
-	onTasks(1, 32, 32, 32)
-	onTasks(2, 500, 500)
-	requireMetricCount(3)
 }
 
 // TestOnTasksLegacyMultiples covers the *AsMultipleOfLegacy settings and how they combine
@@ -484,6 +392,115 @@ func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
 	require.Equal(t, 8, d.NewTarget)
 	require.Equal(t, 1000, d.BacklogCap)
+}
+
+// =============================================================================
+// Behaviour over time: many OnTasks calls against a fake clock.
+// =============================================================================
+
+// CONSIDER(carlydf): move the hand-rolled loops below onto scalerHarness. It feeds each
+// call the last applied target and private state, updated only when the target changes, as
+// scaleManager does; some of these tests instead pass a fixed CurrentTarget or every
+// decision's state.
+
+// TestOnTasksBacklogScalesUpAndDown verifies that with no rate windows, backlog
+// pressure grows the target one partition at a time (baseline 1 + occupied count)
+// and shrinks back to the baseline once partitions drain below BacklogReset.
+func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
+	t.Parallel()
+	cfg := dynamicconfig.SimplePartitionScalerSettings{
+		Enabled:      true,
+		BacklogReset: 100,
+		BacklogBase:  300,
+		BacklogCap:   1000,
+		Max:          4,
+	}
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		clock.NewEventTimeSource(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// One partition, occupied: baseline 1 + 1 occupied = 2.
+	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1, BacklogCounts: encodeCounts(500)})
+	require.Equal(t, 2, d.NewTarget)
+
+	// Two partitions, both occupied: baseline 1 + 2 occupied = 3.
+	d = scaler.OnTasks(PartitionScalerInput{
+		CurrentTarget: 2,
+		BacklogCounts: encodeCounts(500, 500),
+		PrivateState:  d.PrivateState,
+	})
+	require.Equal(t, 3, d.NewTarget)
+
+	// A newly-opened partition that is not yet occupied does not add more capacity:
+	// baseline 1 + 2 occupied = 3 (unchanged).
+	d = scaler.OnTasks(PartitionScalerInput{
+		CurrentTarget: 3,
+		BacklogCounts: encodeCounts(500, 500, 32),
+		PrivateState:  d.PrivateState,
+	})
+	require.Equal(t, 3, d.NewTarget)
+
+	// All drain below reset: bits clear, target falls back to the baseline of 1.
+	d = scaler.OnTasks(PartitionScalerInput{
+		CurrentTarget: 3,
+		BacklogCounts: encodeCounts(32, 32, 32),
+		PrivateState:  d.PrivateState,
+	})
+	require.Equal(t, 1, d.NewTarget)
+}
+
+func TestOnTasksReportsMaxClampingWhenUnclampedTargetChanges(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled:      true,
+			BacklogReset: 100,
+			BacklogBase:  300,
+			Max:          2,
+		}),
+		nil,
+		clock.NewEventTimeSource(),
+		log.NewNoopLogger(),
+		metricsHandler,
+	)
+	var decision PartitionScalerDecision
+	onTasks := func(wantTarget int, counts ...int64) {
+		decision = scaler.OnTasks(PartitionScalerInput{
+			CurrentTarget: 1,
+			BacklogCounts: encodeCounts(counts...),
+			PrivateState:  decision.PrivateState,
+		})
+		require.Equal(t, wantTarget, decision.NewTarget)
+	}
+	requireMetricCount := func(count int) {
+		require.Len(t, capture.SnapshotMetric(metrics.PartitionScaleMaxClamped.Name()), count)
+	}
+
+	// Entering the clamp reports once. Repeating the same calculation does not.
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+
+	// A new unclamped target reports once, even though the clamped target is unchanged.
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+
+	// Leaving the clamp resets deduplication, so re-entering reports again.
+	onTasks(1, 32, 32, 32)
+	onTasks(2, 500, 500)
+	requireMetricCount(3)
 }
 
 // TestOnTasksBatchedTasksDoNotInflateTarget feeds a constant 150/s in 400-task batches. The
