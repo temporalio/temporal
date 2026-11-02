@@ -535,6 +535,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		RunID:            request.Execution.GetRunId(),
 		WorkflowTypeName: request.WorkflowTypeName,
 		StartTime:        request.StartTime,
+		CreateTime:       request.CreateTime,
 		Status:           request.Status,
 		ExecutionTime:    request.ExecutionTime,
 		TaskID:           request.TaskID,

@@ -14,6 +14,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
@@ -494,6 +497,51 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 	})
 }
 
+func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASM() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+
+	registry := chasm.NewRegistry(s.logger)
+	s.Require().NoError(registry.Register(&chasm.CoreLibrary{}))
+	s.Require().NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	s.Require().NoError(registry.Register(chasmnexus.NewNilLibrary()))
+	tree := chasm.NewEmptyTree(registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+	s.mutableState.chasmTree = tree
+
+	// A workflow may have a CHASM tree without a persisted root component yet.
+	s.True(s.mutableState.isWorkflowSkippable())
+	s.False(tree.IsStateDirty(), "the eligibility check must only read the CHASM tree")
+
+	wf, chasmCtx, err := s.mutableState.ChasmWorkflowComponent(s.T().Context())
+	s.Require().NoError(err)
+	wf.Operations = chasm.Map[int64, *chasmnexus.Operation]{
+		1: chasm.NewComponentField(chasmCtx, chasmnexus.NewOperation(&nexusoperationpb.OperationState{})),
+	}
+	s.False(s.mutableState.isWorkflowSkippable(), "a pending CHASM Nexus operation blocks time skipping")
+}
+
+func (s *mutableStateSuite) TestIsWorkflowSkippableWithCHASMReadError() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+
+	// The tree exists, but its workflow root type cannot be resolved by this registry.
+	registry := chasm.NewRegistry(s.logger)
+	s.mutableState.chasmTree = chasm.NewEmptyTree(
+		registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler,
+	)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mutableState.metricsHandler = metricsHandler
+
+	s.False(s.mutableState.isWorkflowSkippable())
+	s.Require().Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()], 1)
+}
+
 func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
 	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &commonpb.TimeSkippingConfig{Enabled: true},
@@ -672,6 +720,80 @@ func (s *mutableStateSuite) TestInitialSkippedDurationRemainsFixed() {
 	tsi := s.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	s.Equal(3*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
 	s.Equal(initialSkip, tsi.GetInitialSkippedDuration().AsDuration())
+}
+
+func (s *mutableStateSuite) TestTimeSkippingInfoUtil_CreateTime() {
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("NilReceiver_ReturnsStartTime", func() {
+		var util *TimeSkippingInfoUtil
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("NilTimeSkippingInfo_ReturnsStartTime", func() {
+		s.Equal(startTime, NewTimeSkippingInfoUtil(nil).CreateTime(startTime))
+	})
+
+	s.Run("NoInitialSkip_ReturnsStartTime", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.Equal(startTime, util.CreateTime(startTime))
+	})
+
+	s.Run("ZeroStartTime_ReturnsZero", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			InitialSkippedDuration: durationpb.New(time.Hour),
+		})
+		s.True(util.CreateTime(time.Time{}).IsZero())
+	})
+
+	s.Run("InitialSkip_SubtractsInitialNotAccumulated", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(5 * time.Hour),
+			InitialSkippedDuration:     durationpb.New(2 * time.Hour),
+		})
+		s.Equal(startTime.Add(-2*time.Hour), util.CreateTime(startTime))
+	})
+}
+
+func (s *mutableStateSuite) TestCreateTime_InheritedSkip() {
+	realNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	parentSkip := 5 * time.Hour
+	parentTSI := func() *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 100},
+			AccumulatedSkippedDuration: durationpb.New(parentSkip),
+		}
+	}
+
+	testCases := []struct {
+		name      string
+		propagate func(*persistencespb.TimeSkippingInfo) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	}{
+		// continue-as-new and retry
+		{name: "ContinueAsNewOrRetry", propagate: propagateTimeSkippingToNextRun},
+		// child workflows and schedules
+		{name: "ChildOrSchedule", propagate: chasm.PropagateTimeSkippingToOtherExecution},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			tsc, stateProp := tc.propagate(parentTSI())
+			s.Require().Equal(parentSkip, stateProp.GetInitialSkippedDuration().AsDuration())
+
+			startTime := AdjustNowWithTimeSkipping(realNow, stateProp)
+			s.Require().Equal(realNow.Add(parentSkip), startTime)
+
+			s.mutableState.initTimeSkippingInfo(tsc, stateProp)
+			util := NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(realNow, util.CreateTime(startTime))
+
+			s.mutableState.executeTimeSkippingTransition(time.Hour, true, false)
+			util = NewTimeSkippingInfoUtil(s.mutableState.GetExecutionInfo().GetTimeSkippingInfo())
+			s.Equal(parentSkip+time.Hour, util.GetAccumulatedSkippedDuration())
+			s.Equal(realNow, util.CreateTime(startTime))
+		})
+	}
 }
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {

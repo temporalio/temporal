@@ -72,9 +72,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	go.temporal.io/api v1.64.1-0.20261030195137-01272cbd37c9
-	go.temporal.io/auto-scaled-workers v0.0.0-20261013231030-67ffdef6330d
+	go.temporal.io/auto-scaled-workers v0.0.0-20261030203857-75274b664c29
 	go.temporal.io/sdk v1.49.0
-	go.temporal.io/testx v0.0.0-20261028001837-eec3975de26f
+	go.temporal.io/testx v0.0.0-20261029001555-ddcb0739798d
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -112,7 +112,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.56.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
-	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/apache/thrift v0.24.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.22 // indirect
@@ -167,7 +166,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -206,7 +205,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	google.golang.org/genproto v0.0.0-20260420184626-e10c466a9529 // indirect
@@ -226,7 +224,13 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-tool golang.org/x/perf/cmd/benchstat
+// Declare tools here when they must share this module's dependency versions.
+// Declare standalone developer tools in mise.toml - this is generally preferred.
+tool (
+	go.temporal.io/api/cmd/protoc-gen-go-helpers
+	go.temporal.io/api/cmd/protogen
+	go.temporal.io/server/cmd/tools/protoc-gen-go-chasm
+)
 
 // Use the local testx; consumers of the server ignore this replace.
 replace go.temporal.io/testx => ./common/testx
