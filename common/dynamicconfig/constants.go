@@ -1739,7 +1739,14 @@ an optional feature and also requires a metrics collection system that can handl
 	MatchingEnableWorkerMetricsEvents = NewNamespaceBoolSetting(
 		"matching.enableWorkerMetricsEvents",
 		false,
-		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events on every heartbeat.`,
+		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events from worker heartbeats.`,
+	)
+	MatchingWorkerMetricsEventInterval = NewNamespaceDurationSetting(
+		"matching.workerMetricsEventInterval",
+		5*time.Minute,
+		`Minimum interval for emitting worker_metrics events for each worker instance.
+Emitting these events can be expensive. The server controls their emission frequency independently
+of the user-configured SDK heartbeat interval.`,
 	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
