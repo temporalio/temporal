@@ -12,8 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const defaultReserveTimeout = 30 * time.Second
-
 func newTestComponent(limit int32) *Component {
 	return &Component{
 		ConcurrencyState: &fcpb.ConcurrencyState{
