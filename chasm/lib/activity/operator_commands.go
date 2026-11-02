@@ -92,6 +92,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
 		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
 		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.AsyncHandoffOptions = common.CloneProto(ogOptions.GetAsyncHandoffOptions())
 		a.Priority = common.CloneProto(ogOptions.GetPriority())
 		// start_delay only governs the first dispatch. Once the first attempt has started, restoring
 		// the original value would shift ScheduleToClose without affecting dispatch timing.
@@ -107,7 +108,8 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	// Recalculate policy-derived retry intervals based on the (possibly updated) retry policy.
 	// Worker-provided NextRetryDelay values are preserved for their already-scheduled retry.
 	if a.shouldRecalculateCurrentRetryInterval(attempt, frontendReq.GetRestoreOriginal(), updateFields) {
-		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
+		policy, count := a.retryPolicyAndCount(ctx, attempt.GetPendingRetryType())
+		newInterval := backoff.CalculateExponentialRetryInterval(policy, count-1)
 		attempt.CurrentRetryInterval = durationpb.New(newInterval)
 	}
 
@@ -116,7 +118,10 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	attempt.Stamp++
 
-	a.reissueRunningAttemptTimers(ctx, attempt)
+	if err := a.reissueRunningAttemptTimers(ctx, attempt); err != nil {
+		return nil, err
+	}
+
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		a.reissueDispatchAndScheduleToStart(ctx, attempt)
 	}
@@ -140,6 +145,7 @@ func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateAc
 				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
 				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				RetryPolicy:            a.GetRetryPolicy(),
+				AsyncHandoffOptions:    a.GetAsyncHandoffOptions(),
 				Priority:               a.GetPriority(),
 				StartDelay:             a.GetStartDelay(),
 			},
@@ -176,6 +182,11 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	}
 
 	if !restoreOriginal {
+		// TODO: Recalculate pending handoff retries when handoff retry-policy updates are supported.
+		if attempt.GetPendingRetryType() == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+			return false
+		}
+
 		if !util.FieldMaskHasPathOrSubPath(updateFields, "retryPolicy") {
 			return false
 		}
@@ -200,6 +211,7 @@ func (a *Activity) mergeActivityOptions(
 		HeartbeatTimeout:       common.CloneProto(a.HeartbeatTimeout),
 		Priority:               common.CloneProto(a.Priority),
 		RetryPolicy:            common.CloneProto(a.RetryPolicy),
+		AsyncHandoffOptions:    common.CloneProto(a.GetAsyncHandoffOptions()),
 		StartDelay:             common.CloneProto(a.StartDelay),
 	}
 
@@ -213,10 +225,12 @@ func (a *Activity) mergeActivityOptions(
 		}
 	}
 
-	// Re-normalize timeouts after the update so that relationships like
-	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
-	// This mirrors adjustActivityOptions for workflow-embedded activities.
-	if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
+	// Normalize merged timeouts based on whether handoff options are present.
+	if ao.GetAsyncHandoffOptions() != nil {
+		if err := validateAndNormalizeHandoffOptions(ao, nil); err != nil {
+			return err
+		}
+	} else if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
 		return err
 	}
 
@@ -228,6 +242,7 @@ func (a *Activity) mergeActivityOptions(
 	a.HeartbeatTimeout = ao.HeartbeatTimeout
 	a.Priority = ao.Priority
 	a.RetryPolicy = ao.RetryPolicy
+	a.AsyncHandoffOptions = ao.AsyncHandoffOptions
 	a.StartDelay = ao.StartDelay
 
 	return nil
@@ -524,6 +539,7 @@ func (a *Activity) resetKeepPaused(
 	metricsHandler metrics.Handler,
 ) (*activitypb.ResetActivityExecutionResponse, error) {
 	a.clearHandoffState()
+	a.resetHandoffAttempt(ctx)
 
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
@@ -585,7 +601,6 @@ func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
 // with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
 // only if the activity has never started.
 func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
-	// TODO: Restore AsyncHandoffOptions when handoff option support is implemented.
 	og := a.GetOriginalOptions()
 	a.TaskQueue = common.CloneProto(og.GetTaskQueue())
 	a.ScheduleToCloseTimeout = common.CloneProto(og.GetScheduleToCloseTimeout())
@@ -593,6 +608,7 @@ func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
 	a.StartToCloseTimeout = common.CloneProto(og.GetStartToCloseTimeout())
 	a.HeartbeatTimeout = common.CloneProto(og.GetHeartbeatTimeout())
 	a.RetryPolicy = common.CloneProto(og.GetRetryPolicy())
+	a.AsyncHandoffOptions = common.CloneProto(og.GetAsyncHandoffOptions())
 	a.Priority = common.CloneProto(og.GetPriority())
 	if a.GetFirstAttemptStartedTime() == nil {
 		a.StartDelay = common.CloneProto(og.GetStartDelay())

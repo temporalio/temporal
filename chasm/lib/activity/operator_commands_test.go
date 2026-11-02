@@ -8,14 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -722,4 +726,107 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Error(t, err)
 	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+// TestHandoffTimeoutUpdates verifies that timeout edits use the existing pickup or handoff time,
+// preserve task tokens and retry policies, and invalidate superseded timers.
+func TestHandoffTimeoutUpdates(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                     string
+		backoff, handedOff       bool
+		field                    string
+		timeout                  time.Duration
+		expectedBudget           time.Duration
+		expectedHeartbeatTimeout time.Duration
+	}{
+		{name: "shorten carried budget during backoff", backoff: true, field: "start_to_close_timeout", timeout: 5 * time.Second, expectedBudget: 5 * time.Second},
+		{name: "extend carried budget during backoff", backoff: true, field: "start_to_close_timeout", timeout: 2 * time.Minute, expectedBudget: 2 * time.Minute},
+		{name: "disable budget without clearing its anchor", field: "start_to_close_timeout"},
+		{name: "pre handoff heartbeat remains independent", field: "heartbeat_timeout", timeout: 5 * time.Second, expectedBudget: time.Minute, expectedHeartbeatTimeout: 20 * time.Second},
+		{name: "post handoff heartbeat uses handoff anchor", handedOff: true, field: "heartbeat_timeout", timeout: 5 * time.Second, expectedBudget: time.Minute, expectedHeartbeatTimeout: 5 * time.Second},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, ctx := newHandoffRetryTestActivity(t)
+
+			// Timeout edits must not replace an existing unlimited policy with changed namespace defaults.
+			a.AsyncHandoffOptions.RetryPolicy.MaximumAttempts = 0
+			expectedRetryPolicy := common.CloneProto(a.GetAsyncHandoffOptions().GetRetryPolicy())
+			defaults := retrypolicy.DefaultDefaultRetrySettings
+			defaults.MaximumAttempts = 99
+			activityContextFromChasm(ctx).config.DefaultActivityRetryPolicy = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(defaults)
+
+			a.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(20 * time.Second)
+			a.HeartbeatTimeout = durationpb.New(30 * time.Second)
+			a.AwaitingCompletion = testCase.handedOff
+			if testCase.handedOff {
+				a.AsyncHandoffTime = timestamppb.New(defaultTime.Add(20 * time.Second))
+				ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime.Add(40 * time.Second) }
+			}
+
+			attempt := a.LastAttempt.Get(ctx)
+			if testCase.backoff {
+				_, err := a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "retry"}})
+				require.NoError(t, err)
+			}
+
+			before := common.CloneProto(attempt)
+			heartbeatStartedAt := before.GetStartedTime().AsTime()
+			if testCase.handedOff {
+				heartbeatStartedAt = a.GetAsyncHandoffTime().AsTime()
+			}
+
+			ctx.Tasks = nil
+			options := &apiactivitypb.ActivityOptions{}
+			if testCase.field == "start_to_close_timeout" {
+				options.StartToCloseTimeout = durationpb.New(testCase.timeout)
+			} else {
+				options.HeartbeatTimeout = durationpb.New(testCase.timeout)
+			}
+
+			response, err := a.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				Namespace: "test-namespace", ActivityId: "test-activity", ActivityOptions: options,
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{testCase.field}},
+			}})
+			require.NoError(t, err)
+			require.NotNil(t, response.GetFrontendResponse().GetActivityOptions().GetAsyncHandoffOptions())
+			protorequire.ProtoEqual(t, expectedRetryPolicy, a.GetAsyncHandoffOptions().GetRetryPolicy())
+			require.Equal(t, before.GetCount(), attempt.GetCount())
+			require.Equal(t, before.GetAsyncHandoffState().GetCount(), attempt.GetAsyncHandoffState().GetCount())
+			protorequire.ProtoEqual(t, before.GetAsyncHandoffState().GetStartToCloseStartedTime(), attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+			require.Equal(t, before.GetStartedStamp(), attempt.GetStartedStamp())
+			require.Equal(t, before.GetAsyncHandoffState().GetStartToCloseStamp()+1, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+
+			var budget, heartbeat time.Time
+			for _, task := range ctx.Tasks {
+				switch task.Payload.(type) {
+				case *activitypb.HandoffStartToCloseTimeoutTask:
+					budget = task.Attributes.ScheduledTime
+				case *activitypb.HeartbeatTimeoutTask:
+					heartbeat = task.Attributes.ScheduledTime
+				default:
+					continue
+				}
+			}
+
+			if testCase.expectedBudget > 0 {
+				require.Equal(t, before.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime().Add(testCase.expectedBudget), budget)
+			} else {
+				require.True(t, budget.IsZero())
+			}
+
+			if testCase.expectedHeartbeatTimeout > 0 {
+				require.Equal(t, heartbeatStartedAt.Add(testCase.expectedHeartbeatTimeout), heartbeat)
+			} else if testCase.backoff {
+				require.True(t, heartbeat.IsZero())
+			}
+
+			valid, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a, chasm.TaskInvocation{}, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetAsyncHandoffState().GetStartToCloseStamp()})
+			require.NoError(t, err)
+			require.False(t, valid)
+		})
+	}
 }

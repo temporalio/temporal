@@ -402,6 +402,10 @@ message RecordActivityTaskStartedResponse {
   string activity_run_id = 13;
   // Nexus operation context for this activity, used by workers to select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext nexus_serialization_context = 14;
+  // Handoff attempt within the activity attempt. Zero when handoff options are absent.
+  int32 handoff_attempt = 15;
+  // Normalized handoff options for this activity task.
+  temporal.api.activity.v1.AsyncHandoffOptions async_handoff_options = 16;
 }
 
 message RespondWorkflowTaskCompletedRequest {

@@ -95,9 +95,11 @@ func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 		timeout = response.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType()
 	}
 	return activityTimeoutInfo{
-		timeout:  timeout,
-		attempt:  info.GetAttempt(),
-		terminal: info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		timeout:        timeout,
+		outcomeTimeout: response.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		attempt:        info.GetAttempt(),
+		terminal:       info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		handoffAttempt: info.GetHandoffAttempt(),
 	}
 }
 
@@ -118,12 +120,15 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
 	require.NoError(t, err)
+	require.Equal(t, cfg.EagerStart, resp.GetEagerActivityTask() != nil, "unexpected eager activity task presence")
+
 	state := activityDriverState{cfg: cfg}
 	if cfg.EagerStart {
 		task := resp.GetEagerActivityTask()
-		require.NotNil(t, task, "eager standalone activity start did not return a task")
 		state.token = task.GetTaskToken()
+		state.lastTask = task
 		state.startedAttempt = task.GetAttempt()
+		state.startedHandoffAttempt = task.GetHandoffAttempt()
 	}
 	return &saaHandle{
 		activityDriverState: state,
@@ -150,11 +155,12 @@ func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string)
 		Identity:               d.env.Tv().ClientIdentity(),
 		Input:                  payloads.EncodeString(activityInput),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
-		StartToCloseTimeout:    durationpb.New(c.startToClose()),
+		StartToCloseTimeout:    opt(c.startToClose()),
 		ScheduleToCloseTimeout: opt(c.ScheduleToClose),
 		ScheduleToStartTimeout: opt(c.ScheduleToStart),
 		HeartbeatTimeout:       opt(c.HeartbeatTimeout),
 		StartDelay:             opt(c.StartDelay),
+		AsyncHandoffOptions:    c.AsyncHandoffOptions,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:        durationpb.New(c.retryInterval()),
 			BackoffCoefficient:     cmp.Or(c.BackoffCoefficient, 1.0),
@@ -229,9 +235,40 @@ func (a *saaHandle) observedState(t require.TestingT) activityState {
 	info := a.describe(t).GetInfo()
 	switch info.GetStatus() {
 	case enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-		return activityState{runState: info.GetRunState(), attempt: info.GetAttempt()}
+		return activityState{
+			runState: info.GetRunState(), attempt: info.GetAttempt(),
+			handoffAttempt: info.GetHandoffAttempt(), awaitingCompletion: info.GetAwaitingCompletion(),
+		}
 	default:
 		return activityState{closed: true}
+	}
+}
+
+func (a *saaHandle) handoffInfo(t require.TestingT) activityHandoffInfo {
+	info := a.describe(t).GetInfo()
+	return activityHandoffInfo{
+		handoffTime:            info.GetAsyncHandoffTime(),
+		options:                info.GetAsyncHandoffOptions(),
+		awaitingCompletion:     info.GetAwaitingCompletion(),
+		startToCloseTimeout:    info.GetStartToCloseTimeout().AsDuration(),
+		scheduleToCloseTimeout: info.GetScheduleToCloseTimeout().AsDuration(),
+	}
+}
+
+func (a *saaHandle) terminalFailureInfo(t require.TestingT) activityFailureInfo {
+	response := a.describe(t)
+	polled, err := a.d.env.FrontendClient().PollActivityExecution(a.testContext(), &workflowservice.PollActivityExecutionRequest{
+		Namespace: a.d.env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID,
+	})
+	require.NoError(t, err)
+
+	info := response.GetInfo()
+	return activityFailureInfo{
+		attempt:         info.GetAttempt(),
+		handoffAttempt:  info.GetHandoffAttempt(),
+		lastFailure:     info.GetLastFailure(),
+		recordedOutcome: response.GetOutcome(),
+		resultOutcome:   polled.GetOutcome(),
 	}
 }
 
@@ -264,6 +301,11 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	ns := a.d.env.Namespace().String()
 	ctx := a.testContext()
 	switch e.Type {
+	case model.HandoffType:
+		_, err := fc.RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+		})
+		return err
 	case model.HeartbeatType:
 		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,

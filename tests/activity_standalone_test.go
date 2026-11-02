@@ -14000,7 +14000,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 	t.Run("KeepPaused", func(t *testing.T) {
 		// Reset while activity is paused, with keepPaused=true.
 		// Verifies that the activity remains paused after reset and that the attempt
-		// count is reset to 1 and the prior handoff time is cleared.
+		// count is reset to 1.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -14011,14 +14011,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}
 		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
 
-		// Record a handoff timestamp so the reset must clear an existing value.
-		_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp1.GetTaskToken(),
-		})
-		require.NoError(t, err)
-
-		// Fail attempt 1 so it enters retry backoff.
+		// Fail attempt 1 with a short override retry so it enters backoff
 		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
 
 		// Wait for SCHEDULED state (retry backoff)
@@ -14033,7 +14026,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 5*time.Second, 200*time.Millisecond)
 
 		// Pause the activity
-		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+		_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
@@ -14061,7 +14054,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 		require.Greater(t, desc.GetInfo().GetAttempt(), int32(1))
-		require.NotNil(t, desc.GetInfo().GetAsyncHandoffTime())
 
 		// Reset with keepPaused=true — activity should remain paused but attempt reset to 1
 		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
@@ -14072,7 +14064,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Verify reset clears the handoff time while keeping the activity paused at attempt 1.
+		// Verify still paused with attempt=1
 		await.Require(ctx, t, func(c *await.T) {
 			desc, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
@@ -14082,7 +14074,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			require.NoError(c, err)
 			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.GetInfo().GetRunState())
 			require.EqualValues(c, 1, desc.GetInfo().GetAttempt())
-			require.Nil(c, desc.GetInfo().GetAsyncHandoffTime())
 		}, 2*time.Second, 200*time.Millisecond)
 
 		// Unpause the activity
@@ -15239,98 +15230,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 }
 
 func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
-	s.Run("RecordHandoffAndCompleteExternally", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
-		t := s.T()
-		ctx := s.Context()
-
-		activityID, taskQueue := env.Tv().ActivityID(), env.Tv().TaskQueue().GetName()
-		start := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		task := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, start.GetRunId())
-
-		handoff := &workflowservice.RespondActivityTaskHandoffRequest{
-			TaskToken: task.GetTaskToken(),
-			Identity:  defaultIdentity,
-		}
-		// Namespace is intentionally omitted, exercising token-based injection and routing.
-		_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.NoError(t, err)
-
-		describe := func() *activitypb.ActivityExecutionInfo {
-			t.Helper()
-			response, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      start.GetRunId(),
-			})
-			require.NoError(t, err)
-			return response.GetInfo()
-		}
-
-		info := describe()
-		require.True(t, info.GetAwaitingCompletion())
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION, info.GetRunState())
-		require.NotNil(t, info.GetAsyncHandoffTime())
-		require.Nil(t, info.GetAsyncHandoffOptions())
-		require.EqualValues(t, 1, info.GetAttempt())
-		require.Zero(t, info.GetHandoffAttempt())
-
-		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
-			TaskToken: task.GetTaskToken(),
-			Namespace: env.ExternalNamespace().String(),
-		})
-		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-
-		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: task.GetTaskToken(),
-			Result:    defaultResult,
-		})
-		require.NoError(t, err)
-
-		closed := describe()
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, closed.GetStatus())
-		require.False(t, closed.GetAwaitingCompletion())
-		protorequire.ProtoEqual(t, info.GetAsyncHandoffTime(), closed.GetAsyncHandoffTime())
-
-		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.ErrorAs(t, err, new(*serviceerror.NotFound))
-	})
-
-	s.Run("RepeatedHandoffPreservesTimestamp", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
-		t := s.T()
-		ctx := s.Context()
-
-		activityID, taskQueue := env.Tv().ActivityID(), env.Tv().TaskQueue().GetName()
-		start := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		task := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, start.GetRunId())
-
-		handoff := &workflowservice.RespondActivityTaskHandoffRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: task.GetTaskToken(),
-		}
-		_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.NoError(t, err)
-
-		describeRequest := &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      start.GetRunId(),
-		}
-		before, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.NotNil(t, before.GetInfo().GetAsyncHandoffTime())
-
-		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.NoError(t, err)
-
-		after, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.True(t, after.GetInfo().GetAwaitingCompletion())
-		protorequire.ProtoEqual(t, before.GetInfo().GetAsyncHandoffTime(), after.GetInfo().GetAsyncHandoffTime())
-	})
-
 	s.Run("DisableHandoffAfterRecording", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
@@ -15412,88 +15311,5 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		})
 		require.NoError(t, err)
 		require.NoError(t, run.Get(ctx, nil))
-	})
-
-	// Without handoff options, a failure after handoff still advances the activity attempt.
-	// The handoff time survives retry backoff and is cleared at the next worker pickup.
-	s.Run("HandoffPreservesActivityRetryBehavior", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
-		t := s.T()
-		ctx := s.Context()
-
-		activityID, taskQueue := env.Tv().ActivityID(), env.Tv().TaskQueue().GetName()
-		start := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		task := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, start.GetRunId())
-
-		handoff := &workflowservice.RespondActivityTaskHandoffRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: task.GetTaskToken(),
-		}
-		_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.NoError(t, err)
-
-		describeRequest := &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      start.GetRunId(),
-		}
-		handedOff, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION, handedOff.GetInfo().GetRunState())
-		require.NotNil(t, handedOff.GetInfo().GetAsyncHandoffTime())
-
-		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: task.GetTaskToken(),
-			Failure: &failurepb.Failure{
-				Message: "external job failed",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "retryable"},
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		backoff, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, backoff.GetInfo().GetRunState())
-		require.False(t, backoff.GetInfo().GetAwaitingCompletion())
-		protorequire.ProtoEqual(t, handedOff.GetInfo().GetAsyncHandoffTime(), backoff.GetInfo().GetAsyncHandoffTime())
-
-		next, err := env.pollActivityTaskQueue(ctx, taskQueue)
-		require.NoError(t, err)
-		require.EqualValues(t, 2, next.GetAttempt())
-		require.Zero(t, next.GetHandoffAttempt())
-
-		afterPickup, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, afterPickup.GetInfo().GetRunState())
-		require.Nil(t, afterPickup.GetInfo().GetAsyncHandoffTime())
-
-		// The previous attempt's task token is now stale.
-		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
-		require.ErrorAs(t, err, new(*serviceerror.NotFound))
-
-		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: next.GetTaskToken(),
-		})
-		require.NoError(t, err)
-
-		afterHandoff, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION, afterHandoff.GetInfo().GetRunState())
-
-		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: next.GetTaskToken(),
-			Result:    defaultResult,
-		})
-		require.NoError(t, err)
-
-		closed, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
-		require.NoError(t, err)
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, closed.GetInfo().GetStatus())
-		require.False(t, closed.GetInfo().GetAwaitingCompletion())
 	})
 }
