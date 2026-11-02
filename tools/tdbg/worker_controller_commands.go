@@ -14,7 +14,7 @@ import (
 // Each command gets its own flags: urfave/cli keeps parse state on them.
 func wciVersionFlags() []cli.Flag {
 	return []cli.Flag{
-		&cli.StringFlag{Name: FlagDeploymentName, Usage: "Worker deployment name", Required: true},
+		&cli.StringFlag{Name: FlagWCIDeploymentName, Usage: "Worker deployment name", Required: true},
 		&cli.StringFlag{Name: FlagBuildID, Usage: "Worker deployment build ID", Required: true},
 	}
 }
@@ -125,7 +125,7 @@ func AdminMigrateWorkerControllerInstance(c *cli.Context, clientFactory ClientFa
 	if err != nil {
 		return err
 	}
-	deploymentName, buildID := c.String(FlagDeploymentName), c.String(FlagBuildID)
+	deploymentName, buildID := c.String(FlagWCIDeploymentName), c.String(FlagBuildID)
 
 	ctx, cancel := newContext(c)
 	defer cancel()

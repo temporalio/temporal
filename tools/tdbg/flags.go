@@ -80,7 +80,7 @@ var (
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
-	FlagDeploymentName             = "deployment-name"
+	FlagWCIDeploymentName          = "deployment-name"
 	FlagBuildID                    = "build-id"
 	FlagScheduleIDAlias            = []string{"sid"}
 	FlagTarget                     = "target"
