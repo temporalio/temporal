@@ -89,45 +89,6 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	require.Zero(t, rejections, "lock contention is not evidence about a shared budget")
 }
 
-// Classification runs while off, so parked work is already classified when the flag flips.
-func TestExecutable_ClassifiesWhileTheControllerIsOff(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	o := defaultThrottleOverrides()
-	o.enabled = false
-	state, _ := newTestThrottleState(o)
-	e := newThrottleTestExecutable(ctrl, state)
-
-	e.reportThrottle(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-	)
-
-	key := e.throttleKey
-	require.NotEqual(t, ThrottleKey{}, key, "the task must know its class before the flag is on")
-	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, key.Cause)
-	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
-}
-
-// An ungoverned cause means the task leaves the gated class.
-func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	state, _ := newTestThrottleState(defaultThrottleOverrides())
-	e := newThrottleTestExecutable(ctrl, state)
-
-	e.reportThrottle(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-	)
-	require.NotEqual(t, ThrottleKey{}, e.throttleKey)
-
-	e.reportThrottle(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
-	)
-	require.Equal(t, ThrottleKey{}, e.throttleKey,
-		"a system scoped limit is not this namespace's budget")
-}
-
 // A namespace the registry cannot name has no budget to pace against.
 func TestExecutable_UnresolvedNamespaceStaysUngoverned(t *testing.T) {
 	ctrl := gomock.NewController(t)

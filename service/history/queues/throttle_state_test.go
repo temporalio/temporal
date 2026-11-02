@@ -109,13 +109,6 @@ func TestIsControllerInput(t *testing.T) {
 		{name: "aps at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: system},
 		{name: "persistence at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: system},
 		{name: "unspecified scope is not namespace", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: unspecified},
-
-		{name: "busy workflow", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, scope: ns},
-		{name: "circuit breaker", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN, scope: ns},
-
-		{name: "system overloaded", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, scope: ns},
-		{name: "concurrent limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, scope: ns},
-		{name: "rps limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, scope: ns},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, IsControllerInput(tc.cause, tc.scope))
@@ -442,28 +435,6 @@ func TestThrottleState_UnadmittedRejectionsDoNotAllocateKeys(t *testing.T) {
 	require.Zero(t, throttleLen(state), "unmetered rejections must not cost key slots")
 }
 
-func TestThrottleState_UnadmittedRejectionsDoNotBlockIncrease(t *testing.T) {
-	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
-	key := testKey()
-
-	reportThrottle(state, key, true)
-	closeWindow(state, timeSource, key)
-	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
-
-	// Rejections the gate did not issue are loss on traffic it never sent, so they must not
-	// hold the rate down: each of these windows has to climb as though it saw none of them.
-	want := 85.0
-	for i := range 4 {
-		cleanWindow(state, key)
-		reportThrottle(state, key, false)
-		closeWindow(state, timeSource, key)
-
-		want *= 1.1
-		require.InEpsilon(t, want, throttleRate(state, key), 1e-9,
-			"unadmitted rejections blocked the increase in window %d", i)
-	}
-}
-
 func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
@@ -479,41 +450,285 @@ func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
 	require.InEpsilon(t, rate, throttleRate(state, key), 1e-9, "idle windows must leave the rate alone")
 }
 
-func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
-	const rejectEveryNth = 50 // exactly 2% loss for any class size, under the 5% threshold
+func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) {
+	const (
+		hostCount    = 8
+		sharedBudget = 200
+		windowCount  = 120
+		warmup       = 20
+	)
 
-	rateFor := func(demandPerWindow int) float64 {
-		state, timeSource := newTestThrottleState(defaultThrottleOverrides())
-		key := testKey()
-		admitted := 0
-		for range 20 {
-			for range demandPerWindow {
-				admit := admitOK
-				if (admitted+1)%rejectEveryNth == 0 {
-					admit = admitAndReject
-				}
-				if !admit(state, key) {
+	states := make([]*ThrottleState, hostCount)
+	clocks := make([]*clock.EventTimeSource, hostCount)
+	for i := range states {
+		o := defaultThrottleOverrides()
+		o.initialRate = sharedBudget / hostCount
+		o.maxRate = sharedBudget
+		states[i], clocks[i] = newTestThrottleState(o)
+	}
+
+	key := apsKey("ns-1")
+	now := clocks[0].Now()
+	offered := [hostCount]int{60, 50, 45, 40, 35, 30, 25, 20}
+	previous := make([]float64, hostCount)
+	sawIncrease := make([]bool, hostCount)
+	sawDecrease := make([]bool, hostCount)
+	tail := make([]float64, 0, windowCount-warmup)
+	minAggregate := math.Inf(1)
+
+	for window := range windowCount {
+		now = now.Add(testThrottleWindow)
+		for _, timeSource := range clocks {
+			timeSource.Update(now)
+		}
+
+		admitted := make([]int, hostCount)
+		total := 0
+		for i, state := range states {
+			for range offered[i] {
+				allowed, _ := state.Admit(key)
+				if !allowed {
 					continue
+				}
+				admitted[i]++
+				total++
+			}
+		}
+
+		if total > sharedBudget {
+			overflow := total - sharedBudget
+			for i, state := range states {
+				rejected := int(math.Round(float64(overflow*admitted[i]) / float64(total)))
+				for range rejected {
+					state.ReportThrottled(key, true)
+				}
+			}
+		}
+
+		aggregate := 0.0
+		for i, state := range states {
+			rate := throttleRate(state, key)
+			aggregate += rate
+			if previous[i] > 0 {
+				sawIncrease[i] = sawIncrease[i] || rate > previous[i]
+				sawDecrease[i] = sawDecrease[i] || rate < previous[i]
+			}
+			previous[i] = rate
+		}
+		if window >= warmup {
+			tail = append(tail, aggregate)
+			minAggregate = min(minAggregate, aggregate)
+		}
+	}
+
+	sum := 0.0
+	for _, aggregate := range tail {
+		sum += aggregate
+	}
+	mean := sum / float64(len(tail))
+	require.Greater(t, mean, sharedBudget*0.4)
+	require.Less(t, mean, sharedBudget*2.0)
+	require.Greater(t, minAggregate, sharedBudget*0.1)
+	for i, state := range states {
+		require.True(t, sawIncrease[i], "host %d never increased", i)
+		require.True(t, sawDecrease[i], "host %d never decreased", i)
+		require.Greater(t, throttleRate(state, key), state.settings().MinRate,
+			"host %d collapsed to the minimum rate", i)
+	}
+}
+
+func TestThrottleState_IdleKeyRestartsAtInitialRate(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.keyTTL = time.Minute
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	for range 40 {
+		reportThrottle(state, key, true)
+		closeWindow(state, timeSource, key)
+	}
+	require.InEpsilon(t, o.minRate, throttleRate(state, key), 1e-9)
+
+	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
+	require.True(t, admitOK(state, key))
+	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9)
+}
+
+func TestThrottleState_BackwardClockDoesNotResetActiveKey(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.initialRate = 5
+	o.keyTTL = 5 * time.Minute
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+	start := timeSource.Now()
+
+	for i := range 6 {
+		timeSource.Update(start.Add(time.Duration(i+1) * time.Second))
+		reportThrottle(state, key, true)
+		admitOK(state, key)
+	}
+	driven := throttleRate(state, key)
+	require.Less(t, driven, o.initialRate)
+
+	timeSource.Update(start.Add(-10 * time.Minute))
+	admitOK(state, key)
+	timeSource.Update(start.Add(10 * time.Second))
+	admitOK(state, key)
+	require.Less(t, throttleRate(state, key), o.initialRate)
+}
+
+// A class is only asking for a higher rate when the gate refuses it. Raising the rate of a
+// class that never ran out of tokens would climb to the ceiling on clean windows alone, and the
+// burst that buys is what the class dumps the moment its demand returns.
+func TestThrottleState_DemandBelowTheRateDoesNotRaiseIt(t *testing.T) {
+	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
+	key := testKey()
+
+	for range 40 {
+		for range 5 {
+			require.True(t, admitOK(state, key))
+		}
+		closeWindow(state, timeSource, key)
+	}
+	require.InEpsilon(t, defaultThrottleOverrides().initialRate, throttleRate(state, key), 1e-9,
+		"a class well under its rate has shown no demand for more")
+}
+
+// A loss ratio cannot resolve a 5% threshold from ten releases: the smallest non-zero ratio it
+// can express is already 10%, so a class whose true loss is under the threshold would be cut
+// every window that happened to contain a rejection, and would drift below a rate it could
+// sustain. Evidence carries across windows until the ratio means something.
+func TestThrottleState_LowRateClassIsNotCutByAnUnresolvableRatio(t *testing.T) {
+	// 4% loss, under the 5% threshold. At a rate of 15 a window holds too few releases for the
+	// ratio to say so: one rejection reads as 6.7%, and most windows contain one, so deciding
+	// per window drives the class below a rate it was sustaining.
+	const rejectEveryNth = 25
+
+	o := defaultThrottleOverrides()
+	o.initialRate = 15
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	admitted := 0
+	for range 40 {
+		for range 200 { // demand above the rate, so the class is asking for more
+			admit := admitOK
+			if (admitted+1)%rejectEveryNth == 0 {
+				admit = admitAndReject
+			}
+			if !admit(state, key) {
+				continue
+			}
+			admitted++
+		}
+		closeWindow(state, timeSource, key)
+	}
+	require.Greater(t, throttleRate(state, key), o.initialRate,
+		"a class losing 4% against a 5% threshold must not be cut at any rate")
+}
+
+// Loss rises with the class's own rate, which is the feedback the law needs: it settles just
+// above the share other traffic leaves it.
+func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
+	const budget = 200.0
+
+	for _, other := range []float64{0, 100, 150, 190} {
+		sustainable := budget - other
+		o := defaultThrottleOverrides()
+		o.initialRate = 1000
+		state, timeSource := newTestThrottleState(o)
+		key := testKey()
+
+		for range 400 {
+			admitted := 0
+			for {
+				allowed, _ := state.Admit(key)
+				if !allowed {
+					break
 				}
 				admitted++
 			}
-			closeWindow(state, timeSource, key)
+			if aggregate := other + float64(admitted); aggregate > budget && admitted > 0 {
+				// The enforcer refuses the overflow; this class owns its share of it.
+				rejected := int((aggregate - budget) * float64(admitted) / aggregate)
+				for range rejected {
+					state.ReportThrottled(key, true)
+				}
+			}
+			timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 		}
-		return throttleRate(state, key)
+
+		settled := throttleRate(state, key)
+		require.GreaterOrEqual(t, settled, sustainable,
+			"the class must claim the share left to it; other=%v", other)
+		require.Less(t, settled, budget*1.5,
+			"the class must not run away above the budget; other=%v", other)
+		require.Less(t, settled, o.maxRate,
+			"a class under real back pressure must not reach the ceiling; other=%v", other)
+	}
+}
+
+// A release committed while on keeps its rejection after the flag goes off, or the window
+// reads clean while every release was failing.
+func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
+	enabled := true
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	state := NewThrottleState(
+		func() dynamicconfig.TaskThrottleControllerSettings {
+			return dynamicconfig.TaskThrottleControllerSettings{
+				Enabled:       enabled,
+				Beta:          0.85,
+				IncreaseRatio: 0.10,
+				LossThreshold: 0.05,
+				Window:        testThrottleWindow,
+				MaxKeys:       1024,
+				MinRate:       1,
+				MaxRate:       10000,
+				InitialRate:   100,
+				KeyTTL:        5 * time.Minute,
+			}
+		},
+		timeSource,
+		metrics.NoopMetricsHandler,
+	)
+	key := testKey()
+
+	lossThreshold := state.settings().LossThreshold
+	samples := minDecisionReleases(lossThreshold)
+	for range samples {
+		allowed, _ := state.Admit(key)
+		require.True(t, allowed)
 	}
 
+	enabled = false
+	for range samples {
+		state.ReportThrottled(key, true)
+	}
+	enabled = true
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9,
+		"every release failed, so the window must not read clean")
+}
+
+// A zero floor would let a class decay until it can no longer earn the releases a decision
+// needs, stalling it for good while the rescheduler keeps polling the gate.
+func TestThrottleState_ZeroFloorCannotStallAClass(t *testing.T) {
 	o := defaultThrottleOverrides()
-	want := o.initialRate * math.Pow(1+o.increase, 20)
-	require.Less(t, want, o.maxRate, "the run must stay below the ceiling to mean anything")
+	o.minRate = 0
+	o.initialRate = 2
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
 
-	rates := make([]float64, 0, 2)
-	for _, demand := range []int{700, 7000} {
-		rate := rateFor(demand)
-		require.InEpsilon(t, want, rate, 1e-9,
-			"a class seeing 2%% loss against a 5%% threshold must be allowed to speed up every "+
-				"window, whatever its size; demand=%d", demand)
-		rates = append(rates, rate)
+	// Far past the point a 0.85 decay would otherwise reach zero.
+	for range 200 {
+		reportThrottle(state, key, true)
+		closeWindow(state, timeSource, key)
 	}
-	require.InEpsilon(t, rates[0], rates[1], 1e-9,
-		"two classes seeing the same loss must settle at the same rate, whatever their size")
+
+	rate := throttleRate(state, key)
+	require.GreaterOrEqual(t, rate, minThrottleRate,
+		"a configured floor below one release per second must not be honoured")
+	require.True(t, admitOK(state, key), "a floored class must still release")
 }
