@@ -5330,7 +5330,7 @@ func (m *testTaskManager) CreateTasks(
 	} else if m.fault("CreateTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailable("Fake Unavailable")
 	} else if m.fault("CreateTasks", "PersistenceLimit") {
-		return nil, persistence.ErrPersistenceNamespaceShardLimitExceeded
+		return nil, persistence.ErrPersistenceNamespaceLimitExceeded
 	} else if m.fault("CreateTasks", "ConcurrentLimit") {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
