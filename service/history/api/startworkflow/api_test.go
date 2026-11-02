@@ -269,13 +269,51 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 	t.Parallel()
 
 	version := &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"}
+	versionedWorker := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName:       "worker-deployment",
+		BuildId:              "worker-build-id",
+		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
 	testCases := []struct {
-		name        string
-		override    *workflowpb.VersioningOverride
-		wantVersion *deploymentspb.WorkerDeploymentVersion
+		name          string
+		override      *workflowpb.VersioningOverride
+		workerOptions *deploymentpb.WorkerDeploymentOptions
+		wantVersion   *deploymentspb.WorkerDeploymentVersion
 	}{
 		{
 			name: "no override",
+		},
+		{
+			name:          "no override, versioned worker",
+			workerOptions: versionedWorker,
+			wantVersion:   &deploymentspb.WorkerDeploymentVersion{DeploymentName: "worker-deployment", BuildId: "worker-build-id"},
+		},
+		{
+			name: "no override, unversioned worker",
+			workerOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "worker-deployment",
+				BuildId:              "worker-build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED,
+			},
+		},
+		{
+			name: "auto-upgrade override, versioned worker",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{
+				AutoUpgrade: true,
+			}},
+			workerOptions: versionedWorker,
+			wantVersion:   &deploymentspb.WorkerDeploymentVersion{DeploymentName: "worker-deployment", BuildId: "worker-build-id"},
+		},
+		{
+			name: "pinned override, versioned worker",
+			override: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  version,
+				},
+			}},
+			workerOptions: versionedWorker,
+			wantVersion:   &deploymentspb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
 		},
 		{
 			name: "pinned override",
@@ -322,8 +360,9 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{
 					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-						TaskQueue:          &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
-						VersioningOverride: test.override,
+						TaskQueue:                    &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+						VersioningOverride:           test.override,
+						EagerWorkerDeploymentOptions: test.workerOptions,
 					},
 				},
 			}

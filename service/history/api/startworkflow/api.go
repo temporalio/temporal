@@ -191,12 +191,13 @@ func (s *Starter) prepare(ctx context.Context) error {
 // TODO: Reconcile the Matching grant when the start does not create a new execution.
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	request := s.request.StartRequest
-	// Pinned and pending one-time overrides route the first workflow task to their target version.
-	// TODO: When there's no override, send the version from EagerWorkerDeploymentOptions (sent by the Go SDK since
-	// sdk-go#2075), so Matching also checks the versioned queue's backlog.
+	// Check the backlog of the override's target version if there is one, otherwise the eager worker's version.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
+	if version == nil {
+		version = worker_versioning.DeploymentVersionFromOptions(request.GetEagerWorkerDeploymentOptions())
+	}
 	// Same tags as the activity eager paths, which have no workflow type.
 	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
 		s.shardContext.GetMetricsHandler(),
