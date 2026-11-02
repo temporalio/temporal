@@ -99,6 +99,18 @@ func (s *calendarSuite) TestCalendarMatch() {
 	}
 }
 
+func (s *calendarSuite) TestCalendarMatchDayOfWeekRangeIncludingSeven() {
+	// 7 in a day-of-week range means Sunday (same as 0), so "1-7" matches every day.
+	for _, dow := range []string{"1-7", "0-7", "1-7/1"} {
+		cc := s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
+			DayOfWeek: dow,
+		}, time.UTC)
+		s.True(cc.matches(time.Date(2022, time.March, 6, 0, 0, 0, 0, time.UTC)), dow)  // sunday
+		s.True(cc.matches(time.Date(2022, time.March, 7, 0, 0, 0, 0, time.UTC)), dow)  // monday
+		s.True(cc.matches(time.Date(2022, time.March, 12, 0, 0, 0, 0, time.UTC)), dow) // saturday
+	}
+}
+
 func (s *calendarSuite) TestParseCronString() {
 	scs, iv, tz, err := parseCronString("5,9 */2 * * *")
 	s.NoError(err)
