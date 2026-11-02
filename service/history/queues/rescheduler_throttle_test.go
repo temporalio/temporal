@@ -337,8 +337,7 @@ func TestReschedule_FailedSubmitRefundsTheToken(t *testing.T) {
 	require.Zero(t, rejections)
 }
 
-// Priority order is a property of the rescheduler, not of the throttle flag.
-func TestReschedule_PriorityOrderHoldsWithTheControllerOff(t *testing.T) {
+func TestReschedule_ControllerOffDrainsEveryPriority(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	o := defaultThrottleOverrides()
 	o.enabled = false
@@ -372,10 +371,10 @@ func TestReschedule_PriorityOrderHoldsWithTheControllerOff(t *testing.T) {
 	}).AnyTimes()
 	r.reschedule()
 
-	require.Equal(t,
+	require.ElementsMatch(t,
 		[]ctasks.Priority{ctasks.PriorityHigh, ctasks.PriorityLow, ctasks.PriorityPreemptable},
 		submitted,
-		"a disabled controller must not cost the rescheduler its priority order")
+		"a disabled controller must drain every priority")
 	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
 }
 

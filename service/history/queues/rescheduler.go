@@ -228,6 +228,14 @@ func (r *reschedulerImpl) reschedule() {
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
 
+	if !r.throttleState.Enabled() {
+		// Use random order when the throttle controller is disabled.
+		for key, pq := range r.pqMap {
+			r.drainClassLocked(key, pq, now)
+		}
+		return
+	}
+
 	for _, priority := range ctasks.PriorityOrder {
 		for key, pq := range r.pqMap {
 			if key.Priority != priority || pq.IsEmpty() {
