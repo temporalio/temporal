@@ -51,4 +51,5 @@ type PartitionScalerDecision struct {
 	NewTarget    int        // if zero, disable managed scaling, otherwise set partition target
 	BacklogCap   int        // target cap for backlog count; must be zero when NewTarget is zero
 	PrivateState *anypb.Any // optional private state to be stored with target
+	Reason       string     // optional human-readable explanation of the decision, for logging only
 }
