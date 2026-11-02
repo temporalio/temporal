@@ -395,6 +395,17 @@ func MatchingTaskPriorityTag(value int32) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: priStr}
 }
 
+func FairnessKeyTag(value string, breakdown bool) Tag {
+	// "__none__" is emitted even with the breakdown off, so keyless tasks stay distinguishable
+	// from hidden ("__omitted__") keys.
+	if value == "" {
+		value = none
+	} else if !breakdown {
+		value = omitted
+	}
+	return Tag{Key: FairnessKeyTagName, Value: value}
+}
+
 func QueueReaderIDTag(readerID int64) Tag {
 	return Tag{Key: QueueReaderIDTagName, Value: strconv.Itoa(int(readerID))}
 }

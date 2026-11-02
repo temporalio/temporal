@@ -494,6 +494,7 @@ reredirectTask:
 	}
 
 	behavior := directive.GetBehavior()
+	fairnessKey := params.taskInfo.GetPriority().GetFairnessKey()
 
 	var outcome syncMatchOutcome
 	var forwardedForSyncMatch bool
@@ -507,7 +508,7 @@ reredirectTask:
 				// We should not use targetVersion because targetVersion is always routing-config-deriven.
 				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
 				pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
-				syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatch, forwardedForSyncMatch, behavior)
+				syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatch, forwardedForSyncMatch, behavior, fairnessKey)
 			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
@@ -544,7 +545,7 @@ reredirectTask:
 		// Unpinned tasks are written to the default queue for late binding, in case target version
 		// changes by the time they can be dispatched.
 		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
-		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwardedForSyncMatch, behavior)
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwardedForSyncMatch, behavior, fairnessKey)
 	}
 
 	return assignedBuildId, false, err

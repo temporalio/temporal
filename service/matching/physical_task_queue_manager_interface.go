@@ -72,6 +72,6 @@ type (
 		// RecordTaskAdd records a task added to this physical queue using the queue's tagged
 		// metrics handler, so all per-physical-queue labels are included. Only call it on the
 		// partition that received the task, for tasks that were actually added.
-		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
+		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior, fairnessKey string)
 	}
 )
