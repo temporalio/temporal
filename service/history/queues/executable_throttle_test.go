@@ -89,6 +89,23 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	require.Zero(t, rejections, "lock contention is not evidence about a shared budget")
 }
 
+// With the controller off a throttled task stays on its plain task channel.
+func TestExecutable_DoesNotClassifyWhileTheControllerIsOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	o := defaultThrottleOverrides()
+	o.enabled = false
+	state, _ := newTestThrottleState(o)
+	e := newThrottleTestExecutable(ctrl, state)
+
+	e.reportThrottle(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	)
+
+	require.Equal(t, ThrottleKey{}, e.throttleKey)
+	require.Zero(t, throttleLen(state))
+}
+
 // A namespace the registry cannot name has no budget to pace against.
 func TestExecutable_UnresolvedNamespaceStaysUngoverned(t *testing.T) {
 	ctrl := gomock.NewController(t)

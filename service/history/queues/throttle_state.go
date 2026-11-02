@@ -144,10 +144,9 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 }
 
 // ReportThrottled feeds one rejection in. metered says the gate issued the release that was
-// refused, which is what makes it evidence. Such a rejection is recorded even once the
-// controller is off, since the release it answers was already counted.
+// refused, which is what makes it evidence.
 func (s *ThrottleState) ReportThrottled(key ThrottleKey, metered bool) {
-	if !s.Enabled() && !metered {
+	if !s.Enabled() {
 		return
 	}
 	entry := s.peek(key)

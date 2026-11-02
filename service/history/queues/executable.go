@@ -903,12 +903,16 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 
 // Classifies the failure, and reports it when the gate issued the dispatch.
 //
-// Classification runs even while the controller is off, so work parked before the flag is
-// turned on is paced rather than released in one ungated wave.
+// Classification only runs while the controller is on, so with it off a throttled task is
+// parked under its plain task channel and never touches the controller.
 func (e *executableImpl) reportThrottle(
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
+	if !e.throttleState.Enabled() {
+		return
+	}
+
 	// The issuing class is the one the task was parked under, until reclassified below.
 	issuer, metered := e.throttleKey, e.throttleAdmitted
 	e.throttleAdmitted = false
@@ -923,9 +927,6 @@ func (e *executableImpl) reportThrottle(
 		return
 	}
 	e.throttleKey = NewThrottleKey(cause, nsName)
-	if e.throttleState == nil {
-		return
-	}
 
 	// A metered rejection belongs to the class that issued the release, whichever budget
 	// refused it; an unmetered one is recorded against the new class but must not move it.

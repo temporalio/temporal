@@ -1754,7 +1754,7 @@ func (s *executableSuite) TestNack_ThrottleScopedKeepsFastPathWhenControllerOff(
 
 	retryErr := executable.HandleErr(throttleErr)
 	s.Require().Error(retryErr)
-	s.Require().NotEqual(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+	s.Require().Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
 
 	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
 	s.mockRescheduler.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)

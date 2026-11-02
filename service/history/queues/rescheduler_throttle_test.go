@@ -1,7 +1,6 @@
 package queues
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -336,57 +335,6 @@ func TestReschedule_FailedSubmitRefundsTheToken(t *testing.T) {
 	releases, rejections := throttleCounters(state, key)
 	require.Equal(t, int64(1), releases, "only the submit that happened may be counted")
 	require.Zero(t, rejections)
-}
-
-// An operator turns this on during an incident, with the rescheduler already full. Those
-// tasks were parked before the controller was gating, so their class carries no key — and if
-// the release path trusted the class key alone it would drain the whole backlog in one pass,
-// unpaced. That is the largest wave in the system and the one the design exists to remove.
-func TestReschedule_EnablingTheControllerPacesWorkAlreadyParked(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	var enabled atomic.Bool
-
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(time.Unix(0, 0))
-	state := NewThrottleState(
-		func() dynamicconfig.TaskThrottleControllerSettings {
-			return dynamicconfig.TaskThrottleControllerSettings{
-				Enabled:       enabled.Load(),
-				Beta:          0.85,
-				IncreaseRatio: 0.10,
-				LossThreshold: 0.05,
-				Window:        testThrottleWindow,
-				MaxKeys:       1024,
-				MinRate:       1,
-				MaxRate:       10000,
-				InitialRate:   1,
-				KeyTTL:        5 * time.Minute,
-			}
-		},
-		timeSource,
-		metrics.NoopMetricsHandler,
-	)
-
-	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
-	key := apsKey("ns-1")
-	now := timeSource.Now()
-
-	// Parked while the controller was off: the class is created without a throttle key.
-	for range 50 {
-		e := newThrottledExecutable(ctrl, key, true)
-		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-		addThrottled(r, e, now)
-	}
-	require.Equal(t, 50, r.Len())
-
-	enabled.Store(true)
-	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).AnyTimes()
-	r.reschedule()
-
-	require.Equal(t, 49, r.Len(),
-		"a rate of 1/s must release one task, not the whole backlog")
-	require.Equal(t, 1, throttleLen(state),
-		"the class must be tracked, not bypassed")
 }
 
 // Priority order is a property of the rescheduler, not of the throttle flag.

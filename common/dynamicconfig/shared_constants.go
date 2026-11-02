@@ -95,8 +95,7 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 // (cause, namespace); its admitted rate moves multiplicatively, down by Beta when a control
 // window loses more than LossThreshold and up by IncreaseRatio when it does not.
 type TaskThrottleControllerSettings struct {
-	// Enabled toggles the controller. While off, tasks are still classified so parked work
-	// already knows its budget when it is switched on.
+	// Enabled toggles the controller.
 	Enabled bool
 	// MinRate is the floor on a budget's admitted rate, in releases per second. Raising it
 	// is the lever for shortening recovery after a long incident. Values below one release

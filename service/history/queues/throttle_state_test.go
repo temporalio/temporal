@@ -668,50 +668,6 @@ func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 	}
 }
 
-// A release committed while on keeps its rejection after the flag goes off, or the window
-// reads clean while every release was failing.
-func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
-	enabled := true
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(time.Unix(0, 0))
-	state := NewThrottleState(
-		func() dynamicconfig.TaskThrottleControllerSettings {
-			return dynamicconfig.TaskThrottleControllerSettings{
-				Enabled:       enabled,
-				Beta:          0.85,
-				IncreaseRatio: 0.10,
-				LossThreshold: 0.05,
-				Window:        testThrottleWindow,
-				MaxKeys:       1024,
-				MinRate:       1,
-				MaxRate:       10000,
-				InitialRate:   100,
-				KeyTTL:        5 * time.Minute,
-			}
-		},
-		timeSource,
-		metrics.NoopMetricsHandler,
-	)
-	key := testKey()
-
-	lossThreshold := state.settings().LossThreshold
-	samples := minDecisionReleases(lossThreshold)
-	for range samples {
-		allowed, _ := state.Admit(key)
-		require.True(t, allowed)
-	}
-
-	enabled = false
-	for range samples {
-		state.ReportThrottled(key, true)
-	}
-	enabled = true
-	closeWindow(state, timeSource, key)
-
-	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9,
-		"every release failed, so the window must not read clean")
-}
-
 // A zero floor would let a class decay until it can no longer earn the releases a decision
 // needs, stalling it for good while the rescheduler keeps polling the gate.
 func TestThrottleState_ZeroFloorCannotStallAClass(t *testing.T) {
