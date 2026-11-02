@@ -12,11 +12,11 @@ message WorkerGroupState {
   string worker_grouping_key = 1;
   // Lifecycle of the group run. Individual workers may stop while the group stays active.
   WorkerGroupStatus status = 2;
-  // Deadline computed from CHASM time and the effective lease duration.
+  // Lease deadline computed using CHASM's clock and the supplied lease duration.
   google.protobuf.Timestamp lease_expiration_time = 3;
 }
 
-// WorkerState has no heartbeat metadata. The worker is identified by its map key.
+// WorkerState belongs to a worker identified by its key in WorkerGroup.Workers.
 message WorkerState {}
 
 // WorkerGroupStatus describes the lifecycle of a worker group run.

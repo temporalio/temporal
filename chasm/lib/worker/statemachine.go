@@ -14,6 +14,7 @@ type eventHeartbeatReceived struct {
 	leaseDuration time.Duration
 }
 
+// A heartbeat keeps all workers in the group alive under the same lease.
 var transitionActiveHeartbeat = chasm.NewTransition(
 	[]workerstatepb.WorkerGroupStatus{workerstatepb.WORKER_GROUP_STATUS_ACTIVE},
 	workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
@@ -28,6 +29,7 @@ var transitionActiveHeartbeat = chasm.NewTransition(
 
 type eventLeaseExpired struct{}
 
+// Lease expiry ends the current run for the group. A later heartbeat must start a new run.
 var transitionLeaseExpired = chasm.NewTransition(
 	[]workerstatepb.WorkerGroupStatus{workerstatepb.WORKER_GROUP_STATUS_ACTIVE},
 	workerstatepb.WORKER_GROUP_STATUS_INACTIVE,
