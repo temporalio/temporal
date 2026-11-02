@@ -164,8 +164,9 @@ func testScaleManagerSteadyArrivalRate(t *testing.T, maxRate float32) {
 		}
 	}
 
-	// Warm every window at 1,000 tasks/s before the first persisted decision.
-	addSteadyTasks(2400)
+	// Warm the Up windows at 1,000 tasks/s. The first persisted decision comes once the longest
+	// (10s) is full; a partial Down window doesn't hold it back.
+	addSteadyTasks(100)
 	require.NotNil(t, persisted)
 	require.Equal(t, int32(2), persisted.Target)
 	require.True(t, ts.Now().Before(sm.nextDecision), "warmup must enter cooldown")
