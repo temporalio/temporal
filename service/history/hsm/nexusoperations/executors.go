@@ -444,14 +444,7 @@ func (e taskExecutor) saveResult(
 		if err != nil {
 			return err
 		}
-		emitMetrics = e.deferredOperationMetric(
-			finalOp,
-			callErr,
-			failedReason,
-			node.NamespaceName(),
-			node.WorkflowTypeName(),
-			env.Now(),
-		)
+		emitMetrics = e.deferredOperationMetric(finalOp, callErr, failedReason, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
 		return nil
 	})
 	if err != nil {
