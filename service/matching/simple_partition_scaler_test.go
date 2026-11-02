@@ -623,6 +623,8 @@ type rateScalerHarness struct {
 	scaler       *simplePartitionScaler
 	target       int
 	privateState *anypb.Any
+	elapsed      time.Duration // since the harness was created
+	lastIncrease time.Duration // elapsed at the most recent target increase
 }
 
 func newRateScalerHarness(ups, downs []dynamicconfig.SimplePartitionScalerThreshold, target int) *rateScalerHarness {
@@ -644,12 +646,16 @@ func newRateScalerHarness(ups, downs []dynamicconfig.SimplePartitionScalerThresh
 // tick advances one second, reports numTasks, and returns the decision.
 func (h *rateScalerHarness) tick(numTasks int) PartitionScalerDecision {
 	h.ts.Advance(time.Second)
+	h.elapsed += time.Second
 	d := h.scaler.OnTasks(PartitionScalerInput{
 		NumTasks:      numTasks,
 		CurrentTarget: h.target,
 		PrivateState:  h.privateState,
 	})
 	if !d.NoChange && d.NewTarget != h.target {
+		if d.NewTarget > h.target {
+			h.lastIncrease = h.elapsed
+		}
 		h.target = d.NewTarget
 		h.privateState = d.PrivateState
 	}
@@ -670,30 +676,25 @@ var (
 	testDowns60s = []dynamicconfig.SimplePartitionScalerThreshold{{Window: 60 * time.Second, TargetRate: 40}}
 )
 
-// TestOnTasksHoldsDownAfterIncrease verifies that after the target increases, it is not
-// decreased until a full Down window of post-increase data has been collected, even if the
-// Down window was already full of lower-rate history from before the increase.
+// TestOnTasksHoldsDownAfterIncrease verifies that after the target increases, it does not
+// decrease until a full Down window has passed, even though the Down window was already full of
+// lower-rate history from before the increase. Then it drops to what the lower rate needs.
 func TestOnTasksHoldsDownAfterIncrease(t *testing.T) {
 	t.Parallel()
 	h := newRateScalerHarness(testUps10s, testDowns60s, 1)
+	downWindow := testDowns60s[0].Window
 
-	require.Equal(t, 1, h.run(60, 20), "low load fills the Down window")
-
-	// Burst raises the target; keep going until it stops increasing.
-	require.Greater(t, h.run(10, 500), 1, "short burst raises the target via Ups")
-	for prev := 0; prev != h.target; {
-		prev = h.target
-		h.tick(500)
-	}
+	require.Equal(t, 1, h.run(60, 20), "20/s needs one partition")
+	require.Greater(t, h.run(10, 500), 1, "a burst raises the target")
 	raised := h.target
 
-	// Load drops back. Up rates decay within 10s, but the Down window was restarted at the
-	// last increase, so nothing decreases until it fills again.
-	for i := range 58 {
+	// load drops back to 20/s
+	for h.target == raised {
+		require.Less(t, h.elapsed-h.lastIncrease, 2*downWindow, "never decreased")
 		h.tick(20)
-		require.Equal(t, raised, h.target, "decreased %ds after increase", i+2)
 	}
-	require.Equal(t, 1, h.run(5, 20), "decreases once the Down window is full")
+	require.Equal(t, downWindow, h.elapsed-h.lastIncrease, "first decrease must come one Down window after the last increase")
+	require.Equal(t, 1, h.target, "20/s needs one partition")
 }
 
 // TestOnTasksPartialUpsBlockDecision verifies that partial Up windows block any decision, while a
