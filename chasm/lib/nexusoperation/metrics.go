@@ -33,11 +33,11 @@ const FailedReasonCallerError metrics.ReasonString = "caller_error"
 // FailedReasonOperationError means the handler reported the operation as failed, at start or completion.
 const FailedReasonOperationError metrics.ReasonString = "operation_error"
 
-// AttemptFailedReason returns the metric reason when a start attempt permanently fails the operation.
+// OperationFailedReason returns the metric reason when a start attempt permanently fails the operation.
 // Pass the unwrapped failure, not the NexusOperationFailure recorded in history.
 //
 // Only the top-level failure is inspected. Other failures, including nil, use FailedReasonOperationError.
-func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
+func OperationFailedReason(failure *failurepb.Failure) metrics.ReasonString {
 	switch {
 	case failure.GetNexusHandlerFailureInfo() != nil:
 		return FailedReasonHandlerError

@@ -496,7 +496,7 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attem
 			emitOperationCanceled(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_FAILED:
-		reason := chasmnexus.AttemptFailedReason(attemptFailure)
+		reason := chasmnexus.OperationFailedReason(attemptFailure)
 		return func() {
 			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, reason, closeTime)
 		}

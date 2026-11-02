@@ -237,7 +237,7 @@ var TransitionFailed = chasm.NewTransition(
 		// Completion failures describe the operation outcome, regardless of their failure type.
 		reason := FailedReasonOperationError
 		if fromAttempt {
-			reason = AttemptFailedReason(event.Failure)
+			reason = OperationFailedReason(event.Failure)
 		}
 		o.emitOnFailedMetrics(ctx, closeTime, reason)
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
