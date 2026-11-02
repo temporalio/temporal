@@ -29,6 +29,9 @@ var transitionLeaseExpired = chasm.NewTransition(
 	[]workerstatepb.WorkerGroupStatus{workerstatepb.WORKER_GROUP_STATUS_ACTIVE},
 	workerstatepb.WORKER_GROUP_STATUS_INACTIVE,
 	func(_ *WorkerGroup, _ chasm.MutableContext, _ eventLeaseExpired) error {
+		// TODO: When activity tracking is added, schedule recovery for each worker
+		// in this transaction. Use detached worker components so their side-effect
+		// tasks can process activity batches after the group closes, within retention.
 		return nil
 	},
 )
