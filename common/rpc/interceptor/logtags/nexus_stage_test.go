@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -20,6 +22,19 @@ func TestNexusStage(t *testing.T) {
 		req    any
 		want   []tag.Tag
 	}{
+		// Handler Task Delivery
+		{method: api.WorkflowServicePrefix + "PollNexusTaskQueue", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.WorkflowServicePrefix + "RespondNexusTaskCompleted", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.WorkflowServicePrefix + "RespondNexusTaskFailed", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.MatchingServicePrefix + "DispatchNexusTask", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.MatchingServicePrefix + "PollNexusTaskQueue", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.MatchingServicePrefix + "RespondNexusTaskCompleted", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{method: api.MatchingServicePrefix + "RespondNexusTaskFailed", want: []tag.Tag{tag.NexusStageHandlerTaskDelivery}},
+		{
+			method: api.MatchingServicePrefix + "CancelOutstandingPoll",
+			req:    &matchingservice.CancelOutstandingPollRequest{TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS},
+			want:   []tag.Tag{tag.NexusStageHandlerTaskDelivery},
+		},
 		// Handler Inbound
 		{method: api.HistoryServicePrefix + "StartNexusOperation", want: []tag.Tag{tag.NexusStageHandlerInbound}},
 		{method: api.HistoryServicePrefix + "CancelNexusOperation", want: []tag.Tag{tag.NexusStageHandlerInbound}},
@@ -30,6 +45,10 @@ func TestNexusStage(t *testing.T) {
 		{method: api.HistoryServicePrefix + "CompleteNexusOperationChasm", want: []tag.Tag{tag.NexusStageCallerInbound}},
 		{method: api.NexusServicePrefix + "CompleteNexusOperation", want: []tag.Tag{tag.NexusStageCallerInbound}},
 		// No stage
+		{
+			method: api.MatchingServicePrefix + "CancelOutstandingPoll",
+			req:    &matchingservice.CancelOutstandingPollRequest{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		},
 		{method: api.WorkflowServicePrefix + "StartWorkflowExecution"},
 		// Standalone operation APIs are client RPCs, not part of a Nexus call's lifecycle.
 		{method: api.WorkflowServicePrefix + "StartNexusOperationExecution"},
