@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -112,7 +113,8 @@ func (h *handler) checkSupported(namespaceName string, spec *iface.WorkerControl
 }
 
 // validate runs every check that needs no state change; provider checks run without the lock.
-func (h *handler) validate(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error {
+// Provider configs of unchangedGroups are not re-validated, as in the workflow.
+func (h *handler) validate(ctx context.Context, rc compute.RequestContext, spec *iface.WorkerControllerInstanceSpec, unchangedGroups []string) error {
 	if err := spec.Validate(); err != nil {
 		return err
 	}
@@ -122,7 +124,11 @@ func (h *handler) validate(ctx context.Context, rc compute.RequestContext, spec 
 	if err := validateAlgorithms(h.algorithmContext(ctx), spec); err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
-	if err := h.compute.ValidateSpec(ctx, rc, spec); err != nil {
+	changed := &iface.WorkerControllerInstanceSpec{ScalingGroupSpecs: maps.Clone(spec.ScalingGroupSpecs)}
+	for _, id := range unchangedGroups {
+		delete(changed.ScalingGroupSpecs, id)
+	}
+	if err := h.compute.ValidateSpec(ctx, rc, changed); err != nil {
 		if errors.Is(err, ErrProviderNotSupportedOnCHASM) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -168,7 +174,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		UpsertScalingGroups: upsertsToIface(req.GetUpsertScalingGroups()),
 		RemoveScalingGroups: req.GetRemoveScalingGroups(),
 	}
-	updated, err := iface.BuildUpdatedSpec(cur.spec, merge)
+	updated, unchangedGroups, err := iface.BuildUpdatedSpec(cur.spec, merge)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
@@ -185,7 +191,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validate(ctx, rc, updated); err != nil {
+	if err := h.validate(ctx, rc, updated, unchangedGroups); err != nil {
 		return nil, err
 	}
 	registrations, err := registerTaskQueues(ctx, h.algorithmContext(ctx), h.frontend, h.compute, h.logger, rc, updated, cur.statuses)
@@ -198,7 +204,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		if err := w.checkConflictToken(req.GetConflictToken()); err != nil {
 			return nil, err
 		}
-		final, err := iface.BuildUpdatedSpec(w.spec(), merge)
+		final, _, err := iface.BuildUpdatedSpec(w.spec(), merge)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
@@ -314,7 +320,7 @@ func (h *handler) ValidateWorkerControllerInstanceSpec(ctx context.Context, req 
 	if err != nil {
 		return nil, err
 	}
-	updated, err := iface.BuildUpdatedSpec(cur.spec, &iface.UpdateWorkerControllerInstanceRequest{
+	updated, unchangedGroups, err := iface.BuildUpdatedSpec(cur.spec, &iface.UpdateWorkerControllerInstanceRequest{
 		UpsertScalingGroups: upsertsToIface(req.GetUpsertScalingGroups()),
 		RemoveScalingGroups: req.GetRemoveScalingGroups(),
 	})
@@ -325,7 +331,7 @@ func (h *handler) ValidateWorkerControllerInstanceSpec(ctx context.Context, req 
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validate(ctx, rc, updated); err != nil {
+	if err := h.validate(ctx, rc, updated, unchangedGroups); err != nil {
 		return nil, err
 	}
 	return &wcipb.ValidateWorkerControllerInstanceSpecResponse{}, nil

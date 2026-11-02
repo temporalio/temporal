@@ -85,12 +85,15 @@ func (g *ScalingGroup) setAlgorithmStatus(status iface.ScalingAlgorithmStatus) e
 	return nil
 }
 
+// noRegion resolves groups that have no region IDs, the only kind CHASM accepts.
+const noRegion = ""
+
 // ProcessTaskAdd runs the matching group's algorithm on a task-add, inline in the RecordTaskAdd transaction.
 func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, event *wcipb.TaskAddEvent) error {
 	spec := w.spec()
 	request := *migration.TaskAddToWorkflow(event)
 	for id, groupSpec := range spec.ScalingGroupSpecs {
-		if !slices.Contains(spec.EffectiveTaskTypesForGroup(id), request.TaskQueueType) {
+		if !slices.Contains(spec.EffectiveTaskTypesForGroup(id, noRegion), request.TaskQueueType) {
 			continue
 		}
 		group, ok := w.ScalingGroups[id].TryGet(ctx)
@@ -127,7 +130,7 @@ func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, even
 		}
 		return w.applyActions(ctx, id, groupSpec, group, resp.Actions, event)
 	}
-	recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonNoMatchingScaler)
+	recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonNoMatchingScalingGroup)
 	return nil
 }
 
@@ -148,7 +151,7 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			if !ok {
 				continue
 			}
-			group.observePoll(ctx.Now(w), observed, spec.EffectiveTaskTypesForGroup(id))
+			group.observePoll(ctx.Now(w), observed, spec.EffectiveTaskTypesForGroup(id, noRegion))
 			algo, config, err := algorithmFor(algoCtx, groupSpec)
 			if err != nil {
 				ctx.Logger().Warn("Scaling algorithm unavailable for metrics poll", tag.Error(err))
@@ -158,7 +161,7 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			if err != nil {
 				return err
 			}
-			resp, err := algo.ProcessMetricsPoll(algoCtx, config, status, *filterSnapshot(snapshot, spec.EffectiveTaskTypesForGroup(id)))
+			resp, err := algo.ProcessMetricsPoll(algoCtx, config, status, *filterSnapshot(snapshot, spec.EffectiveTaskTypesForGroup(id, noRegion)))
 			if err != nil || resp == nil {
 				ctx.Logger().Warn("Scaling algorithm failed on metrics poll", tag.Error(err))
 				continue
@@ -194,7 +197,7 @@ func (w *WorkerControllerInstance) ProcessDeferredScalingDecision(
 	if !ok {
 		return nil
 	}
-	taskTypes := spec.EffectiveTaskTypesForGroup(groupID)
+	taskTypes := spec.EffectiveTaskTypesForGroup(groupID, noRegion)
 	request := *migration.TaskAddToWorkflow(event)
 	if !slices.Contains(taskTypes, request.TaskQueueType) {
 		return nil

@@ -60,6 +60,10 @@ func (f *fakeAlgo) TaskQueueRegistrationActions(context.Context, iface.ScalingAl
 	return &scalingalgorithm.TaskQueueRegistrationResponse{Actions: f.regActions}, nil
 }
 
+func (f *fakeAlgo) InactiveGroupActions(context.Context, iface.ScalingAlgorithmConfig, iface.ScalingAlgorithmStatus) (*scalingalgorithm.MetricsPollResponse, error) {
+	return nil, nil
+}
+
 var testNow = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 func newDecisionTest(t *testing.T, script fakeAlgo) (*WorkerControllerInstance, *ScalingGroup, *chasm.MockMutableContext) {

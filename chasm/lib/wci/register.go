@@ -44,7 +44,7 @@ func registerTaskQueues(
 
 	out := map[string]registration{}
 	for id, group := range spec.ScalingGroupSpecs {
-		if allRegistered(spec.EffectiveTaskTypesForGroup(id), registered) {
+		if allRegistered(spec.EffectiveTaskTypesForGroup(id, noRegion), registered) {
 			continue
 		}
 		algo, config, err := algorithmFor(algoCtx, group)
