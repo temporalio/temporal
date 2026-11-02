@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	libraryName        = "worker"
-	groupComponentName = "group"
+	libraryName         = "worker"
+	groupComponentName  = "group"
+	workerComponentName = "worker"
 )
 
 var (
@@ -25,6 +26,19 @@ var (
 type WorkerGroup struct {
 	chasm.UnimplementedComponent
 	*workerstatepb.WorkerGroupState
+
+	Workers chasm.Map[string, *Worker]
+}
+
+// Worker identifies one member of the group without storing heartbeat metadata.
+// Its worker instance key is the key in WorkerGroup.Workers.
+type Worker struct {
+	chasm.UnimplementedComponent
+	*workerstatepb.WorkerState
+}
+
+func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
 }
 
 // newWorkerGroup applies the first heartbeat so successful creation includes
@@ -43,6 +57,7 @@ func newWorkerGroup(
 			WorkerGroupingKey: groupingKey,
 			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		},
+		Workers: make(chasm.Map[string, *Worker]),
 	}
 	if err := group.recordHeartbeat(ctx, heartbeats, leaseDuration); err != nil {
 		return nil, err
@@ -76,9 +91,8 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 	g.Status = status
 }
 
-// recordHeartbeat validates the batch and renews the shared lease.
-// Heartbeat metadata stays in the in-memory registry; CHASM stores only the lease.
-// TODO: Handle individual worker shutdown when per-worker state is introduced.
+// recordHeartbeat adds new workers and renews the shared lease.
+// Workers omitted from the batch remain members. Heartbeat metadata is not persisted.
 // TODO: Add run-scoped heartbeat tokens and retry deduplication before accepting
 // activity binding deltas.
 func (g *WorkerGroup) recordHeartbeat(
@@ -95,7 +109,7 @@ func (g *WorkerGroup) recordHeartbeat(
 	if len(heartbeats) == 0 {
 		return serviceerror.NewInvalidArgument("at least one worker heartbeat is required")
 	}
-	// Validate the entire batch before renewing the lease.
+	// Validate the entire batch before changing membership or renewing the lease.
 	for _, heartbeat := range heartbeats {
 		key := heartbeat.GetWorkerInstanceKey()
 		if key == "" {
@@ -106,6 +120,21 @@ func (g *WorkerGroup) recordHeartbeat(
 		}
 	}
 	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
+		heartbeats:    heartbeats,
 		leaseDuration: leaseDuration,
 	})
+}
+
+func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
+	// TODO: Handle individual worker shutdown while other workers keep the group alive.
+	for _, heartbeat := range heartbeats {
+		key := heartbeat.GetWorkerInstanceKey()
+		// Existing and duplicate entries need no update; heartbeat metadata is not stored.
+		if _, exists := g.Workers[key]; exists {
+			continue
+		}
+		g.Workers[key] = chasm.NewComponentField(ctx, &Worker{
+			WorkerState: &workerstatepb.WorkerState{},
+		})
+	}
 }
