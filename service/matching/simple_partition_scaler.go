@@ -233,11 +233,9 @@ func (s *simplePartitionScaler) updateAddTarget(
 
 	if prevTarget > 0 && target > prevTarget {
 		// Down windows include load from before this increase, so they would immediately
-		// pull the target back down. Restart them now (not lazily on the next call, which may
-		// be many seconds later) so a decrease needs exactly one window of new data.
-		clear(s.downTrackers)
-		for _, down := range cfg.Downs {
-			_ = s.getTracker(s.downTrackers, down.Window)
+		// pull the target back down. Restart them so a decrease needs a full window of new data.
+		for _, t := range s.downTrackers {
+			t.clear()
 		}
 	}
 
