@@ -224,8 +224,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// Add tools from this repository or tools that must match its dependency versions here.
-// Add standalone developer tools to mise.toml.
+// Declare tools here when they must share this module's dependency versions.
+// Declare standalone developer tools in mise.toml - this is generally preferred.
 tool (
 	go.temporal.io/api/cmd/protoc-gen-go-helpers
 	go.temporal.io/api/cmd/protogen
