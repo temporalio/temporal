@@ -3,6 +3,7 @@ package wci
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"sync"
@@ -50,6 +51,8 @@ type fakeCompute struct {
 	remote []string
 	// onValidate runs inside ValidateSpec, i.e. while an update holds no lock.
 	onValidate func()
+	// Group IDs the last ValidateSpec saw.
+	validated []string
 }
 
 func (f *fakeCompute) Supports(namespaceName, providerType string) bool {
@@ -64,7 +67,10 @@ func (f *fakeCompute) record(call string) error {
 	return f.callErr
 }
 
-func (f *fakeCompute) ValidateSpec(context.Context, compute.RequestContext, *iface.WorkerControllerInstanceSpec) error {
+func (f *fakeCompute) ValidateSpec(_ context.Context, _ compute.RequestContext, spec *iface.WorkerControllerInstanceSpec) error {
+	f.mu.Lock()
+	f.validated = slices.Sorted(maps.Keys(spec.ScalingGroupSpecs))
+	f.mu.Unlock()
 	if f.onValidate != nil {
 		f.onValidate()
 	}
@@ -259,6 +265,25 @@ func TestE2E_UnsupportedProviderStaysWorkflow(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("aws-lambda"))
 	require.ErrorIs(t, err, ErrProviderNotSupportedOnCHASM)
+}
+
+func TestE2E_UpdateValidatesOnlyChangedCompute(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.Equal(t, []string{"g"}, e.compute.validated)
+
+	added := map[string]*wcipb.ScalingGroupSpecUpdate{"h": {Spec: &wcipb.ScalingGroupSpec{
+		TaskTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		Compute:   &wcipb.ComputeProviderSpec{ProviderType: "test-invoke"},
+	}}}
+	_, err = e.update(added)
+	require.NoError(t, err)
+	require.Equal(t, []string{"h"}, e.compute.validated, "g's compute is unchanged")
+
+	_, err = e.handler.ValidateWorkerControllerInstanceSpec(e.ctx, &wcipb.ValidateWorkerControllerInstanceSpecRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+	require.NoError(t, err)
+	require.Equal(t, []string{"g", "h"}, e.compute.validated, "a request without changes validates every group")
 }
 
 func TestE2E_RemoteProviderRunsOnCHASM(t *testing.T) {
