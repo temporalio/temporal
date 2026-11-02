@@ -38,7 +38,7 @@ func (s *apiSuite) SetupTest() {
 	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.workflowLease = api.NewWorkflowLease(
 		s.workflowContext,
-		func(err error) {},
+		func(err error) error { return err },
 		s.mutableState,
 	)
 }

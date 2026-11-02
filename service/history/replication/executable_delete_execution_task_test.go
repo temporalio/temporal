@@ -218,7 +218,7 @@ func (s *executableDeleteExecutionTaskSuite) expectLastWriteVersion(
 		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
 		archetypeID,
 		locks.PriorityLow,
-	).Return(workflowContext, func(error) {}, nil)
+	).Return(workflowContext, func(err error) error { return err }, nil)
 	workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(mutableState, nil)
 	mutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil)
 }

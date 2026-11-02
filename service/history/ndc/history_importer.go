@@ -3,6 +3,7 @@ package ndc
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -125,6 +127,14 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 	}()
 
 	if len(eventsSlice) != 0 {
+		if len(token) != 0 && r.shardContext.GetConfig().WorkflowPersistencePipeline {
+			cached, release, err := r.workflowCache.GetOrCreateWorkflowExecution(ctx, r.shardContext, namespace.ID(workflowKey.NamespaceID),
+				&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID}, locks.PriorityHigh)
+			if err != nil {
+				return nil, false, err
+			}
+			defer func() { cached.Clear(); retError = release(retError) }()
+		}
 		return r.applyEvents(
 			ctx,
 			ndcWorkflow,

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -67,6 +68,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 )
@@ -99,6 +101,7 @@ type (
 		archivalMetadata             archiver.ArchivalMetadata
 		hostInfoProvider             membership.HostInfoProvider
 		controller                   shard.Controller
+		workflowCache                wcache.Cache
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
@@ -137,6 +140,7 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		HostInfoProvider             membership.HostInfoProvider
 		ShardController              shard.Controller
+		WorkflowCache                wcache.Cache
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
@@ -2050,7 +2054,31 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(workflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(workflowExecution.GetRunId()))
-
+	if h.config.WorkflowPersistencePipeline && (request.GetArchetypeId() == chasm.UnspecifiedArchetypeID || request.GetArchetypeId() == chasm.WorkflowArchetypeID) {
+		request = common.CloneProto(request)
+		workflowExecution = request.GetRequest().GetExecution()
+		if workflowExecution.RunId == "" {
+			current, err := h.persistenceExecutionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+				ShardID: shardID, NamespaceID: namespaceID.String(), WorkflowID: workflowExecution.WorkflowId, ArchetypeID: chasm.WorkflowArchetypeID,
+			})
+			if err != nil {
+				return nil, err
+			}
+			workflowExecution.RunId = current.RunID
+		}
+		shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowExecution.WorkflowId)
+		if err != nil {
+			return nil, err
+		}
+		wfContext, release, err := h.workflowCache.GetOrCreateWorkflowExecution(ctx, shardContext, namespaceID, workflowExecution, locks.PriorityHigh)
+		if err != nil {
+			return nil, err
+		}
+		defer release(nil) //nolint:errcheck // The normal path checks release; preserve panic cleanup here.
+		response, err := forcedeleteworkflowexecution.Invoke(ctx, request, shardID, h.chasmRegistry, h.persistenceExecutionManager, h.persistenceVisibilityManager, h.logger)
+		wfContext.Clear()
+		return response, release(err)
+	}
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,

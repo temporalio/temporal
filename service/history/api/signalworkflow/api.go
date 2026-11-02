@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -19,6 +20,9 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
+	if shard.GetConfig().WorkflowPersistencePipeline {
+		ctx = workflow.WithPipelinedPersistence(ctx)
+	}
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
@@ -63,7 +67,9 @@ func Invoke(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state
-				releaseFn(nil)
+				if err := releaseFn(nil); err != nil {
+					return nil, err
+				}
 				return nil, consts.ErrWorkflowCompleted
 			}
 
@@ -75,7 +81,9 @@ func Invoke(
 				request.GetHeader().Size(),
 				"SignalWorkflowExecution",
 			); err != nil {
-				releaseFn(nil)
+				if persistenceErr := releaseFn(nil); persistenceErr != nil {
+					return nil, persistenceErr
+				}
 				return nil, err
 			}
 
@@ -89,7 +97,9 @@ func Invoke(
 				parentRunID := executionInfo.ParentRunId
 				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
 					externalWorkflowExecution.GetRunId() != parentRunID {
-					releaseFn(nil)
+					if err := releaseFn(nil); err != nil {
+						return nil, err
+					}
 					return nil, consts.ErrWorkflowParent
 				}
 			}
