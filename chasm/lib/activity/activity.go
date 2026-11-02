@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -263,6 +264,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	a.recordLastWorker(ctx, request.GetPollRequest().GetIdentity())
 	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
 		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
 			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
@@ -385,6 +387,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, event.Request.GetCompleteRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -424,6 +427,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
+		a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -436,6 +440,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -461,8 +466,27 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, event.Request.GetCancelRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+func (a *Activity) recordLastWorker(
+	ctx chasm.MutableContext,
+	identity string,
+) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.LastWorkerIdentity = identity
+	principalType := ctx.RequestHeader(headers.PrincipalTypeHeaderName)
+	principalName := ctx.RequestHeader(headers.PrincipalNameHeaderName)
+	if principalType != "" || principalName != "" {
+		attempt.LastWorkerPrincipal = &commonpb.Principal{
+			Type: principalType,
+			Name: principalName,
+		}
+		return
+	}
+	attempt.LastWorkerPrincipal = nil
 }
 
 // Terminate implements the chasm.RootComponent interface.

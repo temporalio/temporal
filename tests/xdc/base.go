@@ -242,6 +242,11 @@ func (s *xdcBaseSuite) setupTest() {
 	})
 }
 
+// SetupSubTest makes assertion failures report on the active subtest.
+func (s *xdcBaseSuite) SetupSubTest() {
+	s.setupTest()
+}
+
 func (s *xdcBaseSuite) createGlobalNamespace() string {
 	return s.createNamespace(true, s.clusters)
 }

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1976,5 +1978,19 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
 		})
+	}
+}
+
+// tasks.Tags can't import this package, so it matches these task types by their "nexusoperations." prefix.
+// This test fails if they are renamed without updating tasks.Tags.
+func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
+	for _, taskType := range []string{
+		nexusoperations.TaskTypeInvocation,
+		nexusoperations.TaskTypeCancelation,
+	} {
+		task := &tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: taskType}},
+		}
+		require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound, taskType)
 	}
 }

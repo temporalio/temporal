@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
@@ -70,6 +72,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -112,6 +115,7 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+		metricsHandler             metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -147,6 +151,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		MetricsHandler                      metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -202,6 +207,7 @@ func NewAdminHandler(
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
+		metricsHandler:             args.MetricsHandler,
 	}
 }
 
@@ -1031,6 +1037,76 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		return nil, err
 	}
 	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
+}
+
+func (adh *AdminHandler) ApplyNamespaceMutation(
+	_ context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
+	var comparisonPanic error
+	comparisonOutcome, comparisonReason := "error", "invalid_request"
+	defer func() {
+		if comparisonPanic != nil {
+			retError = comparisonPanic
+			comparisonOutcome, comparisonReason = "error", "panic"
+		}
+		if request.GetShadow() {
+			adh.recordShadowReceiveComparison(request, payloadTask, legacyTask, comparisonOutcome, comparisonReason, retError)
+		}
+	}()
+	// Recover comparison panics before recording the RPC outcome.
+	defer log.CapturePanic(adh.logger, &comparisonPanic)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
+	}
+	if !request.GetShadow() {
+		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	}
+	if len(request.GetNamespaceTaskPayload()) == 0 {
+		comparisonReason = "missing_payload"
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if len(request.GetShadowLegacyTaskPayload()) == 0 {
+		comparisonReason = "missing_legacy_reference"
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	comparisonReason = "invalid_legacy_reference"
+	legacyTask = &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+		legacyTask = nil
+		return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
+	}
+
+	payloadTask = &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		payloadTask = nil
+		comparisonOutcome, comparisonReason = "error", "invalid_payload"
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		comparisonOutcome, comparisonReason = "match", "none"
+		return &adminservice.ApplyNamespaceMutationResponse{
+			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+		}, nil
+	}
+	comparisonOutcome, comparisonReason = "mismatch", "legacy_payload_mismatch"
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
+	)
+
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+	}, nil
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -2445,28 +2521,13 @@ func (adh *AdminHandler) ListExecutions(
 		return nil, errRequestNotSet
 	}
 
-	pageSize := int(request.GetPageSize())
-	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if pageSize <= 0 || pageSize > maxPageSize {
-		pageSize = maxPageSize
+		request.PageSize = maxPageSize
 	}
 
-	resp, err := adh.visibilityMgr.AdminListExecutions(
-		ctx, &manager.AdminListExecutionsRequest{
-			Namespace:     namespace.Name(request.GetNamespace()),
-			Query:         request.GetQuery(),
-			PageSize:      pageSize,
-			NextPageToken: request.GetNextPageToken(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.ListExecutionsResponse{
-		Executions:    resp.Executions,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
 }
 
 func (adh *AdminHandler) CountExecutions(
@@ -2479,18 +2540,5 @@ func (adh *AdminHandler) CountExecutions(
 		return nil, errRequestNotSet
 	}
 
-	resp, err := adh.visibilityMgr.AdminCountExecutions(
-		ctx, &manager.AdminCountExecutionsRequest{
-			Namespace: namespace.Name(request.GetNamespace()),
-			Query:     request.GetQuery(),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.CountExecutionsResponse{
-		Count:  resp.Count,
-		Groups: resp.Groups,
-	}, nil
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }

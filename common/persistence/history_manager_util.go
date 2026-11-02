@@ -154,6 +154,14 @@ func ValidateBatch(
 			tag.TokenLastEventID(lastEventID),
 		}
 	}
+	// readHistoryBranch and readHistoryBranchReverse guard this same case just before their own
+	// first/last event assignments; report it here too rather than indexing batch[0].
+	// DeserializeStrippedEvents returns no error for a nil or zero-length blob, so an empty batch
+	// reaches this point unflagged.
+	if len(batch) == 0 {
+		return softassert.UnexpectedDataLoss(logger, dataLossMsg, errEmptyEvents, dataLossTags(errEmptyEvents)...)
+	}
+
 	firstEvent = batch[0]
 	eventCount = len(batch)
 	lastEvent = batch[eventCount-1]

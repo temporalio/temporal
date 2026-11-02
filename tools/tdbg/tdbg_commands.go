@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -80,6 +81,12 @@ func getCommands(
 			Aliases:     []string{"vis"},
 			Usage:       "Run admin operation on visibility",
 			Subcommands: newAdminVisibilityCommands(clientFactory),
+		},
+		{
+			Name:        "worker-deployment",
+			Aliases:     []string{"wd"},
+			Usage:       "Run admin operation on a Worker Deployment",
+			Subcommands: newAdminWorkerDeploymentCommands(clientFactory),
 		},
 		{
 			Name:        "decode",
@@ -184,6 +191,60 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
+			},
+		},
+		{
+			Name:  "scan-nexus-chasm",
+			Usage: "Read-only snapshot scan for running workflows with old pending CHASM-backed Nexus operations; results require operator review",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Value:   "ExecutionStatus = 'Running'",
+					Usage:   "Additional Visibility query. The scanner always restricts results to running workflows old enough to contain a qualifying operation.",
+				},
+				&cli.IntFlag{
+					Name:  FlagListRPS,
+					Value: 2,
+					Usage: "Maximum Visibility list requests per second.",
+				},
+				&cli.IntFlag{
+					Name:  FlagRPS,
+					Value: 5,
+					Usage: "Maximum combined DescribeMutableState and history requests per second.",
+				},
+				&cli.IntFlag{
+					Name:  FlagWorkers,
+					Value: 4,
+					Usage: "Maximum executions inspected concurrently.",
+				},
+				&cli.DurationFlag{
+					Name:  FlagMinPendingAge,
+					Value: 10 * time.Minute,
+					Usage: "Minimum age for selecting a pending CHASM Nexus operation as a candidate; age alone does not prove it is stuck.",
+				},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Value: 100,
+					Usage: "Visibility page size. A checkpoint is emitted only after the whole page is processed.",
+				},
+				&cli.IntFlag{
+					Name:  FlagMaxHistoryPages,
+					Value: 100,
+					Usage: "Maximum reverse-history pages read per matching execution.",
+				},
+				&cli.StringFlag{
+					Name:  FlagResumeToken,
+					Usage: "Opaque resume token from a prior checkpoint record. Resume continues the original time-bounded snapshot.",
+				},
+				&cli.StringFlag{
+					Name:  FlagOutput,
+					Value: "jsonl",
+					Usage: "Output format. Only jsonl is supported.",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminScanNexusChasm(c, clientFactory)
 			},
 		},
 		{
@@ -303,6 +364,35 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminWorkerDeploymentCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "describe",
+			Usage: "Print a Worker Deployment's state as JSON, including its version count, as of the start of its current (or given) run",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagDeploymentName,
+					Usage:    "Worker Deployment name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID of the Worker Deployment workflow (default: current run)",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeWorkerDeployment(c, clientFactory)
 			},
 		},
 	}

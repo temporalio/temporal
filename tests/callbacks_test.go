@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -853,4 +855,47 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 		Identity: env.Tv().WorkerIdentity(),
 	})
 	s.NoError(err)
+}
+
+// An invalid system callback token fails routing; the routing log carries the callback's namespace and stage.
+func (s *CallbacksSuite) TestSystemCallbackRoutingErrorIsTagged(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+	logCapture := env.StartNamespaceLogCapture()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
+	)
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.NewString(),
+		Namespace:          env.Namespace().String(),
+		WorkflowId:         env.Tv().WorkflowID(),
+		WorkflowType:       env.Tv().WorkflowType(),
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
+		Identity:           s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{
+				Url:    commonnexus.SystemCallbackURL,
+				Header: map[string]string{commonnexus.CallbackTokenHeader: "not-valid-json"}, // INVALID
+			}},
+		}},
+	})
+	s.NoError(err)
+
+	const routingError = "failed to decode callback token"
+	s.AwaitTrue(func() bool {
+		return slices.ContainsFunc(logCapture.Snapshot(), func(record testlogger.CapturedLog) bool {
+			return record.Message == routingError
+		})
+	}, 10*time.Second, 100*time.Millisecond)
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: routingError,
+		Tags: map[string]any{
+			"nexus-stage":     "handler-outbound",
+			"wf-namespace-id": env.NamespaceID().String(),
+		},
+	})
 }
