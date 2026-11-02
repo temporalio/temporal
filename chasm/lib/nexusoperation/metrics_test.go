@@ -90,7 +90,7 @@ func TestBackendMetricTagDisabledByDefault(t *testing.T) {
 	require.False(t, MetricTagConfiguration.Get(dynamicconfig.NewNoopCollection())().IncludeBackendTag)
 }
 
-func TestAttemptFailedReason(t *testing.T) {
+func TestOperationFailedReason(t *testing.T) {
 	t.Parallel()
 
 	// Use the actual start-result conversion for a rejected request.
@@ -165,7 +165,7 @@ func TestAttemptFailedReason(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, AttemptFailedReason(tc.failure))
+			require.Equal(t, tc.want, OperationFailedReason(tc.failure))
 		})
 	}
 }
