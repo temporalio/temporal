@@ -91,7 +91,7 @@ type WorkerGroupState struct {
 	WorkerGroupingKey string `protobuf:"bytes,1,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	// Lifecycle of the group run. Individual workers may stop while the group stays active.
 	Status WorkerGroupStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerGroupStatus" json:"status,omitempty"`
-	// Deadline computed from CHASM time and the effective lease duration.
+	// Lease deadline computed using CHASM's clock and the supplied lease duration.
 	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -148,7 +148,7 @@ func (x *WorkerGroupState) GetLeaseExpirationTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// WorkerState has no heartbeat metadata. The worker is identified by its map key.
+// WorkerState belongs to a worker identified by its key in WorkerGroup.Workers.
 type WorkerState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

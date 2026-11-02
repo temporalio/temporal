@@ -22,6 +22,7 @@ func TestRecordHeartbeat(t *testing.T) {
 	}}
 	first := workerHeartbeat("worker-1", "group-1")
 	second := workerHeartbeat("worker-2", "group-1")
+	// Create worker children under one shared lease.
 	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first, second}, time.Minute)
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, &workerstatepb.WorkerGroupState{
@@ -29,20 +30,24 @@ func TestRecordHeartbeat(t *testing.T) {
 		Status:              workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		LeaseExpirationTime: timestamppb.New(now.Add(time.Minute)),
 	}, group.WorkerGroupState)
+	require.Len(t, group.Workers, 2)
 	require.Contains(t, group.Workers, first.WorkerInstanceKey)
 	require.Contains(t, group.Workers, second.WorkerInstanceKey)
+	secondWorker := group.Workers[second.WorkerInstanceKey].Get(ctx)
 	require.Equal(t, []chasm.MockTask{{
 		Component:  group,
 		Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(time.Minute)},
 		Payload:    &workerstatepb.LeaseExpiryTask{},
 	}}, ctx.Tasks)
 
+	// Add a worker and renew the lease, retaining omitted and existing workers.
 	now = now.Add(30 * time.Second)
 	third := workerHeartbeat("worker-3", "group-1")
 	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{second, third}, time.Minute))
 	require.Len(t, group.Workers, 3)
 	require.Contains(t, group.Workers, first.WorkerInstanceKey)
 	require.Contains(t, group.Workers, third.WorkerInstanceKey)
+	require.Same(t, secondWorker, group.Workers[second.WorkerInstanceKey].Get(ctx))
 	require.Equal(t, now.Add(time.Minute), group.GetLeaseExpirationTime().AsTime())
 	require.Len(t, ctx.Tasks, 2)
 	require.Same(t, group, ctx.Tasks[1].Component)
@@ -113,6 +118,8 @@ func TestRecordHeartbeatInactiveGroup(t *testing.T) {
 	err = group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{workerHeartbeat("worker-2", "group-1")}, time.Minute)
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 	protorequire.ProtoEqual(t, before, group.WorkerGroupState)
+	require.Len(t, group.Workers, 1)
+	require.Contains(t, group.Workers, "worker-1")
 	require.Len(t, ctx.Tasks, 1)
 }
 

@@ -1,4 +1,5 @@
-// Package worker tracks grouped worker heartbeats and lease expiry in CHASM.
+// Package worker models workers as CHASM components and tracks their liveness using timers.
+// Workers with the same worker_grouping_key share a lease under one WorkerGroup.
 package worker
 
 import (
@@ -30,7 +31,7 @@ type WorkerGroup struct {
 	Workers chasm.Map[string, *Worker]
 }
 
-// Worker identifies one member of the group without storing heartbeat metadata.
+// Worker identifies one member of the group.
 // Its worker instance key is the key in WorkerGroup.Workers.
 type Worker struct {
 	chasm.UnimplementedComponent
@@ -92,9 +93,9 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 }
 
 // recordHeartbeat adds new workers and renews the shared lease.
-// Workers omitted from the batch remain members. Heartbeat metadata is not persisted.
-// TODO: Add run-scoped heartbeat tokens and retry deduplication before accepting
-// activity binding deltas.
+// Workers omitted from the batch remain members.
+// TODO: Handle ordering of heartbeats so that older heartbeats cannot undo newer
+// activity updates, and retried heartbeats are not applied twice.
 func (g *WorkerGroup) recordHeartbeat(
 	ctx chasm.MutableContext,
 	heartbeats []*workerpb.WorkerHeartbeat,
@@ -126,10 +127,9 @@ func (g *WorkerGroup) recordHeartbeat(
 }
 
 func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
-	// TODO: Handle individual worker shutdown while other workers keep the group alive.
 	for _, heartbeat := range heartbeats {
 		key := heartbeat.GetWorkerInstanceKey()
-		// Existing and duplicate entries need no update; heartbeat metadata is not stored.
+		// Keep existing workers, including duplicate keys within this batch.
 		if _, exists := g.Workers[key]; exists {
 			continue
 		}
