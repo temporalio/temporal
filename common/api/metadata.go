@@ -173,7 +173,7 @@ var (
 		"DeleteWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"CreateWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkerDeploymentVersionComputeConfig":   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DeleteWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkerDeploymentVersionMetadata":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ListWorkerDeployments":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
