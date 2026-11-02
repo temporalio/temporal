@@ -408,7 +408,13 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
-func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
+func (e taskExecutor) saveResult(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	callErr error,
+) error {
 	// emitMetrics is derived from the operation's resulting state inside the Access closure and
 	// invoked only after the write transaction commits successfully, so a failed commit (which
 	// retries the task) does not double-count the metric. See operationMetricsHandler's doc comment.
@@ -418,10 +424,10 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 		if err != nil {
 			return err
 		}
-		var attemptFailure *failurepb.Failure
+		var failedReason metrics.ReasonString
 		switch {
 		case callErr != nil:
-			attemptFailure, err = e.handleStartOperationError(env, node, operation, callErr)
+			failedReason, err = e.handleStartOperationError(env, node, operation, callErr)
 		case result.Pending != nil:
 			err = e.saveStartedResult(env, node, operation, result)
 		default:
@@ -438,7 +444,14 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 		if err != nil {
 			return err
 		}
-		emitMetrics = e.deferredOperationMetric(finalOp, callErr, attemptFailure, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		emitMetrics = e.deferredOperationMetric(
+			finalOp,
+			callErr,
+			failedReason,
+			node.NamespaceName(),
+			node.WorkflowTypeName(),
+			env.Now(),
+		)
 		return nil
 	})
 	if err != nil {
@@ -483,9 +496,15 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 
 // deferredOperationMetric returns the metric emission for op's resulting state, or nil if none is due.
 // Invoke it after commit to avoid double-counting failed transactions. callErr carries the timeout
-// type when too little time remains for a request. attemptFailure classifies rejected or locally
-// failed start requests; nil selects operation_error when the operation failed.
-func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attemptFailure *failurepb.Failure, namespaceName, workflowType string, closeTime time.Time) func() {
+// type when too little time remains for a request. failedReason applies only to failed operations.
+func (e taskExecutor) deferredOperationMetric(
+	op Operation,
+	callErr error,
+	failedReason metrics.ReasonString,
+	namespaceName string,
+	workflowType string,
+	closeTime time.Time,
+) func() {
 	switch op.State() {
 	case enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED:
 		return func() {
@@ -496,9 +515,8 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attem
 			emitOperationCanceled(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_FAILED:
-		reason := chasmnexus.OperationFailedReason(attemptFailure)
 		return func() {
-			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, reason, closeTime)
+			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, failedReason, closeTime)
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
@@ -523,9 +541,13 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attem
 }
 
 // handleStartOperationError applies the operation outcome or schedules a retry without emitting metrics.
-// It returns the unwrapped failure for rejected or locally failed start requests. Handler-reported
-// operation outcomes, timeouts, and retries return nil; deferredOperationMetric uses this distinction.
-func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (*failurepb.Failure, error) {
+// It returns the metric reason for failed operations; timeouts and retries return no reason.
+func (e taskExecutor) handleStartOperationError(
+	env hsm.Environment,
+	node *hsm.Node,
+	operation Operation,
+	callErr error,
+) (metrics.ReasonString, error) {
 	var handlerErr *nexus.HandlerError
 	var opErr *nexus.OperationError
 	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
@@ -538,8 +560,8 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		}
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
-		// Nil preserves operation_error even when the operation failure contains a handler error.
-		return nil, handleOperationError(node, operation, opErr)
+		// An underlying handler error does not make this a rejected start request.
+		return chasmnexus.FailedReasonOperationError, handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -554,7 +576,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.As(callErr, &opTimeoutBelowMinErr):
 		// Not enough time to execute another request, resolve the operation with a timeout.
-		return nil, e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
+		return "", e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -564,9 +586,9 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return nil, hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+	return "", hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 		return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
 			Time:        env.Now(),
 			Failure:     failure,
@@ -576,15 +598,19 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	})
 }
 
-// handleNonRetryableStartOperationError fails the operation and returns the unwrapped history cause.
-func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) (*failurepb.Failure, error) {
+// handleNonRetryableStartOperationError fails the operation and returns its metric reason.
+func handleNonRetryableStartOperationError(
+	node *hsm.Node,
+	operation Operation,
+	callErr error,
+) (metrics.ReasonString, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	cause, err := callErrToFailure(callErr, false)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
 		Failure: createNexusOperationFailure(
@@ -602,7 +628,7 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 		}
 	})
 
-	return cause, FailedEventDefinition{}.Apply(node.Parent, event)
+	return chasmnexus.OperationFailedReason(cause), FailedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
