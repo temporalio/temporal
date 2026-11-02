@@ -481,12 +481,10 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 	})
 }
 
-// deferredOperationMetric returns the caller-side metric to record for op's resulting state, or nil
-// when nothing should be emitted (e.g. a retryable attempt failure that leaves the operation
-// scheduled/backing-off). The returned closure is invoked by the caller after the write transaction
-// commits so the metric is not double-counted if the commit fails and the task is retried. callErr
-// carries the timeout type for the below-min-request-timeout case. attemptFailure is the failure
-// returned by handleStartOperationError, which determines the reason of a failed operation.
+// deferredOperationMetric returns the metric emission for op's resulting state, or nil if none is due.
+// Invoke it after commit to avoid double-counting failed transactions. callErr carries the timeout
+// type when too little time remains for a request. attemptFailure classifies rejected or locally
+// failed start requests; nil selects operation_error when the operation failed.
 func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attemptFailure *failurepb.Failure, namespaceName, workflowType string, closeTime time.Time) func() {
 	switch op.State() {
 	case enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED:
@@ -524,11 +522,9 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, attem
 	}
 }
 
-// handleStartOperationError resolves a failed StartOperation attempt by transitioning the operation
-// to its resulting state: terminally failed/canceled/timed-out, or backing off for a retryable
-// attempt failure. It does not emit metrics; saveResult derives the caller-side metric from the
-// resulting state (see deferredOperationMetric). When the attempt fails the operation, it returns the
-// failure it recorded as the cause, for the metric's reason; otherwise it returns nil.
+// handleStartOperationError applies the operation outcome or schedules a retry without emitting metrics.
+// It returns the unwrapped failure for rejected or locally failed start requests. Handler-reported
+// operation outcomes, timeouts, and retries return nil; deferredOperationMetric uses this distinction.
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	var opErr *nexus.OperationError
@@ -542,8 +538,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		}
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
-		// The handler reported the operation's outcome, so there is no handler error to classify and a
-		// failed operation is tagged operation_error.
+		// Nil preserves operation_error even when the operation failure contains a handler error.
 		return nil, handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
@@ -581,8 +576,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	})
 }
 
-// handleNonRetryableStartOperationError fails the operation and returns the failure recorded as the
-// cause.
+// handleNonRetryableStartOperationError fails the operation and returns the unwrapped history cause.
 func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) (*failurepb.Failure, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {

@@ -93,25 +93,17 @@ func TestBackendMetricTagDisabledByDefault(t *testing.T) {
 func TestAttemptFailedReason(t *testing.T) {
 	t.Parallel()
 
-	// The failure a start attempt resolves the operation with when the handler rejects it.
+	// Use the actual start-result conversion for a rejected request.
 	rejected, err := newInvocationResult(nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad input"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, rejected)
 	handlerFailure := rejected.(invocationResultFail).failure
 
-	// The failure a start attempt resolves the operation with when the handler fails it synchronously.
+	// Use the same conversion for a synchronous operation failure.
 	failed, err := newInvocationResult(nil, nexus.NewOperationFailedErrorf("insufficient funds"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, failed)
 	operationFailure := failed.(invocationResultFail).failure
-
-	handlerFailureOfType := func(errType string) *failurepb.Failure {
-		return &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{Type: errType},
-			},
-		}
-	}
 
 	for _, tc := range []struct {
 		name    string
@@ -124,9 +116,13 @@ func TestAttemptFailedReason(t *testing.T) {
 			want:    FailedReasonHandlerError,
 		},
 		{
-			name:    "handler error type outside the spec",
-			failure: handlerFailureOfType("WHATEVER_THE_HANDLER_SAID"),
-			want:    FailedReasonHandlerError,
+			name: "handler error type outside the spec",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+					NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{Type: "WHATEVER_THE_HANDLER_SAID"},
+				},
+			},
+			want: FailedReasonHandlerError,
 		},
 		{
 			name:    "synchronous operation failure",
