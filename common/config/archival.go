@@ -2,6 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"slices"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const (
@@ -33,6 +37,9 @@ func (p *HistoryArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
+	if err := p.S3store.Validate(); err != nil {
+		return fmt.Errorf("archival.history.provider.s3store: %w", err)
+	}
 	return p.Gstorage.validate("archival.history.provider.gstorage")
 }
 
@@ -40,7 +47,21 @@ func (p *VisibilityArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
+	if err := p.S3store.Validate(); err != nil {
+		return fmt.Errorf("archival.visibility.provider.s3store: %w", err)
+	}
 	return p.Gstorage.validate("archival.visibility.provider.gstorage")
+}
+
+// Validate validates the S3 archiver configuration.
+func (s *S3Archiver) Validate() error {
+	if s == nil || s.StorageClass == "" {
+		return nil
+	}
+	if !slices.Contains(types.StorageClass("").Values(), types.StorageClass(s.StorageClass)) {
+		return fmt.Errorf("invalid S3 storageClass %q", s.StorageClass)
+	}
+	return nil
 }
 
 func isArchivalConfigValid(
