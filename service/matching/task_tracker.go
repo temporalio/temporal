@@ -113,6 +113,7 @@ func (s *taskTracker) incOver(n int, from time.Time) {
 	// since startTime, so counting them would overstate it. For a tracker created during this
 	// call that is the whole batch, which is intended: e.g. a batch accumulated over 20s
 	// counted in a new 2s window would read ~10x the true rate.
+	// TODO(dynamic partitioning): consider counting tasks that arrived before tracker existed, to react quickly to spikes on unloaded queue
 	lower := from
 	if s.startTime.After(lower) {
 		lower = s.startTime
