@@ -1,11 +1,13 @@
 package s3store
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type queryParserSuite struct {
@@ -261,4 +263,67 @@ func (s *queryParserSuite) TestParseStartTime() {
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.startTime, parsedQuery.startTime)
 	}
+}
+
+func TestParseExecutionStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  enumspb.WorkflowExecutionStatus
+	}{
+		{name: "completed", value: "'Completed'", want: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED},
+		{name: "failed", value: "'failed'", want: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED},
+		{name: "canceled", value: "'canceled'", want: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED},
+		{name: "terminated", value: "'terminated'", want: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED},
+		{name: "continued as new", value: "'continuedasnew'", want: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW},
+		{name: "continued as new underscore", value: "'continued_as_new'", want: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW},
+		{name: "timed out", value: "'timedout'", want: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT},
+		{name: "timed out underscore", value: "'timed_out'", want: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT},
+		{name: "case and whitespace", value: "'  FaIlEd  '", want: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED},
+		{name: "quoted numeric", value: "'3'", want: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED},
+		{name: "numeric completed", value: "2", want: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED},
+		{name: "numeric failed", value: "3", want: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED},
+		{name: "numeric canceled", value: "4", want: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED},
+		{name: "numeric terminated", value: "5", want: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED},
+		{name: "numeric continued as new", value: "6", want: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW},
+		{name: "numeric timed out", value: "7", want: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := NewQueryParser().Parse("WorkflowId = 'workflow' AND ExecutionStatus = " + tc.value)
+			require.NoError(t, err)
+			require.Equal(t, &parsedQuery{workflowID: new("workflow"), status: new(tc.want)}, got)
+		})
+	}
+	for _, tc := range []struct {
+		name      string
+		query     string
+		wantError string
+	}{
+		{name: "unknown status", query: "ExecutionStatus = 'invalid'", wantError: "unknown workflow close status"},
+		{name: "running", query: "ExecutionStatus = 'Running'", wantError: "unknown workflow close status"},
+		{name: "unspecified", query: "ExecutionStatus = 0", wantError: "unknown workflow close status"},
+		{name: "unknown numeric", query: "ExecutionStatus = 99", wantError: "unknown workflow close status"},
+		{name: "repeat", query: "ExecutionStatus = 'Failed' AND ExecutionStatus = 'Failed'", wantError: "can not query ExecutionStatus multiple times"},
+		{name: "conflict", query: "ExecutionStatus = 'Failed' AND ExecutionStatus = 'Completed'", wantError: "can not query ExecutionStatus multiple times"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := NewQueryParser().Parse("WorkflowId = 'workflow' AND " + tc.query)
+			require.ErrorContains(t, err, tc.wantError)
+		})
+	}
+	for _, op := range []string{"!=", ">", ">=", "<", "<="} {
+		t.Run(fmt.Sprintf("operator %s", op), func(t *testing.T) {
+			t.Parallel()
+			_, err := NewQueryParser().Parse("WorkflowId = 'workflow' AND ExecutionStatus " + op + " 'Failed'")
+			require.ErrorContains(t, err, "only operation = is support for ExecutionStatus")
+		})
+	}
+	t.Run("index required", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewQueryParser().Parse("ExecutionStatus = 'Failed'")
+		require.ErrorContains(t, err, "WorkflowId or WorkflowType is required")
+	})
 }

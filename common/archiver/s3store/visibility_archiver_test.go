@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -733,4 +734,85 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *archiverspb.VisibilityRecord) {
 	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, record)
 	s.Require().NoError(err)
+}
+
+func TestArchiveAndQueryExecutionStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		filter      string
+		wantIndexes []int
+	}{
+		{name: "failed", filter: " AND ExecutionStatus = 'Failed'", wantIndexes: []int{1, 3}},
+		{name: "completed", filter: " AND ExecutionStatus = 'Completed'", wantIndexes: []int{0, 2}},
+		{name: "no matches", filter: " AND ExecutionStatus = 'Canceled'"},
+		{name: "no status filter", wantIndexes: []int{0, 1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s3cli := mocks.NewMockS3API(gomock.NewController(t))
+			setupFsEmulation(s3cli)
+			arc := &visibilityArchiver{
+				logger:         log.NewNoopLogger(),
+				metricsHandler: metrics.NoopMetricsHandler,
+				s3cli:          s3cli,
+				queryParser:    NewQueryParser(),
+			}
+			uri, err := archiver.NewURI(testBucketURI)
+			require.NoError(t, err)
+			statuses := []enumspb.WorkflowExecutionStatus{
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			}
+			var records []*archiverspb.VisibilityRecord
+			for i, status := range statuses {
+				record := &archiverspb.VisibilityRecord{
+					NamespaceId:      testNamespaceID,
+					Namespace:        testNamespace,
+					WorkflowId:       testWorkflowID,
+					RunId:            fmt.Sprintf("run-%d", i),
+					WorkflowTypeName: testWorkflowTypeName,
+					StartTime:        timestamppb.New(time.Date(2020, 1, 1, 0, i, 0, 0, time.UTC)),
+					CloseTime:        timestamppb.New(time.Date(2020, 1, 1, 1, i, 0, 0, time.UTC)),
+					Status:           status,
+					HistoryLength:    10,
+				}
+				require.NoError(t, arc.Archive(t.Context(), uri, record))
+				records = append(records, record)
+			}
+			request := &archiver.QueryVisibilityRequest{
+				NamespaceID: testNamespaceID,
+				PageSize:    1,
+				Query:       "WorkflowId = '" + testWorkflowID + "'" + tc.filter,
+			}
+			var executions []*workflowpb.WorkflowExecutionInfo
+			var emptyPageWithToken bool
+			for range 5 {
+				response, err := arc.Query(t.Context(), uri, request, searchattribute.TestNameTypeMap())
+				require.NoError(t, err)
+				require.LessOrEqual(t, len(response.Executions), request.PageSize)
+				if len(response.Executions) == 0 && len(response.NextPageToken) > 0 {
+					emptyPageWithToken = true
+				}
+				executions = append(executions, response.Executions...)
+				request.NextPageToken = response.NextPageToken
+				if len(request.NextPageToken) == 0 {
+					break
+				}
+			}
+			require.Empty(t, request.NextPageToken)
+			var expected []*workflowpb.WorkflowExecutionInfo
+			for _, i := range tc.wantIndexes {
+				execution, err := convertToExecutionInfo(records[i], searchattribute.TestNameTypeMap())
+				require.NoError(t, err)
+				expected = append(expected, execution)
+			}
+			protorequire.ProtoSliceEqual(t, expected, executions)
+			if tc.filter != "" {
+				require.True(t, emptyPageWithToken)
+			}
+		})
+	}
 }

@@ -3,6 +3,7 @@ package gcloud
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -474,4 +475,96 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 		}
 	}
 	s.Len(executions, 2, "there should be exactly 2 unique executions")
+}
+
+func TestQueryExecutionStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		filter      string
+		wantIndexes []int
+	}{
+		{name: "failed", filter: " AND ExecutionStatus = 'Failed'", wantIndexes: []int{1}},
+		{name: "completed", filter: " AND ExecutionStatus = 'Completed'", wantIndexes: []int{0, 2}},
+		{name: "no matches", filter: " AND ExecutionStatus = 'Canceled'"},
+		{name: "no status filter", wantIndexes: []int{0, 1, 2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			uri, err := archiver.NewURI("gs://bucket/archive")
+			require.NoError(t, err)
+			storage := connector.NewMockClient(gomock.NewController(t))
+			storage.EXPECT().Exist(gomock.Any(), uri, "").Return(true, nil).AnyTimes()
+			arc := newVisibilityArchiver(log.NewNoopLogger(), metrics.NoopMetricsHandler, storage)
+			statuses := []enumspb.WorkflowExecutionStatus{
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}
+			var expected []*workflowpb.WorkflowExecutionInfo
+			for i, status := range statuses {
+				record := &archiverspb.VisibilityRecord{
+					NamespaceId:      testNamespaceID,
+					Namespace:        testNamespace,
+					WorkflowId:       testWorkflowID,
+					RunId:            fmt.Sprintf("run-%d", i),
+					WorkflowTypeName: testWorkflowTypeName,
+					StartTime:        timestamp.UnixOrZeroTimePtr(1580896574804475000),
+					CloseTime:        timestamp.UnixOrZeroTimePtr(1580896575946478000),
+					Status:           status,
+					HistoryLength:    36,
+				}
+				encoded, err := encode(record)
+				require.NoError(t, err)
+				filename := fmt.Sprintf("record-%d.visibility", i)
+				storage.EXPECT().QueryWithFilters(gomock.Any(), uri, constructTimeBasedSearchKey(testNamespaceID, indexKeyCloseTimeout, record.CloseTime.AsTime(), PrecisionDay), 1, i, gomock.Any()).Return([]string{filename}, i == len(statuses)-1, i+1, nil)
+				storage.EXPECT().Get(gomock.Any(), uri, testNamespaceID+"/"+filename).Return(encoded, nil)
+				for _, wantIndex := range tc.wantIndexes {
+					if wantIndex == i {
+						info, err := convertToExecutionInfo(record, searchattribute.TestNameTypeMap())
+						require.NoError(t, err)
+						expected = append(expected, info)
+					}
+				}
+			}
+			request := &archiver.QueryVisibilityRequest{
+				NamespaceID: testNamespaceID,
+				PageSize:    1,
+				Query:       "CloseTime = '2020-02-05T09:56:15Z' AND SearchPrecision = 'Day'" + tc.filter,
+			}
+			var executions []*workflowpb.WorkflowExecutionInfo
+			var emptyPageWithToken bool
+			for range len(statuses) {
+				response, err := arc.Query(t.Context(), uri, request, searchattribute.TestNameTypeMap())
+				require.NoError(t, err)
+				require.LessOrEqual(t, len(response.Executions), request.PageSize)
+				if len(response.Executions) == 0 && len(response.NextPageToken) > 0 {
+					emptyPageWithToken = true
+				}
+				executions = append(executions, response.Executions...)
+				request.NextPageToken = response.NextPageToken
+			}
+			require.Empty(t, request.NextPageToken)
+			protorequire.ProtoSliceEqual(t, expected, executions)
+			if tc.filter != "" {
+				require.True(t, emptyPageWithToken)
+			}
+		})
+	}
+}
+
+func TestQueryConflictingExecutionStatus(t *testing.T) {
+	t.Parallel()
+	uri, err := archiver.NewURI("gs://bucket/archive")
+	require.NoError(t, err)
+	storage := connector.NewMockClient(gomock.NewController(t))
+	storage.EXPECT().Exist(gomock.Any(), uri, "").Return(true, nil)
+	arc := newVisibilityArchiver(log.NewNoopLogger(), metrics.NoopMetricsHandler, storage)
+	response, err := arc.Query(t.Context(), uri, &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    1,
+		Query:       "CloseTime = '2020-02-05T09:56:15Z' AND SearchPrecision = 'Day' AND ExecutionStatus = 'Failed' AND ExecutionStatus = 'Completed'",
+	}, searchattribute.TestNameTypeMap())
+	require.NoError(t, err)
+	require.Equal(t, &archiver.QueryVisibilityResponse{}, response)
 }
