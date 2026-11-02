@@ -909,15 +909,14 @@ func (e *executableImpl) reportThrottle(
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
-	if !e.throttleState.Enabled() {
-		return
-	}
-
 	// The issuing class is the one the task was parked under, until reclassified below.
 	issuer, metered := e.throttleKey, e.throttleAdmitted
 	e.throttleAdmitted = false
 	e.throttleKey = ThrottleKey{}
 
+	if !e.throttleState.Enabled() {
+		return
+	}
 	if !IsControllerInput(cause, scope) {
 		// Not a budget this controller paces, so the release stays counted as clean.
 		return
