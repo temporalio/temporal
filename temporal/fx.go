@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -184,7 +183,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	persistenceConfig := so.config.Persistence
-	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	err = persistenceClient.VerifyCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
 	if err != nil {
 		return serverOptionsProvider{}, err
 	}
@@ -910,22 +909,6 @@ func ServerLifetimeHooks(
 	svr *ServerImpl,
 ) {
 	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
-}
-
-func verifyPersistenceCompatibleVersion(
-	cfg config.Persistence,
-	persistenceServiceResolver resolver.ServiceResolver,
-	logger log.Logger,
-) error {
-	// cassandra schema version validation
-	if err := verifyCassandraCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
-		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
-	}
-	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
-		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
-	}
-	return nil
 }
 
 type SpanExporterInputs struct {

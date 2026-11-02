@@ -22,3 +22,11 @@ func newCassandraDataStoreFactory(
 ) persistence.DataStoreFactory {
 	return cassandra.NewFactory(cfg, r, clusterName, logger, metricsHandler, serializer)
 }
+
+func verifyCassandraCompatibleVersion(
+	cfg config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+) error {
+	return cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger)
+}

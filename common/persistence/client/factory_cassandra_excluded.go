@@ -23,3 +23,9 @@ func newCassandraDataStoreFactory(
 	logger.Fatal("cassandra persistence is not compiled into this server; rebuild with the temporal_with_cassandra build tag")
 	return nil
 }
+
+// verifyCassandraCompatibleVersion is a no-op, since config validation rejects Cassandra
+// datastores when Cassandra persistence is excluded from this build.
+func verifyCassandraCompatibleVersion(config.Persistence, resolver.ServiceResolver, log.Logger) error {
+	return nil
+}

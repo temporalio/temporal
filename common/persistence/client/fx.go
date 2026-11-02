@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -216,6 +217,23 @@ func DataStoreFactoryProvider(
 	}
 
 	return dataStoreFactory
+}
+
+// VerifyCompatibleVersion checks that the schema versions of the configured persistence stores are compatible with this server.
+func VerifyCompatibleVersion(
+	cfg config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+) error {
+	// cassandra schema version validation
+	if err := verifyCassandraCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
+		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
+	}
+	// sql schema version validation
+	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
+		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
+	}
+	return nil
 }
 
 func DataStoreFactoryLifetimeHooks(lc fx.Lifecycle, f persistence.DataStoreFactory) {
