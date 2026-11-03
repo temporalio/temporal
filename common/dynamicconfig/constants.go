@@ -3315,6 +3315,21 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
+	ReplicationReceiverLaneMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverLaneMaxOutstandingTaskCount",
+		100,
+		`Maximum number of outstanding tasks of one replication lane in a lane stream receiver. Past
+it, the receiver pauses that lane alone. The default HIGH priority lane keeps sending, and counts
+only its own tasks toward ReplicationReceiverMaxOutstandingTaskCount.`,
+	)
+	ReplicationReceiverMaxTotalOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxTotalOutstandingTaskCount",
+		1000,
+		`Maximum number of outstanding HIGH priority tasks of a lane stream receiver across the default
+lane and every replication lane. Past it, the receiver pauses all HIGH priority traffic, lanes
+included. Set it above ReplicationReceiverMaxOutstandingTaskCount plus the lanes' share, so that it
+only acts as a backstop for receiver memory.`,
+	)
 	ReplicationReceiverSlowSubmissionLatencyThreshold = NewGlobalDurationSetting(
 		"history.ReplicationReceiverSubmissionLatencyThreshold",
 		1*time.Second,

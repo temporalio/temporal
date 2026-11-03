@@ -125,6 +125,8 @@ type (
 		// LastRefused is when the lane's limiter last refused a send, or zero if it never did.
 		// The policy chooses how long that observation remains relevant.
 		LastRefused time.Time
+		// Paused is whether the receiver has paused the lane.
+		Paused bool
 		// PolicyState is the state last saved with the lane.
 		PolicyState []byte
 	}
