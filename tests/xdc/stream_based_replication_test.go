@@ -1698,6 +1698,116 @@ func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_ReceiverLanesDisabl
 	})
 }
 
+// TestLanePause makes the standby pause the suite namespace's lane on every ack. The lane must
+// hold its tasks without the standby ever pausing the default HIGH lane, and send them once the
+// standby resumes it.
+func (s *streamBasedReplicationTestSuite) TestLanePause() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	active, standby := s.clusters[0], s.clusters[1]
+	// A limit below zero pauses a lane even with no outstanding task.
+	resume := standby.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationReceiverLaneMaxOutstandingTaskCount, -1)
+	defer resume()
+	stopIsolating := s.isolateSuiteNamespace(1000)
+	defer stopIsolating()
+	// The lane sends its first task before the standby acks it, and pauses on that ack.
+	workflowIDs := s.startWorkflowsUntilLaneSendsTasks()
+	for range 5 {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+	}
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneAckMatching(active, func(state *replicationspb.SyncReplicationState) bool {
+			for _, laneState := range state.GetLaneStates() {
+				if laneState.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+					return true
+				}
+			}
+			return false
+		}), "the standby did not pause the lane")
+	}, 30*time.Second, 200*time.Millisecond)
+	s.False(s.sawLaneAckMatching(active, func(state *replicationspb.SyncReplicationState) bool {
+		return state.GetHighPriorityState().GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	}), "pausing the lane paused the default HIGH lane")
+	// The standby keeps acking, so the stream is live, yet the paused lane does not send the
+	// last workflow.
+	acks := s.ackCount(active)
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.GreaterOrEqual(t, s.ackCount(active), acks+3, "the standby stopped acking")
+	}, 30*time.Second, 200*time.Millisecond)
+	_, err := standby.FrontendClient().DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespaceName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowIDs[len(workflowIDs)-1]},
+	})
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound, "a paused lane sent its tasks")
+
+	resume()
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneReceiverLimit sets the standby's lane limit to zero: a stream with no lane opens none,
+// and a stream with a lane backlog drops the lane and re-sends its tasks on the default lane.
+func (s *streamBasedReplicationTestSuite) TestLaneReceiverLimit() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	active, standby := s.clusters[0], s.clusters[1]
+	acceptNoLanes := func() (revert func()) {
+		s.awaitStreamRestart(standby, laneTestReceiverOperation, func() {
+			revert = standby.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverMaxLanes, 0)
+		})
+		return revert
+	}
+	s.Run("NoLanes", func() {
+		revert := acceptNoLanes()
+		defer revert()
+		stopIsolating := s.isolateSuiteNamespace(1000)
+		defer stopIsolating()
+		var workflowIDs []string
+		for range 5 {
+			workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+		}
+		s.requireWorkflowsReplicated(workflowIDs)
+		s.False(s.sawLaneMessage(active, func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo() != nil
+		}), "the active cluster opened a lane that the standby does not accept")
+	})
+	s.Run("Backlog", func() {
+		var revert func()
+		defer func() { revert() }()
+		s.runLaneKillSwitchDrill(func() { revert = acceptNoLanes() })
+	})
+}
+
+// TestLaneRateChange raises the rate of a lane that holds a backlog it cannot send within the
+// test's wait. The new rate must apply on the lane's next send, without a stream restart.
+func (s *streamBasedReplicationTestSuite) TestLaneRateChange() {
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	defer stopSlowLane()
+	stopFastLane := s.isolateSuiteNamespace(1000)
+	defer stopFastLane()
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneInvalidConfig makes the isolation config invalid while a lane holds a backlog. The
+// open-source policy then asks to retire every lane at once: the lane must send its backlog
+// without its rate limit and retire.
+func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	defer stopSlowLane()
+	for _, c := range s.clusters {
+		invalid := []dynamicconfig.ReplicationLaneIsolationEntry{{NamespaceID: s.namespaceID, TasksPerSecond: 1000}}
+		defer c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, invalid)()
+	}
+	s.requireWorkflowsReplicated(workflowIDs)
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneMessage(s.clusters[0], func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetRetire()
+		}), "the lane did not retire")
+	}, 60*time.Second, time.Second)
+}
+
 // runLaneKillSwitchDrill isolates the suite's namespace on a slow lane, builds a backlog the
 // lane cannot send within the test's wait, applies a kill switch, and requires every
 // workflow started while isolated to replicate. That only happens if the default lane
@@ -1951,10 +2061,18 @@ func (s *streamBasedReplicationTestSuite) sawLaneMessage(sender *testcore.TestCl
 	return false
 }
 
-// sawLaneAck reports whether cluster sender received an ack that carries lane watermarks. A
-// receiver acks a lane only after lane messages reach it, so the ack shows that a live stream
-// delivered lane traffic.
-func (s *streamBasedReplicationTestSuite) sawLaneAck(sender *testcore.TestCluster) bool {
+// ackCount returns how many acks cluster sender has received.
+func (s *streamBasedReplicationTestSuite) ackCount(sender *testcore.TestCluster) int {
+	count := 0
+	s.sawLaneAckMatching(sender, func(*replicationspb.SyncReplicationState) bool {
+		count++
+		return false
+	})
+	return count
+}
+
+// sawLaneAckMatching reports whether cluster sender received an ack that matches.
+func (s *streamBasedReplicationTestSuite) sawLaneAckMatching(sender *testcore.TestCluster, match func(*replicationspb.SyncReplicationState) bool) bool {
 	for _, captured := range sender.GetReplicationStreamRecorder().GetMessages() {
 		if captured.Direction != testcore.DirectionServerRecv {
 			continue
@@ -1967,9 +2085,18 @@ func (s *streamBasedReplicationTestSuite) sawLaneAck(sender *testcore.TestCluste
 			state = req.GetSyncReplicationState()
 		default:
 		}
-		if len(state.GetLaneStates()) > 0 {
+		if state != nil && match(state) {
 			return true
 		}
 	}
 	return false
+}
+
+// sawLaneAck reports whether cluster sender received an ack that carries lane watermarks. A
+// receiver acks a lane only after lane messages reach it, so the ack shows that a live stream
+// delivered lane traffic.
+func (s *streamBasedReplicationTestSuite) sawLaneAck(sender *testcore.TestCluster) bool {
+	return s.sawLaneAckMatching(sender, func(state *replicationspb.SyncReplicationState) bool {
+		return len(state.GetLaneStates()) > 0
+	})
 }
