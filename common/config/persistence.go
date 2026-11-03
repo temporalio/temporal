@@ -183,6 +183,9 @@ func (ds *DataStore) Validate() error {
 		}
 	}
 	if ds.Cassandra != nil {
+		if err := validateCassandra(ds.Cassandra); err != nil {
+			return err
+		}
 		if err := ds.Cassandra.validate(); err != nil {
 			return err
 		}
