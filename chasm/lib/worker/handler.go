@@ -62,9 +62,7 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 			if err != nil {
 				return nil, err
 			}
-			// TODO: Apply this heartbeat only in the update callback once CHASM
-			// saves children added there when starting a new execution. Then remove
-			// the createdGroup check below.
+			// TODO: Remove this call once CHASM saves children added in the update callback.
 			if err := group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), heartbeatTimeout); err != nil {
 				return nil, err
 			}
@@ -73,6 +71,7 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		},
 		func(group *WorkerGroup, mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (chasm.NoValue, error) {
 			// The first heartbeat was already applied in startFn.
+			// TODO: Remove this check once the first heartbeat is handled only in the update callback.
 			if group == createdGroup {
 				return nil, nil
 			}
