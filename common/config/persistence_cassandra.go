@@ -5,14 +5,9 @@ package config
 import (
 	"fmt"
 	"reflect"
-	"slices"
 	"strings"
-)
 
-// cassandraConsistencies and cassandraSerialConsistencies are the consistency levels accepted by the Cassandra driver.
-var (
-	cassandraConsistencies       = []string{"ANY", "ONE", "TWO", "THREE", "QUORUM", "ALL", "LOCAL_QUORUM", "EACH_QUORUM", "LOCAL_ONE"}
-	cassandraSerialConsistencies = []string{"SERIAL", "LOCAL_SERIAL"}
+	"github.com/gocql/gocql"
 )
 
 func validateCassandra(c *Cassandra) error {
@@ -44,16 +39,24 @@ func (c *CassandraConsistencySettings) validate() error {
 	}
 
 	if c.Consistency != "" {
-		if !slices.Contains(cassandraConsistencies, strings.ToUpper(c.Consistency)) {
-			return fmt.Errorf("bad cassandra consistency: invalid consistency %q", c.Consistency)
+		_, err := gocql.ParseConsistencyWrapper(c.Consistency)
+		if err != nil {
+			return fmt.Errorf("bad cassandra consistency: %v", err)
 		}
 	}
 
 	if c.SerialConsistency != "" {
-		if !slices.Contains(cassandraSerialConsistencies, strings.ToUpper(c.SerialConsistency)) {
-			return fmt.Errorf("bad cassandra serial consistency: invalid consistency %q", c.SerialConsistency)
+		_, err := parseSerialConsistency(c.SerialConsistency)
+		if err != nil {
+			return fmt.Errorf("bad cassandra serial consistency: %v", err)
 		}
 	}
 
 	return nil
+}
+
+func parseSerialConsistency(serialConsistency string) (gocql.SerialConsistency, error) {
+	var s gocql.SerialConsistency
+	err := s.UnmarshalText([]byte(strings.ToUpper(serialConsistency)))
+	return s, err
 }
