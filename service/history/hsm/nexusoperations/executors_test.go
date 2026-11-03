@@ -75,6 +75,7 @@ func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 }
 
 func TestProcessInvocationTask(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
 		WorkflowId: "handler-wf-id",
@@ -106,11 +107,13 @@ func TestProcessInvocationTask(t *testing.T) {
 		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
 		// performing a real request.
 		httpCallerErr error
+		workflowNow   time.Time
 	}{
 		{
 			name:            "async start",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
+			workflowNow:     workflowNow,
 			checkStartOperationOptions: func(t *testing.T, options nexus.StartOperationOptions) {
 				require.Len(t, options.Links, 1)
 				var links []*commonpb.Link
@@ -150,6 +153,8 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
+				require.Equal(t, workflowNow, op.StartedTime.AsTime(),
+					"start-to-close deadlines must be anchored to workflow logical time")
 				require.Len(t, events, 1)
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].EventType)
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
@@ -375,12 +380,15 @@ func TestProcessInvocationTask(t *testing.T) {
 			name:            "transient error",
 			requestTimeout:  time.Hour,
 			destinationDown: true,
+			workflowNow:     workflowNow,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.Equal(t, workflowNow, op.LastAttemptCompleteTime.AsTime(),
+					"retry deadlines must be anchored to workflow logical time")
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
 				require.Empty(t, events)
@@ -597,6 +605,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			if !tc.workflowNow.IsZero() {
+				backend.NowFn = func() time.Time { return tc.workflowNow }
+			}
 			node := newOperationNode(t, backend, backend.Events[0])
 			env := fakeEnv{node}
 			if tc.cancelBeforeStart {
@@ -1000,6 +1011,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 }
 
 func TestProcessCancelationTask(t *testing.T) {
+	workflowNow := time.Date(2027, time.January, 1, 13, 0, 0, 0, time.UTC)
 	cases := []struct {
 		name                        string
 		endpointNotFound            bool
@@ -1012,6 +1024,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		destinationDown             bool
 		header                      map[string]string
 		disableNewFailureWireFormat bool
+		workflowNow                 time.Time
 	}{
 		{
 			name:            "failure",
@@ -1089,12 +1102,15 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:            "transient error",
 			requestTimeout:  time.Hour,
 			destinationDown: true,
+			workflowNow:     workflowNow,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
+				require.Equal(t, workflowNow, c.LastAttemptCompleteTime.AsTime(),
+					"cancellation retry deadlines must be anchored to workflow logical time")
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "internal server error", c.LastAttemptFailure.Message)
 			},
@@ -1171,6 +1187,9 @@ func TestProcessCancelationTask(t *testing.T) {
 				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			if !tc.workflowNow.IsZero() {
+				backend.NowFn = func() time.Time { return tc.workflowNow }
+			}
 			node := newOperationNode(t, backend, backend.Events[0])
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)

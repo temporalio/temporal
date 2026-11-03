@@ -7966,6 +7966,11 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
 		return closeTransactionResult{}, err
 	}
+	if regenTimerTasksForWorkflowTimeSkipping {
+		// Reset persisted HSM timer status before normal close-time generation so the earliest
+		// surviving group is emitted once with the new workflow clock offset.
+		refreshStateMachineTimerTasksForTimeSkipping(ms)
+	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().

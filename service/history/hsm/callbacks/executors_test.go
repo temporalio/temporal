@@ -58,6 +58,8 @@ func (fakeEnv) Now() time.Time {
 
 var _ hsm.Environment = fakeEnv{}
 
+var testWorkflowNow = time.Date(2027, time.January, 1, 14, 0, 0, 0, time.UTC)
+
 type mutableState struct {
 	completionNexus nexusrpc.CompleteOperationOptions
 	completionHsm   *persistencespb.HSMCompletionCallbackArg
@@ -110,6 +112,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+				require.Equal(t, testWorkflowNow, cb.LastAttemptCompleteTime.AsTime(),
+					"callback retry deadlines must be anchored to workflow logical time")
 			},
 		},
 		{
@@ -337,7 +341,13 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	root, err := hsm.NewRoot(
+		reg,
+		workflow.StateMachineType,
+		mutableState,
+		make(map[string]*persistencespb.StateMachineMap),
+		&hsmtest.NodeBackend{NowFn: func() time.Time { return testWorkflowNow }},
+	)
 	require.NoError(t, err)
 	return root
 }

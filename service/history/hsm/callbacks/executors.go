@@ -193,17 +193,17 @@ func (e taskExecutor) saveResult(
 			switch result.(type) {
 			case invocationResultOK:
 				return TransitionSucceeded.Apply(callback, EventSucceeded{
-					Time: env.Now(),
+					Time: node.Now(),
 				})
 			case invocationResultRetry:
 				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
-					Time:        env.Now(),
+					Time:        node.Now(),
 					Err:         result.error(),
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
 			case invocationResultFail:
 				return TransitionFailed.Apply(callback, EventFailed{
-					Time: env.Now(),
+					Time: node.Now(),
 					Err:  result.error(),
 				})
 			default:

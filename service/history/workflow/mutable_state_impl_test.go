@@ -8912,6 +8912,50 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		s.Equal(expectedTS, smTask.VisibilityTimestamp, "the single emitted task carries the current virtual→wall conversion")
 	})
 
+	s.Run("Active_Eligible_RefreshesPersistedStateMachineTimerGroups", func() {
+		now := s.mockShard.GetTimeSource().Now()
+		userTimerExpiry := now.Add(4 * time.Hour)
+		earlyDeadline := now.Add(2 * time.Hour)
+		lateDeadline := now.Add(3 * time.Hour)
+
+		dbState := buildEligibleState(userTimerExpiry)
+		dbState.ExecutionInfo.TimeSkippingInfo.Config.Enabled = false
+		dbState.ExecutionInfo.StateMachineTimers = []*persistencespb.StateMachineTimerGroup{
+			{
+				Deadline:  timestamppb.New(earlyDeadline),
+				Scheduled: true,
+				Infos:     []*persistencespb.StateMachineTaskInfo{{Type: "nexus-retry"}},
+			},
+			{
+				Deadline:  timestamppb.New(lateDeadline),
+				Scheduled: true,
+				Infos:     []*persistencespb.StateMachineTaskInfo{{Type: "callback-retry"}},
+			},
+		}
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+		enableTimeSkipping(ms)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+		var timerTasks []*tasks.StateMachineTimerTask
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			if timerTask, ok := task.(*tasks.StateMachineTimerTask); ok {
+				timerTasks = append(timerTasks, timerTask)
+			}
+		}
+		s.Require().Len(timerTasks, 1)
+		s.Equal(earlyDeadline.Add(-accumulated), timerTasks[0].VisibilityTimestamp)
+		s.True(ms.GetExecutionInfo().StateMachineTimers[0].Scheduled)
+		s.False(ms.GetExecutionInfo().StateMachineTimers[1].Scheduled,
+			"later groups stay unscheduled so the normal timer path emits them when they become earliest")
+	})
+
 	s.Run("Active_Eligible_CleanState_NoEventOrRegeneration", func() {
 		// A workflow loaded from persistence is not a state change. Closing that
 		// otherwise empty transaction must not advance virtual time merely because
@@ -10043,7 +10087,6 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForExecutionsWithoutTimeSkipping", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
@@ -10058,7 +10101,6 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("NilSafeForNewlyInitializedTimeSkippingWithNoSkip", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 
@@ -10076,7 +10118,6 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("UnchangedVersionedTransitionDoesNotFlag", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -10125,8 +10166,14 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 			FastForwardInfoLastUpdateVersionedTransition: timeSkippingVT(6),
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo.TargetTime = timestamppb.New(s.mutableState.Now().Add(time.Hour))
+		s.mutableState.executionInfo.StateMachineTimers = []*persistencespb.StateMachineTimerGroup{
+			{Deadline: timestamppb.New(s.mutableState.Now().Add(time.Minute)), Scheduled: true, Infos: []*persistencespb.StateMachineTaskInfo{{Type: "nexus"}}},
+			{Deadline: timestamppb.New(s.mutableState.Now().Add(2 * time.Minute)), Scheduled: true, Infos: []*persistencespb.StateMachineTaskInfo{{Type: "callback"}}},
+		}
 		// VT advanced and accumulated skip grew from 0 → 1h in this delta.
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+		s.False(s.mutableState.executionInfo.StateMachineTimers[0].Scheduled)
+		s.False(s.mutableState.executionInfo.StateMachineTimers[1].Scheduled)
 		s.Empty(s.mutableState.PopTasks(), "TaskRefresher generates the Workflow fast-forward timer")
 	})
 
