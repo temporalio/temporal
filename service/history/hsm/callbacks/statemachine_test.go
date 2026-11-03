@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/callbacks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestValidTransitions(t *testing.T) {
@@ -105,6 +106,44 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert no additional tasks are generated
 	require.Empty(t, out.Tasks)
+}
+
+func TestTimeSkippingTarget(t *testing.T) {
+	now := time.Now().UTC()
+
+	for _, state := range []enumsspb.CallbackState{
+		enumsspb.CALLBACK_STATE_STANDBY,
+		enumsspb.CALLBACK_STATE_FAILED,
+		enumsspb.CALLBACK_STATE_SUCCEEDED,
+	} {
+		t.Run(state.String(), func(t *testing.T) {
+			callback := callbacks.Callback{CallbackInfo: &persistencespb.CallbackInfo{State: state}}
+			target, skippable := callback.TimeSkippingTarget(now)
+			require.True(t, skippable)
+			require.True(t, target.IsZero())
+		})
+	}
+
+	t.Run("scheduled blocks", func(t *testing.T) {
+		callback := callbacks.Callback{CallbackInfo: &persistencespb.CallbackInfo{State: enumsspb.CALLBACK_STATE_SCHEDULED}}
+		_, skippable := callback.TimeSkippingTarget(now)
+		require.False(t, skippable)
+	})
+
+	for name, deadline := range map[string]time.Time{
+		"future backoff contributes target": now.Add(time.Minute),
+		"due backoff blocks":                now,
+	} {
+		t.Run(name, func(t *testing.T) {
+			callback := callbacks.Callback{CallbackInfo: &persistencespb.CallbackInfo{
+				State:                   enumsspb.CALLBACK_STATE_BACKING_OFF,
+				NextAttemptScheduleTime: timestamppb.New(deadline),
+			}}
+			target, skippable := callback.TimeSkippingTarget(now)
+			require.Equal(t, deadline, target)
+			require.Equal(t, deadline.After(now), skippable)
+		})
+	}
 }
 
 func TestCompareState(t *testing.T) {

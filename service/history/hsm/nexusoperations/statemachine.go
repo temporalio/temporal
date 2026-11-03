@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -123,6 +124,29 @@ func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
 		return nil, nil
 	}
 	return child, err
+}
+
+// TimeSkippingTargets returns the deadlines that bound a skip while the invocation is waiting to
+// retry. Any other pending state, including a requested cancellation, represents in-flight work.
+func (o Operation) TimeSkippingTargets(node *hsm.Node, now time.Time) ([]time.Time, bool, error) {
+	if o.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
+		return nil, false, nil
+	}
+	cancelation, err := o.Cancelation(node)
+	if err != nil {
+		return nil, false, err
+	}
+	if cancelation != nil {
+		return nil, false, nil
+	}
+	targets, skippable := commonnexus.RetryBackoffTimeSkippingTargets(
+		now,
+		o.GetScheduledTime().AsTime(),
+		o.GetNextAttemptScheduleTime().AsTime(),
+		o.GetScheduleToCloseTimeout().AsDuration(),
+		o.GetScheduleToStartTimeout().AsDuration(),
+	)
+	return targets, skippable, nil
 }
 
 // transitionTasks returns tasks that are emitted as transition outputs.

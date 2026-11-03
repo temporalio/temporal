@@ -67,6 +67,22 @@ func (c Callback) State() enumsspb.CallbackState {
 	return c.CallbackInfo.State
 }
 
+// TimeSkippingTarget reports whether the callback permits time skipping and, while backing off,
+// returns the retry deadline that bounds the skip.
+func (c Callback) TimeSkippingTarget(now time.Time) (time.Time, bool) {
+	switch c.State() {
+	case enumsspb.CALLBACK_STATE_STANDBY,
+		enumsspb.CALLBACK_STATE_FAILED,
+		enumsspb.CALLBACK_STATE_SUCCEEDED:
+		return time.Time{}, true
+	case enumsspb.CALLBACK_STATE_BACKING_OFF:
+		target := c.GetNextAttemptScheduleTime().AsTime()
+		return target, target.After(now)
+	default:
+		return time.Time{}, false
+	}
+}
+
 func (c Callback) SetState(state enumsspb.CallbackState) {
 	c.CallbackInfo.State = state
 }
