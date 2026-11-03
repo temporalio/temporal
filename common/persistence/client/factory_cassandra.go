@@ -3,6 +3,8 @@
 package client
 
 import (
+	"fmt"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -28,5 +30,8 @@ func verifyCassandraCompatibleVersion(
 	persistenceServiceResolver resolver.ServiceResolver,
 	logger log.Logger,
 ) error {
-	return cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger)
+	if err := cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
+		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
+	}
+	return nil
 }

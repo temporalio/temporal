@@ -227,7 +227,7 @@ func VerifyCompatibleVersion(
 ) error {
 	// cassandra schema version validation
 	if err := verifyCassandraCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
-		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
+		return err
 	}
 	// sql schema version validation
 	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
