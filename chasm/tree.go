@@ -4196,12 +4196,10 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
 
-	// Replication does not mark the subtree dirty. Re-stamp timers only when the
-	// replicated accumulated skip changed.
+	// Updating the workflow clock does not necessarily dirty the CHASM subtree. Re-stamp timers
+	// whenever either the active workflow path or passive replication changed the offset.
 	if !n.subtreeIsDirty {
-		// task regeneration works both for pure chasm-based executions
-		// and workflows that is only partially on chasm
-		if n.totalTimeSkippedUpdatedInPassive {
+		if n.totalTimeSkippedUpdatedInPassive || n.needsTimeSkippingTaskRegenForWorkflows {
 			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
 				return err
 			}
