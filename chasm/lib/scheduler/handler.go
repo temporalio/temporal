@@ -171,7 +171,13 @@ func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateSch
 		),
 		(*Scheduler).Update,
 		req,
+		// Empty RequestId disables dedup.
+		chasm.WithRequestID(req.FrontendRequest.GetRequestId()),
 	)
+	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+		// Retry of an already-applied request; V1 signal dedup also returns success.
+		return &schedulerpb.UpdateScheduleResponse{FrontendResponse: &workflowservice.UpdateScheduleResponse{}}, nil
+	}
 	return resp, err
 }
 
@@ -188,7 +194,11 @@ func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchSched
 		),
 		(*Scheduler).Patch,
 		req,
+		chasm.WithRequestID(req.FrontendRequest.GetRequestId()),
 	)
+	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+		return &schedulerpb.PatchScheduleResponse{FrontendResponse: &workflowservice.PatchScheduleResponse{}}, nil
+	}
 	return resp, err
 }
 
