@@ -2,25 +2,27 @@ package frontend
 
 import (
 	"context"
+	"go.temporal.io/api/serviceerror"
 	"maps"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/wideevents"
 )
 
 func (adh *AdminHandler) authoritativeNamespaceMutationObservation(
 	request *adminservice.ApplyNamespaceMutationRequest,
+	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
 	details map[string]any,
 ) nsreplication.CHASMAuthoritativeApplyObservation {
-	details = maps.Clone(details)
 	observation := nsreplication.CHASMAuthoritativeApplyObservation{
-		Task:                request.GetNamespaceTask(),
+		Task:                task,
 		Stage:               nsreplication.CHASMApplyStageReceive,
 		Outcome:             outcome,
 		SourceCluster:       request.GetSourceCluster(),
@@ -30,49 +32,39 @@ func (adh *AdminHandler) authoritativeNamespaceMutationObservation(
 		AttemptCount:        int(request.GetAttemptCount()),
 		Duration:            time.Since(startTime),
 		Error:               applyErr,
-		Details:             details,
+		Details:             maps.Clone(details),
 	}
 	applyNamespaceMutationAttribution(request, &observation)
 	return observation
 }
 
-func applyNamespaceMutationAttribution(
-	request *adminservice.ApplyNamespaceMutationRequest,
-	observation *nsreplication.CHASMAuthoritativeApplyObservation,
-) {
-	if attribution := request.GetAttribution(); attribution.GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
-		if observation.Details == nil {
-			observation.Details = make(map[string]any)
-		}
-		observation.Transport = nsreplication.OperatorRepairTransport
-		observation.Mode = nsreplication.OperatorRepairMode
-		observation.Details["origin"] = "operator_repair"
-		observation.Details["repair_id"] = attribution.GetRepairId()
-		observation.Details["operator_reason"] = attribution.GetReason()
-	}
-}
-
 func (adh *AdminHandler) recordAuthoritativeNamespaceMutation(
 	request *adminservice.ApplyNamespaceMutationRequest,
+	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
 	details map[string]any,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	nsreplication.RecordCHASMAuthoritativeApply(
 		adh.metricsHandler,
-		adh.authoritativeNamespaceMutationObservation(request, outcome, applyErr, startTime, details),
+		adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details),
 	)
 }
 
 func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 	request *adminservice.ApplyNamespaceMutationRequest,
+	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
 	details map[string]any,
 ) {
-	observation := adh.authoritativeNamespaceMutationObservation(request, outcome, applyErr, startTime, details)
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
+	observation := adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details)
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
 	if adh.config != nil &&
 		adh.config.EmitNamespaceLifecycleEvents != nil &&
@@ -84,9 +76,13 @@ func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 func (adh *AdminHandler) withAuthoritativeNamespaceMutationEvent(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
-) context.Context {
+	task *replicationspb.NamespaceTaskAttributes,
+) (observationCtx context.Context) {
+	observationCtx = ctx
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	observation := nsreplication.CHASMAuthoritativeApplyObservation{
-		Task:                request.GetNamespaceTask(),
+		Task:                task,
 		Stage:               nsreplication.CHASMApplyStageReceive,
 		ComponentBusinessID: request.GetComponentBusinessId(),
 		ComponentRunID:      request.GetComponentRunId(),
@@ -118,6 +114,22 @@ func authoritativeReceiveOutcome(outcome nsreplication.ApplyOutcome) string {
 		return nsreplication.CHASMApplyOutcomeNotAdmitted
 	default:
 		return nsreplication.CHASMApplyOutcomeError
+	}
+}
+
+func applyNamespaceMutationAttribution(
+	request *adminservice.ApplyNamespaceMutationRequest,
+	observation *nsreplication.CHASMAuthoritativeApplyObservation,
+) {
+	if attribution := request.GetAttribution(); attribution.GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+		if observation.Details == nil {
+			observation.Details = make(map[string]any)
+		}
+		observation.Transport = nsreplication.OperatorRepairTransport
+		observation.Mode = nsreplication.OperatorRepairMode
+		observation.Details["origin"] = "operator_repair"
+		observation.Details["repair_id"] = attribution.GetRepairId()
+		observation.Details["operator_reason"] = attribution.GetReason()
 	}
 }
 

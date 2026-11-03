@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,24 +42,6 @@ func (m *sqlExecutionStore) applyWorkflowMutationTx(
 		return serviceerror.NewInternalf("uuid parse failed. Error: %v", err)
 	}
 
-	// TODO Remove me if UPDATE holds the lock to the end of a transaction
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowMutation.Condition,
-		workflowMutation.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
 	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
@@ -69,8 +52,14 @@ func (m *sqlExecutionStore) applyWorkflowMutationTx(
 		lastWriteVersion,
 		workflowMutation.DBRecordVersion,
 		shardID,
+		workflowMutation.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -209,24 +198,6 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 		return err
 	}
 
-	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowSnapshot.Condition,
-		workflowSnapshot.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
 	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
@@ -237,8 +208,14 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 		lastWriteVersion,
 		workflowSnapshot.DBRecordVersion,
 		shardID,
+		workflowSnapshot.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -970,6 +947,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	serializer serialization.Serializer,
 ) error {
+	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
@@ -993,6 +971,7 @@ func assertRunIDAndUpdateCurrentExecution(
 				StartTime:           currentRow.StartTime,
 			}
 		}
+		shouldUpdate = !currentExecutionsEqual(currentRow, &row)
 		return nil
 	}
 	if err := assertCurrentExecution(ctx,
@@ -1005,8 +984,29 @@ func assertRunIDAndUpdateCurrentExecution(
 	); err != nil {
 		return err
 	}
+	if !shouldUpdate {
+		return nil
+	}
 
 	return updateCurrentExecution(ctx, tx, row)
+}
+
+func currentExecutionsEqual(a, b *sqlplugin.CurrentExecutionsRow) bool {
+	startTimesEqual := a.StartTime == nil && b.StartTime == nil ||
+		a.StartTime != nil && b.StartTime != nil &&
+			a.StartTime.Truncate(time.Microsecond).Equal(b.StartTime.Truncate(time.Microsecond))
+	return a.ShardID == b.ShardID &&
+		bytes.Equal(a.NamespaceID, b.NamespaceID) &&
+		a.WorkflowID == b.WorkflowID &&
+		bytes.Equal(a.RunID, b.RunID) &&
+		a.ArchetypeID == b.ArchetypeID &&
+		a.CreateRequestID == b.CreateRequestID &&
+		startTimesEqual &&
+		a.LastWriteVersion == b.LastWriteVersion &&
+		a.State == b.State &&
+		a.Status == b.Status &&
+		bytes.Equal(a.Data, b.Data) &&
+		a.DataEncoding == b.DataEncoding
 }
 
 func assertCurrentExecution(
@@ -1179,6 +1179,7 @@ func (m *sqlExecutionStore) updateExecution(
 	lastWriteVersion int64,
 	dbRecordVersion int64,
 	shardID int32,
+	condition int64,
 ) error {
 	row, err := m.buildExecutionRow(
 		namespaceID,
@@ -1193,7 +1194,29 @@ func (m *sqlExecutionStore) updateExecution(
 	if err != nil {
 		return err
 	}
-	result, err := tx.UpdateExecutions(ctx, row)
+
+	var result sql.Result
+	conditionalUpdater, supportsConditionalUpdate := tx.(sqlplugin.HistoryExecutionConditionalUpdater)
+	if supportsConditionalUpdate {
+		result, err = conditionalUpdater.UpdateExecutionsWithCondition(ctx, &sqlplugin.ExecutionsUpdate{
+			ExecutionsRow: *row,
+			Condition:     condition,
+		})
+	} else {
+		if err := lockAndCheckExecution(
+			ctx,
+			tx,
+			shardID,
+			row.NamespaceID,
+			workflowID,
+			row.RunID,
+			condition,
+			dbRecordVersion,
+		); err != nil {
+			return err
+		}
+		result, err = tx.UpdateExecutions(ctx, row)
+	}
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateExecution failed. Erorr: %v", err)
 	}
@@ -1202,6 +1225,20 @@ func (m *sqlExecutionStore) updateExecution(
 		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
 	}
 	if rowsAffected != 1 {
+		if rowsAffected == 0 && supportsConditionalUpdate {
+			if err := lockAndCheckExecution(
+				ctx,
+				tx,
+				shardID,
+				row.NamespaceID,
+				workflowID,
+				row.RunID,
+				condition,
+				dbRecordVersion,
+			); err != nil {
+				return err
+			}
+		}
 		return serviceerror.NewNotFoundf("updateExecution failed. Affected %v rows updated instead of 1.", rowsAffected)
 	}
 

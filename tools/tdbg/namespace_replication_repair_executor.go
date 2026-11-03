@@ -50,15 +50,11 @@ type namespaceReplicationRepairApplyResult struct {
 
 type namespaceReplicationRepairer struct {
 	verifier *namespaceReplicationVerifier
-	now      func() time.Time
 }
 
 func newNamespaceReplicationRepairer(verifier *namespaceReplicationVerifier) *namespaceReplicationRepairer {
 	return &namespaceReplicationRepairer{
 		verifier: verifier,
-		now: func() time.Time {
-			return time.Now().UTC()
-		},
 	}
 }
 
@@ -89,7 +85,7 @@ func (r *namespaceReplicationRepairer) Execute(
 		retErr = errors.Join(retErr, sourceConnection.closer.Close())
 	}()
 
-	effectiveCutoff, err := r.effectiveRepairCutoff(request.ReconcileBefore)
+	effectiveCutoff, err := r.effectiveRepairCutoff(request.ReconcileBefore, request.Observation.sourceSnapshot.GetObservedAt())
 	if err != nil {
 		return result, err
 	}
@@ -140,8 +136,11 @@ func validateNamespaceReplicationRepairExecution(request namespaceReplicationRep
 	return nil
 }
 
-func (r *namespaceReplicationRepairer) effectiveRepairCutoff(requested *time.Time) (time.Time, error) {
-	automatic := r.now()
+func (r *namespaceReplicationRepairer) effectiveRepairCutoff(requested *time.Time, observedAt *timestamppb.Timestamp) (time.Time, error) {
+	if observedAt == nil || observedAt.CheckValid() != nil {
+		return time.Time{}, errors.New("source must support a server-timed namespace observation for repair")
+	}
+	automatic := observedAt.AsTime()
 	if requested == nil {
 		return automatic, nil
 	}
@@ -441,7 +440,6 @@ func (r *namespaceReplicationRepairer) applyRepairTask(
 		func(rpcCtx context.Context) (*adminservice.ApplyNamespaceMutationResponse, error) {
 			return client.ApplyNamespaceMutation(rpcCtx, &adminservice.ApplyNamespaceMutationRequest{
 				NamespaceTask:        task,
-				Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
 				SourceCluster:        sourceCluster,
 				NamespaceTaskPayload: payload,
 				Attribution: &adminservice.NamespaceMutationAttribution{
@@ -531,7 +529,7 @@ func verifiedRepairPeers(observation *namespaceReplicationObservation) []string 
 		if cluster.Role == "SOURCE" || cluster.Presence != namespaceReplicationPresencePresent ||
 			cluster.ConfigVersion == nil || *cluster.ConfigVersion > sourceVersion ||
 			cluster.ConfigMatch != namespaceReplicationMatchMatch ||
-			cluster.FailoverMatch != namespaceReplicationMatchMatch {
+			namespaceReplicationFailoverBlocks(&cluster, observation.sourceSnapshot.GetFailoverVersion()) {
 			continue
 		}
 		peers = append(peers, cluster.Cluster)

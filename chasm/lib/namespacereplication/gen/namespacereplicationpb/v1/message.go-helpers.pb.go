@@ -292,7 +292,8 @@ var (
 		"Pending":       1,
 		"Committed":     2,
 		"Failed":        3,
-		"SkippedShadow": 4,
+		"Indeterminate": 4,
+		"SkippedShadow": 5,
 	}
 )
 

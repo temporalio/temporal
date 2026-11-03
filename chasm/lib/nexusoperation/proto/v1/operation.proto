@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
+import "chasm/lib/callback/proto/v1/message.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -58,6 +59,9 @@ message OperationState {
   NexusOperationTerminateState terminate_state = 19;
   // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
   repeated temporal.api.common.v1.Link links = 20;
+
+  // Metadata about attached completion callbacks.
+  temporal.server.chasm.lib.callbacks.proto.v1.CallbackMetadata callback_metadata = 21;
 }
 
 message NexusOperationTerminateState {

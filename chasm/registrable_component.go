@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -20,9 +22,12 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral     bool
-		singleCluster bool
-		detached      bool
+		ephemeral        bool
+		singleCluster    bool
+		detached         bool
+		recordPrincipals bool
+		executionType    enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
+		retention        func(*namespace.Namespace) time.Duration
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -73,6 +78,57 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
+}
+
+// WithRecordPrincipals records, on the root component, the principal of the caller that
+// creates an execution and of the caller that closes it. It only has an effect on a component
+// registered as the root of an execution. Archetypes opt in because the principals are stored
+// on every execution; workflows record principals on their history events instead.
+func WithRecordPrincipals() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.recordPrincipals = true
+	}
+}
+
+// WithExecutionType declares how executions of this archetype are named outside of CHASM, e.g. in
+// the links that address them. It only has an effect on a component registered as the root of an
+// execution; components nested inside an execution are named by their path within it.
+//
+// An archetype registered without this option has no external representation, and reports
+// [enumspb.EXECUTION_TYPE_UNSPECIFIED].
+func WithExecutionType(
+	executionType enumspb.ExecutionType,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.executionType = executionType
+	}
+}
+
+// WithRetention overrides how long closed executions of this archetype are kept before deletion.
+// The function is evaluated when an execution closes. It only has an effect on a component registered
+// as the root of an execution.
+//
+// The returned value replaces the namespace retention and may be shorter or longer than it, but is
+// floored at the namespace min retention. A non-positive value falls back to the namespace retention.
+func WithRetention(
+	retention func(*namespace.Namespace) time.Duration,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.retention = retention
+	}
+}
+
+// Retention returns the retention registered via WithRetention for the given namespace, and
+// whether one is registered and positive.
+func (rc *RegistrableComponent) Retention(ns *namespace.Namespace) (time.Duration, bool) {
+	if rc.retention == nil {
+		return 0, false
+	}
+	retention := rc.retention(ns)
+	if retention <= 0 {
+		return 0, false
+	}
+	return retention, true
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.

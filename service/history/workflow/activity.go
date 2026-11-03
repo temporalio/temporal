@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"time"
 
@@ -299,7 +300,10 @@ func ResetActivity(
 	if resetOptions {
 		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			if errors.Is(err, ErrMissingActivityScheduledEvent) {
+				return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+			}
+			return err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {

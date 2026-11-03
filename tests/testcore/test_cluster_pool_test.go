@@ -31,9 +31,9 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createCluster := func() *functionalTestBase {
 		created++
-		return &FunctionalTestBase{}
+		return &functionalTestBase{}
 	}
 
 	t.Run("uses cluster", func(t *testing.T) {
@@ -63,9 +63,9 @@ func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createCluster := func() *functionalTestBase {
 		created++
-		return &FunctionalTestBase{}
+		return &functionalTestBase{}
 	}
 
 	activeCluster := p.get(t, createCluster)
@@ -84,9 +84,9 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createCluster := func() *functionalTestBase {
 		created++
-		return &FunctionalTestBase{
+		return &functionalTestBase{
 			t: &sharedClusterT{name: t.Name()},
 		}
 	}

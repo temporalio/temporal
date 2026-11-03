@@ -29,6 +29,7 @@ type namespaceRepairHandlerOptions struct {
 }
 
 type namespaceRepairObserver struct {
+	logger                       log.Logger
 	eventLogger                  otellog.Logger
 	metricsHandler               metrics.Handler
 	currentCluster               string
@@ -42,9 +43,10 @@ type manualPeerReconciliationObservation struct {
 	lastFailure  string
 }
 
-func newNamespaceRepairHandler(options namespaceRepairHandlerOptions) *handler {
-	h := newHandler(options.Logger)
+func newNamespaceRepairHandler(options namespaceRepairHandlerOptions) *serviceHandler {
+	h := newServiceHandler(options.Logger)
 	h.repairObserver = &namespaceRepairObserver{
+		logger:                       options.Logger,
 		eventLogger:                  options.EventLogger,
 		metricsHandler:               options.MetricsHandler,
 		currentCluster:               options.ClusterMetadata.GetCurrentClusterName(),
@@ -60,6 +62,8 @@ func (o *namespaceRepairObserver) observe(
 	peers []manualPeerReconciliationObservation,
 	terminal *componentTerminalObservation,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(o.logger, &telemetryPanic)
 	for _, peer := range peers {
 		metrics.NamespaceReplicationCHASMManualReconciliations.With(o.metricsHandler).Record(
 			1,

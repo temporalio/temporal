@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -9,12 +8,14 @@ import (
 	"io"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	otellog "go.opentelemetry.io/otel/log"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -97,7 +99,7 @@ type (
 		namespaceDLQHandler                   nsreplication.DLQMessageHandler
 		namespaceMutationExecutor             nsreplication.MutationTaskExecutor
 		eventSerializer                       serialization.Serializer
-		visibilityMgr                         manager.VisibilityManager
+		visibilityMgr                         manager.AdminVisibilityManager
 		persistenceExecutionName              string
 		namespaceReplicationQueue             persistence.NamespaceReplicationQueue
 		taskManager                           persistence.TaskManager
@@ -116,6 +118,7 @@ type (
 		healthServer                          *health.Server
 		historyHealthChecker                  HealthChecker
 		chasmRegistry                         *chasm.Registry
+		timeSource                            clock.TimeSource
 		chasmVisibilityManager                chasm.VisibilityManager
 		chasmNamespaceReplicationRepairClient namespacereplicationpb.NamespaceReplicationRepairServiceClient
 		schedulerClient                       schedulerpb.SchedulerServiceClient
@@ -132,7 +135,7 @@ type (
 		Config                                *Config
 		NamespaceReplicationQueue             persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue   persistence.NamespaceReplicationQueue
-		visibilityMgr                         manager.VisibilityManager
+		visibilityMgr                         manager.AdminVisibilityManager
 		Logger                                log.Logger
 		EventLogger                           otellog.Logger
 		TaskManager                           persistence.TaskManager
@@ -214,6 +217,7 @@ func NewAdminHandler(
 		taskCategoryRegistry:                  args.CategoryRegistry,
 		matchingClient:                        args.matchingClient,
 		chasmRegistry:                         args.ChasmRegistry,
+		timeSource:                            args.TimeSource,
 		chasmVisibilityManager:                args.ChasmVisibilityManager,
 		chasmNamespaceReplicationRepairClient: args.ChasmNamespaceReplicationRepairClient,
 		schedulerClient:                       args.SchedulerClient,
@@ -1052,158 +1056,135 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
-) (*adminservice.ApplyNamespaceMutationResponse, error) {
-	startTime := time.Now() // nolint:forbidigo // Wall-clock time is used only for latency metrics.
-	if request == nil || request.GetNamespaceTask() == nil {
-		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
+) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	startTime := time.Now() // nolint:forbidigo // Wall-clock time measures only receiver latency.
+	defer log.CapturePanic(adh.logger, &retError)
+	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
+	var comparisonPanic error
+	comparisonOutcome, comparisonReason := "error", "invalid_request"
+	defer func() {
+		if comparisonPanic != nil {
+			retError = comparisonPanic
+			comparisonOutcome, comparisonReason = "error", "panic"
+		}
+		if request.GetShadow() {
+			adh.recordShadowReceiveComparison(request, payloadTask, legacyTask, comparisonOutcome, comparisonReason, retError)
+		}
+	}()
+	// Recover comparison panics before recording the RPC outcome.
+	defer log.CapturePanic(adh.logger, &comparisonPanic)
+
+	if request == nil {
+		return nil, serviceerror.NewInvalidArgument("request is required")
 	}
 	if err := validateNamespaceMutationAttribution(request); err != nil {
 		return nil, err
 	}
-	payloadTask, actualFingerprint, matches, err := validateNamespaceMutationPayload(request)
-	if err != nil {
-		if request.GetShadow() {
-			adh.recordShadowReceiveComparison(
-				request.GetNamespaceTask().GetNamespaceOperation(),
-				request.GetSourceCluster(),
-				namespaceReplicationShadowOutcomeError,
-			)
-			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
-		} else {
-			details := map[string]any{
-				"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
-			}
-			if len(actualFingerprint) > 0 {
-				details["actual_task_fingerprint"] = hex.EncodeToString(actualFingerprint)
-			}
-			adh.observeAuthoritativeNamespaceMutation(
-				request,
-				nsreplication.CHASMApplyOutcomeFingerprintError,
-				err,
-				startTime,
-				details,
-			)
-		}
-		return nil, err
+	// Shadow must expose the same feature prerequisite as authoritative applies.
+	if !adh.clusterMetadata.IsGlobalNamespaceEnabled() {
+		comparisonReason = "global_namespace_disabled"
+		return nil, serviceerror.NewFailedPrecondition("global namespace replication is disabled on this cluster")
 	}
-	if !matches {
-		adh.logger.Warn(
-			"namespace replication receive mismatch",
-			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
-			tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
-			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
-		)
-		if request.GetShadow() {
-			adh.recordShadowReceiveComparison(
-				request.GetNamespaceTask().GetNamespaceOperation(),
-				request.GetSourceCluster(),
-				namespaceReplicationShadowOutcomeMismatch,
-			)
-			adh.emitShadowReceiveComparison(
-				request,
-				request.GetFingerprint(),
-				actualFingerprint,
-				namespaceReplicationShadowOutcomeMismatch,
-				nil,
-			)
-			return &adminservice.ApplyNamespaceMutationResponse{
-				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
-			}, nil
+	if request.GetRemovedPeer() && request.GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("removed_peer is only valid for authoritative updates")
+	}
+	if len(request.GetNamespaceTaskPayload()) == 0 {
+		comparisonReason = "missing_payload"
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+	if request.GetShadow() && len(request.GetShadowLegacyTaskPayload()) == 0 {
+		comparisonReason = "missing_legacy_reference"
+		return nil, serviceerror.NewInvalidArgument("shadow_legacy_task_payload is required")
+	}
+	if request.GetShadow() {
+		comparisonReason = "invalid_legacy_reference"
+		legacyTask = &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetShadowLegacyTaskPayload(), legacyTask); err != nil {
+			legacyTask = nil
+			return nil, serviceerror.NewInvalidArgumentf("decode shadow_legacy_task_payload: %v", err)
 		}
-		adh.observeAuthoritativeNamespaceMutation(
-			request,
-			nsreplication.CHASMApplyOutcomeFingerprintMismatch,
-			nil,
-			startTime,
-			map[string]any{
-				"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
-				"actual_task_fingerprint":   hex.EncodeToString(actualFingerprint),
-			},
-		)
-		return nil, serviceerror.NewInvalidArgument("namespace mutation fingerprint mismatch")
 	}
 
-	if request.GetShadow() {
-		adh.recordShadowReceiveComparison(
-			request.GetNamespaceTask().GetNamespaceOperation(),
-			request.GetSourceCluster(),
-			namespaceReplicationShadowOutcomeMatch,
-		)
-		adh.emitShadowReceiveComparison(
-			request,
-			request.GetFingerprint(),
-			actualFingerprint,
-			namespaceReplicationShadowOutcomeMatch,
-			nil,
-		)
+	payloadTask = &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		payloadTask = nil
+		comparisonOutcome, comparisonReason = "error", "invalid_payload"
+		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	if !request.GetShadow() {
+		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
+			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+			Transport: namespaceMutationTransport(request),
+		})
+		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask)
+		// CHASM deliveries can arrive out of order. Persist a removal even when this
+		// peer has not received its earlier addition: the config version fences
+		// that delayed addition. Otherwise it can create stale membership after
+		// the source has stopped targeting this peer. Legacy never sets this marker.
+		if request.GetRemovedPeer() {
+			clusters := payloadTask.GetReplicationConfig().GetClusters()
+			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
+				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
+					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
+				}) {
+				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+			}
+			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
+		}
+		// Absorb transient Unavailable errors, including cell-wide metadata CAS
+		// contention and an UPDATE losing a missing-row CREATE race to an older
+		// snapshot. ExecuteWithOutcome converts that duplicate to Unavailable so
+		// the next attempt applies the newer update through apply-if-higher.
+		// Returning Unavailable signals a destination failure at the source and
+		// can open the shared destination circuit breaker, delaying other mutations.
+		// Each attempt rereads metadata; durable retries remain in CHASM.
+		policy := backoff.NewExponentialRetryPolicy(20 * time.Millisecond).
+			WithBackoffCoefficient(2).
+			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
+		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+		}, policy, func(err error) bool {
+			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
+			return retryable
+		})
+		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+			return nil, err
+		}
+		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
+		if err != nil {
+			return nil, err
+		}
+		adh.recordAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
+		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+	}
+	// Compare the byte payloads after decoding with the same schema. The typed
+	// gRPC field can encode unknown map fields in a different order.
+	if proto.Equal(legacyTask, payloadTask) {
+		comparisonOutcome, comparisonReason = "match", "none"
 		return &adminservice.ApplyNamespaceMutationResponse{
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
 	}
-	ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
-		SourceCluster: request.GetSourceCluster(),
-		TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
-		Transport:     namespaceMutationTransport(request),
-	})
-	ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request)
-	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
-	if err != nil {
-		adh.observeAuthoritativeNamespaceMutation(
-			request,
-			nsreplication.CHASMApplyOutcomeError,
-			err,
-			startTime,
-			nil,
-		)
-		return nil, err
-	}
-	wireOutcome, err := namespaceMutationResponseOutcome(outcome)
-	if err != nil {
-		adh.observeAuthoritativeNamespaceMutation(
-			request,
-			nsreplication.CHASMApplyOutcomeError,
-			err,
-			startTime,
-			nil,
-		)
-		return nil, err
-	}
-	adh.recordAuthoritativeNamespaceMutation(request, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
-	return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+	comparisonOutcome, comparisonReason = "mismatch", "legacy_payload_mismatch"
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(legacyTask.GetId()),
+		tag.NewStringTag("reason", "legacy_payload_mismatch"),
+		tag.NewStringsTag("differing_fields", nsreplication.DifferingNamespaceTaskFields(legacyTask, payloadTask)),
+		tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetShadowLegacyTaskPayload()))),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload()))),
+	)
+
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+	}, nil
 }
 
-func validateNamespaceMutationPayload(
-	request *adminservice.ApplyNamespaceMutationRequest,
-) (*replicationspb.NamespaceTaskAttributes, []byte, bool, error) {
-	if request.NamespaceTaskPayload == nil {
-		return nil, nil, false, serviceerror.NewInvalidArgument("namespace_task_payload is required")
-	}
+// Three total receiver attempts bound transient retries within the RPC deadline.
+const namespaceMutationApplyMaxAttempts = 3
 
-	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
-	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
-		return nil, actualFingerprint, false, nil
-	}
-
-	payloadTask := &replicationspb.NamespaceTaskAttributes{}
-	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
-		return nil, actualFingerprint, false,
-			serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
-	}
-	if proto.Equal(payloadTask, request.GetNamespaceTask()) {
-		return payloadTask, actualFingerprint, true, nil
-	}
-
-	typedFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-	if err != nil {
-		return nil, actualFingerprint, false,
-			serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
-	}
-	return nil, typedFingerprint, false, nil
-}
-
-func namespaceMutationResponseOutcome(
-	outcome nsreplication.ApplyOutcome,
-) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
+func namespaceMutationResponseOutcome(outcome nsreplication.ApplyOutcome) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
 	switch outcome {
 	case nsreplication.ApplyOutcomeCreated:
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED, nil
@@ -1216,26 +1197,8 @@ func namespaceMutationResponseOutcome(
 	case nsreplication.ApplyOutcomeNotAdmitted:
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED, nil
 	default:
-		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED,
-			serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
+		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED, serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
 	}
-}
-
-func (adh *AdminHandler) recordShadowReceiveComparison(
-	operation enumsspb.NamespaceOperation,
-	sourceCluster string,
-	outcome string,
-) {
-	if adh.metricsHandler == nil {
-		return
-	}
-	metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(
-		1,
-		metrics.SourceClusterTag(sourceCluster),
-		metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
-		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
-		metrics.OutcomeTag(outcome),
-	)
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -1521,34 +1484,36 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 // StartAdminBatchOperation starts an admin batch operation.
 func (adh *AdminHandler) StartAdminBatchOperation(
 	ctx context.Context,
-	request *adminservice.StartAdminBatchOperationRequest,
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
 ) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	if request == nil {
+	if adminRequest == nil {
 		return nil, errRequestNotSet
 	}
-
-	if err := validateAdminBatchOperation(request); err != nil {
+	if err := validateAdminBatchOperation(adminRequest); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	// Admin batch workflows run in the temporal-system namespace to operate on target namespaces.
+	targetNS := adminRequest.GetNamespace()
+	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
 	if err != nil {
 		return nil, err
 	}
+	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
+	operateJobID := targetNS + ":" + adminRequest.GetJobId()
 
-	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
+	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.GetNamespace()),
+		NamespaceID: namespace.ID(sysNSID),
+		Namespace:   namespace.Name(sysNS),
 		Query:       batcher.OpenAdminBatchOperationQuery,
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	openAdminBatchOperationCount := int(countResp.Count)
 	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
@@ -1558,32 +1523,46 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		}
 	}
 
-	input := &batchspb.BatchOperationInput{
-		AdminRequest: request,
-		NamespaceId:  namespaceID.String(),
+	// prepare the batch-workflow input
+	batchWfInput := &batchspb.BatchOperationInput{
+		AdminRequest: adminRequest,
+		NamespaceId:  targetNSID.String(),
 	}
-
-	identity := request.GetIdentity()
+	identity := adminRequest.GetIdentity()
 	var batchTypeMemo string
-	switch op := request.Operation.(type) {
+	switch op := adminRequest.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// These operations mutate workflow state of the target ns,
+		// so the cluster should be active for the target namespace.
+		if err := adh.checkTargetNamespaceActive(targetNS); err != nil {
+			return nil, err
+		}
+		delegatedBatchType := op.DelegationOperation
+		delegatedBatchRequest, err := createDelegatedBatchRequest(adminRequest, delegatedBatchType)
+		if err != nil {
+			return nil, err
+		}
+		if err := batcher.ValidateBatchOperation(delegatedBatchRequest); err != nil {
+			return nil, err
+		}
+		batchWfInput.Request = delegatedBatchRequest
+		batchWfInput.BatchType = delegatedBatchType
+		batchTypeMemo = snakeCaseBatchType(delegatedBatchType)
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
-
-	inputPayload, err := payloads.Encode(input)
+	batchWfInputPayload, err := payloads.Encode(batchWfInput)
 	if err != nil {
 		return nil, err
 	}
-
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+			batcher.BatchReasonMemo:        payload.EncodeString(adminRequest.GetReason()),
 		},
 	}
-
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttributes(
 		&searchAttributes,
@@ -1591,12 +1570,13 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
 	)
 
+	// start batch workflow
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
+		Namespace:                sysNS,
+		WorkflowId:               operateJobID,
 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
+		Input:                    batchWfInputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -1608,7 +1588,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	_, err = adh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
+			sysNSID,
 			startReq,
 			nil,
 			nil,
@@ -1618,7 +1598,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.StartAdminBatchOperationResponse{}, nil
+	return &adminservice.StartAdminBatchOperationResponse{WorkflowId: operateJobID}, nil
 }
 
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
@@ -1632,6 +1612,9 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	if len(params.GetJobId()) == 0 {
 		return serviceerror.NewInvalidArgument("JobId is not set on request.")
 	}
+	if strings.Contains(params.GetJobId(), ":") {
+		return serviceerror.NewInvalidArgument("JobId cannot contain ':'")
+	}
 	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
 		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
 	}
@@ -1640,9 +1623,80 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		// No additional validation needed
 		return nil
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// The delegated batch type will be validated after the delegated request is built
+		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
 	}
+}
+
+// checkTargetNamespaceActive reports whether this cluster may mutate the target namespace's
+// executions. The batch workflow itself runs in the system namespace, which is local and so
+// always active here, which is why the target namespace has to be checked separately.
+func (adh *AdminHandler) checkTargetNamespaceActive(targetNS string) error {
+	nsEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(targetNS))
+	if err != nil {
+		return err
+	}
+	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+	//nolint:forbidigo // a batch spans many workflows, so there is no single businessID to route on
+	if !nsEntry.ActiveInCluster(currentCluster) {
+		return serviceerror.NewNamespaceNotActive(
+			targetNS,
+			currentCluster,
+			nsEntry.ActiveClusterName(namespace.RoutingKey{}),
+		)
+	}
+	return nil
+}
+
+func createDelegatedBatchRequest(
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
+	batchType enumspb.BatchOperationType,
+) (*workflowservice.StartBatchOperationRequest, error) {
+	delegatedBatchRequest := &workflowservice.StartBatchOperationRequest{
+		Namespace:       adminRequest.GetNamespace(), // the target ns
+		JobId:           adminRequest.GetJobId(),
+		Reason:          adminRequest.GetReason(),
+		VisibilityQuery: adminRequest.GetVisibilityQuery(),
+	}
+	targetExecutionType := enumspb.EXECUTION_TYPE_WORKFLOW
+	// Only delegate destructive operations whose fields can be derived from the admin envelope.
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: adminRequest.GetIdentity(),
+				Reason:   adminRequest.GetReason(),
+			},
+		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeletionOperation{
+			DeletionOperation: &batchpb.BatchOperationDeletion{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
+			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
+		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
+	default:
+		return nil, serviceerror.NewInvalidArgumentf(
+			"batch operation type %v cannot be delegated to the admin API", batchType)
+	}
+	for _, execution := range adminRequest.GetExecutions() {
+		delegatedBatchRequest.TargetExecutions = append(delegatedBatchRequest.TargetExecutions, &commonpb.Execution{
+			Type:       targetExecutionType,
+			BusinessId: execution.GetWorkflowId(),
+			RunId:      execution.GetRunId(),
+		})
+	}
+	return delegatedBatchRequest, nil
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
@@ -2013,6 +2067,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		Name: request.GetNamespace(),
 		ID:   request.GetId(),
 	}
+	observedAt := adh.timeSource.Now()
 	resp, err := adh.persistenceMetadataManager.GetNamespace(ctx, req)
 	if err != nil {
 		return nil, err
@@ -2022,6 +2077,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
 	nsResponse := &adminservice.GetNamespaceResponse{
+		ObservedAt: timestamppb.New(observedAt),
 		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			State:       info.State,
@@ -2352,9 +2408,10 @@ func (adh *AdminHandler) getDLQWorkflowID(
 
 // validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
 // It performs the following checks:
-// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
-// 2. If both archetypeID and archetype are specified, validates they match each other
-// 3. If only archetype is specified, converts it to an ID
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry.
+// 2. If both archetypeID and archetype are specified, validates they match each other.
+// 3. If only archetype is specified, converts it to an ID.
+// 4. If neither is specified (archetypeID is zero and archetype is empty), defaults to WorkflowArchetypeID.
 func (adh *AdminHandler) validateAndResolveArchetypeID(
 	archetype chasm.Archetype,
 	archetypeID uint32,
@@ -2546,4 +2603,36 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 		return nil, err
 	}
 	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	pageSize := request.GetPageSize()
+	maxPageSize := int32(adh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if pageSize <= 0 || pageSize > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
+	return adh.visibilityMgr.AdminListExecutions(ctx, request)
+}
+
+func (adh *AdminHandler) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	return adh.visibilityMgr.AdminCountExecutions(ctx, request)
 }

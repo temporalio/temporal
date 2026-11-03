@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -47,13 +48,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
@@ -63,10 +64,11 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mockapi/operatorservicemock/v1"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/dummy"
@@ -94,7 +96,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
-		mockVisibilityMgr          *manager.MockVisibilityManager
+		mockAdminVisibilityMgr     *manager.MockAdminVisibilityManager
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
@@ -109,26 +111,9 @@ type (
 
 		currentClusterName string
 
-		handler                   *AdminHandler
-		namespaceMutationExecutor *testNamespaceMutationExecutor
-	}
-
-	testNamespaceMutationExecutor struct {
-		outcome nsreplication.ApplyOutcome
-		err     error
-		task    *replicationspb.NamespaceTaskAttributes
-		ctx     context.Context
+		handler *AdminHandler
 	}
 )
-
-func (e *testNamespaceMutationExecutor) ExecuteWithOutcome(
-	ctx context.Context,
-	task *replicationspb.NamespaceTaskAttributes,
-) (nsreplication.ApplyOutcome, error) {
-	e.ctx = ctx
-	e.task = task
-	return e.outcome, e.err
-}
 
 func TestAdminHandlerSuite(t *testing.T) {
 	s := new(adminHandlerSuite)
@@ -162,7 +147,8 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
-	s.mockVisibilityMgr = s.mockResource.VisibilityManager
+	s.mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
@@ -180,6 +166,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit:     dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesSizeOfValueLimit:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesTotalSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		VisibilityMaxPageSize:                 dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
@@ -194,7 +181,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg.SearchAttributesNumberOfKeysLimit,
 		cfg.SearchAttributesSizeOfValueLimit,
 		cfg.SearchAttributesTotalSizeLimit,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		cfg.SuppressErrorSetSystemSearchAttribute,
 		metrics.NoopMetricsHandler,
@@ -206,7 +193,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		s.mockResource.GetLogger(),
 		nil,
 		s.mockResource.GetTaskManager(),
@@ -227,11 +214,11 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
-		nil, // chasmVisibilityManager - only needed by namespace replication repair tests
-		nil, // chasmNamespaceReplicationRepairClient - only needed by namespace replication repair tests
+		nil, // CHASM visibility manager
+		nil, // CHASM repair client
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
-		metrics.NoopMetricsHandler,
+		nil, // metricsHandler
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -248,8 +235,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
 	)
-	s.namespaceMutationExecutor = &testNamespaceMutationExecutor{}
-	s.handler = NewAdminHandler(args, namespaceDLQHandler, s.namespaceMutationExecutor)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler, nsreplication.NewMockMutationTaskExecutor(s.controller))
 	s.handler.Start()
 }
 
@@ -259,421 +245,224 @@ func (s *adminHandlerSuite) TearDownTest() {
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	namespaceTask := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Id:                 "namespace-id",
-	}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Shadow:               true,
-		Fingerprint:          fingerprint,
-		SourceCluster:        "source-cluster",
-		ComponentBusinessId:  "namespace-id:mutation-id",
-		ComponentRunId:       "run-id",
-		AttemptCount:         2,
-		NamespaceTaskPayload: payload,
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: namespaceTaskPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
-	s.Nil(s.namespaceMutationExecutor.task)
-	requireShadowComparisonMetric(
-		s.T(),
-		metricsCapture,
-		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
-		metrics.TargetClusterTag("").Key,
-		s.currentClusterName,
-		"create",
-		namespaceReplicationShadowOutcomeMatch,
-		"source-cluster",
-	)
-	details := requireShadowComparisonEvent(
-		s.T(),
-		eventLogger.records,
-		namespaceReplicationComparisonBoundaryReceive,
-		namespaceReplicationShadowOutcomeMatch,
-		"source-cluster",
-		s.currentClusterName,
-	)
-	s.Equal(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
-	s.Equal(details["task_fingerprint"], details["actual_task_fingerprint"])
-	s.Equal("namespace-id:mutation-id", details["component_business_id"])
-	s.Equal("run-id", details["component_run_id"])
-	s.InDelta(float64(2), details["attempt_count"], 0)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	namespaceTask := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
-		Id:                 "namespace-id",
-	}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
-	s.Require().NoError(err)
-
-	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Shadow:               true,
-		Fingerprint:          []byte("incorrect-fingerprint"),
-		SourceCluster:        "source-cluster",
-		ComponentBusinessId:  "namespace-id:mutation-id",
-		ComponentRunId:       "run-id",
-		AttemptCount:         3,
-		NamespaceTaskPayload: payload,
-	})
-	s.Require().NoError(err)
-	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
-	s.Nil(s.namespaceMutationExecutor.task)
-	requireShadowComparisonMetric(
-		s.T(),
-		metricsCapture,
-		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
-		metrics.TargetClusterTag("").Key,
-		s.currentClusterName,
-		"update",
-		namespaceReplicationShadowOutcomeMismatch,
-		"source-cluster",
-	)
-	details := requireShadowComparisonEvent(
-		s.T(),
-		eventLogger.records,
-		namespaceReplicationComparisonBoundaryReceive,
-		namespaceReplicationShadowOutcomeMismatch,
-		"source-cluster",
-		s.currentClusterName,
-	)
-	s.NotEqual(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
-	s.Equal(details["task_fingerprint"], details["actual_task_fingerprint"])
-}
-
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadError() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-
-	payload := []byte{0xff}
-	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: &replicationspb.NamespaceTaskAttributes{
-			NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
-			Id:                 "namespace-id",
-		},
-		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		SourceCluster:        "source-cluster",
-		ComponentBusinessId:  "namespace-id:mutation-id",
-		ComponentRunId:       "run-id",
-		AttemptCount:         4,
-		NamespaceTaskPayload: payload,
-	})
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
-	requireShadowComparisonMetric(
-		s.T(),
-		metricsCapture,
-		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
-		metrics.TargetClusterTag("").Key,
-		s.currentClusterName,
-		"update",
-		namespaceReplicationShadowOutcomeError,
-		"source-cluster",
-	)
-	details := requireShadowComparisonEvent(
-		s.T(),
-		eventLogger.records,
-		namespaceReplicationComparisonBoundaryReceive,
-		namespaceReplicationShadowOutcomeError,
-		"source-cluster",
-		s.currentClusterName,
-	)
-	s.Equal(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
-	s.Equal("namespace-id:mutation-id", details["component_business_id"])
-	s.Equal("run-id", details["component_run_id"])
-	s.InDelta(float64(4), details["attempt_count"], 0)
-}
-
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-
-	testCases := []struct {
-		name     string
-		outcome  nsreplication.ApplyOutcome
-		expected adminservice.ApplyNamespaceMutationResponse_Outcome
-	}{
-		{"created", nsreplication.ApplyOutcomeCreated, adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED},
-		{"applied", nsreplication.ApplyOutcomeApplied, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED},
-		{"stale", nsreplication.ApplyOutcomeNoOpStale, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE},
-		{"duplicate", nsreplication.ApplyOutcomeDuplicate, adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE},
-		{"not admitted", nsreplication.ApplyOutcomeNotAdmitted, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED},
-	}
-	for _, testCase := range testCases {
-		s.Run(testCase.name, func() {
-			namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-			payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
-			s.Require().NoError(err)
-			fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
-			s.namespaceMutationExecutor.outcome = testCase.outcome
-
-			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-				NamespaceTask:        namespaceTask,
-				Fingerprint:          fingerprint,
-				SourceCluster:        "source-cluster",
-				ComponentBusinessId:  "business-id",
-				ComponentRunId:       "run-id",
-				AttemptCount:         2,
-				NamespaceTaskPayload: payload,
-			})
-			s.Require().NoError(err)
-			s.Equal(testCase.expected, response.GetOutcome())
-			s.True(proto.Equal(namespaceTask, s.namespaceMutationExecutor.task))
-			eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(s.namespaceMutationExecutor.ctx)
-			s.Require().True(ok)
-			s.Equal("source-cluster", eventContext.SourceCluster)
-			s.Equal(s.currentClusterName, eventContext.TargetCluster)
-			s.Equal(2, eventContext.AttemptCount)
-			s.Equal("chasm", eventContext.EventData.Details["transport"])
-			s.Equal("authoritative", eventContext.EventData.Details["mode"])
-			s.Equal(nsreplication.CHASMApplyStageReceive, eventContext.EventData.Details["apply_stage"])
-			s.Equal("business-id", eventContext.EventData.Details["component_business_id"])
-			s.Equal("run-id", eventContext.EventData.Details["component_run_id"])
-		})
-	}
-	s.Empty(metricsCapture.SnapshotMetric(metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name()))
-	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
-	s.Len(recordings, len(testCases))
-	for i, testCase := range testCases {
-		s.Equal(nsreplication.CHASMApplyStageReceive, recordings[i].Tags["apply_stage"])
-		s.Equal(authoritativeReceiveOutcome(testCase.outcome), recordings[i].Tags[metrics.OutcomeTag("").Key])
-	}
-	s.Empty(eventLogger.records, "the real executor owns successful processed events")
-	metricsContext, ok := nsreplication.TaskMetricsContextFromContext(s.namespaceMutationExecutor.ctx)
-	s.True(ok)
-	s.Equal(nsreplication.CHASMReplicationTransport, metricsContext.Transport)
-	s.Equal(s.currentClusterName, metricsContext.TargetCluster)
-}
-
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_OperatorRepairAttribution() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture()
+	s.handler.logger = logger
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	s.namespaceMutationExecutor.outcome = nsreplication.ApplyOutcomeApplied
-
-	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		SourceCluster:        "source-cluster",
-		NamespaceTaskPayload: payload,
-		Attribution: &adminservice.NamespaceMutationAttribution{
-			Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
-			RepairId: "repair-id",
-			Reason:   "operator reason",
-		},
-	})
-	s.Require().NoError(err)
-	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
-	metricsContext, ok := nsreplication.TaskMetricsContextFromContext(s.namespaceMutationExecutor.ctx)
-	s.True(ok)
-	s.Equal(nsreplication.OperatorRepairTransport, metricsContext.Transport)
-	eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(s.namespaceMutationExecutor.ctx)
-	s.Require().True(ok)
-	s.Equal(nsreplication.OperatorRepairTransport, eventContext.EventData.Details["transport"])
-	s.Equal(nsreplication.OperatorRepairMode, eventContext.EventData.Details["mode"])
-	s.Equal("operator_repair", eventContext.EventData.Details["origin"])
-	s.Equal("repair-id", eventContext.EventData.Details["repair_id"])
-	s.Equal("operator reason", eventContext.EventData.Details["operator_reason"])
-	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
-	s.Require().Len(recordings, 1)
-	s.Equal(nsreplication.OperatorRepairTransport, recordings[0].Tags[metrics.TransportTag("").Key])
-}
-
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsInvalidOperatorRepairAttribution() {
-	for _, request := range []*adminservice.ApplyNamespaceMutationRequest{
-		{
-			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
-			Attribution: &adminservice.NamespaceMutationAttribution{
-				RepairId: "repair-id",
-			},
-		},
-		{
-			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
-			Shadow:        true,
-			Attribution: &adminservice.NamespaceMutationAttribution{
-				Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
-				RepairId: "repair-id",
-				Reason:   "operator reason",
-			},
-		},
-		{
-			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
-			Attribution: &adminservice.NamespaceMutationAttribution{
-				Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
-			},
-		},
-	} {
-		_, err := s.handler.ApplyNamespaceMutation(context.Background(), request)
-		var invalidArgument *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgument)
-	}
-}
-
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadDiffersFromTypedTask() {
-	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(payloadTask)
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(&replicationspb.NamespaceTaskAttributes{Id: "legacy-namespace-id"})
 	s.Require().NoError(err)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
-		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "namespace replication shadow receive mismatch",
+		Tags: map[string]any{
+			"reason":             "legacy_payload_mismatch",
+			"differing_fields":   []string{"id"},
+			"legacy_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(legacyPayload)),
+			"actual_fingerprint": hex.EncodeToString(nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)),
+		},
+	})
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowHashesOriginalPayloadBytes() {
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowUsesPayloadInsteadOfTypedTask() {
+	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(payloadTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:           &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: namespaceTaskPayload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowComparesDecodedPayloads() {
 	canonicalPayload, err := nsreplication.MarshalNamespaceTask(
 		&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
 	)
 	s.Require().NoError(err)
 	unknownField := protowire.AppendTag(nil, 100, protowire.VarintType)
 	unknownField = protowire.AppendVarint(unknownField, 42)
-	payload := append(unknownField, canonicalPayload...)
+	namespaceTaskPayload := append(unknownField, canonicalPayload...)
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{}
-	s.Require().NoError(proto.Unmarshal(payload, namespaceTask))
+	s.Require().NoError(proto.Unmarshal(namespaceTaskPayload, namespaceTask))
 	reencodedPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	s.NotEqual(payload, reencodedPayload)
+	s.NotEqual(namespaceTaskPayload, reencodedPayload)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: reencodedPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMissingPayload() {
-	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
-		Shadow:        true,
-	})
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "nil"},
+		{name: "empty", payload: []byte{}},
+	} {
+		s.Run(tc.name, func() {
+			_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:               true,
+				NamespaceTaskPayload: tc.payload,
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "namespace_task_payload is required")
+		})
+	}
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload() {
-	payload := []byte{0xff}
-	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
-		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+	namespaceTaskPayload := []byte{0xff}
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"})
+	s.Require().NoError(err)
+	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		Shadow:                  true,
+		NamespaceTaskPayload:    namespaceTaskPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
 	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Require().ErrorContains(err, "decode namespace_task_payload")
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsMissingPayload() {
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsFingerprintMismatch() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
-	s.Require().NoError(err)
-
-	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Fingerprint:          []byte("wrong"),
-		SourceCluster:        "source-cluster",
-		ComponentBusinessId:  "business-id",
-		ComponentRunId:       "run-id",
-		AttemptCount:         2,
-		NamespaceTaskPayload: payload,
-	})
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
-	s.Nil(s.namespaceMutationExecutor.task)
-	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
-	s.Require().Len(recordings, 1)
-	s.Equal(nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
-	s.Equal(nsreplication.CHASMApplyOutcomeFingerprintMismatch, recordings[0].Tags[metrics.OutcomeTag("").Key])
-	s.Require().Len(eventLogger.records, 1)
-	details := namespaceReplicationEventDetails(s.T(), eventLogger.records[0])
-	s.Equal("business-id", details["component_business_id"])
-	s.Equal("run-id", details["component_run_id"])
-	s.Equal(nsreplication.CHASMApplyOutcomeFingerprintMismatch, details["outcome"])
-	s.NotEqual(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
+func (s *adminHandlerSuite) TestApplyNamespaceMutationRejectsInvalidLegacyReference() {
+	for _, tc := range []struct {
+		name      string
+		reference []byte
+	}{
+		{name: "missing"},
+		{name: "malformed", reference: []byte{0xff}},
+	} {
+		s.Run(tc.name, func() {
+			_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:                  true,
+				NamespaceTaskPayload:    []byte{0x12, 1, 'n'},
+				ShadowLegacyTaskPayload: tc.reference,
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "shadow_legacy_task_payload")
+		})
+	}
 }
 
-func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeApplyErrorObserved() {
-	metricsHandler := metricstest.NewCaptureHandler()
-	metricsCapture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(metricsCapture)
-	s.handler.metricsHandler = metricsHandler
-	eventLogger := &captureNamespaceEventLogger{}
-	s.handler.eventLogger = eventLogger
-	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	s.namespaceMutationExecutor.err = serviceerror.NewUnavailable("metadata unavailable")
-	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
-	s.Require().NoError(err)
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+func (s *adminHandlerSuite) TestApplyNamespaceMutationDetectsLegacyDivergence() {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*replicationspb.NamespaceTaskAttributes)
+		field  string
+	}{
+		{name: "field dropped by history converter", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.Info.Description = ""
+		}, field: "info"},
+		{name: "version changed", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.ConfigVersion++
+		}, field: "config_version"},
+		{name: "unknown field dropped", mutate: func(task *replicationspb.NamespaceTaskAttributes) {
+			task.ProtoReflect().SetUnknown(nil)
+		}, field: "unknown_fields"},
+	} {
+		s.Run(tc.name, func() {
+			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
+			s.handler.logger = logger
+			legacyTask := &replicationspb.NamespaceTaskAttributes{
+				Id:            "namespace-id",
+				Info:          &namespacepb.NamespaceInfo{Description: "frontend legacy value"},
+				ConfigVersion: 42,
+			}
+			unknown := protowire.AppendTag(nil, 100, protowire.VarintType)
+			legacyTask.ProtoReflect().SetUnknown(protowire.AppendVarint(unknown, 42))
+			legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+			s.Require().NoError(err)
+			chasmTask := proto.Clone(legacyTask).(*replicationspb.NamespaceTaskAttributes)
+			tc.mutate(chasmTask)
+			chasmPayload, err := nsreplication.MarshalNamespaceTask(chasmTask)
+			s.Require().NoError(err)
 
-	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask:        namespaceTask,
-		Fingerprint:          fingerprint,
-		SourceCluster:        "source-cluster",
-		ComponentBusinessId:  "business-id",
-		ComponentRunId:       "run-id",
-		AttemptCount:         3,
-		NamespaceTaskPayload: payload,
+			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+				Shadow:                  true,
+				NamespaceTaskPayload:    chasmPayload,
+				ShadowLegacyTaskPayload: legacyPayload,
+			})
+			s.Require().NoError(err)
+			s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+			capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: "namespace replication shadow receive mismatch",
+				Tags: map[string]any{
+					"reason":           "legacy_payload_mismatch",
+					"differing_fields": []string{tc.field},
+				},
+			})
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutationIgnoresTypedUnknownMapEncodingOrder() {
+	// Field 100 represents a map known to the sender but unknown to this receiver.
+	// Each map entry is a repeated length-delimited unknown field at the receiver.
+	entry := func(key string) []byte {
+		encoded := protowire.AppendString(protowire.AppendTag(nil, 1, protowire.BytesType), key)
+		encoded = protowire.AppendString(protowire.AppendTag(encoded, 2, protowire.BytesType), "value")
+		return protowire.AppendBytes(protowire.AppendTag(nil, 100, protowire.BytesType), encoded)
+	}
+	legacyTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	legacyTask.ProtoReflect().SetUnknown(append(entry("a"), entry("b")...))
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+	s.Require().NoError(err)
+	typedTask := proto.Clone(legacyTask).(*replicationspb.NamespaceTaskAttributes)
+	typedTask.ProtoReflect().SetUnknown(append(entry("b"), entry("a")...))
+	s.Require().False(proto.Equal(legacyTask, typedTask), "test must exercise unknown-map encoding differences")
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:           typedTask,
+		Shadow:                  true,
+		NamespaceTaskPayload:    legacyPayload,
+		ShadowLegacyTaskPayload: legacyPayload,
 	})
-	var unavailable *serviceerror.Unavailable
-	s.ErrorAs(err, &unavailable)
-	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
-	s.Require().Len(recordings, 1)
-	s.Equal(nsreplication.CHASMApplyOutcomeError, recordings[0].Tags[metrics.OutcomeTag("").Key])
-	s.Require().Len(eventLogger.records, 1)
-	details := namespaceReplicationEventDetails(s.T(), eventLogger.records[0])
-	s.Equal(nsreplication.CHASMApplyOutcomeError, details["outcome"])
-	s.Equal("metadata unavailable", details["error"])
-	s.InDelta(float64(3), details["attempt_count"], 0)
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
@@ -1376,7 +1165,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -1414,7 +1203,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{esconfig.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -2398,7 +2187,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
@@ -2413,7 +2202,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2500,7 +2289,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestEsNameTypeMap(), nil).Times(eventsWithSasCount)
 
@@ -2512,7 +2301,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -3100,5 +2889,238 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 		s.Nil(resp)
 		var unavailable *serviceerror.Unavailable
 		s.ErrorAs(err, &unavailable)
+	})
+}
+
+func TestCreateDelegatedBatchRequest(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       "target-namespace",
+		VisibilityQuery: "WorkflowType = 'test'",
+		JobId:           "job-id",
+		Reason:          "test reason",
+		Identity:        "test identity",
+	}
+
+	tests := []struct {
+		name      string
+		batchType enumspb.BatchOperationType
+		validate  func(*testing.T, *workflowservice.StartBatchOperationRequest)
+		wantError bool
+	}{
+		{
+			name:      "terminate workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminationOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminationOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "terminate activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminateActivitiesOperation.GetIdentity())
+				require.Equal(t, adminRequest.GetReason(), op.TerminateActivitiesOperation.GetReason())
+			},
+		},
+		{
+			name:      "delete workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeletionOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.DeletionOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "delete activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation)
+				require.True(t, ok)
+			},
+		},
+		{
+			name:      "unsupported operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			wantError: true,
+		},
+		{
+			name:      "unspecified operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
+			wantError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			if tc.wantError {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, request)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, adminRequest.GetNamespace(), request.GetNamespace())
+			require.Equal(t, adminRequest.GetVisibilityQuery(), request.GetVisibilityQuery())
+			require.Equal(t, adminRequest.GetJobId(), request.GetJobId())
+			require.Equal(t, adminRequest.GetReason(), request.GetReason())
+			tc.validate(t, request)
+		})
+	}
+}
+
+func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace: "target-namespace",
+		JobId:     "job-id",
+		Reason:    "test reason",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "business-id", RunId: "run-id"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		batchType     enumspb.BatchOperationType
+		executionType enumspb.ExecutionType
+	}{
+		{
+			name:          "workflow operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			executionType: enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		{
+			name:          "activity operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			require.NoError(t, err)
+			require.Equal(t, []*commonpb.Execution{
+				{Type: tc.executionType, BusinessId: "business-id", RunId: "run-id"},
+			}, request.GetTargetExecutions())
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestListExecutions() {
+	ctx := context.Background()
+	request := &adminservice.ListExecutionsRequest{
+		Namespace:     s.namespace.String(),
+		Query:         "ExecutionStatus = 'Completed'",
+		PageSize:      10,
+		NextPageToken: []byte("page-token"),
+	}
+	executions := []*adminservice.VisibilityExecutionInfo{
+		{
+			NamespaceId: s.namespaceID.String(),
+			Namespace:   s.namespace.String(),
+			BusinessId:  "test-workflow-id",
+			RunId:       "test-run-id",
+			State:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.ListExecutionsResponse{
+				Executions:    executions,
+				NextPageToken: []byte("next-page-token"),
+			}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.NoError(err)
+		protorequire.ProtoSliceEqual(s.T(), executions, resp.GetExecutions())
+		s.Equal([]byte("next-page-token"), resp.GetNextPageToken())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, protomock.Eq(&adminservice.ListExecutionsRequest{
+				Query:    request.GetQuery(),
+				PageSize: request.GetPageSize(),
+			})).
+			Return(&adminservice.ListExecutionsResponse{}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
+			Query:    request.GetQuery(),
+			PageSize: request.GetPageSize(),
+		})
+		s.NoError(err)
+		s.Empty(resp.GetExecutions())
+		s.Empty(resp.GetNextPageToken())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+}
+
+func (s *adminHandlerSuite) TestCountExecutions() {
+	ctx := context.Background()
+	request := &adminservice.CountExecutionsRequest{
+		Namespace: s.namespace.String(),
+		Query:     "GROUP BY ExecutionStatus",
+	}
+	groups := []*adminservice.CountExecutionsResponse_AggregationGroup{
+		{
+			GroupValues: []*commonpb.Payload{
+				payload.EncodeString(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String()),
+			},
+			Count: 100,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, protomock.Eq(request)).
+			Return(&adminservice.CountExecutionsResponse{Count: 100, Groups: groups}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		protorequire.ProtoSliceEqual(s.T(), groups, resp.GetGroups())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, protomock.Eq(&adminservice.CountExecutionsRequest{Query: request.GetQuery()})).
+			Return(&adminservice.CountExecutionsResponse{Count: 100}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
+			Query: request.GetQuery(),
+		})
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		s.Empty(resp.GetGroups())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
 	})
 }

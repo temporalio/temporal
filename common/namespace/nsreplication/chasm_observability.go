@@ -12,12 +12,14 @@ import (
 )
 
 const (
-	CHASMApplyStageReceive    = "receive"
-	CHASMApplyStageLocal      = "local"
-	CHASMApplyStagePeer       = "peer"
-	CHASMApplyStageComponent  = "component"
-	CHASMReplicationTransport = "chasm"
-	OperatorRepairTransport   = "operator_repair"
+	CHASMApplyOutcomeManuallyReconciled = "manually_reconciled"
+	OperatorRepairMode                  = "operator_repair"
+	OperatorRepairTransport             = "operator_repair"
+	CHASMApplyStageReceive              = "receive"
+	CHASMApplyStageLocal                = "local"
+	CHASMApplyStagePeer                 = "peer"
+	CHASMApplyStageComponent            = "component"
+	CHASMReplicationTransport           = "chasm"
 
 	CHASMApplyOutcomeApplied               = "applied"
 	CHASMApplyOutcomeCreated               = "created"
@@ -25,24 +27,24 @@ const (
 	CHASMApplyOutcomeNoChange              = "no_change"
 	CHASMApplyOutcomeNotAdmitted           = "not_admitted"
 	CHASMApplyOutcomeError                 = "error"
+	CHASMApplyOutcomeFencedAmbiguous       = "fenced_ambiguous"
 	CHASMApplyOutcomeRetryableError        = "retryable_error"
 	CHASMApplyOutcomeTerminalError         = "terminal_error"
 	CHASMApplyOutcomeRetryExhausted        = "retry_exhausted"
-	CHASMApplyOutcomeFingerprintError      = "fingerprint_error"
-	CHASMApplyOutcomeFingerprintMismatch   = "fingerprint_mismatch"
+	CHASMApplyOutcomeStateUpdateSkipped    = "state_update_skipped"
 	CHASMApplyOutcomeStateTransitionError  = "state_transition_error"
 	CHASMApplyOutcomeCompleted             = "completed"
 	CHASMApplyOutcomeCompletedWithFailures = "completed_with_failures"
 	CHASMApplyOutcomeFailed                = "failed"
-	CHASMApplyOutcomeManuallyReconciled    = "manually_reconciled"
 
 	chasmAuthoritativeMode = "authoritative"
-	OperatorRepairMode     = "operator_repair"
 	chasmApplyStageTag     = "apply_stage"
 )
 
 // CHASMAuthoritativeApplyObservation describes one authoritative CHASM lifecycle observation.
 type CHASMAuthoritativeApplyObservation struct {
+	Transport                   string
+	Mode                        string
 	Task                        *replicationspb.NamespaceTaskAttributes
 	Stage                       string
 	Outcome                     string
@@ -52,13 +54,10 @@ type CHASMAuthoritativeApplyObservation struct {
 	ComponentRunID              string
 	AttemptCount                int
 	Duration                    time.Duration
-	PendingDuration             *time.Duration
 	PendingAge                  *time.Duration
 	PendingAgeThresholdExceeded bool
 	Error                       error
 	Details                     map[string]any
-	Transport                   string
-	Mode                        string
 }
 
 // RecordCHASMAuthoritativeApply records bounded-cardinality metrics for one apply attempt.
@@ -73,9 +72,10 @@ func RecordCHASMAuthoritativeApply(
 	tags := []metrics.Tag{
 		metrics.SourceClusterTag(observation.SourceCluster),
 		metrics.TargetClusterTag(observation.TargetCluster),
-		metrics.TransportTag(chasmObservationTransport(observation)),
-		metrics.OperationTag(namespaceReplicationOperation(observation.Task)),
+		metrics.OperationTag(OperationMetricValue(observation.Task.GetNamespaceOperation())),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
+		metrics.StringTag("mode", chasmObservationMode(observation)),
+		metrics.TransportTag(chasmObservationTransport(observation)),
 		metrics.OutcomeTag(observation.Outcome),
 	}
 	metrics.NamespaceReplicationCHASMApplyOutcomes.With(metricsHandler).Record(
@@ -83,20 +83,26 @@ func RecordCHASMAuthoritativeApply(
 		append(tags, metrics.NamespaceTag(observation.Task.GetInfo().GetName()))...,
 	)
 	metrics.NamespaceReplicationCHASMApplyLatency.With(metricsHandler).Record(observation.Duration, tags...)
-	if observation.PendingDuration != nil {
-		metrics.NamespaceReplicationCHASMPeerPendingLatency.With(metricsHandler).Record(
-			max(*observation.PendingDuration, 0),
-			tags...,
-		)
-	}
 	if observation.PendingAge != nil {
-		metrics.NamespaceReplicationCHASMPeerPendingAge.With(metricsHandler).Record(
-			max(*observation.PendingAge, 0),
-			tags...,
-		)
+		pendingAge := max(*observation.PendingAge, 0)
+		switch observation.Stage {
+		case CHASMApplyStageLocal:
+			metrics.NamespaceReplicationCHASMLocalPendingAge.With(metricsHandler).Record(pendingAge, tags...)
+		case CHASMApplyStagePeer:
+			metrics.NamespaceReplicationCHASMPeerPendingAge.With(metricsHandler).Record(pendingAge, tags...)
+		default:
+			// Pending-age metrics are defined only for retry-owning local and peer stages.
+		}
 	}
 	if observation.PendingAgeThresholdExceeded {
-		metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		switch observation.Stage {
+		case CHASMApplyStageLocal:
+			metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		case CHASMApplyStagePeer:
+			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		default:
+			// Pending-threshold metrics are defined only for retry-owning local and peer stages.
+		}
 	}
 }
 
@@ -161,15 +167,12 @@ func CHASMAuthoritativeApplyEventData(
 	if observation.ComponentRunID != "" {
 		eventData.Details["component_run_id"] = observation.ComponentRunID
 	}
-	if observation.PendingDuration != nil {
-		eventData.Details["pending_duration_ms"] = max(*observation.PendingDuration, 0).Milliseconds()
-	}
+
 	if observation.PendingAge != nil {
 		eventData.Details["pending_age_ms"] = max(*observation.PendingAge, 0).Milliseconds()
 	}
 	return eventData, true
 }
-
 func chasmObservationTransport(observation CHASMAuthoritativeApplyObservation) string {
 	if observation.Transport != "" {
 		return observation.Transport

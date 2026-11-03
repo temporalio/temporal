@@ -242,10 +242,16 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
-  // ReconcileNamespaceMutationComponents discovers one page of running CHASM
-  // namespace mutation executions by namespace ID and updates each exact
-  // execution after a verified operator repair.
+  // Reconcile covered pending fan-outs after an operator repair.
   rpc ReconcileNamespaceMutationComponents(ReconcileNamespaceMutationComponentsRequest) returns (ReconcileNamespaceMutationComponentsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
+  rpc CountExecutions(CountExecutionsRequest) returns (CountExecutionsResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 }

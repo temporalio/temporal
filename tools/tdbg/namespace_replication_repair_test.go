@@ -18,6 +18,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestNamespaceReplicationRepairCommandDryRun(t *testing.T) {
@@ -348,6 +349,7 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	target := proto.CloneOf(source)
 	target.Info.Description = "divergent"
+	target.FailoverHistory = nil
 
 	sourceClient := testNamespaceReplicationSourceClient(source)
 	targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
@@ -386,7 +388,6 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	require.Equal(t, int64(11), plan.ProposedSourceConfigVersion)
 
 	repairer := newNamespaceReplicationRepairer(verifier)
-	repairer.now = func() time.Time { return time.Unix(102, 0).UTC() }
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -483,7 +484,6 @@ func TestNamespaceReplicationRepairerReconcilesOnlyIndividuallyVerifiedPeers(t *
 	require.Equal(t, namespaceReplicationRepairActionNone, plan.SourceAction)
 
 	repairer := newNamespaceReplicationRepairer(verifier)
-	repairer.now = func() time.Time { return time.Unix(102, 0).UTC() }
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -540,7 +540,6 @@ func TestNamespaceReplicationRepairerCreatesMissingTarget(t *testing.T) {
 	require.Equal(t, namespaceReplicationRepairActionCreate, plan.Clusters[0].Action)
 
 	repairer := newNamespaceReplicationRepairer(verifier)
-	repairer.now = func() time.Time { return time.Unix(102, 0).UTC() }
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -565,7 +564,6 @@ func TestNamespaceReplicationRepairerAbortsWhenSourceChangesAfterPlanning(t *tes
 	source.Info.Description = "changed after planning"
 
 	repairer := newNamespaceReplicationRepairer(verifier)
-	repairer.now = func() time.Time { return time.Unix(102, 0).UTC() }
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest: verifyRequest,
 		Observation:   observation,
@@ -604,6 +602,7 @@ func TestVerifiedRepairPeersRequiresStableSource(t *testing.T) {
 
 func TestNamespaceReplicationRepairerRejectsLaterCutoff(t *testing.T) {
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a"}, 10, 20)
+	source.ObservedAt = timestamppb.New(time.Unix(101, 0))
 	verifier := testNamespaceReplicationVerifier(source, nil)
 	observation, err := verifier.observe(context.Background(), testNamespaceReplicationVerifyRequest())
 	require.NoError(t, err)
@@ -611,7 +610,6 @@ func TestNamespaceReplicationRepairerRejectsLaterCutoff(t *testing.T) {
 	require.NoError(t, err)
 
 	repairer := newNamespaceReplicationRepairer(verifier)
-	repairer.now = func() time.Time { return time.Unix(101, 0).UTC() }
 	later := time.Unix(102, 0).UTC()
 	_, err = repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
 		VerifyRequest:   testNamespaceReplicationVerifyRequest(),
@@ -621,6 +619,21 @@ func TestNamespaceReplicationRepairerRejectsLaterCutoff(t *testing.T) {
 		ReconcileBefore: &later,
 	})
 	require.ErrorContains(t, err, "cannot be later")
+}
+
+func TestNamespaceRepairCutoffRequiresServerObservation(t *testing.T) {
+	t.Parallel()
+	repairer := newNamespaceReplicationRepairer(nil)
+	_, err := repairer.effectiveRepairCutoff(nil, nil)
+	require.ErrorContains(t, err, "server-timed namespace observation")
+	serverTime := time.Unix(100, 0).UTC()
+	cutoff, err := repairer.effectiveRepairCutoff(nil, timestamppb.New(serverTime))
+	require.NoError(t, err)
+	require.Equal(t, serverTime, cutoff)
+	earlier := serverTime.Add(-time.Hour)
+	cutoff, err = repairer.effectiveRepairCutoff(&earlier, timestamppb.New(serverTime))
+	require.NoError(t, err)
+	require.Equal(t, earlier, cutoff)
 }
 
 func applyRepairTaskToSnapshot(

@@ -61,18 +61,17 @@ type RPCFactory struct {
 	requireRemoteClusterAuth bool
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient      func() (*common.FrontendHTTPClient, error)
-	internodeGRPCConnections struct {
-		sync.RWMutex
-		conns map[string]*grpc.ClientConn
-	}
+	localFrontendClient func() (*common.FrontendHTTPClient, error)
+
+	// Guards closed and both connection maps.
+	connectionsMu            sync.RWMutex
+	closed                   bool
+	internodeGRPCConnections map[string]*grpc.ClientConn
+	remoteFrontendGRPCConns  map[string]*grpc.ClientConn
+
 	internodeConnCleanupTicker *time.Ticker
 	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
 	localFrontendGRPCConn func() *grpc.ClientConn
-
-	// Remote frontend connections, keyed by rpcAddress. Dialing one address
-	// must not block lookups for another.
-	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -122,7 +121,8 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
+	f.internodeGRPCConnections = make(map[string]*grpc.ClientConn)
+	f.remoteFrontendGRPCConns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
 	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
@@ -239,22 +239,34 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 // CreateRemoteFrontendGRPCConnection returns the shared connection for cross-cluster
 // calls to rpcAddress, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
-	if conn, ok := d.remoteFrontendGRPCConns.Load(rpcAddress); ok {
-		return conn.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+	d.connectionsMu.RLock()
+	conn, ok := d.remoteFrontendGRPCConns[rpcAddress]
+	d.connectionsMu.RUnlock()
+	if ok {
+		return conn
 	}
 
-	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	newConn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
 	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
-	if conn == nil {
+	if newConn == nil {
 		return nil
 	}
 
-	// Dialed outside the lock, so concurrent callers can race; the loser closes its own.
-	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
-	if loaded {
-		_ = conn.Close()
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	if d.closed {
+		// Callers require a non-nil connection, even after shutdown.
+		_ = newConn.Close()
+		return newConn
 	}
-	return actual.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.remoteFrontendGRPCConns[rpcAddress]
+	if ok {
+		_ = newConn.Close()
+		return existing
+	}
+	d.remoteFrontendGRPCConns[rpcAddress] = newConn
+	return newConn
 }
 
 func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -318,9 +330,9 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 	d.maybeCleanupInternodeConns()
 
 	// Reuse the cached connection unless it has been shut down, in which case re-dial.
-	d.internodeGRPCConnections.RLock()
-	conn, ok := d.internodeGRPCConnections.conns[hostName]
-	d.internodeGRPCConnections.RUnlock()
+	d.connectionsMu.RLock()
+	conn, ok := d.internodeGRPCConnections[hostName]
+	d.connectionsMu.RUnlock()
 	if ok && conn.GetState() != connectivity.Shutdown {
 		return conn
 	}
@@ -340,13 +352,20 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		return nil
 	}
 
-	d.internodeGRPCConnections.Lock()
-	defer d.internodeGRPCConnections.Unlock()
-	if existing, ok := d.internodeGRPCConnections.conns[hostName]; ok && existing.GetState() != connectivity.Shutdown {
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	if d.closed {
+		// Callers require a non-nil connection, even after shutdown.
+		_ = newConn.Close()
+		return newConn
+	}
+	// Connection creation runs unlocked. Recheck for a connection cached by another caller.
+	existing, ok := d.internodeGRPCConnections[hostName]
+	if ok && existing.GetState() != connectivity.Shutdown {
 		_ = newConn.Close()
 		return existing
 	}
-	d.internodeGRPCConnections.conns[hostName] = newConn
+	d.internodeGRPCConnections[hostName] = newConn
 	return newConn
 }
 
@@ -361,11 +380,11 @@ func (d *RPCFactory) maybeCleanupInternodeConns() {
 
 // Removes shut-down cached connections; never closes live ones.
 func (d *RPCFactory) cleanupInternodeConns() {
-	d.internodeGRPCConnections.Lock()
-	defer d.internodeGRPCConnections.Unlock()
-	for hostName, conn := range d.internodeGRPCConnections.conns {
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	for hostName, conn := range d.internodeGRPCConnections {
 		if conn.GetState() == connectivity.Shutdown {
-			delete(d.internodeGRPCConnections.conns, hostName)
+			delete(d.internodeGRPCConnections, hostName)
 		}
 	}
 }
@@ -389,24 +408,22 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	return connection
 }
 
+// Close shuts down all cached connections. Later requests return closed connections.
 func (d *RPCFactory) Close() {
 	d.internodeConnCleanupTicker.Stop()
+	_ = d.localFrontendGRPCConn().Close()
 
-	d.internodeGRPCConnections.Lock()
-	for _, conn := range d.internodeGRPCConnections.conns {
+	d.connectionsMu.Lock()
+	defer d.connectionsMu.Unlock()
+	d.closed = true
+	for _, conn := range d.internodeGRPCConnections {
 		_ = conn.Close()
 	}
-	clear(d.internodeGRPCConnections.conns)
-	d.internodeGRPCConnections.Unlock()
-
-	d.remoteFrontendGRPCConns.Range(func(_, v any) bool {
-		if conn, ok := v.(*grpc.ClientConn); ok {
-			_ = conn.Close()
-		}
-		return true
-	})
-
-	_ = d.localFrontendGRPCConn().Close()
+	clear(d.internodeGRPCConnections)
+	for _, conn := range d.remoteFrontendGRPCConns {
+		_ = conn.Close()
+	}
+	clear(d.remoteFrontendGRPCConns)
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {

@@ -6,6 +6,7 @@ func OperationPossiblySucceeded(err error) bool {
 	switch err.(type) {
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError,
 		*ShardOwnershipLostError,
 		*InvalidPersistenceRequestError,

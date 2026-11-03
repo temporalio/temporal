@@ -13,9 +13,10 @@ import (
 	"go.temporal.io/server/common/log"
 	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/primitives"
+	"google.golang.org/protobuf/proto"
 )
 
-type handler struct {
+type serviceHandler struct {
 	namespacereplicationpb.UnimplementedNamespaceReplicationServiceServer
 	namespacereplicationpb.UnimplementedNamespaceReplicationRepairServiceServer
 
@@ -23,11 +24,11 @@ type handler struct {
 	repairObserver *namespaceRepairObserver
 }
 
-func newHandler(logger log.Logger) *handler {
-	return &handler{logger: logger}
+func newServiceHandler(logger log.Logger) *serviceHandler {
+	return &serviceHandler{logger: logger}
 }
 
-func (h *handler) TriggerNamespaceMutation(
+func (h *serviceHandler) TriggerNamespaceMutation(
 	ctx context.Context,
 	req *namespacereplicationpb.TriggerNamespaceMutationRequest,
 ) (response *namespacereplicationpb.TriggerNamespaceMutationResponse, retErr error) {
@@ -35,12 +36,6 @@ func (h *handler) TriggerNamespaceMutation(
 
 	if err := validateTriggerNamespaceMutationRequest(req); err != nil {
 		return nil, err
-	}
-	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
-		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
-	}
-	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE {
-		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
 	}
 
 	key := executionKey(req)
@@ -56,7 +51,7 @@ func (h *handler) TriggerNamespaceMutation(
 			return component, nil
 		},
 		req.GetMutation(),
-		chasm.WithRequestID(req.GetBusinessId()),
+		chasm.WithStartRequestID(req.GetBusinessId()),
 	)
 	if err != nil {
 		return nil, err
@@ -72,7 +67,8 @@ func (h *handler) TriggerNamespaceMutation(
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
 				namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW:
 				return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, true, nil
-			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED:
+			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
+				namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE:
 				failure := local.GetFailure()
 				return nil, true, localApplyError(failure.GetApplicationFailureInfo().GetType(), failure.GetMessage())
 			default:
@@ -87,7 +83,7 @@ func (h *handler) TriggerNamespaceMutation(
 	return result, nil
 }
 
-func (h *handler) ReconcileNamespaceMutation(
+func (h *serviceHandler) ReconcileNamespaceMutation(
 	ctx context.Context,
 	req *namespacereplicationpb.ReconcileNamespaceMutationRequest,
 ) (response *namespacereplicationpb.ReconcileNamespaceMutationResponse, retErr error) {
@@ -375,6 +371,23 @@ func mapsKeys[V any](values map[string]V) []string {
 func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.TriggerNamespaceMutationRequest) error {
 	if req == nil || req.GetMutation() == nil {
 		return serviceerror.NewInvalidArgument("mutation is required")
+	}
+	if !req.GetMutation().GetIsGlobalNamespace() {
+		return serviceerror.NewInvalidArgument("mutation.is_global_namespace must be true")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
+	}
+	if req.GetMutation().GetShadow() {
+		if len(req.GetMutation().GetShadowLegacyTaskPayload()) == 0 {
+			return serviceerror.NewInvalidArgument("mutation.shadow_legacy_task_payload is required")
+		}
+		if err := proto.Unmarshal(req.GetMutation().GetShadowLegacyTaskPayload(), &replicationspb.NamespaceTaskAttributes{}); err != nil {
+			return serviceerror.NewInvalidArgumentf("decode mutation.shadow_legacy_task_payload: %v", err)
+		}
 	}
 	if req.GetNamespaceId() == "" {
 		return serviceerror.NewInvalidArgument("namespace_id is required")

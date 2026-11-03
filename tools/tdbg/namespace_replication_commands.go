@@ -32,10 +32,13 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "verify",
 					Usage: "Compare a global namespace across its configured clusters",
+					Description: "Uses the selected active source to discover current replicas; removed peers are not inspected. " +
+						"Target TLS certificates must match the hostname in the discovered or overridden address; --tls-server-name applies only to the source.",
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name:  FlagNamespace,
-							Usage: "Namespace name",
+							Name:    FlagNamespace,
+							Aliases: FlagNamespaceAlias,
+							Usage:   "Namespace name (must be explicitly supplied here, globally, or through TEMPORAL_CLI_NAMESPACE)",
 						},
 						&cli.StringFlag{
 							Name:  FlagNamespaceID,
@@ -59,8 +62,9 @@ func newNamespaceReplicationCommands(
 					Usage: "Plan or execute guarded namespace replication repair",
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name:  FlagNamespace,
-							Usage: "Namespace name",
+							Name:    FlagNamespace,
+							Aliases: FlagNamespaceAlias,
+							Usage:   "Namespace name",
 						},
 						&cli.StringFlag{
 							Name:  FlagNamespaceID,
@@ -448,6 +452,16 @@ func namespaceReplicationRPCTimeout(c *cli.Context) time.Duration {
 
 func namespaceReplicationSelectorFromCLI(c *cli.Context) (namespaceReplicationSelector, error) {
 	name := strings.TrimSpace(c.String(FlagNamespace))
+	// Local selectors take precedence over an inherited namespace. Without a
+	// local selector, accept an explicit global namespace but not its default.
+	if !c.IsSet(FlagNamespace) && !c.IsSet(FlagNamespaceID) {
+		for _, parent := range c.Lineage()[1:] {
+			if parent.IsSet(FlagNamespace) {
+				name = strings.TrimSpace(parent.String(FlagNamespace))
+				break
+			}
+		}
+	}
 	id := strings.TrimSpace(c.String(FlagNamespaceID))
 	if name == "" && id == "" {
 		return namespaceReplicationSelector{}, errors.New("exactly one of --namespace or --namespace-id is required")
@@ -484,14 +498,15 @@ func printNamespaceReplicationVerification(
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		c.App.Writer,
 		"Status: %s\nNamespace: %s (%s)\nSource cluster: %s\n",
 		result.Status,
 		result.NamespaceName,
 		result.NamespaceID,
 		result.SourceCluster,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	if result.StatusDetail != "" {
@@ -511,6 +526,7 @@ func printNamespaceReplicationVerification(
 			FailoverVersion: optionalInt64String(cluster.FailoverVersion),
 			FailoverMatch:   cluster.FailoverMatch,
 			Differences:     strings.Join(cluster.Differences, ","),
+			Warnings:        strings.Join(cluster.Warnings, "; "),
 			Error:           cluster.Error,
 		})
 	}
@@ -526,6 +542,7 @@ type namespaceReplicationVerificationTableRow struct {
 	FailoverVersion string
 	FailoverMatch   string
 	Differences     string
+	Warnings        string
 	Error           string
 }
 

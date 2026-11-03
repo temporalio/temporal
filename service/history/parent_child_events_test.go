@@ -67,6 +67,17 @@ func parentChildRecords(capture *parentChildEventCapture) []otellog.Record {
 	return records
 }
 
+func standbyTaskErrorRecords(capture *parentChildEventCapture) []otellog.Record {
+	var records []otellog.Record
+	for _, record := range capture.snapshot() {
+		if record.EventName() == wideevents.ReplicationLifecycleEventName &&
+			wideEventDetails(record)["operation"] == wideevents.ReplOperationStandbyTaskExecution {
+			records = append(records, record)
+		}
+	}
+	return records
+}
+
 func wideEventDetails(record otellog.Record) map[string]any {
 	attribute, ok := wideEventAttributes(record)["details"]
 	if !ok {

@@ -68,6 +68,8 @@ const (
 	AdminService_GetTaskQueueUserData_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
 	AdminService_MigrateSchedule_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
 	AdminService_ReconcileNamespaceMutationComponents_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/ReconcileNamespaceMutationComponents"
+	AdminService_ListExecutions_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
+	AdminService_CountExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -167,10 +169,10 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
-	// ReconcileNamespaceMutationComponents discovers one page of running CHASM
-	// namespace mutation executions by namespace ID and updates each exact
-	// execution after a verified operator repair.
+	// Reconcile covered pending fan-outs after an operator repair.
 	ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error)
+	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
+	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -635,6 +637,24 @@ func (c *adminServiceClient) ReconcileNamespaceMutationComponents(ctx context.Co
 	return out, nil
 }
 
+func (c *adminServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
+	out := new(ListExecutionsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListExecutions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error) {
+	out := new(CountExecutionsResponse)
+	err := c.cc.Invoke(ctx, AdminService_CountExecutions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -732,10 +752,10 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
-	// ReconcileNamespaceMutationComponents discovers one page of running CHASM
-	// namespace mutation executions by namespace ID and updates each exact
-	// execution after a verified operator repair.
+	// Reconcile covered pending fan-outs after an operator repair.
 	ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error)
+	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
+	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -886,6 +906,12 @@ func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *Migrate
 }
 func (UnimplementedAdminServiceServer) ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReconcileNamespaceMutationComponents not implemented")
+}
+func (UnimplementedAdminServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListExecutions not implemented")
+}
+func (UnimplementedAdminServiceServer) CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CountExecutions not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1772,6 +1798,42 @@ func _AdminService_ReconcileNamespaceMutationComponents_Handler(srv interface{},
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListExecutionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListExecutions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListExecutions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListExecutions(ctx, req.(*ListExecutionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_CountExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountExecutionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).CountExecutions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_CountExecutions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).CountExecutions(ctx, req.(*CountExecutionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1966,6 +2028,14 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReconcileNamespaceMutationComponents",
 			Handler:    _AdminService_ReconcileNamespaceMutationComponents_Handler,
+		},
+		{
+			MethodName: "ListExecutions",
+			Handler:    _AdminService_ListExecutions_Handler,
+		},
+		{
+			MethodName: "CountExecutions",
+			Handler:    _AdminService_CountExecutions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

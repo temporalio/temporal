@@ -181,6 +181,7 @@ func TestMeter(t *testing.T) {
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
+		cmpopts.EquateEmpty(),
 		cmp.Comparer(func(e1, e2 metricdata.Extrema[int64]) bool {
 			v1, ok1 := e1.Value()
 			v2, ok2 := e2.Value()
@@ -254,6 +255,7 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
+		cmpopts.EquateEmpty(),
 		cmp.Comparer(func(e1, e2 metricdata.Extrema[float64]) bool {
 			v1, ok1 := e1.Value()
 			v2, ok2 := e2.Value()

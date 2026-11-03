@@ -27,7 +27,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
@@ -88,6 +90,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 
 	mockActiveClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockActiveClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockActiveStreamClient, nil).AnyTimes()
+	mockActiveClient.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
 	s.mockAdminClient = map[string]adminservice.AdminServiceClient{
 		"cluster-a": mockActiveClient,
 	}
@@ -148,20 +151,19 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 		}
 		executions[execution] = historyBatch
 	}
-	//nolint:forbidigo
-	time.Sleep(5 * time.Second) // 5 seconds is enough for the history replication task to be processed and applied to passive cluster
-
-	for execution, historyBatch := range executions {
-		s.assertHistoryEvents(context.Background(), s.namespaceID.String(), execution, historyBatch)
-	}
+	await.Require(testcontext.For(s.T()), s.T(), func(t *await.T) {
+		for execution, historyBatch := range executions {
+			s.assertHistoryEvents(t, execution, historyBatch)
+		}
+	}, 30*time.Second, 200*time.Millisecond)
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
-	ctx context.Context,
-	namespaceId string,
+	t *await.T,
 	execution workflow.Execution,
 	historyBatch []*historypb.History,
 ) {
+	t.Helper()
 	mockClientBean := client.NewMockBean(s.controller)
 	mockClientBean.
 		EXPECT().
@@ -177,18 +179,21 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 	)
 
 	passiveIterator := passiveClusterFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
-		ctx, s.passiveClusterName, namespace.ID(namespaceId), execution.ID, execution.RunID, 0, 1, 0, 0)
+		t.Context(), s.passiveClusterName, s.namespaceID, execution.ID, execution.RunID, 0, 1, 0, 0)
 
-	index := 0
+	var actualBatches []*commonpb.DataBlob
 	for passiveIterator.HasNext() {
-		s.True(passiveIterator.HasNext())
 		passiveBatch, err := passiveIterator.Next()
-		s.NoError(err)
-		inputEvents := historyBatch[index].Events
-		index++
-		inputBatch, _ := s.serializer.SerializeEvents(inputEvents)
-		s.Equal(inputBatch, passiveBatch.RawEventBatch)
+		require.NoError(t, err)
+		actualBatches = append(actualBatches, passiveBatch.RawEventBatch)
 	}
+	expectedBatches := make([]*commonpb.DataBlob, 0, len(historyBatch))
+	for _, batch := range historyBatch {
+		inputBatch, err := s.serializer.SerializeEvents(batch.Events)
+		require.NoError(t, err)
+		expectedBatches = append(expectedBatches, inputBatch)
+	}
+	protorequire.ProtoSliceEqual(t, expectedBatches, actualBatches)
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {

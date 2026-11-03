@@ -482,7 +482,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
 					assert.Equal(t, p.ExecutionDuration, request.ExecutionDuration.AsDuration())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
-
 					return &archival.Response{}, p.ArchiveError
 				})
 			}

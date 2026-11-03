@@ -80,6 +80,7 @@ func RandomSnapshot(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: branchToken,
+		TxnID:       eventID,
 		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
 	}}
 }
@@ -153,6 +154,7 @@ func RandomMutation(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: branchToken,
+		TxnID:       eventID,
 		Events:      []*historypb.HistoryEvent{RandomHistoryEvent(eventID, lastWriteVersion)},
 	}}
 }

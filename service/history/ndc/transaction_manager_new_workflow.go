@@ -214,7 +214,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow Workflow,
 ) error {
 
-	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(currentWorkflow)
+	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
+		currentWorkflow,
+		r.shardContext.GetMetricsHandler(),
+	)
 	if err != nil {
 		return err
 	}
@@ -316,6 +319,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	currentWorkflowPolicy, err := currentWorkflow.SuppressBy(
 		targetWorkflow,
+		r.shardContext.GetMetricsHandler(),
 	)
 	if err != nil {
 		return err

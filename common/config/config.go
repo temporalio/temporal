@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/keepalive"
@@ -281,7 +281,7 @@ type (
 		// Custom contains the config for custom datastore implementation
 		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
-		Elasticsearch *client.Config `yaml:"elasticsearch"`
+		Elasticsearch *esconfig.Config `yaml:"elasticsearch"`
 	}
 
 	FaultInjection struct {

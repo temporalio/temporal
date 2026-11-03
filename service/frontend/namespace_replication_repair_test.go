@@ -14,7 +14,9 @@ import (
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
@@ -30,6 +32,8 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	visibilityManager := chasm.NewMockVisibilityManager(controller)
 	repairClient := &testNamespaceReplicationRepairClient{}
 	handler := &AdminHandler{
+		timeSource:                            clock.NewRealTimeSource(),
+		logger:                                log.NewTestLogger(),
 		persistenceMetadataManager:            metadataManager,
 		clusterMetadata:                       clusterMetadata,
 		chasmVisibilityManager:                visibilityManager,
@@ -45,7 +49,7 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 					ActiveClusterName: "cluster-a",
 					Clusters:          []string{"cluster-a", "cluster-b"},
-					State:             enumspb.REPLICATION_STATE_NORMAL,
+					State:             enumspb.REPLICATION_STATE_UNSPECIFIED,
 				},
 			},
 		},

@@ -163,6 +163,7 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		FirstEventID:             1,
 		NextEventID:              8,
 		TargetCluster:            "target-cluster",
+		TargetShard:              13,
 		Priority:                 "TASK_PRIORITY_LOW",
 		ArtifactKind:             ArtifactKindMutation,
 		ExclusiveStartVT:         &VersionedTransitionEntry{FailoverVersion: 5, TransitionCount: 4},
@@ -228,6 +229,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"next_event_id":  int64(8),
 			// what the task actually carried, as opposed to what the queue entry described.
 			"target_cluster":                       "target-cluster",
+			"target_shard":                         int64(13),
 			"priority":                             "TASK_PRIORITY_LOW",
 			"artifact_kind":                        ArtifactKindMutation,
 			"exclusive_start_versioned_transition": `{"failover_version":5,"transition_count":4}`,
@@ -265,6 +267,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		ReplicationSkipped: mergeFields(base, map[string]any{
 			"phase":          "skipped",
 			"target_cluster": "target-cluster",
+			"target_shard":   int64(13),
 			"priority":       "TASK_PRIORITY_LOW",
 			"attempt":        int64(2),
 			"error":          "boom",

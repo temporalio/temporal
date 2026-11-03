@@ -186,9 +186,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -197,10 +197,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The V2 schedule should still exist and be describable after migration.
@@ -309,12 +307,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 	// The production sentinel completes after its idle timeout. This test uses a
 	// signal to reach the same retained COMPLETED state without waiting 15 minutes.
 	var closedSentinel *workflowservice.DescribeWorkflowExecutionResponse
-	s.Require().Eventually(func() bool {
-		closedSentinel, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		closedSentinel, err = env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
 		})
-		return err == nil && closedSentinel.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, closedSentinel.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 	s.Require().Equal(dummy.DummyWFTypeName, closedSentinel.GetWorkflowExecutionInfo().GetType().GetName())
 
@@ -328,12 +327,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRun
 	s.Require().NoError(err)
 
 	var migrated *workflowservice.DescribeWorkflowExecutionResponse
-	s.Require().Eventually(func() bool {
-		migrated, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		migrated, err = env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
 		})
-		return err == nil && migrated.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, migrated.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 	s.Require().Equal(scheduler.WorkflowType, migrated.GetWorkflowExecutionInfo().GetType().GetName())
 }
@@ -409,9 +409,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	})
 
 	// Wait for the V1 scheduler to process its first workflow task and go to sleep.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -420,7 +420,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 				},
 			},
 		)
-		return err == nil && desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+		require.NoError(at, err)
+		require.Greater(at, desc.GetWorkflowExecutionInfo().GetHistoryLength(), int64(3))
 	}, awaitTimeout, pollInterval)
 
 	sentinelResp, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
@@ -437,7 +438,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	sentinelRunID := sentinelResp.GetDatabaseMutableState().GetExecutionState().GetRunId()
 	s.Require().NotEmpty(sentinelRunID)
 
-	migrationMarkerOutcomes := func() (failureTypes []string, succeeded int, markerErr error) {
+	migrationMarkerOutcomes := func(ctx context.Context) (failureTypes []string, succeeded int, markerErr error) {
 		history, markerErr := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       nsName,
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
@@ -481,9 +482,10 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	var failureTypes []string
 	var succeededMarkers int
 	var markerErr error
-	s.Eventually(func() bool {
-		failureTypes, succeededMarkers, markerErr = migrationMarkerOutcomes()
-		return markerErr == nil && len(failureTypes) == 1
+	await.Require(ctx, s.T(), func(at *await.T) {
+		failureTypes, succeededMarkers, markerErr = migrationMarkerOutcomes(at.Context())
+		require.NoError(at, markerErr)
+		require.Len(at, failureTypes, 1)
 	}, awaitTimeout, pollInterval)
 	s.Require().NoError(markerErr)
 	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
@@ -502,7 +504,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "wake migration after sentinel deletion"})
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
-	failureTypes, succeededMarkers, err = migrationMarkerOutcomes()
+	failureTypes, succeededMarkers, err = migrationMarkerOutcomes(ctx)
 	s.Require().NoError(err)
 	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
 	s.Require().Equal(1, succeededMarkers)
@@ -605,9 +607,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	s.NoError(err)
 
 	// Wait for the per-namespace worker to pick up the V1 workflow.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -616,16 +618,14 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+		require.NoError(at, err)
+		require.Greater(at, desc.GetWorkflowExecutionInfo().GetHistoryLength(), int64(3))
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// V1 workflow should automatically migrate due to dynamic config and complete.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -634,10 +634,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// V2 schedule should now exist.
@@ -713,9 +711,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
 
 	// Wait for the per-namespace worker to pick up the V1 workflow.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -724,10 +722,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+		require.NoError(at, err)
+		require.Greater(at, desc.GetWorkflowExecutionInfo().GetHistoryLength(), int64(3))
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// Issue migration from V1 to V2.
@@ -743,9 +739,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 	s.NoError(err)
 
 	// Wait for V1 workflow to complete.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -754,10 +750,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	v2Desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
@@ -775,13 +769,14 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 
 	// Custom SAs must also be queryable on the CHASM visibility record.
 	var listResp *workflowservice.ListSchedulesResponse
-	s.Eventually(func() bool {
-		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		listResp, err = env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       nsName,
 			MaximumPageSize: 10,
 			Query:           "CustomKeywordField = 'v1-to-v2 sa value'",
 		})
-		return err == nil && len(listResp.GetSchedules()) == 1
+		require.NoError(at, err)
+		require.Len(at, listResp.GetSchedules(), 1)
 	}, 30*time.Second, 500*time.Millisecond)
 	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
 	s.Equal(schSAKeyword.Data, listResp.GetSchedules()[0].GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
@@ -858,34 +853,32 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 
 	var predecessorRunID string
 	var successorRunID string
-	s.Require().Eventually(func() bool {
-		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Requiref(ctx, s.T(), func(at *await.T) {
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
 		})
-		if descErr != nil || desc.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return false
-		}
+		require.NoError(at, descErr)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
 		successorRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		history, historyErr := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		history, historyErr := env.FrontendClient().GetWorkflowExecutionHistory(at.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWfID, RunId: successorRunID},
 		})
-		if historyErr != nil || len(history.GetHistory().GetEvents()) == 0 {
-			return false
-		}
+		require.NoError(at, historyErr)
+		require.NotEmpty(at, history.GetHistory().GetEvents())
 		predecessorRunID = history.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId()
-		return predecessorRunID != ""
+		require.NotEmpty(at, predecessorRunID)
 	}, 30*time.Second, 500*time.Millisecond, "immediate action should continue as new and leave its successor running")
 
 	// Routing is disabled, so this frontend DescribeSchedule reads V1 state.
 	var before *workflowservice.DescribeScheduleResponse
-	s.Require().Eventually(func() bool {
-		before, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		before, err = env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		return err == nil
+		require.NoError(at, err)
 	}, 30*time.Second, 500*time.Millisecond)
 	s.Require().Len(before.GetInfo().GetRunningWorkflows(), 1)
 	s.Equal(predecessorRunID, before.GetInfo().GetRunningWorkflows()[0].GetRunId(),
@@ -906,25 +899,24 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 	s.Require().NoError(err)
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
-	s.Require().Eventually(func() bool {
-		desc, descErr := env.SdkClient().DescribeWorkflowExecution(ctx, runningWfID, successorRunID)
-		if descErr != nil || len(desc.Callbacks) != 1 {
-			return false
-		}
-		return desc.Callbacks[0].State == enumspb.CALLBACK_STATE_STANDBY &&
-			desc.Callbacks[0].Callback.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL
+	await.Requiref(ctx, s.T(), func(at *await.T) {
+		desc, descErr := env.SdkClient().DescribeWorkflowExecution(at.Context(), runningWfID, successorRunID)
+		require.NoError(at, descErr)
+		require.Len(at, desc.Callbacks, 1)
+		require.Equal(at, enumspb.CALLBACK_STATE_STANDBY, desc.Callbacks[0].State)
+		require.Equal(at, chasm.NexusCompletionHandlerURL, desc.Callbacks[0].Callback.GetNexus().GetUrl())
 	}, 30*time.Second, 500*time.Millisecond, "migration should attach the scheduler callback to the open successor run")
 
 	var v2 *schedulerpb.DescribeScheduleResponse
-	s.Require().Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		v2, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 			},
 		)
-		return err == nil
+		require.NoError(at, err)
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// V2 -> V1.
@@ -941,12 +933,12 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2ToV1RoundTrip() 
 
 	// Routing is disabled, so this frontend DescribeSchedule reads restored V1 state.
 	var after *workflowservice.DescribeScheduleResponse
-	s.Require().Eventually(func() bool {
-		after, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		after, err = env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		return err == nil
+		require.NoError(at, err)
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// Conflict tokens use different byte order in V1 and V2, but every leg must
@@ -1087,22 +1079,22 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 
 	// Wait for the CHASM scheduler to be closed after migration.
 	var failedPreconditionErr *serviceerror.FailedPrecondition
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		_, chasmErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 			},
 		)
-		return errors.As(chasmErr, &failedPreconditionErr)
+		require.ErrorAs(at, chasmErr, &failedPreconditionErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Wait for the V1 system scheduler workflow to be running.
 	sysWorkflowID := scheduler.WorkflowIDPrefix + sid
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		_, descErr := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1111,19 +1103,19 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 				},
 			},
 		)
-		return descErr == nil
+		require.NoError(at, descErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Describe the V1 schedule via the frontend. With routing disabled, this
 	// goes directly to the V1 path. The per-namespace worker must pick up
 	// the workflow and register query handlers before this succeeds.
 	var v1Desc *workflowservice.DescribeScheduleResponse
-	s.Eventually(func() bool {
-		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		v1Desc, err = env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		return err == nil
+		require.NoError(at, err)
 	}, 30*time.Second, 500*time.Millisecond)
 
 	v1Schedule := v1Desc.GetSchedule()
@@ -1168,12 +1160,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 	// Validate ListSchedules returns exactly one entry once the V1 workflow
 	// has written its visibility records (no duplicates from V1+V2).
 	var listResp *workflowservice.ListSchedulesResponse
-	s.Eventually(func() bool {
-		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		listResp, err = env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       nsName,
 			MaximumPageSize: 10,
 		})
-		return err == nil && len(listResp.GetSchedules()) == 1
+		require.NoError(at, err)
+		require.Len(at, listResp.GetSchedules(), 1)
 	}, 30*time.Second, 500*time.Millisecond)
 	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
 
@@ -1313,17 +1306,15 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 	})
 	s.NoError(err)
 	s.NotNil(firstDescribe.GetSchedule())
-	s.Eventually(func() bool {
-		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
-		if listErr != nil {
-			return false
-		}
+	await.Require(ctx, s.T(), func(at *await.T) {
+		listResp, listErr := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		require.NoError(at, listErr)
 		for _, schedule := range listResp.GetSchedules() {
 			if schedule.GetScheduleId() == sid {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not reached the expected migration state")
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Verify the schedule exists in CHASM by describing it directly through the
@@ -1340,27 +1331,21 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false)
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, false)
 
-	s.Eventually(func() bool {
-		describeResp, describeErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		describeResp, describeErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		if describeErr != nil {
-			return false
-		}
-		if describeResp.GetSchedule() == nil {
-			return false
-		}
-		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
-		if listErr != nil {
-			return false
-		}
+		require.NoError(at, describeErr)
+		require.NotNil(at, describeResp.GetSchedule())
+		listResp, listErr := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		require.NoError(at, listErr)
 		for _, schedule := range listResp.GetSchedules() {
 			if schedule.GetScheduleId() == sid {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not reached the expected migration state")
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
@@ -1428,24 +1413,24 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 
 	// Wait for the CHASM scheduler to be closed after migration.
 	var failedPreconditionErr *serviceerror.FailedPrecondition
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		_, chasmErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 			},
 		)
-		return errors.As(chasmErr, &failedPreconditionErr)
+		require.ErrorAs(at, chasmErr, &failedPreconditionErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Wait for the V1 workflow to be running and query handlers registered.
-	s.Eventually(func() bool {
-		_, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		_, descErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		return descErr == nil
+		require.NoError(at, descErr)
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// With CHASM routing still enabled, DescribeSchedule through the frontend
@@ -1485,12 +1470,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 
 	// Verify the pause took effect on V1. The patch is delivered as a signal,
 	// so the workflow needs time to process it.
-	s.Eventually(func() bool {
-		descResp, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, s.T(), func(at *await.T) {
+		descResp, err = env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		return err == nil && descResp.GetSchedule().GetState().GetPaused()
+		require.NoError(at, err)
+		require.True(at, descResp.GetSchedule().GetState().GetPaused())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// DeleteSchedule should also fall through to V1.
@@ -1703,9 +1689,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	s.NoError(err)
 
 	// Wait for the per-namespace worker to pick up the V1 workflow.
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1714,10 +1700,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+		require.NoError(at, err)
+		require.Greater(at, desc.GetWorkflowExecutionInfo().GetHistoryLength(), int64(3))
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Issue migration from V1 to V2. The previously deleted CHASM execution
@@ -1734,9 +1718,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	s.NoError(err)
 
 	// Wait for the V1 workflow to complete (migration activity ran).
-	s.Eventually(func() bool {
+	await.Require(ctx, s.T(), func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: nsID,
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1745,10 +1729,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The new V2 schedule should be describable.
@@ -1827,20 +1809,16 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	require.Eventually(t, func() bool {
-		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, t, func(at *await.T) {
+		descResp, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		if err != nil || len(descResp.GetInfo().GetRecentActions()) == 0 {
-			return false
-		}
+		require.NoError(at, err)
+		require.NotEmpty(at, descResp.GetInfo().GetRecentActions())
 		a := descResp.Info.RecentActions[0]
-		if a.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return false
-		}
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a.GetStartWorkflowStatus())
 		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
-		return true
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// Enable CHASM and migration, allowing it for schedules with running workflows.
@@ -1860,9 +1838,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 
 	// Wait for the V1 scheduler workflow to complete (migration done).
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	require.Eventually(t, func() bool {
+	await.Require(ctx, t, func(at *await.T) {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
+			at.Context(),
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: env.NamespaceID().String(),
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1871,10 +1849,8 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 				},
 			},
 		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Describe the V2 schedule and verify no duplicate RunIds in RecentActions.
@@ -1976,20 +1952,16 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 
 	// Wait for the V1 scheduler to start the workflow and record it as running.
 	var runningWfID string
-	require.Eventually(t, func() bool {
-		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Require(ctx, t, func(at *await.T) {
+		descResp, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 		})
-		if err != nil || len(descResp.GetInfo().GetRecentActions()) == 0 {
-			return false
-		}
+		require.NoError(at, err)
+		require.NotEmpty(at, descResp.GetInfo().GetRecentActions())
 		a := descResp.Info.RecentActions[0]
-		if a.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return false
-		}
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a.GetStartWorkflowStatus())
 		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
-		return true
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// Enable CHASM and migration; the running-workflow gate stays off, so only the
@@ -2000,7 +1972,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 	// A successful migration completes the V1 scheduler workflow; while migration
 	// is deferred it stays running.
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	v1Migrated := func() bool {
+	v1Migrated := func(ctx context.Context) bool {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
 			ctx,
 			&historyservice.DescribeWorkflowExecutionRequest{
@@ -2016,12 +1988,12 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 
 	// With the gate off, auto-migration is deferred: the scheduler re-evaluates the
 	// decision every interval but keeps running rather than migrating.
-	require.Never(t, v1Migrated, 5*time.Second, 500*time.Millisecond,
+	require.Never(t, func() bool { return v1Migrated(ctx) }, 5*time.Second, 500*time.Millisecond,
 		"migration must be deferred while the schedule has a running workflow and the gate is off")
 
 	// Turn the gate on; auto-migration now proceeds even with the workflow running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
-	require.Eventually(t, v1Migrated, 15*time.Second, 500*time.Millisecond,
+	await.Requiref(ctx, t, func(at *await.T) { require.True(at, v1Migrated(at.Context())) }, 15*time.Second, 500*time.Millisecond,
 		"migration should proceed once the gate allows running workflows")
 
 	// The V2 schedule should now exist.
@@ -2448,12 +2420,13 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	})
 	require.NoError(t, err)
 	runningRunID := startResp.GetRunId()
-	require.Eventually(t, func() bool {
-		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWid, RunId: runningRunID},
 		})
-		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	sched := &schedulepb.Schedule{
@@ -2538,19 +2511,17 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	//   - The pending start, kicked off by ProcessBuffer once isRunning
 	//     resolves to false, then run to completion by the SDK worker.
 	var lastDesc *schedulerpb.DescribeScheduleResponse
-	require.Eventually(t, func() bool {
+	await.Requiref(ctx, t, func(at *await.T) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(at, err)
 		lastDesc = desc
-		return len(desc.GetFrontendResponse().GetInfo().GetRecentActions()) >= 2
+		require.GreaterOrEqual(at, len(desc.GetFrontendResponse().GetInfo().GetRecentActions()), 2)
 	}, 30*time.Second, 500*time.Millisecond, "expected both running and pending starts to surface in RecentActions")
 
 	// Load-bearing assertion: the pending start must NOT have been dropped
@@ -2592,12 +2563,13 @@ func TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: nsName,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startResp.GetRunId()},
 		})
-		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	now := time.Now().UTC()
@@ -2647,23 +2619,23 @@ func TestScheduleMigration_ClosedFailedWorkflowRecordsCompletion(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
+	await.Requiref(ctx, t, func(at *await.T) {
 		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 			},
 		)
-		if err != nil || !desc.GetFrontendResponse().GetSchedule().GetState().GetPaused() {
-			return false
-		}
+		require.NoError(at, err)
+		require.True(at, desc.GetFrontendResponse().GetSchedule().GetState().GetPaused())
 		for _, action := range desc.GetFrontendResponse().GetInfo().GetRecentActions() {
 			if action.GetStartWorkflowResult().GetRunId() == startResp.GetRunId() {
-				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+				require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, action.GetStartWorkflowStatus())
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not reached the expected migration state")
 	}, 30*time.Second, 500*time.Millisecond,
 		"closed migrated failure must be recorded and pause the V2 schedule")
 }
@@ -2739,7 +2711,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	startV1(migrateSID)
 	startV1(stayV1SID)
 
-	v1Status := func(sid string) enumspb.WorkflowExecutionStatus {
+	v1Status := func(ctx context.Context, sid string) enumspb.WorkflowExecutionStatus {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
 			ctx,
 			&historyservice.DescribeWorkflowExecutionRequest{
@@ -2757,8 +2729,8 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	}
 
 	// The accepted schedule's V1 workflow should complete (migrate to CHASM).
-	require.Eventually(t, func() bool {
-		return v1Status(migrateSID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	await.Requiref(ctx, t, func(at *await.T) {
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, v1Status(at.Context(), migrateSID))
 	}, 30*time.Second, 500*time.Millisecond, "schedule %q should migrate to CHASM", migrateSID)
 
 	// And its CHASM-side description should be present.
@@ -2772,7 +2744,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	// handler should still report NotFound. Re-checked over a window to ensure
 	// the negative state is stable rather than racing a delayed migration.
 	require.Never(t, func() bool {
-		return v1Status(stayV1SID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		return v1Status(ctx, stayV1SID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	}, 10*time.Second, 1*time.Second, "schedule %q must not migrate while outside the rollout cohort", stayV1SID)
 
 	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
@@ -2784,12 +2756,12 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 		"schedule %q rejected by the rollout must not appear on the CHASM handler", stayV1SID)
 
 	// And the schedule should still be reachable through the public frontend.
-	require.Eventually(t, func() bool {
-		_, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Requiref(ctx, t, func(at *await.T) {
+		_, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: stayV1SID,
 		})
-		return err == nil
+		require.NoError(at, err)
 	}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for V1 schedule %q", stayV1SID)
 }
 

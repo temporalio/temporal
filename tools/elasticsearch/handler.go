@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/schema"
 	commonschema "go.temporal.io/server/tools/common/schema"
 )
@@ -86,43 +87,43 @@ func ping(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
-	cfg := new(esclient.Config)
+func parseElasticConfig(c *cli.Context) (*esconfig.Config, error) {
+	cfg := new(esconfig.Config)
 
-	u, err := url.Parse(cli.GlobalString(commonschema.CLIOptEndpoint))
+	u, err := url.Parse(c.GlobalString(commonschema.CLIOptEndpoint))
 	if err != nil {
-		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.GlobalString(commonschema.CLIOptEndpoint), err)
+		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", c.GlobalString(commonschema.CLIOptEndpoint), err)
 	}
 
 	cfg.URL = *u
-	cfg.Username = cli.GlobalString(commonschema.CLIOptUser)
-	cfg.Password = cli.GlobalString(commonschema.CLIOptPassword)
+	cfg.Username = c.GlobalString(commonschema.CLIOptUser)
+	cfg.Password = c.GlobalString(commonschema.CLIOptPassword)
 	cfg.Version = "v7" // Fixed schema version 7
 	cfg.Indices = map[string]string{}
 
-	if cli.String(CLIOptVisibilityIndex) != "" {
-		cfg.Indices[esclient.VisibilityAppName] = cli.String(CLIOptVisibilityIndex)
+	if c.String(CLIOptVisibilityIndex) != "" {
+		cfg.Indices[esconfig.VisibilityAppName] = c.String(CLIOptVisibilityIndex)
 	}
 
-	if cli.GlobalString(CLIOptAWSCredentials) != "" {
-		cfg.AWSRequestSigning.CredentialProvider = cli.GlobalString(CLIOptAWSCredentials)
+	if c.GlobalString(CLIOptAWSCredentials) != "" {
+		cfg.AWSRequestSigning.CredentialProvider = c.GlobalString(CLIOptAWSCredentials)
 		cfg.AWSRequestSigning.Enabled = true
 
 		if cfg.AWSRequestSigning.CredentialProvider == "static" {
 			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
 			cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
-			cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
+			cfg.AWSRequestSigning.Static.Token = c.GlobalString(CLIOptAWSToken)
 		}
 	}
 
-	if cli.GlobalBool(commonschema.CLIFlagEnableTLS) {
+	if c.GlobalBool(commonschema.CLIFlagEnableTLS) {
 		cfg.TLS = &auth.TLS{
 			Enabled:                true,
-			CertFile:               cli.GlobalString(commonschema.CLIFlagTLSCertFile),
-			KeyFile:                cli.GlobalString(commonschema.CLIFlagTLSKeyFile),
-			CaFile:                 cli.GlobalString(commonschema.CLIFlagTLSCaFile),
-			ServerName:             cli.GlobalString(commonschema.CLIFlagTLSHostName),
-			EnableHostVerification: !cli.GlobalBool(commonschema.CLIFlagTLSDisableHostVerification),
+			CertFile:               c.GlobalString(commonschema.CLIFlagTLSCertFile),
+			KeyFile:                c.GlobalString(commonschema.CLIFlagTLSKeyFile),
+			CaFile:                 c.GlobalString(commonschema.CLIFlagTLSCaFile),
+			ServerName:             c.GlobalString(commonschema.CLIFlagTLSHostName),
+			EnableHostVerification: !c.GlobalBool(commonschema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 

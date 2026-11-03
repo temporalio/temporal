@@ -188,10 +188,38 @@ func Upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 
-	_, err := s3cli.PutObject(ctx, &s3.PutObjectInput{
+	return upload(ctx, s3cli, URI, key, data, nil)
+}
+
+// UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
+// It returns whether an upload was performed.
+func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string) (bool, error) {
+	ctx, cancel := ensureContextTimeout(ctx)
+	defer cancel()
+
+	result, err := s3cli.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(URI.Hostname()),
 		Key:    aws.String(key),
-		Body:   bytes.NewReader(data),
+	})
+	if err == nil && result.Metadata[archiver.VisibilityArchivalRecordHashMetadataKey] == recordHash {
+		return false, nil
+	}
+	if err != nil && !IsNotFoundError(err) {
+		return false, err
+	}
+
+	err = upload(ctx, s3cli, URI, key, data, map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+	return err == nil, err
+}
+
+func upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, metadata map[string]string) error {
+	_, err := s3cli.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:   aws.String(URI.Hostname()),
+		Key:      aws.String(key),
+		Body:     bytes.NewReader(data),
+		Metadata: metadata,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.NoSuchBucket](err); ok {

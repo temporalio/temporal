@@ -21,13 +21,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const namespaceReplicationClusterListPageSize = 1000
+
+const namespaceReplicationWarningInitialHistory = "target is missing the initial failover history entry; configuration repair will not change failover history"
 
 const (
 	namespaceReplicationStatusHealthy                   = "HEALTHY"
@@ -81,7 +81,10 @@ type namespaceReplicationClusterVerification struct {
 	FailoverFingerprint string   `json:"failover_fingerprint,omitempty"`
 	FailoverMatch       string   `json:"failover_match"`
 	Differences         []string `json:"differences,omitempty"`
+	Warnings            []string `json:"warnings,omitempty"`
 	Error               string   `json:"error,omitempty"`
+
+	initialHistoryMissing bool
 }
 
 type namespaceReplicationObservation struct {
@@ -224,7 +227,8 @@ func (v *namespaceReplicationVerifier) observe(
 
 	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
-		return observation, fmt.Errorf("project source namespace: %w", err)
+		blockNamespaceReplicationVerification(result, fmt.Errorf("project source namespace: %w", err))
+		return observation, nil
 	}
 	result.SourceConfigFingerprint, err = namespaceReplicationFingerprint(configProjection)
 	if err != nil {
@@ -258,11 +262,7 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 	result.ExpectedClusters = expectedClusters
-	if err := validateNamespaceReplicationAddressOverrides(
-		expectedClusters,
-		result.SourceCluster,
-		request.AddressOverrides,
-	); err != nil {
+	if err := validateNamespaceReplicationAddressOverrides(expectedClusters, result.SourceCluster, request.AddressOverrides); err != nil {
 		blockNamespaceReplicationVerification(result, err)
 		return observation, nil
 	}
@@ -340,10 +340,7 @@ func (v *namespaceReplicationVerifier) observe(
 	observation.sourceSnapshot = finalSource
 	observation.sourceStable = true
 
-	if err := deriveNamespaceReplicationStatus(result); err != nil {
-		result.Status = namespaceReplicationStatusBlocked
-		result.StatusDetail = err.Error()
-	}
+	deriveNamespaceReplicationStatus(result)
 	return observation, nil
 }
 
@@ -476,8 +473,24 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 		sourceFailoverProjection,
 		failoverProjection,
 	)
+	// A topology update can initialize history at the source without advancing the
+	// failover version. Existing peers only accept history with a newer failover.
+	result.initialHistoryMissing = namespaceReplicationInitialHistoryMissing(source, byID, sourceFailoverProjection, failoverProjection)
+	if result.initialHistoryMissing {
+		result.Warnings = []string{namespaceReplicationWarningInitialHistory}
+	}
 	result.Error = ""
 	return result, byID
+}
+
+func namespaceReplicationInitialHistoryMissing(
+	source, target *adminservice.GetNamespaceResponse,
+	sourceFailover, targetFailover *replicationspb.NamespaceTaskAttributes,
+) bool {
+	return source.GetFailoverVersion() == target.GetFailoverVersion() &&
+		len(source.GetFailoverHistory()) == 1 && len(target.GetFailoverHistory()) == 0 &&
+		source.GetFailoverHistory()[0].GetFailoverVersion() == source.GetFailoverVersion() &&
+		proto.Equal(sourceFailover.GetReplicationConfig(), targetFailover.GetReplicationConfig())
 }
 
 func getNamespace(
@@ -514,7 +527,8 @@ func validateSourceNamespace(response *adminservice.GetNamespaceResponse, source
 			response.GetReplicationConfig().GetActiveClusterName(),
 		)
 	}
-	if response.GetReplicationConfig().GetState() != enumspb.REPLICATION_STATE_NORMAL {
+	state := response.GetReplicationConfig().GetState()
+	if state != enumspb.REPLICATION_STATE_NORMAL && state != enumspb.REPLICATION_STATE_UNSPECIFIED {
 		return fmt.Errorf(
 			"source namespace replication state is %s, not NORMAL",
 			response.GetReplicationConfig().GetState(),
@@ -551,28 +565,29 @@ func validateExpectedClusters(
 	response *adminservice.GetNamespaceResponse,
 	sourceCluster string,
 ) ([]string, error) {
-	counts := make(map[string]int)
-	for _, cluster := range response.GetReplicationConfig().GetClusters() {
-		name := strings.TrimSpace(cluster.GetClusterName())
-		if name == "" {
-			return nil, errors.New("source namespace contains an empty replication cluster name")
-		}
-		counts[name]++
+	if err := validateReplicationClusterNames(response.GetReplicationConfig().GetClusters()); err != nil {
+		return nil, err
 	}
-	if counts[sourceCluster] != 1 {
-		return nil, fmt.Errorf(
-			"source replication cluster list must contain %q exactly once; found %d",
-			sourceCluster,
-			counts[sourceCluster],
-		)
+	clusters := clusterNames(response.GetReplicationConfig().GetClusters())
+	if !slices.Contains(clusters, sourceCluster) {
+		return nil, fmt.Errorf("source replication cluster list must contain %q exactly once", sourceCluster)
 	}
-	for cluster, count := range counts {
-		if count != 1 {
-			return nil, fmt.Errorf("replication cluster %q appears %d times", cluster, count)
-		}
-	}
-	clusters := slices.Sorted(maps.Keys(counts))
 	return clusters, nil
+}
+
+func validateReplicationClusterNames(clusters []*replicationpb.ClusterReplicationConfig) error {
+	seen := make(map[string]struct{}, len(clusters))
+	for _, cluster := range clusters {
+		name := cluster.GetClusterName()
+		if name == "" || name != strings.TrimSpace(name) {
+			return fmt.Errorf("invalid replication cluster name %q: names must be nonempty without surrounding whitespace", name)
+		}
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("replication cluster %q appears more than once", name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
 }
 
 func namespaceReplicationTargetsRequiringMetadata(
@@ -644,10 +659,6 @@ func resolveClusterAddresses(
 	metadata map[string]*persistencespb.ClusterMetadata,
 	overrides map[string]string,
 ) (map[string]string, error) {
-	if err := validateNamespaceReplicationAddressOverrides(expectedClusters, sourceCluster, overrides); err != nil {
-		return nil, err
-	}
-
 	addresses := map[string]string{sourceCluster: sourceAddress}
 	for _, cluster := range expectedClusters {
 		if cluster == sourceCluster {
@@ -699,6 +710,9 @@ func namespaceReplicationProjections(
 	if err := validateNamespaceResponse(response); err != nil {
 		return nil, nil, err
 	}
+	if err := validateReplicationClusterNames(response.GetReplicationConfig().GetClusters()); err != nil {
+		return nil, nil, err
+	}
 	info := response.GetInfo()
 	config := response.GetConfig()
 	replicationConfig := response.GetReplicationConfig()
@@ -706,10 +720,6 @@ func namespaceReplicationProjections(
 	var badBinaries *namespacepb.BadBinaries
 	if len(config.GetBadBinaries().GetBinaries()) != 0 {
 		badBinaries = proto.CloneOf(config.GetBadBinaries())
-	}
-	var retention *durationpb.Duration
-	if config.GetWorkflowExecutionRetentionTtl() != nil {
-		retention = proto.CloneOf(config.GetWorkflowExecutionRetentionTtl())
 	}
 	configProjection = &replicationspb.NamespaceTaskAttributes{
 		Id: info.GetId(),
@@ -721,27 +731,21 @@ func namespaceReplicationProjections(
 			Data:        cloneNamespaceDataExcluding(info.GetData(), dataKeysToIgnore),
 		},
 		Config: &namespacepb.NamespaceConfig{
-			BadBinaries:                  badBinaries,
-			HistoryArchivalState:         config.GetHistoryArchivalState(),
-			HistoryArchivalUri:           config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:      config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:        config.GetVisibilityArchivalUri(),
-			CustomSearchAttributeAliases: cloneNonEmptyStringMap(config.GetCustomSearchAttributeAliases()),
+			WorkflowExecutionRetentionTtl: proto.CloneOf(config.GetWorkflowExecutionRetentionTtl()),
+			BadBinaries:                   badBinaries,
+			HistoryArchivalState:          config.GetHistoryArchivalState(),
+			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
+			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
+			CustomSearchAttributeAliases:  cloneNonEmptyStringMap(config.GetCustomSearchAttributeAliases()),
 		},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: normalizedClusterReplicationConfigs(replicationConfig.GetClusters()),
 		},
 	}
-	if retention != nil {
-		configProjection.Config.WorkflowExecutionRetentionTtl = retention
-	}
-
-	failoverHistory := make([]*replicationpb.FailoverStatus, 0, len(response.GetFailoverHistory()))
+	var failoverHistory []*replicationpb.FailoverStatus
 	for _, status := range response.GetFailoverHistory() {
 		failoverHistory = append(failoverHistory, proto.CloneOf(status))
-	}
-	if len(failoverHistory) == 0 {
-		failoverHistory = nil
 	}
 	failoverProjection = &replicationspb.NamespaceTaskAttributes{
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
@@ -749,6 +753,9 @@ func namespaceReplicationProjections(
 			State:             replicationConfig.GetState(),
 		},
 		FailoverHistory: failoverHistory,
+	}
+	if failoverProjection.ReplicationConfig.State == enumspb.REPLICATION_STATE_UNSPECIFIED {
+		failoverProjection.ReplicationConfig.State = enumspb.REPLICATION_STATE_NORMAL
 	}
 	if err := common.DiscardUnknownProto(configProjection); err != nil {
 		return nil, nil, fmt.Errorf("discard unknown config projection fields: %w", err)
@@ -788,14 +795,7 @@ func cloneNamespaceDataExcluding(
 func normalizedClusterReplicationConfigs(
 	clusters []*replicationpb.ClusterReplicationConfig,
 ) []*replicationpb.ClusterReplicationConfig {
-	names := make([]string, 0, len(clusters))
-	for _, cluster := range clusters {
-		if cluster.GetClusterName() != "" {
-			names = append(names, cluster.GetClusterName())
-		}
-	}
-	slices.Sort(names)
-	names = slices.Compact(names)
+	names := clusterNames(clusters)
 	if len(names) == 0 {
 		return nil
 	}
@@ -822,12 +822,6 @@ func namespaceReplicationDifferences(
 	actualFailover *replicationspb.NamespaceTaskAttributes,
 ) []string {
 	var differences []string
-	if expectedConfig.GetId() != actualConfig.GetId() {
-		differences = append(differences, "namespace.id")
-	}
-	if expectedConfig.GetInfo().GetName() != actualConfig.GetInfo().GetName() {
-		differences = append(differences, "namespace.name")
-	}
 	if expectedConfig.GetInfo().GetState() != actualConfig.GetInfo().GetState() {
 		differences = append(differences, "info.state")
 	}
@@ -916,14 +910,8 @@ func namespaceReplicationSnapshotsEqual(
 		proto.Equal(firstFailover, secondFailover), nil
 }
 
-func deriveNamespaceReplicationStatus(result *namespaceReplicationVerificationResult) error {
-	if len(result.Clusters) == 0 || result.Clusters[0].Role != "SOURCE" {
-		return errors.New("verification result has no source cluster")
-	}
+func deriveNamespaceReplicationStatus(result *namespaceReplicationVerificationResult) {
 	source := result.Clusters[0]
-	if source.ConfigVersion == nil || source.FailoverVersion == nil {
-		return errors.New("verification result has incomplete source versions")
-	}
 
 	repairRequired := false
 	blocked := false
@@ -954,14 +942,14 @@ func deriveNamespaceReplicationStatus(result *namespaceReplicationVerificationRe
 	} else {
 		result.Status = namespaceReplicationStatusHealthy
 	}
-	return nil
 }
 
 func namespaceReplicationFailoverBlocks(
 	cluster *namespaceReplicationClusterVerification,
 	sourceFailoverVersion int64,
 ) bool {
-	return cluster.FailoverMatch != namespaceReplicationMatchMatch ||
+	return (cluster.FailoverMatch != namespaceReplicationMatchMatch &&
+		!cluster.initialHistoryMissing) ||
 		(cluster.FailoverVersion != nil && *cluster.FailoverVersion > sourceFailoverVersion)
 }
 
@@ -977,6 +965,9 @@ func isNamespaceNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	var namespaceNotFound *serviceerror.NamespaceNotFound
-	return errors.As(err, &namespaceNotFound) || grpcstatus.Code(err) == codes.NotFound
+	if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
+		return true
+	}
+	_, ok := serviceerror.FromStatus(grpcstatus.Convert(err)).(*serviceerror.NamespaceNotFound)
+	return ok
 }

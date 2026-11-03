@@ -41,6 +41,7 @@ func (p *taskGeneratorProviderImpl) NewTaskGenerator(
 ) TaskGenerator {
 	return NewTaskGenerator(
 		shard.GetNamespaceRegistry(),
+		shard.ChasmRegistry(),
 		mutableState,
 		shard.GetConfig(),
 		shard.GetArchivalMetadata(),

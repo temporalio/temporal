@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
@@ -26,6 +27,22 @@ func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.
 			RootPartition(),
 		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 	))
+}
+
+func eagerActivityMetricsHandler(
+	handler metrics.Handler,
+	config *Config,
+	request *workflowservice.StartActivityExecutionRequest,
+) metrics.Handler {
+	namespaceName := request.GetNamespace()
+	taskQueueName := request.GetTaskQueue().GetName()
+	return metrics.GetPerActivityEagerExecutionScope(
+		handler,
+		namespaceName,
+		taskQueueName,
+		config.BreakdownMetricsByTaskQueue(namespaceName, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		"StartActivityExecution",
+	)
 }
 
 // baseMetricsHandler adds only the operation tag.

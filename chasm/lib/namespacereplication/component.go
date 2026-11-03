@@ -36,11 +36,19 @@ var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMu
 var _ chasm.VisibilitySearchAttributesProvider = (*NamespaceMutationComponent)(nil)
 var _ chasm.VisibilityMemoProvider = (*NamespaceMutationComponent)(nil)
 
-const NamespaceIDSearchAttributeName = "ReplicatedNamespaceId"
+const (
+	NamespaceIDSearchAttributeName   = "ReplicatedNamespaceId"
+	NamespaceNameSearchAttributeName = "ReplicatedNamespaceName"
+)
 
 var namespaceIDSearchAttribute = chasm.NewSearchAttributeKeyword(
 	NamespaceIDSearchAttributeName,
 	chasm.SearchAttributeFieldKeyword01,
+)
+
+var namespaceNameSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceNameSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword02,
 )
 
 // NewNamespaceMutationComponent constructs a fresh component with the mutation set
@@ -74,12 +82,14 @@ func (c *NamespaceMutationComponent) initializeVisibility(ctx chasm.MutableConte
 }
 
 // SearchAttributes indexes the namespace being mutated for eventual CLI-based
-// repair. The CHASM execution itself lives in temporal-system, so its storage
-// namespace cannot be used to find all mutation executions for an application
-// namespace.
+// repair and manual discovery. The CHASM execution itself lives in
+// temporal-system, so its storage namespace cannot be used to find all mutation
+// executions for an application namespace. Repair remains keyed by the stable
+// namespace ID; the name is a human-friendly discovery alias.
 func (c *NamespaceMutationComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
 		namespaceIDSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
+		namespaceNameSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetName()),
 	}
 }
 
@@ -93,7 +103,7 @@ func (c *NamespaceMutationComponent) Memo(chasm.Context) proto.Message {
 // LifecycleState implements the chasm.Component interface.
 // COMPONENT_STATUS_RUNNING → LifecycleStateRunning (the component is doing work).
 // COMPONENT_STATUS_COMPLETED → LifecycleStateCompleted (all tasks reached terminal state).
-// COMPONENT_STATUS_FAILED → LifecycleStateFailed (local apply failed; peers never attempted).
+// COMPONENT_STATUS_FAILED → LifecycleStateFailed (local apply failed or remained indeterminate).
 func (c *NamespaceMutationComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch c.GetStatus() {
 	case namespacereplicationpb.COMPONENT_STATUS_COMPLETED:
@@ -124,8 +134,9 @@ func (c *NamespaceMutationComponent) ContextMetadata(_ chasm.Context) map[string
 // the component (e.g., on execution state size limits). For the namespace
 // replication transport, terminate marks the component as failed; any in-flight
 // tasks will see the closed lifecycle on next validate and skip. If termination
-// happens before the local apply resolves, record a local failure as well so a
-// caller polling that outcome can observe a terminal result.
+// happens before the local apply resolves, record an indeterminate local outcome
+// so a caller polling that outcome can observe a terminal result without being
+// told the metadata write definitely failed.
 //
 // Apply-if-higher on receivers makes future mutations safe even when a
 // component was terminated mid-flight.
@@ -134,14 +145,15 @@ func (c *NamespaceMutationComponent) Terminate(
 	request chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	if c.GetLocalApply().GetOutcome() == namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING {
-		reason := request.Reason
-		if reason == "" {
-			reason = "namespace mutation terminated before local apply committed"
+		reason := "namespace mutation terminated while local apply outcome was unresolved"
+		if request.Reason != "" {
+			reason += ": " + request.Reason
 		}
-		return chasm.TerminateComponentResponse{}, TransitionLocalFailed.Apply(c, ctx, EventLocalFailed{
-			Time:    ctx.Now(c),
-			Err:     errors.New(reason),
-			ErrType: localFailureInternal,
+		// Termination cannot establish whether an in-flight local mutation
+		// committed. Keep that uncertainty explicit in the persisted outcome.
+		return chasm.TerminateComponentResponse{}, TransitionLocalIndeterminate.Apply(c, ctx, EventLocalIndeterminate{
+			Time: ctx.Now(c),
+			Err:  errors.New(reason),
 		})
 	}
 	c.SetStateMachineState(namespacereplicationpb.COMPONENT_STATUS_FAILED)

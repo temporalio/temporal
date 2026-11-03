@@ -13,6 +13,8 @@ import (
 	reflect "reflect"
 
 	enums "go.temporal.io/api/enums/v1"
+	log "go.temporal.io/server/common/log"
+	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -42,17 +44,17 @@ func (m *MockPartitionScalerFactory) EXPECT() *MockPartitionScalerFactoryMockRec
 }
 
 // New mocks base method.
-func (m *MockPartitionScalerFactory) New(nsName namespace.Name, tqName string, tqType enums.TaskQueueType) PartitionScaler {
+func (m *MockPartitionScalerFactory) New(nsName namespace.Name, tqName string, tqType enums.TaskQueueType, logger log.Logger, metricsHandler metrics.Handler) PartitionScaler {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "New", nsName, tqName, tqType)
+	ret := m.ctrl.Call(m, "New", nsName, tqName, tqType, logger, metricsHandler)
 	ret0, _ := ret[0].(PartitionScaler)
 	return ret0
 }
 
 // New indicates an expected call of New.
-func (mr *MockPartitionScalerFactoryMockRecorder) New(nsName, tqName, tqType any) *gomock.Call {
+func (mr *MockPartitionScalerFactoryMockRecorder) New(nsName, tqName, tqType, logger, metricsHandler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "New", reflect.TypeOf((*MockPartitionScalerFactory)(nil).New), nsName, tqName, tqType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "New", reflect.TypeOf((*MockPartitionScalerFactory)(nil).New), nsName, tqName, tqType, logger, metricsHandler)
 }
 
 // MockPartitionScaler is a mock of PartitionScaler interface.

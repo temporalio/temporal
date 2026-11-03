@@ -59,7 +59,7 @@ func TestPeerRetryCycle(t *testing.T) {
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil),
 	)
 
-	for attempt := int32(0); attempt < 2; attempt++ {
+	for attempt := range int32(2) {
 		task := &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: attempt}
 		err := env.peerHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{Destination: "cellB"}, task)
 		var destinationDown *queueserrors.DestinationDownError

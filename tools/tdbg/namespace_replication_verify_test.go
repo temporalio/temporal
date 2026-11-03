@@ -211,6 +211,126 @@ func TestNamespaceReplicationVerifier_ObserveCapturesReusableState(t *testing.T)
 	require.Nil(t, missing)
 }
 
+func TestNamespaceReplicationVerifierInitialHistoryWarning(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		mutate  func(*adminservice.GetNamespaceResponse, *adminservice.GetNamespaceResponse)
+		status  string
+		warning bool
+	}{
+		{name: "initial history only", status: namespaceReplicationStatusHealthy, warning: true},
+		{name: "config repair remains allowed", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.Info.Description = "stale"
+		}, status: namespaceReplicationStatusRepairRequired, warning: true},
+		{name: "stale failover", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.FailoverVersion--
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "target failover ahead", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.FailoverVersion++
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "different nonempty history", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.FailoverHistory = []*replicationpb.FailoverStatus{{FailoverVersion: 19}}
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "different active cluster", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.ReplicationConfig.ActiveClusterName = "cluster-b"
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "handover", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "multiple history entries", mutate: func(source, _ *adminservice.GetNamespaceResponse) {
+			source.FailoverHistory = append(source.FailoverHistory, &replicationpb.FailoverStatus{FailoverVersion: 19})
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "history not at current version", mutate: func(source, _ *adminservice.GetNamespaceResponse) {
+			source.FailoverHistory[0].FailoverVersion--
+		}, status: namespaceReplicationStatusBlocked},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			target.FailoverHistory = nil
+			if test.mutate != nil {
+				test.mutate(source, target)
+			}
+			v := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{"cluster-b": target})
+			result, err := v.Verify(t.Context(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			require.Equal(t, test.status, result.Status)
+			require.Equal(t, test.warning, len(result.Clusters[1].Warnings) != 0)
+			require.Equal(t, namespaceReplicationMatchMismatch, result.Clusters[1].FailoverMatch)
+			require.Contains(t, result.Clusters[1].Differences, "replication.failover_history")
+			if test.warning {
+				app := NewCliApp()
+				var output bytes.Buffer
+				app.Writer = &output
+				require.NoError(t, printNamespaceReplicationVerification(cli.NewContext(app, nil, nil), result))
+				require.Contains(t, output.String(), "WARNINGS")
+				require.Contains(t, output.String(), "failover history entry;")
+				payload, err := json.Marshal(result)
+				require.NoError(t, err)
+				require.Contains(t, string(payload), namespaceReplicationWarningInitialHistory)
+				result.Clusters[1].Warnings = []string{"reworded warning"}
+				deriveNamespaceReplicationStatus(result)
+				require.Equal(t, test.status, result.Status)
+			}
+		})
+	}
+}
+
+func TestNamespaceReplicationVerifierReplicationStateAndClusterValidation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		mutate func(*adminservice.GetNamespaceResponse, *adminservice.GetNamespaceResponse)
+		status string
+	}{
+		{name: "unspecified source is normal", mutate: func(source, _ *adminservice.GetNamespaceResponse) {
+			source.ReplicationConfig.State = enumspb.REPLICATION_STATE_UNSPECIFIED
+		}, status: namespaceReplicationStatusHealthy},
+		{name: "unspecified target is normal", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.ReplicationConfig.State = enumspb.REPLICATION_STATE_UNSPECIFIED
+		}, status: namespaceReplicationStatusHealthy},
+		{name: "unknown source state", mutate: func(source, _ *adminservice.GetNamespaceResponse) {
+			source.ReplicationConfig.State = enumspb.ReplicationState(99)
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "duplicate target cluster", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.ReplicationConfig.Clusters = append(target.ReplicationConfig.Clusters, target.ReplicationConfig.Clusters[0])
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "whitespace source cluster", mutate: func(source, _ *adminservice.GetNamespaceResponse) {
+			source.ReplicationConfig.Clusters[1].ClusterName = " cluster-b "
+		}, status: namespaceReplicationStatusBlocked},
+		{name: "whitespace target cluster", mutate: func(_, target *adminservice.GetNamespaceResponse) {
+			target.ReplicationConfig.Clusters[1].ClusterName = " cluster-b "
+		}, status: namespaceReplicationStatusBlocked},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			target := proto.CloneOf(source)
+			test.mutate(source, target)
+			v := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{"cluster-b": target})
+			result, err := v.Verify(t.Context(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			require.Equal(t, test.status, result.Status)
+		})
+	}
+}
+
+func TestNamespaceReplicationVerifierUnrelatedNotFoundBlocks(t *testing.T) {
+	t.Parallel()
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+	client := testNamespaceReplicationTargetClient("cluster-b", nil)
+	client.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+		return nil, status.Error(codes.NotFound, "unrelated resource not found")
+	}
+	v := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b-address": client})
+	result, err := v.Verify(t.Context(), testNamespaceReplicationVerifyRequest())
+	require.NoError(t, err)
+	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
+	require.Equal(t, namespaceReplicationPresenceUnavailable, result.Clusters[1].Presence)
+}
+
 func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *testing.T) {
 	const ignoredKey = "__MCNConfig"
 
@@ -337,7 +457,7 @@ func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *tes
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
 	client := testNamespaceReplicationTargetClient("cluster-b", nil)
 	client.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
-		return nil, status.Error(codes.NotFound, "namespace not found")
+		return nil, serviceerror.ToStatus(serviceerror.NewNamespaceNotFound("namespace")).Err()
 	}
 	verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{
 		"cluster-b-address": client,
@@ -455,7 +575,7 @@ func TestValidateExpectedClusters(t *testing.T) {
 		&replicationpb.ClusterReplicationConfig{ClusterName: "cluster-b"},
 	)
 	_, err = validateExpectedClusters(response, "cluster-a")
-	require.ErrorContains(t, err, "appears 2 times")
+	require.ErrorContains(t, err, "appears more than once")
 
 	response.ReplicationConfig.Clusters = []*replicationpb.ClusterReplicationConfig{{ClusterName: "cluster-b"}}
 	_, err = validateExpectedClusters(response, "cluster-a")
@@ -513,8 +633,6 @@ func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
 		failoverChange bool
 		mutate         func(*adminservice.GetNamespaceResponse)
 	}{
-		{name: "namespace ID", difference: "namespace.id", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Id = "other-id" }},
-		{name: "namespace name", difference: "namespace.name", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Name = "other-name" }},
 		{name: "namespace state", difference: "info.state", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED }},
 		{name: "description", difference: "info.description", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.Description = "other" }},
 		{name: "owner email", difference: "info.owner_email", configChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.Info.OwnerEmail = "other@example.com" }},
@@ -645,11 +763,9 @@ func TestResolveClusterAddresses(t *testing.T) {
 		"cluster-c": "override-c:7233",
 	}, addresses)
 
-	_, err = resolveClusterAddresses(
+	err = validateNamespaceReplicationAddressOverrides(
 		[]string{"cluster-a"},
 		"cluster-a",
-		"source:7233",
-		nil,
 		map[string]string{"cluster-a": "other:7233"},
 	)
 	require.ErrorContains(t, err, "source cluster address")
@@ -689,6 +805,94 @@ func TestNamespaceReplicationVerifyRequiresExplicitSelector(t *testing.T) {
 
 	err := app.Run([]string{"tdbg", "namespace", "replication", "verify"})
 	require.ErrorContains(t, err, "exactly one of --namespace or --namespace-id")
+}
+
+func TestNamespaceReplicationVerifyNamespaceFlags(t *testing.T) {
+	// urfave/cli mutates shared built-in flags when running an app.
+	for _, test := range []struct {
+		name      string
+		global    []string
+		local     []string
+		wantName  string
+		wantError string
+	}{
+		{name: "global name", global: []string{"--namespace", "namespace"}, wantName: "namespace"},
+		{name: "global alias", global: []string{"-n", "namespace"}, wantName: "namespace"},
+		{name: "local alias", local: []string{"-n", "namespace"}, wantName: "namespace"},
+		{name: "local overrides global", global: []string{"-n", "other"}, local: []string{"--namespace", "namespace"}, wantName: "namespace"},
+		{name: "ID ignores implicit global default", local: []string{"--namespace-id", "namespace-id"}},
+		{name: "local ID overrides global name", global: []string{"-n", "other"}, local: []string{"--namespace-id", "namespace-id"}},
+		{name: "local selectors conflict", local: []string{"--namespace", "namespace", "--namespace-id", "namespace-id"}, wantError: "mutually exclusive"},
+		{name: "no implicit default", wantError: "exactly one"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a"}, 10, 20)
+			client := testNamespaceReplicationSourceClient(source)
+			client.getNamespaceFn = func(request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+				if request.GetNamespace() != "" {
+					require.Equal(t, test.wantName, request.GetNamespace())
+				} else {
+					require.Equal(t, "namespace-id", request.GetId())
+				}
+				return proto.CloneOf(source), nil
+			}
+			factory := &testNamespaceReplicationCLIClientFactory{
+				sourceAddress: "source-address",
+				clients:       map[string]*testNamespaceReplicationAdminClient{"source-address": client},
+			}
+			app, _ := testNamespaceReplicationCLIApp(factory)
+			args := append([]string{"tdbg"}, test.global...)
+			args = append(args, "namespace", "replication", "verify")
+			args = append(args, test.local...)
+			err := app.Run(args)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				require.Empty(t, factory.openedAddresses)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, []string{"source-address"}, factory.openedAddresses)
+			}
+		})
+	}
+}
+
+func TestNamespaceReplicationVerifyNamespaceEnvironment(t *testing.T) {
+	// The environment is process-wide, so this test cannot run in parallel.
+	for _, test := range []struct {
+		name          string
+		args          []string
+		wantNamespace string
+	}{
+		{name: "environment", args: []string{"tdbg", "namespace", "replication", "verify"}, wantNamespace: "environment"},
+		{name: "global flag overrides environment", args: []string{"tdbg", "-n", "global", "namespace", "replication", "verify"}, wantNamespace: "global"},
+		{name: "local flag overrides environment", args: []string{"tdbg", "namespace", "replication", "verify", "-n", "local"}, wantNamespace: "local"},
+		{name: "local ID overrides environment", args: []string{"tdbg", "namespace", "replication", "verify", "--namespace-id", "namespace-id"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("TEMPORAL_CLI_NAMESPACE", "environment")
+			sourceName := test.wantNamespace
+			if sourceName == "" {
+				sourceName = "namespace"
+			}
+			source := testNamespaceResponse(sourceName, "namespace-id", "cluster-a", []string{"cluster-a"}, 10, 20)
+			client := testNamespaceReplicationSourceClient(source)
+			client.getNamespaceFn = func(request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+				if request.GetNamespace() != "" {
+					require.Equal(t, test.wantNamespace, request.GetNamespace())
+				} else {
+					require.Equal(t, "namespace-id", request.GetId())
+				}
+				return proto.CloneOf(source), nil
+			}
+			factory := &testNamespaceReplicationCLIClientFactory{
+				sourceAddress: "source-address",
+				clients:       map[string]*testNamespaceReplicationAdminClient{"source-address": client},
+			}
+			app, _ := testNamespaceReplicationCLIApp(factory)
+			require.NoError(t, app.Run(test.args))
+			require.Equal(t, []string{"source-address"}, factory.openedAddresses)
+		})
+	}
 }
 
 func TestNamespaceReplicationVerifyCommandUsesConfiguredAddressAndOverrides(t *testing.T) {
@@ -945,6 +1149,7 @@ func testNamespaceResponse(
 			{FailoverTime: timestamppb.New(time.Unix(20, 0)), FailoverVersion: failoverVersion},
 		},
 		IsGlobalNamespace: true,
+		ObservedAt:        timestamppb.New(time.Unix(102, 0)),
 	}
 }
 

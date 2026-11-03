@@ -12,7 +12,7 @@ type Library struct {
 	ApplyLocalTaskHandler  *applyLocalTaskHandler
 	ApplyPeerTaskHandler   *applyPeerTaskHandler
 	PeerBackoffTaskHandler *applyPeerBackoffTaskHandler
-	handler                *handler
+	serviceHandler         *serviceHandler
 }
 
 // NewNilLibrary creates a Library with all nil handlers. Useful for
@@ -25,20 +25,20 @@ func newLibrary(
 	applyLocal *applyLocalTaskHandler,
 	applyPeer *applyPeerTaskHandler,
 	peerBackoff *applyPeerBackoffTaskHandler,
-	handler *handler,
+	serviceHandler *serviceHandler,
 ) *Library {
 	return &Library{
 		ApplyLocalTaskHandler:  applyLocal,
 		ApplyPeerTaskHandler:   applyPeer,
 		PeerBackoffTaskHandler: peerBackoff,
-		handler:                handler,
+		serviceHandler:         serviceHandler,
 	}
 }
 
 func (l *Library) RegisterServices(server *grpc.Server) {
-	if l.handler != nil {
-		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.handler)
-		server.RegisterService(&namespacereplicationpb.NamespaceReplicationRepairService_ServiceDesc, l.handler)
+	if l.serviceHandler != nil {
+		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.serviceHandler)
+		server.RegisterService(&namespacereplicationpb.NamespaceReplicationRepairService_ServiceDesc, l.serviceHandler)
 	}
 }
 
@@ -54,7 +54,7 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			// operator repair CLI uses it to resolve the exact CHASM business/run
 			// IDs returned by namespace-indexed queries.
 			chasm.WithBusinessIDAlias("NamespaceMutationBusinessId"),
-			chasm.WithSearchAttributes(namespaceIDSearchAttribute),
+			chasm.WithSearchAttributes(namespaceIDSearchAttribute, namespaceNameSearchAttribute),
 		),
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmnsreplication "go.temporal.io/server/chasm/lib/namespacereplication"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -21,7 +22,8 @@ const namespaceMutationRepairVisibilityPageSize = 100
 func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
 	ctx context.Context,
 	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
-) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+) (_ *adminservice.ReconcileNamespaceMutationComponentsResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
 	if err := adh.validateNamespaceMutationRepair(ctx, request); err != nil {
 		return nil, err
 	}
@@ -75,6 +77,9 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 	if request.GetCutoffTime() == nil || request.GetCutoffTime().CheckValid() != nil {
 		return serviceerror.NewInvalidArgument("a valid cutoff_time is required")
 	}
+	if request.GetCutoffTime().AsTime().After(adh.timeSource.Now()) {
+		return serviceerror.NewInvalidArgument("cutoff_time cannot be in the server's future")
+	}
 	authoritativePeers, err := validateNamespaceRepairPeerSet(
 		"authoritative_peer_clusters",
 		request.GetAuthoritativePeerClusters(),
@@ -116,7 +121,7 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 	if replicationConfig.GetActiveClusterName() != currentCluster {
 		return serviceerror.NewFailedPrecondition("repair must run on the active namespace cluster")
 	}
-	if replicationConfig.GetState() != enumspb.REPLICATION_STATE_NORMAL {
+	if state := replicationConfig.GetState(); state != enumspb.REPLICATION_STATE_NORMAL && state != enumspb.REPLICATION_STATE_UNSPECIFIED {
 		return serviceerror.NewFailedPrecondition("namespace replication state must be NORMAL")
 	}
 

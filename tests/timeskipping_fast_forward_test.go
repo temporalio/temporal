@@ -122,7 +122,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	})
 	s.NoError(err)
 
-	// Wait for the fast-forward's TimeSkippingTimerTask to fire while the activity is still in
+	// Wait for the fast-forward's TimeSkippingFastForwardTimerTask to fire while the activity is still in
 	// flight. With timer1=29:58 and fast-forward=30m, the regenerated fast-forward task's wall
 	// VisibilityTime is at startTime+2s; the executor hits this within seconds of WT2
 	// closing. B3 not fixed: the executor emits the disable transition regardless of
@@ -193,7 +193,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 //	    TimeSkippingTransitioned event is added on close-tx — both
 //	    closeTransactionHandleTimeSkipping and shouldExecuteTimeSkipping
 //	    short-circuit on IsWorkflowExecutionStatusPaused.
-//	(2) The fast-forward's TimeSkippingTimerTask still fires while paused.
+//	(2) The fast-forward's TimeSkippingFastForwardTimerTask still fires while paused.
 //	    executeTimeSkippingTimerTask only checks IsWorkflowExecutionRunning
 //	    (paused workflows are State=RUNNING), so the disable transition is
 //	    written through pause — analogous to user-timer-fired events firing
@@ -270,7 +270,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	})
 	s.NoError(err)
 
-	// Wait for the fast-forward TimeSkippingTimerTask to fire while paused. The executor
+	// Wait for the fast-forward TimeSkippingFastForwardTimerTask to fire while paused. The executor
 	// writes the disable event regardless of pause status: HasReached becomes true
 	// and Config.Enabled becomes false.
 	s.AwaitTruef(func() bool {
