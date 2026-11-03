@@ -93,13 +93,11 @@ func TestBackendMetricTagDisabledByDefault(t *testing.T) {
 func TestOperationFailedReason(t *testing.T) {
 	t.Parallel()
 
-	// Use the actual start-result conversion for a rejected request.
 	rejected, err := newInvocationResult(nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad input"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, rejected)
 	handlerFailure := rejected.(invocationResultFail).failure
 
-	// Use the same conversion for a synchronous operation failure.
 	failed, err := newInvocationResult(nil, nexus.NewOperationFailedErrorf("insufficient funds"))
 	require.NoError(t, err)
 	require.IsType(t, invocationResultFail{}, failed)

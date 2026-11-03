@@ -504,9 +504,12 @@ func (e taskExecutor) saveStartedResult(node *hsm.Node, operation Operation, res
 	})
 }
 
-// deferredOperationMetric returns the metric emission for op's resulting state, or nil if none is due.
-// Invoke it after commit to avoid double-counting failed transactions. callErr carries the timeout
-// type when too little time remains for a request. failedReason applies only to failed operations.
+// deferredOperationMetric returns the caller-side metric to record for op's resulting state, or nil
+// when nothing should be emitted (e.g. a retryable attempt failure that leaves the operation
+// scheduled/backing-off). The returned closure is invoked by the caller after the write transaction
+// commits so the metric is not double-counted if the commit fails and the task is retried. callErr
+// carries the timeout type for the below-min-request-timeout case.
+// failedReason applies only to failed operations.
 func (e taskExecutor) deferredOperationMetric(
 	op Operation,
 	callErr error,
@@ -550,7 +553,10 @@ func (e taskExecutor) deferredOperationMetric(
 	}
 }
 
-// handleStartOperationError applies the operation outcome or schedules a retry without emitting metrics.
+// handleStartOperationError resolves a failed StartOperation attempt by transitioning the operation
+// to its resulting state: terminally failed/canceled/timed-out, or backing off for a retryable
+// attempt failure. It does not emit metrics; saveResult derives the caller-side metric from the
+// resulting state (see deferredOperationMetric).
 // It returns the metric reason for failed operations; timeouts and retries return no reason.
 func (e taskExecutor) handleStartOperationError(
 	node *hsm.Node,
@@ -607,7 +613,6 @@ func (e taskExecutor) handleStartOperationError(
 	})
 }
 
-// handleNonRetryableStartOperationError fails the operation and returns its metric reason.
 func handleNonRetryableStartOperationError(
 	node *hsm.Node,
 	operation Operation,
