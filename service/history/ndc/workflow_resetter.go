@@ -1077,6 +1077,37 @@ func reapplyEvents(
 					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: %d completion callbacks are already attached but the event contains additional workflow option updates", len(callbacks))
 				}
 			}
+			workflowUpdateOptions := attr.GetWorkflowUpdateOptions()
+			if len(workflowUpdateOptions) > 0 {
+				workflowUpdateOptions = make(
+					[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+					0,
+					len(attr.GetWorkflowUpdateOptions()),
+				)
+			}
+			for _, updateOptions := range attr.GetWorkflowUpdateOptions() {
+				if len(updateOptions.GetAttachedCompletionCallbacks()) > 0 && updateOptions.GetAttachedRequestId() != "" {
+					_, exists, err := workflow.ResolveCallbackAttachmentEventReference(
+						ctx,
+						mutableState,
+						updateOptions.GetUpdateId(),
+						updateOptions.GetAttachedRequestId(),
+					)
+					if err != nil {
+						return reappliedEvents, err
+					}
+					if exists {
+						continue
+					}
+				}
+				workflowUpdateOptions = append(workflowUpdateOptions, updateOptions)
+			}
+			if len(attr.GetWorkflowUpdateOptions()) > 0 && len(workflowUpdateOptions) == 0 &&
+				attr.GetVersioningOverride() == nil && !attr.GetUnsetVersioningOverride() &&
+				len(callbacks) == 0 && attr.GetPriority() == nil &&
+				attr.GetTimeSkippingConfig() == nil && !attr.GetTimeSkippingConfigUpdated() {
+				continue
+			}
 			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 				attr.GetVersioningOverride(),
 				attr.GetUnsetVersioningOverride(),
@@ -1087,7 +1118,7 @@ func reapplyEvents(
 				attr.GetPriority(),
 				attr.GetTimeSkippingConfig(),
 				attr.GetTimeSkippingConfigUpdated(),
-				attr.GetWorkflowUpdateOptions(),
+				workflowUpdateOptions,
 			); err != nil {
 				return reappliedEvents, err
 			}

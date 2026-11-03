@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/metrics"
@@ -199,6 +200,58 @@ type MutableStateWithEffects struct {
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.IsWorkflowExecutionRunning()
+}
+
+// HasCallbackAttachment reports whether callbacks were already attached for requestID.
+func (mse MutableStateWithEffects) HasCallbackAttachment(
+	updateID string,
+	requestID string,
+) (bool, error) {
+	// TODO: Propagate the caller's context through update.EventStore. This lookup is in-memory today,
+	// but CHASM component reads may use persistence once partial loading is supported.
+	_, ok, err := ResolveCallbackAttachmentEventReference(
+		context.Background(),
+		mse.MutableState,
+		updateID,
+		requestID,
+	)
+	return ok, err
+}
+
+// ResolveCallbackAttachmentEventReference reads a callback attachment event reference from
+// legacy mutable state or, if absent there, from a CHASM WorkflowUpdate component.
+func ResolveCallbackAttachmentEventReference(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	updateID string,
+	requestID string,
+) (chasmworkflow.CallbackAttachmentEventReference, bool, error) {
+	// Check legacy state first because older executions may not have a CHASM Workflow root.
+	if requestIDInfo := mutableState.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
+		return chasmworkflow.CallbackAttachmentEventReference{
+			EventType: requestIDInfo.GetEventType(),
+			EventID:   requestIDInfo.GetEventId(),
+		}, true, nil
+	}
+
+	return getCallbackAttachmentEventReferenceFromChasm(ctx, mutableState, updateID, requestID)
+}
+
+func getCallbackAttachmentEventReferenceFromChasm(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	updateID string,
+	requestID string,
+) (chasmworkflow.CallbackAttachmentEventReference, bool, error) {
+	if !mutableState.ChasmEnabled() {
+		return chasmworkflow.CallbackAttachmentEventReference{}, false, nil
+	}
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		return chasmworkflow.CallbackAttachmentEventReference{}, false, err
+	}
+	reference, ok := wf.LookupCallbackAttachmentEventReference(chasmCtx, updateID, requestID)
+	return reference, ok, nil
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:

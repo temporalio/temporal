@@ -110,8 +110,8 @@ type mockEventStore struct {
 		workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 	) (*historypb.HistoryEvent, error)
 
-	CanAddEventFunc  func() bool
-	HasRequestIDFunc func(requestID string) bool
+	CanAddEventFunc           func() bool
+	HasCallbackAttachmentFunc func(updateID, requestID string) (bool, error)
 }
 
 func (m mockEventStore) AddWorkflowExecutionOptionsUpdatedEvent(
@@ -165,9 +165,12 @@ func (m mockEventStore) RejectWorkflowExecutionUpdate(_ string, _ *failurepb.Fai
 	return nil
 }
 
-func (m mockEventStore) HasRequestID(requestID string) bool {
-	if m.HasRequestIDFunc != nil {
-		return m.HasRequestIDFunc(requestID)
+func (m mockEventStore) HasCallbackAttachment(
+	updateID string,
+	requestID string,
+) (bool, error) {
+	if m.HasCallbackAttachmentFunc != nil {
+		return m.HasCallbackAttachmentFunc(updateID, requestID)
 	}
-	return false
+	return false, nil
 }
