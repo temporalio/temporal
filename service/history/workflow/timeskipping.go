@@ -696,18 +696,20 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 	preAccumulatedSkipDuration time.Duration,
 ) {
-	if ms.IsWorkflow() && !ms.ChasmEnabled() {
-		// Workflow executions now re-stamp timer tasks
-		// via chasm for those of chasm nexus operations
-		// via TaskRefresher.refreshTasksForTimeSkipping for the rest
-		return
-	}
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
 		return
 	}
 	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
 		return
+	}
+	if ms.IsWorkflow() {
+		// TaskRefresher runs after this hook and uses the reset status to emit the earliest HSM
+		// timer once with the replicated workflow clock offset.
+		refreshStateMachineTimerTasksForTimeSkipping(ms)
+		if !ms.ChasmEnabled() {
+			return
+		}
 	}
 	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
 	if !ms.IsWorkflow() {
