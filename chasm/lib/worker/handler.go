@@ -31,11 +31,10 @@ func newHandler(dc *dynamicconfig.Collection, namespaceRegistry namespace.Regist
 }
 
 // RecordHeartbeat creates or renews the shared lease for the group.
-// If we receive a heartbeat after the lease expires, we start a new run.
 //
-// When tracking is enabled, success means the lease was saved. When disabled,
-// a valid request returns success without changing state.
-// Invalid requests, namespace lookup failures, and failed updates return an error.
+//   - Heartbeats update the existing open run.
+//   - When the lease expires, we close the current run.
+//   - When we receive a heartbeat later, it reuses the grouping key to create a new run.
 func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (_ *workerstatepb.RecordHeartbeatResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
