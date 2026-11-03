@@ -828,6 +828,37 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// you use mutable state after the releaseFunc has been called, you will be accessing mutable state without holding the lock.
 	// Deep copy what you need.
 
+	// A cold progress cache must not suppress the events produced by this task.
+	// The receiver can fetch any gaps if the serialized state has advanced further.
+	if !taskInfo.IsFirstTask && len(syncStateResult.VersionedTransitionArtifact.EventBatches) == 0 &&
+		taskInfo.FirstEventID >= common.FirstEventID && taskInfo.NextEventID > taskInfo.FirstEventID {
+		var eventBatches []*commonpb.DataBlob
+		var cached bool
+		if c.eventBlobCache != nil {
+			_, eventBatches, _, cached = getEventsFromCache(
+				c.eventBlobCache,
+				taskInfo.WorkflowKey,
+				taskInfo.FirstEventVersion,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+			)
+		}
+		if !cached {
+			eventBatches, err = getEventsBlob(
+				ctx,
+				c.shardID,
+				currentHistoryCopy.BranchToken,
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
+				c.executionManager,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		syncStateResult.VersionedTransitionArtifact.EventBatches = eventBatches
+	}
+
 	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(closeTransferTask)
 	syncStateResult.VersionedTransitionArtifact.IsForceReplication = taskInfo.IsForceReplication
 
