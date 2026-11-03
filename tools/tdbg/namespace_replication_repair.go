@@ -7,20 +7,16 @@ import (
 	"slices"
 	"time"
 
-	namespacepb "go.temporal.io/api/namespace/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
-	namespaceReplicationRepairActionNone                  = "NONE"
-	namespaceReplicationRepairActionCreate                = "CREATE"
-	namespaceReplicationRepairActionApplySource           = "APPLY_SOURCE"
-	namespaceReplicationRepairActionPrepareSource         = "PREPARE_SOURCE"
-	namespaceReplicationRepairActionPrepareSourceAndApply = "PREPARE_SOURCE_AND_APPLY"
+	namespaceReplicationRepairActionNone          = "NONE"
+	namespaceReplicationRepairActionCreate        = "CREATE"
+	namespaceReplicationRepairActionApplySource   = "APPLY_SOURCE"
+	namespaceReplicationRepairActionPrepareSource = "PREPARE_SOURCE"
 
 	namespaceReplicationRepairStatusPlanned   = "PLANNED"
 	namespaceReplicationRepairStatusNoChanges = "NO_CHANGES"
@@ -107,7 +103,7 @@ func planNamespaceReplicationRepair(
 			Cluster:              cluster.Cluster,
 			Presence:             cluster.Presence,
 			CurrentConfigVersion: cluster.ConfigVersion,
-			Action:               namespaceRepairTargetAction(cluster, plan.SourceAction),
+			Action:               namespaceRepairTargetAction(cluster),
 		})
 	}
 	slices.SortFunc(plan.Clusters, func(left, right namespaceReplicationClusterRepairPlan) int {
@@ -162,16 +158,12 @@ func inspectNamespaceRepairVersions(
 
 func namespaceRepairTargetAction(
 	cluster namespaceReplicationClusterVerification,
-	sourceAction string,
 ) string {
 	if cluster.Presence == namespaceReplicationPresenceMissing {
 		return namespaceReplicationRepairActionCreate
 	}
 	if cluster.Presence != namespaceReplicationPresencePresent || cluster.ConfigMatch == namespaceReplicationMatchMatch {
 		return namespaceReplicationRepairActionNone
-	}
-	if sourceAction == namespaceReplicationRepairActionPrepareSource {
-		return namespaceReplicationRepairActionPrepareSourceAndApply
 	}
 	return namespaceReplicationRepairActionApplySource
 }
@@ -187,8 +179,6 @@ const (
 func buildNamespaceReplicationRepairTask(
 	source *adminservice.GetNamespaceResponse,
 	failoverSource *adminservice.GetNamespaceResponse,
-	configVersion int64,
-	failoverVersion int64,
 	dataKeysToIgnore map[string]struct{},
 	dataPolicy namespaceRepairDataPolicy,
 ) (*replicationspb.NamespaceTaskAttributes, error) {
@@ -201,28 +191,17 @@ func buildNamespaceReplicationRepairTask(
 		return nil, fmt.Errorf("project repair failover state: %w", err)
 	}
 
-	task := proto.CloneOf(configProjection)
+	task := configProjection
 	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
-	task.ConfigVersion = configVersion
-	task.FailoverVersion = failoverVersion
-	// The receiver treats a nil BadBinaries field as "leave unchanged". Repair
-	// must send an explicit empty value when the source has cleared all entries.
-	if task.Config.BadBinaries == nil {
-		task.Config.BadBinaries = &namespacepb.BadBinaries{}
-	}
+	task.ConfigVersion = source.GetConfigVersion()
+	task.FailoverVersion = failoverSource.GetFailoverVersion()
 	task.ReplicationConfig.ActiveClusterName = failoverProjection.GetReplicationConfig().GetActiveClusterName()
 	task.ReplicationConfig.State = failoverProjection.GetReplicationConfig().GetState()
-	task.FailoverHistory = make([]*replicationpb.FailoverStatus, 0, len(failoverProjection.GetFailoverHistory()))
-	for _, status := range failoverProjection.GetFailoverHistory() {
-		task.FailoverHistory = append(task.FailoverHistory, proto.CloneOf(status))
-	}
-	if len(task.FailoverHistory) == 0 {
-		task.FailoverHistory = nil
-	}
+	task.FailoverHistory = failoverProjection.GetFailoverHistory()
 
 	switch dataPolicy {
 	case namespaceRepairDataSourceExact:
-		task.Info.Data = cloneNonEmptyStringMap(source.GetInfo().GetData())
+		// The source projection already owns a copy of every data key.
 	case namespaceRepairDataPreserveTargetIgnored:
 		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
 		for key := range dataKeysToIgnore {

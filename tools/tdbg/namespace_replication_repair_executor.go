@@ -217,14 +217,13 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 	task, err := buildNamespaceReplicationRepairTask(
 		frozen,
 		frozen,
-		request.Plan.ProposedSourceConfigVersion,
-		frozen.GetFailoverVersion(),
 		r.verifier.dataKeysToIgnore,
 		namespaceRepairDataSourceExact,
 	)
 	if err != nil {
 		return nil, err
 	}
+	task.ConfigVersion = request.Plan.ProposedSourceConfigVersion
 	prepared, err := r.applyRepairAndReadback(ctx, client, request, task, result)
 	if err != nil {
 		result.Error = err.Error()
@@ -393,8 +392,6 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 	task, err := buildNamespaceReplicationRepairTask(
 		preparedSource,
 		failoverSource,
-		preparedSource.GetConfigVersion(),
-		failoverSource.GetFailoverVersion(),
 		r.verifier.dataKeysToIgnore,
 		dataPolicy,
 	)
@@ -452,7 +449,6 @@ func (r *namespaceReplicationRepairer) applyRepairTask(
 		r.verifier.rpcTimeout,
 		func(rpcCtx context.Context) (*adminservice.ApplyNamespaceMutationResponse, error) {
 			return client.ApplyNamespaceMutation(rpcCtx, &adminservice.ApplyNamespaceMutationRequest{
-				NamespaceTask:        task,
 				SourceCluster:        request.Plan.SourceCluster,
 				NamespaceTaskPayload: payload,
 				Attribution: &adminservice.NamespaceMutationAttribution{
@@ -479,8 +475,7 @@ func acceptableNamespaceRepairOutcome(
 			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE ||
 			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED ||
 			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE
-	case namespaceReplicationRepairActionPrepareSource, namespaceReplicationRepairActionApplySource,
-		namespaceReplicationRepairActionPrepareSourceAndApply:
+	case namespaceReplicationRepairActionPrepareSource, namespaceReplicationRepairActionApplySource:
 		return outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED ||
 			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE
 	default:

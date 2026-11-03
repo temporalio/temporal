@@ -19,7 +19,6 @@ import (
 
 type serviceHandler struct {
 	namespacereplicationpb.UnimplementedNamespaceReplicationServiceServer
-	namespacereplicationpb.UnimplementedNamespaceReplicationRepairServiceServer
 
 	logger         log.Logger
 	repairObserver *namespaceRepairObserver
@@ -237,19 +236,16 @@ func reconcilePendingPeer(
 	authoritativePeers map[string]struct{},
 	verifiedPeers map[string]struct{},
 ) (*namespacereplicationpb.PeerReconciliation, *manualPeerReconciliationObservation, error) {
-	result := &namespacereplicationpb.PeerReconciliation{TargetCell: peer}
 	status := component.GetPeerApply()[peer]
 	if status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING &&
 		status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
-		result.Outcome = namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL
-		return result, nil, nil
+		return peerReconciliationResult(peer, status, namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL), nil, nil
 	}
 
 	basis := namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP
 	if _, configured := authoritativePeers[peer]; configured {
 		if _, verified := verifiedPeers[peer]; !verified {
-			result.Outcome = namespacereplicationpb.PeerReconciliation_OUTCOME_NOT_VERIFIED
-			return result, nil, nil
+			return peerReconciliationResult(peer, status, namespacereplicationpb.PeerReconciliation_OUTCOME_NOT_VERIFIED), nil, nil
 		}
 		basis = namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET
 	}
@@ -264,15 +260,25 @@ func reconcilePendingPeer(
 	if err != nil {
 		return nil, nil, err
 	}
-	result.Outcome = namespacereplicationpb.PeerReconciliation_OUTCOME_RECONCILED
-	result.Basis = basis
 	status = component.GetPeerApply()[peer]
-	return result, &manualPeerReconciliationObservation{
+	return peerReconciliationResult(peer, status, namespacereplicationpb.PeerReconciliation_OUTCOME_RECONCILED), &manualPeerReconciliationObservation{
 		targetCell:   peer,
 		basis:        basis,
 		attemptCount: status.GetAttemptCount(),
 		lastFailure:  status.GetLastFailure().GetMessage(),
 	}, nil
+}
+
+func peerReconciliationResult(
+	peer string,
+	status *namespacereplicationpb.PeerApplyStatus,
+	outcome namespacereplicationpb.PeerReconciliation_Outcome,
+) *namespacereplicationpb.PeerReconciliation {
+	return &namespacereplicationpb.PeerReconciliation{
+		TargetCell: peer,
+		Outcome:    outcome,
+		Basis:      status.GetManualReconciliation().GetBasis(),
+	}
 }
 
 func readReconciliationResult(
@@ -306,10 +312,9 @@ func readReconciliationResult(
 			}
 			peers := slices.Sorted(maps.Keys(component.GetPeerApply()))
 			for _, peer := range peers {
-				response.Peers = append(response.Peers, &namespacereplicationpb.PeerReconciliation{
-					TargetCell: peer,
-					Outcome:    namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL,
-				})
+				response.Peers = append(response.Peers, peerReconciliationResult(
+					peer, component.GetPeerApply()[peer], namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL,
+				))
 			}
 			return &readResult{response: response, closed: true}, nil
 		},

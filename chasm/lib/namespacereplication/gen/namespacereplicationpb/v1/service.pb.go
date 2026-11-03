@@ -296,10 +296,9 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto
 	"\x13verified_peer_cells\x18\t \x03(\tR\x11verifiedPeerCells\x12S\n" +
 	"\x17verified_config_version\x18\n" +
 	" \x01(\v2\x1b.google.protobuf.Int64ValueR\x15verifiedConfigVersion\x12W\n" +
-	"\x19verified_failover_version\x18\v \x01(\v2\x1b.google.protobuf.Int64ValueR\x17verifiedFailoverVersion2\x9d\x02\n" +
+	"\x19verified_failover_version\x18\v \x01(\v2\x1b.google.protobuf.Int64ValueR\x17verifiedFailoverVersion2\xa3\x04\n" +
 	"\x1bNamespaceReplicationService\x12\xfd\x01\n" +
-	"\x18TriggerNamespaceMutation\x12X.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest\x1aY.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_id2\xa9\x02\n" +
-	"!NamespaceReplicationRepairService\x12\x83\x02\n" +
+	"\x18TriggerNamespaceMutation\x12X.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest\x1aY.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_id\x12\x83\x02\n" +
 	"\x1aReconcileNamespaceMutation\x12Z.temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest\x1a[.temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_idBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
 
 var (
@@ -330,9 +329,9 @@ var file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_d
 	5, // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest.verified_config_version:type_name -> google.protobuf.Int64Value
 	5, // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest.verified_failover_version:type_name -> google.protobuf.Int64Value
 	0, // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest
-	2, // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationRepairService.ReconcileNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest
+	2, // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.ReconcileNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest
 	1, // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse
-	6, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationRepairService.ReconcileNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse
+	6, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.ReconcileNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse
 	6, // [6:8] is the sub-list for method output_type
 	4, // [4:6] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -354,7 +353,7 @@ func file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   1,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_depIdxs,

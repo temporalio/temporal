@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -73,7 +74,7 @@ func TestNamespaceReplicationRepairCommandDryRun(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Contains(t, output.String(), namespaceReplicationRepairStatusPlanned)
-	require.Contains(t, output.String(), namespaceReplicationRepairActionPrepareSourceAndApply)
+	require.Contains(t, output.String(), namespaceReplicationRepairActionApplySource)
 }
 
 func TestNamespaceReplicationRepairCommandExecute(t *testing.T) {
@@ -83,11 +84,11 @@ func TestNamespaceReplicationRepairCommandExecute(t *testing.T) {
 	sourceClient := testNamespaceReplicationSourceClient(source)
 	targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
 	sourceClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
-		applyRepairTaskToSnapshot(source, request.GetNamespaceTask())
+		applyRepairTaskToSnapshot(source, decodeNamespaceRepairTask(t, request))
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
 	}
 	targetClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
-		applyRepairTaskToSnapshot(target, request.GetNamespaceTask())
+		applyRepairTaskToSnapshot(target, decodeNamespaceRepairTask(t, request))
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
 	}
 	sourceClient.reconcileNamespaceMutationComponentsFn = func(request *adminservice.ReconcileNamespaceMutationComponentsRequest) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
@@ -305,7 +306,7 @@ func TestPlanNamespaceReplicationRepair(t *testing.T) {
 			wantStatus:        namespaceReplicationRepairStatusPlanned,
 			wantSourceVersion: 11,
 			wantSourceAction:  namespaceReplicationRepairActionPrepareSource,
-			wantTargetAction:  namespaceReplicationRepairActionPrepareSourceAndApply,
+			wantTargetAction:  namespaceReplicationRepairActionApplySource,
 		},
 		{
 			name:              "divergent target ahead prepares max plus one",
@@ -315,7 +316,7 @@ func TestPlanNamespaceReplicationRepair(t *testing.T) {
 			wantStatus:        namespaceReplicationRepairStatusPlanned,
 			wantSourceVersion: 13,
 			wantSourceAction:  namespaceReplicationRepairActionPrepareSource,
-			wantTargetAction:  namespaceReplicationRepairActionPrepareSourceAndApply,
+			wantTargetAction:  namespaceReplicationRepairActionApplySource,
 		},
 		{
 			name:               "overflow blocks",
@@ -396,13 +397,12 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 	target.ReplicationConfig.ActiveClusterName = "cluster-b"
 	target.FailoverVersion = 19
 	target.FailoverHistory[0].FailoverVersion = 19
+	sourceBefore, targetBefore := proto.CloneOf(source), proto.CloneOf(target)
 	ignored := map[string]struct{}{"mcn.local": {}}
 
 	task, err := buildNamespaceReplicationRepairTask(
 		source,
 		target,
-		11,
-		19,
 		ignored,
 		namespaceRepairDataPreserveTargetIgnored,
 	)
@@ -419,8 +419,6 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 	missingTask, err := buildNamespaceReplicationRepairTask(
 		source,
 		source,
-		11,
-		20,
 		ignored,
 		namespaceRepairDataExcludeIgnored,
 	)
@@ -430,13 +428,16 @@ func TestBuildNamespaceReplicationRepairTaskPreservesTargetLocalDataAndFailover(
 	sourceTask, err := buildNamespaceReplicationRepairTask(
 		source,
 		source,
-		12,
-		20,
 		ignored,
 		namespaceRepairDataSourceExact,
 	)
 	require.NoError(t, err)
 	require.Equal(t, source.GetInfo().GetData(), sourceTask.GetInfo().GetData())
+	task.Info.Data["shared"] = "changed task"
+	task.Config.WorkflowExecutionRetentionTtl.Seconds++
+	task.FailoverHistory[0].FailoverVersion++
+	protorequire.ProtoEqual(t, sourceBefore, source)
+	protorequire.ProtoEqual(t, targetBefore, target)
 }
 
 func TestBuildNamespaceReplicationRepairTaskClearsTargetBadBinaries(t *testing.T) {
@@ -457,13 +458,11 @@ func TestBuildNamespaceReplicationRepairTaskClearsTargetBadBinaries(t *testing.T
 	task, err := buildNamespaceReplicationRepairTask(
 		source,
 		target,
-		11,
-		20,
 		nil,
 		namespaceRepairDataPreserveTargetIgnored,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, task.GetConfig().BadBinaries)
+	require.Nil(t, task.GetConfig().BadBinaries)
 	require.Empty(t, task.GetConfig().GetBadBinaries().GetBinaries())
 }
 
@@ -477,13 +476,13 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	targetClient := testNamespaceReplicationTargetClient("cluster-b", target)
 	sourceClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
 		require.Equal(t, adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, request.GetAttribution().GetOrigin())
-		applyRepairTaskToSnapshot(source, request.GetNamespaceTask())
+		applyRepairTaskToSnapshot(source, decodeNamespaceRepairTask(t, request))
 		return &adminservice.ApplyNamespaceMutationResponse{
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE,
 		}, nil
 	}
 	targetClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
-		applyRepairTaskToSnapshot(target, request.GetNamespaceTask())
+		applyRepairTaskToSnapshot(target, decodeNamespaceRepairTask(t, request))
 		return &adminservice.ApplyNamespaceMutationResponse{
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
 		}, nil
@@ -588,7 +587,7 @@ func TestNamespaceReplicationRepairerReconcilesOnlyIndividuallyVerifiedPeers(t *
 	sourceClient := testNamespaceReplicationSourceClient(source)
 	targetBClient := testNamespaceReplicationTargetClient("cluster-b", targetB)
 	targetBClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
-		applyRepairTaskToSnapshot(targetB, request.GetNamespaceTask())
+		applyRepairTaskToSnapshot(targetB, decodeNamespaceRepairTask(t, request))
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
 	}
 	targetCClient := testNamespaceReplicationTargetClient("cluster-c", targetC)
@@ -657,10 +656,11 @@ func TestNamespaceReplicationRepairerCreatesMissingTarget(t *testing.T) {
 				},
 			}
 			targetClient.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
-				require.Equal(t, enumsspb.NAMESPACE_OPERATION_UPDATE, request.GetNamespaceTask().GetNamespaceOperation())
-				require.True(t, proto.Equal(source.GetConfig().GetBadBinaries(), request.GetNamespaceTask().GetConfig().GetBadBinaries()))
+				task := decodeNamespaceRepairTask(t, request)
+				require.Equal(t, enumsspb.NAMESPACE_OPERATION_UPDATE, task.GetNamespaceOperation())
+				require.True(t, proto.Equal(source.GetConfig().GetBadBinaries(), task.GetConfig().GetBadBinaries()))
 				target = testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 0, 0)
-				applyRepairTaskToSnapshot(target, request.GetNamespaceTask())
+				applyRepairTaskToSnapshot(target, task)
 				return &adminservice.ApplyNamespaceMutationResponse{Outcome: outcome}, nil
 			}
 			var reconciliationRequest *adminservice.ReconcileNamespaceMutationComponentsRequest
@@ -798,7 +798,7 @@ func TestRepairRequiresMatchingReadbackAfterStaleSuccess(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			expected := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
-			task, err := buildNamespaceReplicationRepairTask(expected, expected, 11, 20, nil, namespaceRepairDataSourceExact)
+			task, err := buildNamespaceReplicationRepairTask(expected, expected, nil, namespaceRepairDataSourceExact)
 			require.NoError(t, err)
 			actual := proto.CloneOf(expected)
 			if test.mutate != nil {
@@ -867,8 +867,9 @@ func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
 			applied := false
 			client.applyNamespaceMutationFn = func(request *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
 				applied = true
-				require.Equal(t, "after confirmation", request.GetNamespaceTask().GetInfo().GetData()["local-key"])
-				applyRepairTaskToSnapshot(target, request.GetNamespaceTask())
+				task := decodeNamespaceRepairTask(t, request)
+				require.Equal(t, "after confirmation", task.GetInfo().GetData()["local-key"])
+				applyRepairTaskToSnapshot(target, task)
 				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
 			}
 			verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{"cluster-b-address": client})
@@ -887,6 +888,15 @@ func TestRepairRefreshesTargetBeforeWriting(t *testing.T) {
 			}
 		})
 	}
+}
+
+func decodeNamespaceRepairTask(t *testing.T, request *adminservice.ApplyNamespaceMutationRequest) *replicationspb.NamespaceTaskAttributes {
+	t.Helper()
+	require.Nil(t, request.GetNamespaceTask(), "repair sends task content only in namespace_task_payload")
+	require.NotEmpty(t, request.GetNamespaceTaskPayload())
+	task := &replicationspb.NamespaceTaskAttributes{}
+	require.NoError(t, proto.Unmarshal(request.GetNamespaceTaskPayload(), task))
+	return task
 }
 
 func applyRepairTaskToSnapshot(

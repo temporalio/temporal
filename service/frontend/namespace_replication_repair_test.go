@@ -78,7 +78,7 @@ func TestNamespaceRepairReconcilesConcurrentlyAndPreservesPartialResults(t *test
 		}
 		return &namespacereplicationpb.ReconcileNamespaceMutationResponse{ComponentEligible: true, ComponentCompleted: true}, nil
 	}}
-	handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata, clusterMetadata: clusters, chasmVisibilityManager: visibility, chasmNamespaceReplicationRepairClient: client}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata, clusterMetadata: clusters, chasmVisibilityManager: visibility, chasmNsReplClient: client}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	type result struct {
@@ -144,12 +144,12 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	repairClient := &testNamespaceReplicationRepairClient{}
 	handler := &AdminHandler{
 		// This frontend clock trails the snapshot's frontend; versions fence coverage.
-		timeSource:                            clock.NewEventTimeSource(),
-		logger:                                log.NewTestLogger(),
-		persistenceMetadataManager:            metadataManager,
-		clusterMetadata:                       clusterMetadata,
-		chasmVisibilityManager:                visibilityManager,
-		chasmNamespaceReplicationRepairClient: repairClient,
+		timeSource:                 clock.NewEventTimeSource(),
+		logger:                     log.NewTestLogger(),
+		persistenceMetadataManager: metadataManager,
+		clusterMetadata:            clusterMetadata,
+		chasmVisibilityManager:     visibilityManager,
+		chasmNsReplClient:          repairClient,
 	}
 
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cluster-a").Times(2)
@@ -267,7 +267,7 @@ func TestNamespaceRepairRejectsChangedSourceVersions(t *testing.T) {
 
 func TestReconcileNamespaceMutationExecutionReportsPerComponentError(t *testing.T) {
 	repairClient := &testNamespaceReplicationRepairClient{err: errors.New("history unavailable")}
-	handler := &AdminHandler{chasmNamespaceReplicationRepairClient: repairClient}
+	handler := &AdminHandler{chasmNsReplClient: repairClient}
 	result := handler.reconcileNamespaceMutationExecution(
 		context.Background(),
 		&adminservice.ReconcileNamespaceMutationComponentsRequest{
@@ -285,7 +285,7 @@ func TestReconcileNamespaceMutationExecutionReportsPerComponentError(t *testing.
 }
 
 type testNamespaceReplicationRepairClient struct {
-	namespacereplicationpb.NamespaceReplicationRepairServiceClient
+	namespacereplicationpb.NamespaceReplicationServiceClient
 	requests []*namespacereplicationpb.ReconcileNamespaceMutationRequest
 	response *namespacereplicationpb.ReconcileNamespaceMutationResponse
 	err      error

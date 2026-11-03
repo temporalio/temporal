@@ -451,6 +451,7 @@ func TestReconcileNamespaceMutationPreservesAttemptsAndCompletes(t *testing.T) {
 			require.Len(t, retryResponse.GetPeers(), 3)
 			for _, peer := range retryResponse.GetPeers() {
 				require.Equal(t, namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL, peer.GetOutcome())
+				require.Equal(t, component.GetPeerApply()[peer.GetTargetCell()].GetManualReconciliation().GetBasis(), peer.GetBasis())
 			}
 
 			completions := capture.SnapshotMetric(metrics.NamespaceReplicationShadowCompletionOutcomes.Name())

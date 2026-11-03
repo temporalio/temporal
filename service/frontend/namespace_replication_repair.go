@@ -157,7 +157,7 @@ func (adh *AdminHandler) reconcileNamespaceMutationExecution(
 		BusinessId: businessID,
 		RunId:      runID,
 	}
-	response, err := adh.chasmNamespaceReplicationRepairClient.ReconcileNamespaceMutation(
+	response, err := adh.chasmNsReplClient.ReconcileNamespaceMutation(
 		ctx,
 		&namespacereplicationpb.ReconcileNamespaceMutationRequest{
 			SystemNamespaceId:       primitives.SystemNamespaceID,
