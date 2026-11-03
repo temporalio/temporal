@@ -94,6 +94,8 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 
 // recordHeartbeat adds new workers and renews the shared lease.
 // Workers omitted from the batch remain members.
+// TODO: Once heartbeat ordering is supported, treat workers missing from
+// the full heartbeat list as gone and reschedule their activities.
 // TODO: Handle ordering of heartbeats so that older heartbeats cannot undo newer
 // activity updates, and retried heartbeats are not applied twice.
 func (g *WorkerGroup) recordHeartbeat(
@@ -129,7 +131,7 @@ func (g *WorkerGroup) recordHeartbeat(
 func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
 	for _, heartbeat := range heartbeats {
 		key := heartbeat.GetWorkerInstanceKey()
-		// Keep existing workers, including duplicate keys within this batch.
+		// Reuse existing worker components so their state is preserved across heartbeats.
 		if _, exists := g.Workers[key]; exists {
 			continue
 		}
