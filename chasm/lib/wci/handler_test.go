@@ -290,6 +290,31 @@ func TestE2E_CreateFromMigrationStateValidatesSpec(t *testing.T) {
 	require.ErrorAs(t, e.prepareSpecs(testToken, time.Minute, specs), &invalid, "two groups claim the same task type")
 }
 
+func TestE2E_SharedWorkerSetRejected(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	e.compute.remote = []string{"gcp-cloud-run"}
+	pool, err := sdk.PreferProtoDataConverter.ToPayload(map[string]string{"project": "p", "region": "r", "worker_pool": "pool"})
+	require.NoError(t, err)
+	specs := map[string]*wcipb.ScalingGroupSpec{}
+	for id, taskType := range map[string]enumspb.TaskQueueType{"g": enumspb.TASK_QUEUE_TYPE_WORKFLOW, "h": enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		specs[id] = &wcipb.ScalingGroupSpec{
+			TaskTypes: []enumspb.TaskQueueType{taskType},
+			Compute:   &wcipb.ComputeProviderSpec{ProviderType: "gcp-cloud-run", Config: pool},
+		}
+	}
+	upserts := map[string]*wcipb.ScalingGroupSpecUpdate{}
+	for id, spec := range specs {
+		upserts[id] = &wcipb.ScalingGroupSpecUpdate{Spec: spec}
+	}
+
+	var invalid *serviceerror.InvalidArgument
+	_, err = e.update(upserts)
+	require.ErrorAs(t, err, &invalid)
+	require.ErrorContains(t, err, "both resize gcp-cloud-run worker set p/r/pool")
+	require.Empty(t, e.compute.calls, "rejected before any provider call")
+	require.ErrorAs(t, e.prepareSpecs(testToken, time.Minute, specs), &invalid, "the handover is declined")
+}
+
 func TestE2E_UpdateValidatesOnlyChangedCompute(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
