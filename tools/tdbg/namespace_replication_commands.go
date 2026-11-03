@@ -170,14 +170,15 @@ func printNamespaceReplicationVerification(
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		c.App.Writer,
 		"Status: %s\nNamespace: %s (%s)\nSource cluster: %s\n",
 		result.Status,
 		result.NamespaceName,
 		result.NamespaceID,
 		result.SourceCluster,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	if result.StatusDetail != "" {

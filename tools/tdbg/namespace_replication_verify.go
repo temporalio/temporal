@@ -258,11 +258,7 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 	result.ExpectedClusters = expectedClusters
-	if err := validateNamespaceReplicationAddressOverrides(
-		expectedClusters,
-		result.SourceCluster,
-		request.AddressOverrides,
-	); err != nil {
+	if err := validateNamespaceReplicationAddressOverrides(expectedClusters, result.SourceCluster, request.AddressOverrides); err != nil {
 		blockNamespaceReplicationVerification(result, err)
 		return observation, nil
 	}
@@ -474,15 +470,22 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	)
 	// A topology update can initialize history at the source without advancing the
 	// failover version. Existing peers only accept history with a newer failover.
-	if source.GetFailoverVersion() == byID.GetFailoverVersion() &&
-		len(source.GetFailoverHistory()) == 1 && len(byID.GetFailoverHistory()) == 0 &&
-		source.GetFailoverHistory()[0].GetFailoverVersion() == source.GetFailoverVersion() &&
-		proto.Equal(sourceFailoverProjection.GetReplicationConfig(), failoverProjection.GetReplicationConfig()) {
-		result.initialHistoryMissing = true
+	result.initialHistoryMissing = namespaceReplicationInitialHistoryMissing(source, byID, sourceFailoverProjection, failoverProjection)
+	if result.initialHistoryMissing {
 		result.Warnings = []string{namespaceReplicationWarningInitialHistory}
 	}
 	result.Error = ""
 	return result, byID
+}
+
+func namespaceReplicationInitialHistoryMissing(
+	source, target *adminservice.GetNamespaceResponse,
+	sourceFailover, targetFailover *replicationspb.NamespaceTaskAttributes,
+) bool {
+	return source.GetFailoverVersion() == target.GetFailoverVersion() &&
+		len(source.GetFailoverHistory()) == 1 && len(target.GetFailoverHistory()) == 0 &&
+		source.GetFailoverHistory()[0].GetFailoverVersion() == source.GetFailoverVersion() &&
+		proto.Equal(sourceFailover.GetReplicationConfig(), targetFailover.GetReplicationConfig())
 }
 
 func getNamespace(
