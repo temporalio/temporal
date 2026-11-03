@@ -688,7 +688,7 @@ func TestE2E_ActivateCommitsAndReplaysOnce(t *testing.T) {
 	require.Equal(t, 2, fake.taskAddCalls, "queued task-adds replay in the activating transaction")
 	w, _ := e.live(t)
 	require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status)
-	require.NotNil(t, w.NextPollTime, "the cadence starts at activation")
+	require.Equal(t, e.clock.Now(), w.NextPollTime.AsTime(), "polls at once to catch task-adds lost while frozen")
 
 	require.NoError(t, e.activate(testToken, 2), "a retried activation is a no-op")
 	require.Equal(t, 2, fake.taskAddCalls)
@@ -785,8 +785,6 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	_, err := e.update(groupUpsert("test-invoke"))
 	require.NoError(t, err)
-	w, _ := e.live(t)
-	nextPoll := w.NextPollTime.AsTime()
 
 	require.NoError(t, e.migrateToWorkflow())
 	require.NoError(t, e.migrateToWorkflow(), "repeating while migrating is a no-op")
@@ -804,14 +802,14 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 	require.NoError(t, sdk.PreferProtoDataConverter.FromPayloads(start.GetInput(), &args))
 	require.Equal(t, "dep", args.DeploymentName)
 	require.Contains(t, args.State.Spec.ScalingGroupSpecs, "g")
-	require.Equal(t, nextPoll, args.State.NextPollTime.AsTime(), "the poll cadence carries over")
+	require.Equal(t, e.clock.Now(), args.State.NextPollTime.AsTime(), "the workflow polls at once after activation")
 
 	require.NotNil(t, args.PendingMigration, "the workflow starts pending")
 	require.Equal(t, args.PendingMigration.Token, start.GetRequestId(), "the token de-duplicates a retried start")
 	require.Len(t, e.history.updates, 1)
 	require.Equal(t, iface.UpdateActivateMigration, e.history.updates[0].GetInput().GetName())
 
-	w, _ = e.live(t)
+	w, _ := e.live(t)
 	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
 	require.ErrorIs(t, e.recordTaskAdd(), ErrClosed, "the router falls back to the workflow")
 	_, err = e.describe()
@@ -843,6 +841,7 @@ func TestE2E_MigrateToWorkflowAborts(t *testing.T) {
 			w, _ := e.live(t)
 			require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status, "CHASM keeps the WCI")
 			require.Empty(t, w.MigrationToken)
+			require.Equal(t, e.clock.Now(), w.NextPollTime.AsTime(), "polls at once to catch task-adds rejected while migrating")
 			require.NoError(t, e.recordTaskAdd(), "scaling resumes")
 		})
 	}

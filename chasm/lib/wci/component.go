@@ -137,8 +137,8 @@ func NewWorkerControllerInstanceFromMigration(
 	return w
 }
 
-// armTimersFromState resumes the poll and validation cadence from state; past-due deadlines fire now.
-func (w *WorkerControllerInstance) armTimersFromState(ctx chasm.MutableContext) {
+// armTimersAfterHandover polls now, to catch task-adds lost while frozen, and resumes the validation cadence.
+func (w *WorkerControllerInstance) armTimersAfterHandover(ctx chasm.MutableContext) {
 	now := ctx.Now(w)
 	notBefore := func(t *timestamppb.Timestamp, fallback time.Time) time.Time {
 		if t == nil {
@@ -149,7 +149,7 @@ func (w *WorkerControllerInstance) armTimersFromState(ctx chasm.MutableContext) 
 		}
 		return now
 	}
-	w.armPollTimer(ctx, notBefore(w.NextPollTime, now.Add(maxPollInterval)))
+	w.armPollTimer(ctx, now)
 	w.armValidationTimer(ctx, notBefore(w.NextValidationTime, now.Add(validationInterval)))
 }
 
