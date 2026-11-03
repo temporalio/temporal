@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,14 +11,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	sdklog "go.temporal.io/sdk/log"
-	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/sdk"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -94,74 +86,10 @@ func newCatchupArgs(tb testing.TB, gap time.Duration) *schedulespb.StartSchedule
 	}
 }
 
-// runCatchupFirstTask runs only the first task after continue-as-new: catch up
-// the gap, start the action, continue-as-new.
-func runCatchupFirstTask(tb testing.TB, ts *testsuite.WorkflowTestSuite, gap time.Duration) {
-	env := ts.NewTestWorkflowEnvironment()
-	env.SetStartTime(baseStartTime)
-	mockEverySecondActivities(env, &everySecondCounters{runEndTimes: map[string]time.Time{}})
-	env.ExecuteWorkflow(SchedulerWorkflow, newCatchupArgs(tb, gap))
-	require.True(tb, env.IsWorkflowCompleted())
-	require.True(tb, workflow.IsContinueAsNewError(env.GetWorkflowError()), "%v", env.GetWorkflowError())
-}
-
-// prodLogger is the per-namespace worker's SDK logger: the server's zap JSON
-// logger (no sampling, caller info on) behind log.NewSdkLogger. Output goes to
-// a file, a lower bound on a pod's stdout pipe.
-func prodLogger(tb testing.TB) sdklog.Logger {
-	path := filepath.Join(tb.TempDir(), "worker.log")
-	return log.NewSdkLogger(log.NewZapLogger(log.BuildZapLogger(log.Config{Level: "info", Format: "json", OutputFile: path})))
-}
-
-// prodMetrics is the per-namespace worker's SDK metrics handler: the server's
-// OpenTelemetry/Prometheus handler behind sdk.NewMetricsHandler.
-func prodMetrics(tb testing.TB) sdkclient.MetricsHandler {
-	h, err := metrics.MetricsHandlerFromConfig(log.NewNoopLogger(), &metrics.Config{
-		Prometheus: &metrics.PrometheusConfig{Framework: metrics.FrameworkOpentelemetry, ListenAddress: "127.0.0.1:0"},
-	})
-	require.NoError(tb, err)
-	tb.Cleanup(func() { h.Stop(log.NewNoopLogger()) })
-	return sdk.NewMetricsHandler(h)
-}
-
+// withOneIteration makes every run continue-as-new after one iteration, so a test sees
+// each chunk of a catch-up as its own run.
 func withOneIteration(tb testing.TB) {
 	prev := CurrentTweakablePolicies.IterationsBeforeContinueAsNew
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
 	tb.Cleanup(func() { CurrentTweakablePolicies.IterationsBeforeContinueAsNew = prev })
-}
-
-// BenchmarkCatchupFirstTask attributes the cost of the first task after a stall
-// to the production logger and metrics handler. Items are seconds of gap; all
-// but the first MaxBufferSize take the "Buffer too large" log+metric path.
-//
-//	go test ./service/worker/scheduler -run x -bench CatchupFirstTask -benchtime 5x
-func BenchmarkCatchupFirstTask(b *testing.B) {
-	withOneIteration(b)
-	const gap = 4*time.Hour + 24*time.Minute // first production failure
-	for _, tc := range []struct {
-		name          string
-		prodLogging   bool
-		prodMetricsOn bool
-	}{
-		{name: "noop-log/noop-metrics"},
-		{name: "prod-log/noop-metrics", prodLogging: true},
-		{name: "noop-log/prod-metrics", prodMetricsOn: true},
-		{name: "prod-log/prod-metrics", prodLogging: true, prodMetricsOn: true},
-	} {
-		b.Run(tc.name, func(b *testing.B) {
-			var ts testsuite.WorkflowTestSuite
-			if tc.prodLogging {
-				ts.SetLogger(prodLogger(b))
-			} else {
-				ts.SetLogger(log.NewSdkLogger(log.NewNoopLogger()))
-			}
-			if tc.prodMetricsOn {
-				ts.SetMetricsHandler(prodMetrics(b))
-			}
-			for b.Loop() {
-				runCatchupFirstTask(b, &ts, gap)
-			}
-			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/gap.Seconds(), "ns/item")
-		})
-	}
 }
