@@ -3930,11 +3930,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`Enable forwarding worker heartbeats from Frontend to the worker state machine.`,
 	)
-	WorkerStateTrackingLeaseDuration = NewNamespaceDurationSetting(
-		"worker.stateTrackingLeaseDuration",
+	MinWorkerHeartbeatTimeout = NewNamespaceDurationSetting(
+		"worker.minHeartbeatTimeout",
 		// Leave slack beyond the SDK's default one-minute heartbeat interval.
 		2*time.Minute,
-		`Shared lease duration for a worker group.`,
+		`Minimum allowed worker heartbeat timeout.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are

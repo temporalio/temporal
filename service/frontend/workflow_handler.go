@@ -7734,18 +7734,15 @@ func (wh *WorkflowHandler) recordDurableWorkerHeartbeats(ctx context.Context, na
 	groups := make(map[string][]*workerpb.WorkerHeartbeat)
 	for _, heartbeat := range request.GetWorkerHeartbeat() {
 		groupingKey := heartbeat.GetHostInfo().GetWorkerGroupingKey()
-		// Older SDKs without a grouping key retain metadata-only heartbeat behavior.
+		// Handle older SDKs that don't set a grouping key.
 		if groupingKey != "" {
 			groups[groupingKey] = append(groups[groupingKey], heartbeat)
 		}
 	}
 	for groupingKey, heartbeats := range groups {
-		groupRequest := common.CloneProto(request)
-		groupRequest.WorkerHeartbeat = heartbeats
-		groupRequest.ResourceId = groupingKey
 		_, err := wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
 			NamespaceId:       namespaceID,
-			FrontendRequest:   groupRequest,
+			FrontendRequest:   newLivenessHeartbeatRequest(request, groupingKey, heartbeats),
 			WorkerGroupingKey: groupingKey,
 		})
 		if err != nil {
@@ -7753,6 +7750,27 @@ func (wh *WorkflowHandler) recordDurableWorkerHeartbeats(ctx context.Context, na
 		}
 	}
 	return nil
+}
+
+// Only liveness is tracked for now. Omit worker metadata to reduce copying and RPC size.
+func newLivenessHeartbeatRequest(
+	request *workflowservice.RecordWorkerHeartbeatRequest,
+	groupingKey string,
+	heartbeats []*workerpb.WorkerHeartbeat,
+) *workflowservice.RecordWorkerHeartbeatRequest {
+	groupRequest := &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace:       request.GetNamespace(),
+		Identity:        request.GetIdentity(),
+		ResourceId:      groupingKey,
+		WorkerHeartbeat: make([]*workerpb.WorkerHeartbeat, 0, len(heartbeats)),
+	}
+	for _, heartbeat := range heartbeats {
+		groupRequest.WorkerHeartbeat = append(groupRequest.WorkerHeartbeat, &workerpb.WorkerHeartbeat{
+			WorkerInstanceKey: heartbeat.GetWorkerInstanceKey(),
+			HostInfo:          &workerpb.WorkerHostInfo{WorkerGroupingKey: groupingKey},
+		})
+	}
+	return groupRequest
 }
 
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.

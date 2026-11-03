@@ -15,23 +15,27 @@ import (
 type handler struct {
 	workerstatepb.UnimplementedWorkerServiceServer
 
-	namespaceRegistry namespace.Registry
-	enabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	leaseDuration     dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	logger            log.Logger
+	namespaceRegistry   namespace.Registry
+	enabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	minHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	logger              log.Logger
 }
 
 func newHandler(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry, logger log.Logger) *handler {
 	return &handler{
-		namespaceRegistry: namespaceRegistry,
-		enabled:           dynamicconfig.EnableDurableWorkerHeartbeats.Get(dc),
-		leaseDuration:     dynamicconfig.WorkerStateTrackingLeaseDuration.Get(dc),
-		logger:            logger,
+		namespaceRegistry:   namespaceRegistry,
+		enabled:             dynamicconfig.EnableDurableWorkerHeartbeats.Get(dc),
+		minHeartbeatTimeout: dynamicconfig.MinWorkerHeartbeatTimeout.Get(dc),
+		logger:              logger,
 	}
 }
 
-// RecordHeartbeat creates or renews the group addressed by the SDK grouping key.
-// CHASM updates an open run or creates a new run if the previous lease expired.
+// RecordHeartbeat creates or renews the shared lease for the group.
+// If we receive a heartbeat after the lease expires, we start a new run.
+//
+// When tracking is enabled, success means the lease was saved. When disabled,
+// a valid request returns success without changing state.
+// Invalid requests, namespace lookup failures, and failed updates return an error.
 func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (_ *workerstatepb.RecordHeartbeatResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
@@ -43,9 +47,11 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		return nil, err
 	}
 	if !h.enabled(ns.Name().String()) {
-		return nil, serviceerror.NewFailedPrecondition("durable worker heartbeats are disabled")
+		return &workerstatepb.RecordHeartbeatResponse{FrontendResponse: &workflowservice.RecordWorkerHeartbeatResponse{}}, nil
 	}
-	leaseDuration := h.leaseDuration(ns.Name().String())
+	// TODO: Read the heartbeat timeout from the request once SDKs send it,
+	// and enforce the minimum allowed timeout. Use the minimum for now.
+	heartbeatTimeout := h.minHeartbeatTimeout(ns.Name().String())
 	var createdGroup *WorkerGroup
 	// TODO: Once activity binding tracking is added, avoid creating or renewing
 	// runs for groups with no tracked activities.
@@ -53,17 +59,25 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetWorkerGroupingKey()},
 		func(mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (*WorkerGroup, error) {
-			var err error
-			createdGroup, err = newWorkerGroup(mctx, request.GetWorkerGroupingKey(), request.GetFrontendRequest().GetWorkerHeartbeat(), leaseDuration)
-			return createdGroup, err
+			group, err := newWorkerGroup(request.GetWorkerGroupingKey())
+			if err != nil {
+				return nil, err
+			}
+			// TODO: Apply this heartbeat only in the update callback once CHASM
+			// saves children added there when starting a new execution. Then remove
+			// the createdGroup check below.
+			if err := group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), heartbeatTimeout); err != nil {
+				return nil, err
+			}
+			createdGroup = group
+			return group, nil
 		},
 		func(group *WorkerGroup, mctx chasm.MutableContext, request *workerstatepb.RecordHeartbeatRequest) (chasm.NoValue, error) {
-			// CHASM also invokes this callback for a newly created component.
-			// Its constructor already applied the first heartbeat and expiry task.
+			// The first heartbeat was already applied in startFn.
 			if group == createdGroup {
 				return nil, nil
 			}
-			return nil, group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), leaseDuration)
+			return nil, group.recordHeartbeat(mctx, request.GetFrontendRequest().GetWorkerHeartbeat(), heartbeatTimeout)
 		},
 		req,
 		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),

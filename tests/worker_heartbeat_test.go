@@ -21,8 +21,8 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// TestWorkerHeartbeatLifecycle exercises the public heartbeat path and reads
-// persisted state through the admin API, rather than accessing the live CHASM engine.
+// TestWorkerHeartbeatLifecycle verifies that workers with the same grouping key
+// share a lease and that later heartbeats renew it.
 func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	t.Parallel()
 	env := newWorkerHeartbeatEnv(t, true, time.Minute)
@@ -34,22 +34,29 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 
 	// Workers sharing a grouping key renew one lease; mixed groups get separate runs.
 	sendWorkerHeartbeats(t, env, first, second, other)
-	group, ctx := readWorkerGroup(t, env, groupKey, "")
+	group, ctx, err := fetchWorkerGroup(t.Context(), env, groupKey, "")
+	require.NoError(t, err)
+	require.Len(t, group.Workers, 2)
+	require.Contains(t, group.Workers, first.WorkerInstanceKey)
+	require.Contains(t, group.Workers, second.WorkerInstanceKey)
 	require.Equal(t, groupKey, group.WorkerGroupingKey)
-	otherGroup, _ := readWorkerGroup(t, env, otherGroupKey, "")
+	otherGroup, _, err := fetchWorkerGroup(t.Context(), env, otherGroupKey, "")
+	require.NoError(t, err)
 	require.Equal(t, otherGroupKey, otherGroup.WorkerGroupingKey)
+	require.Contains(t, otherGroup.Workers, other.WorkerInstanceKey)
 	firstRunID := ctx.ExecutionKey().RunID
 	firstDeadline := group.LeaseExpirationTime.AsTime()
 
 	// A heartbeat from one member renews the same shared lease.
 	first.WorkerIdentity = "updated-worker"
 	sendWorkerHeartbeats(t, env, first)
-	group, ctx = readWorkerGroup(t, env, groupKey, "")
+	group, ctx, err = fetchWorkerGroup(t.Context(), env, groupKey, "")
+	require.NoError(t, err)
 	require.Equal(t, firstRunID, ctx.ExecutionKey().RunID)
 
 	require.True(t, group.LeaseExpirationTime.AsTime().After(firstDeadline))
 
-	// Metadata is still updated in the existing in-memory registry.
+	// Workers are still tracked in the in-memory registry.
 	response, err := env.FrontendClient().DescribeWorker(t.Context(), &workflowservice.DescribeWorkerRequest{
 		Namespace: env.Namespace().String(), WorkerInstanceKey: first.WorkerInstanceKey,
 	})
@@ -57,60 +64,60 @@ func TestWorkerHeartbeatLifecycle(t *testing.T) {
 	require.Equal(t, first.WorkerIdentity, response.GetWorkerInfo().GetWorkerHeartbeat().GetWorkerIdentity())
 }
 
-// TestWorkerHeartbeatExpiryAndReconnect verifies that the real expiry task closes
-// the run and a later heartbeat starts a fresh run without changing SDK keys.
+// TestWorkerHeartbeatExpiryAndReconnect verifies that the current run closes when
+// heartbeats stop and that a later heartbeat starts a new run.
 func TestWorkerHeartbeatExpiryAndReconnect(t *testing.T) {
 	t.Parallel()
 	env := newWorkerHeartbeatEnv(t, true, 2*time.Second)
 	groupKey := env.Tv().Any().String()
 	heartbeat := workerHeartbeatForGroup(env.Tv().Any().String(), groupKey)
 	sendWorkerHeartbeats(t, env, heartbeat)
-	_, ctx := readWorkerGroup(t, env, groupKey, "")
+	_, ctx, err := fetchWorkerGroup(t.Context(), env, groupKey, "")
+	require.NoError(t, err)
 	oldRunID := ctx.ExecutionKey().RunID
 
-	// Stop heartbeats and wait for the persisted run to close.
+	// With no further heartbeats, the current run closes when the lease expires.
 	await.Require(t.Context(), t, func(t *await.T) {
 		group, _, err := fetchWorkerGroup(t.Context(), env, groupKey, oldRunID)
 		require.NoError(t, err)
 		require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_INACTIVE, group.Status)
 	}, 15*time.Second, 100*time.Millisecond)
 
-	// Reuse both SDK keys; only the internal Run ID changes.
+	// Send another heartbeat with the same grouping key and worker instance key.
 	sendWorkerHeartbeats(t, env, heartbeat)
-	group, ctx := readWorkerGroup(t, env, groupKey, "")
+	group, ctx, err := fetchWorkerGroup(t.Context(), env, groupKey, "")
+	require.NoError(t, err)
 	require.NotEqual(t, oldRunID, ctx.ExecutionKey().RunID)
 	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_ACTIVE, group.Status)
-	oldGroup, _ := readWorkerGroup(t, env, groupKey, oldRunID)
+	oldGroup, _, err := fetchWorkerGroup(t.Context(), env, groupKey, oldRunID)
+	require.NoError(t, err)
 	require.Equal(t, workerstatepb.WORKER_GROUP_STATUS_INACTIVE, oldGroup.Status)
 }
 
-func TestWorkerHeartbeatMetadataOnly(t *testing.T) {
+func TestWorkerHeartbeatWithoutDurableTracking(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name     string
-		enabled  bool
-		groupKey string
+		name       string
+		enabled    bool
+		groupKey   string
+		businessID string
 	}{
-		{name: "durable tracking disabled", groupKey: "group"},
-		{name: "legacy SDK without grouping key", enabled: true},
+		{name: "durable tracking disabled", enabled: false, groupKey: "group", businessID: "group"},
+		{name: "missing grouping key", enabled: true, businessID: "worker"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newWorkerHeartbeatEnv(t, tc.enabled, time.Minute)
-			heartbeat := workerHeartbeatForGroup(env.Tv().Any().String(), tc.groupKey)
+			heartbeat := workerHeartbeatForGroup("worker", tc.groupKey)
 			sendWorkerHeartbeats(t, env, heartbeat)
 
-			// The existing metadata registry continues working in both cases.
+			// Workers are still tracked in the in-memory registry in both cases.
 			_, err := env.FrontendClient().DescribeWorker(t.Context(), &workflowservice.DescribeWorkerRequest{
 				Namespace: env.Namespace().String(), WorkerInstanceKey: heartbeat.WorkerInstanceKey,
 			})
 			require.NoError(t, err)
-			businessID := tc.groupKey
-			if businessID == "" {
-				businessID = heartbeat.WorkerInstanceKey
-			}
 			_, err = env.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
-				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: businessID}, Archetype: chasmworker.Archetype,
+				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: tc.businessID}, Archetype: chasmworker.Archetype,
 			})
 			var notFound *serviceerror.NotFound
 			require.ErrorAs(t, err, &notFound)
@@ -118,7 +125,7 @@ func TestWorkerHeartbeatMetadataOnly(t *testing.T) {
 	}
 }
 
-func newWorkerHeartbeatEnv(t *testing.T, enabled bool, lease time.Duration) *testcore.TestEnv {
+func newWorkerHeartbeatEnv(t *testing.T, enabled bool, heartbeatTimeout time.Duration) *testcore.TestEnv {
 	t.Helper()
 	return testcore.NewEnv(t,
 		testcore.WithDedicatedCluster(),
@@ -126,7 +133,9 @@ func newWorkerHeartbeatEnv(t *testing.T, enabled bool, lease time.Duration) *tes
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDurableWorkerHeartbeats, enabled),
-		testcore.WithDynamicConfig(dynamicconfig.WorkerStateTrackingLeaseDuration, lease),
+		testcore.WithDynamicConfig(dynamicconfig.MinWorkerHeartbeatTimeout, heartbeatTimeout),
+		testcore.WithDynamicConfig(dynamicconfig.TimerProcessorMaxPollInterval, 100*time.Millisecond),
+		testcore.WithDynamicConfig(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.0),
 	)
 }
 
@@ -140,13 +149,6 @@ func sendWorkerHeartbeats(t *testing.T, env *testcore.TestEnv, heartbeats ...*wo
 		Namespace: env.Namespace().String(), WorkerHeartbeat: heartbeats,
 	})
 	require.NoError(t, err)
-}
-
-func readWorkerGroup(t testing.TB, env *testcore.TestEnv, key, runID string) (*chasmworker.WorkerGroup, chasm.Context) {
-	t.Helper()
-	group, ctx, err := fetchWorkerGroup(t.Context(), env, key, runID)
-	require.NoError(t, err)
-	return group, ctx
 }
 
 func fetchWorkerGroup(ctx context.Context, env *testcore.TestEnv, key, runID string) (*chasmworker.WorkerGroup, chasm.Context, error) {
