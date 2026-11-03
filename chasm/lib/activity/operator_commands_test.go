@@ -655,42 +655,68 @@ func TestShouldRecalculateCurrentRetryInterval(t *testing.T) {
 	}
 }
 
-// TestUpdateActivityExecutionOptions_RestoreOriginal_RejectsMissingOriginalOptions mimics an
-// activity persisted before original_options existed (e.g. created by a binary predating this
-// field's introduction). Restoring such an activity's options has nothing valid to fall back to
-// and must be rejected rather than silently wiping TaskQueue and both close/start timeouts.
+// TestUpdateActivityExecutionOptions_RestoreOriginal_RejectsMissingOriginalOptions verifies
+// that missing or incomplete original options are rejected without changing the activity.
 func TestUpdateActivityExecutionOptions_RestoreOriginal_RejectsMissingOriginalOptions(t *testing.T) {
-	ctx := &chasm.MockMutableContext{
-		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name            string
+		originalOptions *apiactivitypb.ActivityOptions
+		expectedError   string
+	}{
+		{
+			name:          "missing snapshot",
+			expectedError: "cannot restore original options: no original task queue was recorded for this activity",
 		},
+		{
+			name: "incomplete phase timeout coverage",
+			originalOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "original-task-queue"},
+				AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{
+					StartToHandoffTimeout: durationpb.New(time.Minute),
+				},
+			},
+			expectedError: "cannot restore original options: a positive schedule-to-close or start-to-close timeout, or both handoff phase timeouts, is required",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+				},
+			}
+
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+					ActivityType:           &commonpb.ActivityType{Name: "T"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "current-task-queue"},
+					ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+					StartToCloseTimeout:    durationpb.New(10 * time.Second),
+					OriginalOptions:        testCase.originalOptions,
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+			}
+
+			_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+				FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					ActivityId:      "act",
+					RestoreOriginal: true,
+					RequestId:       "failed-update-request-id",
+				},
+			})
+
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			require.ErrorContains(t, err, testCase.expectedError)
+			require.Empty(t, activity.GetLastUpdateOptionsRequestId())
+			require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+			require.Equal(t, 30*time.Second, activity.GetScheduleToCloseTimeout().AsDuration())
+			require.Equal(t, 10*time.Second, activity.GetStartToCloseTimeout().AsDuration())
+		})
 	}
-
-	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			ActivityType:           &commonpb.ActivityType{Name: "T"},
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: "current-task-queue"},
-			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
-			StartToCloseTimeout:    durationpb.New(10 * time.Second),
-			OriginalOptions:        nil,
-		},
-		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
-	}
-
-	_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
-		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
-			ActivityId:      "act",
-			RestoreOriginal: true,
-			RequestId:       "failed-update-request-id",
-		},
-	})
-
-	require.Error(t, err)
-	require.Empty(t, activity.GetLastUpdateOptionsRequestId())
-	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
-	require.Equal(t, 30*time.Second, activity.GetScheduleToCloseTimeout().AsDuration())
-	require.Equal(t, 10*time.Second, activity.GetStartToCloseTimeout().AsDuration())
 }
 
 // TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions covers the equivalent gap

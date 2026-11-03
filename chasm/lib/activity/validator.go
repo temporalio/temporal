@@ -265,7 +265,7 @@ func validateOriginalOptionsRestorable(original *activitypb.ActivityOptions) err
 		original.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration() <= 0
 	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
 		original.GetStartToCloseTimeout().AsDuration() <= 0 && noPhaseCoverage {
-		return serviceerror.NewInvalidArgument("cannot restore original options: no original schedule-to-close or start-to-close timeout was recorded for this activity")
+		return serviceerror.NewInvalidArgument("cannot restore original options: a positive schedule-to-close or start-to-close timeout, or both handoff phase timeouts, is required")
 	}
 	return nil
 }
@@ -952,12 +952,20 @@ func validateAndNormalizeHandoffOptions(options *activitypb.ActivityOptions, ret
 	}
 
 	handoff := options.GetAsyncHandoffOptions()
-	for _, value := range []*durationpb.Duration{
-		options.ScheduleToCloseTimeout, options.ScheduleToStartTimeout, options.StartToCloseTimeout,
-		options.HeartbeatTimeout, handoff.StartToHandoffTimeout, handoff.HandoffToCloseTimeout, handoff.HeartbeatTimeout,
+	for _, timeout := range []struct {
+		name  string
+		value *durationpb.Duration
+	}{
+		{name: "ScheduleToCloseTimeout", value: options.ScheduleToCloseTimeout},
+		{name: "ScheduleToStartTimeout", value: options.ScheduleToStartTimeout},
+		{name: "StartToCloseTimeout", value: options.StartToCloseTimeout},
+		{name: "HeartbeatTimeout", value: options.HeartbeatTimeout},
+		{name: "AsyncHandoffOptions.StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{name: "AsyncHandoffOptions.HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{name: "AsyncHandoffOptions.HeartbeatTimeout", value: handoff.HeartbeatTimeout},
 	} {
-		if err := timestamp.ValidateAndCapProtoDuration(value); err != nil {
-			return serviceerror.NewInvalidArgument(err.Error())
+		if err := timestamp.ValidateAndCapProtoDuration(timeout.value); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid %s: %v", timeout.name, err)
 		}
 	}
 

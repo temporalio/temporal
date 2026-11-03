@@ -1809,6 +1809,7 @@ func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
 			expectedHandoffToClose time.Duration
 			retryDefaults          *retrypolicy.DefaultRetrySettings
 			expectedRetryPolicy    *commonpb.RetryPolicy
+			expectedError          string
 		}{
 			{name: "empty options keep phase timers disabled"},
 			{name: "start-to-handoff alone cannot cover both phases", mutate: func(options *activitypb.ActivityOptions) {
@@ -1859,15 +1860,27 @@ func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
 					NonRetryableErrorTypes: []string{"handoff-error"},
 				},
 			},
+			{name: "negative schedule-to-close timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToCloseTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid ScheduleToCloseTimeout: negative duration"},
+			{name: "negative schedule-to-start timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToStartTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid ScheduleToStartTimeout: negative duration"},
+			{name: "negative start-to-close timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.StartToCloseTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid StartToCloseTimeout: negative duration"},
+			{name: "negative activity heartbeat", mutate: func(options *activitypb.ActivityOptions) {
+				options.HeartbeatTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid HeartbeatTimeout: negative duration"},
 			{name: "negative submission timeout", mutate: func(options *activitypb.ActivityOptions) {
 				options.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(-time.Second)
-			}, invalid: true},
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.StartToHandoffTimeout: negative duration"},
 			{name: "negative completion timeout", mutate: func(options *activitypb.ActivityOptions) {
 				options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(-time.Second)
-			}, invalid: true},
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.HandoffToCloseTimeout: negative duration"},
 			{name: "negative submission heartbeat", mutate: func(options *activitypb.ActivityOptions) {
 				options.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(-time.Second)
-			}, invalid: true},
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.HeartbeatTimeout: negative duration"},
 			{name: "invalid handoff policy", mutate: func(options *activitypb.ActivityOptions) {
 				options.AsyncHandoffOptions.RetryPolicy = &commonpb.RetryPolicy{BackoffCoefficient: 0.5, MaximumAttempts: 3}
 			}, invalid: true},
@@ -1895,6 +1908,10 @@ func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
 				err := validateAndNormalizeHandoffOptions(options, defaults)
 				if testCase.invalid {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+					if testCase.expectedError != "" {
+						require.ErrorContains(t, err, testCase.expectedError)
+					}
+
 					return
 				}
 
