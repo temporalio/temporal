@@ -115,6 +115,24 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
 }
 
+// TimeSkippingTargets returns the deadlines that bound a skip while the invocation is waiting to
+// retry. Any other pending state, including a requested cancellation, represents in-flight work.
+func (o *Operation) TimeSkippingTargets(ctx chasm.Context, now time.Time) ([]time.Time, bool) {
+	if o.GetStatus() != nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
+		return nil, false
+	}
+	if _, ok := o.Cancellation.TryGet(ctx); ok {
+		return nil, false
+	}
+	return commonnexus.RetryBackoffTimeSkippingTargets(
+		now,
+		o.GetScheduledTime().AsTime(),
+		o.GetNextAttemptScheduleTime().AsTime(),
+		o.GetScheduleToCloseTimeout().AsDuration(),
+		o.GetScheduleToStartTimeout().AsDuration(),
+	)
+}
+
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,

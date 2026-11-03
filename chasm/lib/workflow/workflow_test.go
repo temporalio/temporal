@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -10,6 +11,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -106,4 +109,52 @@ func TestLifecycleState(t *testing.T) {
 	wf := &Workflow{MSPointer: chasm.NewMSPointer(nodeBackend)}
 
 	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
+}
+
+func TestTimeSkippingTransitionIncludesNexusAndCallbackRetries(t *testing.T) {
+	now := time.Date(2027, time.January, 1, 12, 0, 0, 0, time.UTC)
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(NewLibrary(NewRegistry())))
+	require.NoError(t, registry.Register(&callback.Library{}))
+	require.NoError(t, registry.Register(chasmnexus.NewNilLibrary()))
+
+	backend := &chasm.MockNodeBackend{
+		HandleNow:                 func() time.Time { return now },
+		HandleNextTransitionCount: func() int64 { return 2 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey: func() definition.WorkflowKey {
+			return definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id")
+		},
+	}
+	tree := chasm.NewEmptyTree(registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	ctx := chasm.NewMutableContext(context.Background(), tree)
+
+	operation := chasmnexus.NewOperation(&nexusoperationpb.OperationState{
+		Status:                  nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+		ScheduledTime:           timestamppb.New(now),
+		NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+	})
+	workflowCallback := callback.NewCallback("callback", timestamppb.New(now), &callbackspb.Callback{})
+	workflowCallback.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
+	workflowCallback.NextAttemptScheduleTime = timestamppb.New(now.Add(30 * time.Minute))
+	wf := &Workflow{
+		MSPointer: chasm.NewMSPointer(backend),
+		Operations: chasm.Map[int64, *chasmnexus.Operation]{
+			1: chasm.NewComponentField(ctx, operation),
+		},
+		Callbacks: chasm.Map[string, *callback.Callback]{
+			"callback": chasm.NewComponentField(ctx, workflowCallback),
+		},
+	}
+	require.NoError(t, tree.SetRootComponent(wf))
+	readCtx := chasm.NewContext(context.Background(), tree)
+
+	require.True(t, wf.IsExecutionSkippable(readCtx))
+	transition := wf.FindSkipToTarget(readCtx)
+	require.Equal(t, now.Add(30*time.Minute), transition.GetTargetTime())
+
+	workflowCallback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
+	require.False(t, wf.IsExecutionSkippable(readCtx), "an in-flight callback must block skipping")
 }

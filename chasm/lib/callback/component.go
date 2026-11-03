@@ -72,6 +72,22 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
+// TimeSkippingTarget reports whether this callback permits time skipping and, when it is backing
+// off, the retry deadline that bounds the skip. A scheduled callback is in flight and blocks.
+func (c *Callback) TimeSkippingTarget(now time.Time) (time.Time, bool) {
+	switch c.GetStatus() {
+	case callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return time.Time{}, true
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		target := c.GetNextAttemptScheduleTime().AsTime()
+		return target, target.After(now)
+	default:
+		return time.Time{}, false
+	}
+}
+
 func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
 	return c.Status
 }

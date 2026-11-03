@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"time"
+
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -74,15 +76,63 @@ func (w *Workflow) LifecycleState(
 
 // IsExecutionSkippable reports whether CHASM-owned workflow work permits time skipping.
 // Mutable State checks the workflow's legacy state and in-flight work separately.
-func (w *Workflow) IsExecutionSkippable(_ chasm.Context) bool {
-	return w.pendingNexusOperationCount() == 0
+func (w *Workflow) IsExecutionSkippable(ctx chasm.Context) bool {
+	_, skippable := w.timeSkippingTransition(ctx)
+	return skippable
 }
 
-// FindSkipToTarget returns an empty transition until CHASM-owned Workflow timers
-// can contribute skip targets.
+// FindSkipToTarget returns the earliest Nexus or callback retry deadline owned by the workflow.
 func (w *Workflow) FindSkipToTarget(ctx chasm.Context) chasm.TimeSkippingTransition {
-	// #todo: if a feature is migrated from workflow to chasm
-	return *chasm.NewTimeSkippingTransition(ctx.Now(w))
+	transition, _ := w.timeSkippingTransition(ctx)
+	return transition
+}
+
+func (w *Workflow) timeSkippingTransition(ctx chasm.Context) (chasm.TimeSkippingTransition, bool) {
+	transition := chasm.NewTimeSkippingTransition(ctx.Now(w))
+	trackTarget := func(target time.Time) bool {
+		if target.IsZero() {
+			return true
+		}
+		if !target.After(transition.CurrentTime) {
+			return false
+		}
+		transition.TrackEarliestFutureTime(target)
+		return true
+	}
+	trackCallbacks := func(callbackFields chasm.Map[string, *callback.Callback]) bool {
+		for _, callbackField := range callbackFields {
+			target, skippable := callbackField.Get(ctx).TimeSkippingTarget(transition.CurrentTime)
+			if !skippable || !trackTarget(target) {
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, operationField := range w.Operations {
+		operation := operationField.Get(ctx)
+		targets, skippable := operation.TimeSkippingTargets(ctx, transition.CurrentTime)
+		if !skippable {
+			return *transition, false
+		}
+		for _, target := range targets {
+			if !trackTarget(target) {
+				return *transition, false
+			}
+		}
+		if !trackCallbacks(operation.Callbacks) {
+			return *transition, false
+		}
+	}
+	if !trackCallbacks(w.Callbacks) {
+		return *transition, false
+	}
+	for _, updateField := range w.Updates {
+		if !trackCallbacks(updateField.Get(ctx).Callbacks) {
+			return *transition, false
+		}
+	}
+	return *transition, true
 }
 
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {

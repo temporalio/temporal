@@ -450,3 +450,39 @@ func TestToAPICallbackInfoReportsBlocked(t *testing.T) {
 		})
 	}
 }
+
+func TestTimeSkippingTarget(t *testing.T) {
+	now := time.Now().UTC()
+
+	for _, status := range []callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_SUCCEEDED,
+	} {
+		t.Run(status.String(), func(t *testing.T) {
+			callback := newTestCallback(status, nexusVariant(testCallbackURL))
+			target, skippable := callback.TimeSkippingTarget(now)
+			require.True(t, skippable)
+			require.True(t, target.IsZero())
+		})
+	}
+
+	t.Run("scheduled blocks", func(t *testing.T) {
+		callback := newTestCallback(callbackspb.CALLBACK_STATUS_SCHEDULED, nexusVariant(testCallbackURL))
+		_, skippable := callback.TimeSkippingTarget(now)
+		require.False(t, skippable)
+	})
+
+	for name, deadline := range map[string]time.Time{
+		"future backoff contributes target": now.Add(time.Minute),
+		"due backoff blocks":                now,
+	} {
+		t.Run(name, func(t *testing.T) {
+			callback := newTestCallback(callbackspb.CALLBACK_STATUS_BACKING_OFF, nexusVariant(testCallbackURL))
+			callback.NextAttemptScheduleTime = timestamppb.New(deadline)
+			target, skippable := callback.TimeSkippingTarget(now)
+			require.Equal(t, deadline, target)
+			require.Equal(t, deadline.After(now), skippable)
+		})
+	}
+}
