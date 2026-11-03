@@ -413,8 +413,59 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_FoldsMemberLaneWate
 		"lane-a": {
 			InclusiveLowWatermark:     laneWatermark.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+			FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 		},
 	}, state.LaneStates)
+}
+
+func (s *laneStreamReceiverSuite) TestLaneFlowControlCommand() {
+	s.streamReceiver.Config.ReplicationReceiverLaneMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(2)
+	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	taskID := int64(0)
+	trackTasks := func(laneID string, count int) {
+		s.streamReceiver.memberLaneMu.Lock()
+		tracker := s.streamReceiver.memberLanes[laneID].tracker
+		s.streamReceiver.memberLaneMu.Unlock()
+		for range count {
+			taskID++
+			task := NewMockTrackableExecutableTask(s.controller)
+			task.EXPECT().TaskID().Return(taskID).AnyTimes()
+			tracker.TrackTasks(WatermarkInfo{Watermark: taskID + 1, Timestamp: time.Now()}, task)
+		}
+	}
+
+	trackTasks("lane-a", 2)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	trackTasks("lane-a", 1)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, s.streamReceiver.laneFlowControlCommand("lane-a"))
+}
+
+func (s *laneStreamReceiverSuite) TestHighPriorityFlowControlSignal() {
+	s.streamReceiver.Config.ReplicationReceiverMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(500)
+	s.streamReceiver.Config.ReplicationReceiverMaxTotalOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(1000)
+	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	laneTracker := NewMockExecutableTaskTracker(s.controller)
+	s.streamReceiver.memberLanes["lane-a"].tracker = laneTracker
+	for _, tc := range []struct {
+		name             string
+		defaultCount     int
+		laneCount        int
+		expectedSignaled int
+	}{
+		// A slow lane counts toward its own pause, not the default lane's.
+		{name: "LaneBacklogDoesNotPauseDefault", defaultCount: 10, laneCount: 900, expectedSignaled: 10},
+		{name: "DefaultBacklog", defaultCount: 600, laneCount: 0, expectedSignaled: 600},
+		// Past the total, the signal is over ReplicationReceiverMaxOutstandingTaskCount, so HIGH pauses.
+		{name: "TotalBackstop", defaultCount: 10, laneCount: 1000, expectedSignaled: 1010},
+	} {
+		s.Run(tc.name, func() {
+			s.highPriorityTaskTracker.EXPECT().Size().Return(tc.defaultCount).Times(2)
+			laneTracker.EXPECT().Size().Return(tc.laneCount)
+			s.Equal(tc.expectedSignaled, s.streamReceiver.highPriorityFlowControlSignal().taskTrackingCount)
+		})
+	}
 }
 
 func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNamespaces() {

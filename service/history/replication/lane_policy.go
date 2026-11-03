@@ -124,6 +124,8 @@ type (
 		Retiring bool
 		// Paced is whether the lane's limiter refused a send in the last few seconds.
 		Paced bool
+		// Paused is whether the receiver has paused the lane.
+		Paused bool
 		// PolicyState is the state last saved with the lane.
 		PolicyState []byte
 	}

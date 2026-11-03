@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/namespace"
@@ -32,6 +33,8 @@ type senderLaneSnapshot struct {
 	acked      int64
 	ackedTime  time.Time
 	retiring   bool
+	// paused is whether the receiver's last ack paused the lane.
+	paused bool
 	// policyState is saved with the lane for the policy that created it.
 	policyState []byte
 }
@@ -175,27 +178,48 @@ func (r *senderLaneRegistry) Snapshots() []senderLaneSnapshot {
 	return out
 }
 
-// ObserveAcks records the lane watermarks from a receiver ack. A lane's acked position
-// never moves backwards.
+// ObserveAcks records the lane watermarks and pauses from a receiver ack. A lane's acked
+// position never moves backwards. A lane missing from the ack keeps its pause.
 func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.ReplicationState) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	changed := false
 	for laneID, state := range states {
-		if lane, ok := r.byID[laneID]; ok && state.GetInclusiveLowWatermark() > lane.acked {
+		lane, ok := r.byID[laneID]
+		if !ok {
+			continue
+		}
+		if state.GetInclusiveLowWatermark() > lane.acked {
 			lane.acked = state.GetInclusiveLowWatermark()
 			lane.ackedTime = state.GetInclusiveLowWatermarkTime().AsTime()
 		}
+		if paused := state.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE; paused != lane.paused {
+			lane.paused = paused
+			changed = true
+		}
 	}
+	if changed {
+		r.notifyChanged()
+	}
+}
+
+// Paused reports whether the receiver has paused a lane.
+func (r *senderLaneRegistry) Paused(logicalKey string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lane, ok := r.byKey[logicalKey]
+	return ok && lane.paused
 }
 
 // RequestRetirement marks a lane as retiring once the receiver has acknowledged every task
 // the lane owns up to the default lane's reserved position. After that, the default lane can
-// take the lane's tasks back without a gap.
+// take the lane's tasks back without a gap. A paused lane does not retire: its tasks would go
+// back to the default lane around the pause.
 func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.pending || lane.retiring || lane.leases != 0 {
+	if !ok || lane.pending || lane.retiring || lane.paused || lane.leases != 0 {
 		return false
 	}
 	if r.defaultReservedCursor == 0 {

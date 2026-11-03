@@ -165,6 +165,31 @@ func (s *laneStreamSenderSuite) requestLane(logicalKey string, limiter LaneLimit
 	s.streamSender.laneLimiters[logicalKey] = limiter
 }
 
+func (s *laneStreamSenderSuite) TestPaceLane_WaitsWhileReceiverPausesLane() {
+	logicalKey := namespaceLaneKey("ns-a")
+	limiter := &fakeLaneLimiter{}
+	s.requestLane(logicalKey, limiter)
+	lane, _, err := s.streamSender.laneRegistry.Create(logicalKey, namespaceLaneFilter("ns-a"), 0, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE},
+	})
+	// A handover lifts the lane's rate limit but not the receiver's pause.
+	s.streamSender.handoverInProgress.Store(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.streamSender.paceLane(ctx, logicalKey) }()
+	cancel()
+	s.ErrorIs(<-done, context.Canceled)
+
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME},
+	})
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Zero(limiter.calls)
+}
+
 func (s *laneStreamSenderSuite) TestPaceLane_StreamEnded() {
 	logicalKey := namespaceLaneKey("ns-a")
 	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}

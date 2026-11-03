@@ -103,15 +103,7 @@ func newLaneStreamReceiver(
 		recvSignalChan:           make(chan struct{}, 1),
 	}
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
-	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
-		return &FlowControlSignal{
-			// Include the isolated per-namespace lane trackers: isolation splits the
-			// HIGH lane, so flow control protects against total HIGH backlog (default
-			// lane + member lanes).
-			taskTrackingCount:  receiver.highFamilyTrackingCount(),
-			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
-		}
-	}
+	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = receiver.highPriorityFlowControlSignal
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
 		return &FlowControlSignal{
 			taskTrackingCount:  lowPriorityTaskTracker.Size(),
@@ -306,6 +298,7 @@ func (r *laneStreamReceiver) ackMessage(
 			laneStates[laneID] = &replicationspb.ReplicationState{
 				InclusiveLowWatermark:     wm.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
+				FlowControlCommand:        r.laneFlowControlCommand(laneID),
 			}
 		}
 	case ReceiverModeSingleStack:
@@ -579,6 +572,40 @@ func (r *laneStreamReceiver) finishLaneBatch(laneID string, retire bool) {
 	if retire {
 		lane.retiring = true
 	}
+}
+
+// highFamilyTrackingCount is the total tracked-task count across the default HIGH lane
+// and all lanes (used for HIGH flow control — lanes split the HIGH lane).
+// highPriorityFlowControlSignal decides the pause of the default HIGH priority lane. It counts
+// only the default lane's tasks, so a lane that applies slowly pauses itself rather than the
+// default lane. Past ReplicationReceiverMaxTotalOutstandingTaskCount across the default lane and
+// every lane, it pauses HIGH anyway, and with it every lane.
+func (r *laneStreamReceiver) highPriorityFlowControlSignal() *FlowControlSignal {
+	count := r.highPriorityTaskTracker.Size()
+	if total := r.highFamilyTrackingCount(); total > r.Config.ReplicationReceiverMaxTotalOutstandingTaskCount() {
+		count = max(count, total, r.Config.ReplicationReceiverMaxOutstandingTaskCount()+1)
+	}
+	return &FlowControlSignal{
+		taskTrackingCount:  count,
+		lastSlowSubmission: r.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
+	}
+}
+
+// laneFlowControlCommand pauses a lane whose outstanding tasks pass
+// ReplicationReceiverLaneMaxOutstandingTaskCount, and resumes it otherwise.
+func (r *laneStreamReceiver) laneFlowControlCommand(laneID string) enumsspb.ReplicationFlowControlCommand {
+	r.memberLaneMu.Lock()
+	lane, ok := r.memberLanes[laneID]
+	outstanding := 0
+	if ok {
+		outstanding = lane.tracker.Size()
+	}
+	r.memberLaneMu.Unlock()
+	if limit := r.Config.ReplicationReceiverLaneMaxOutstandingTaskCount(); outstanding > limit {
+		r.logger.Warn("Pausing a replication lane.", tag.NewStringTag("lane", laneID), tag.Counter(outstanding), tag.NewInt("limit", limit))
+		return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	}
+	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 }
 
 func (r *laneStreamReceiver) highFamilyTrackingCount() int {
