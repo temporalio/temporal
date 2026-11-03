@@ -371,6 +371,7 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 			Retiring:    lane.retiring,
 			LastRefused: s.laneRefusedAt[lane.logicalKey],
 			PolicyState: slices.Clone(lane.policyState),
+			Paused:      lane.paused,
 		})
 	}
 	s.laneStateMu.Unlock()
@@ -782,9 +783,21 @@ func laneRetryDelay(retryAfter time.Duration) time.Duration {
 }
 
 // paceLane returns once the lane may send its next task, or with the context's error once the
-// stream ends, so that the send is not retried. The limiter never blocks: when it refuses a
-// send, the lane waits here for laneRetryDelay and asks again.
+// stream ends, so that the send is not retried. A lane the receiver has paused waits until it
+// resumes, even during a handover, because the pause protects the receiver. The limiter never
+// blocks: when it refuses a send, the lane waits here for laneRetryDelay and asks again.
 func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) error {
+	for {
+		changed := s.laneRegistry.Changed()
+		if !s.laneRegistry.Paused(logicalKey) {
+			break
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	for s.laneShouldBeRateLimited(logicalKey) {
 		limiter := s.laneLimiter(logicalKey)
 		if limiter == nil {
@@ -839,6 +852,7 @@ func (s *laneStreamSender) recordLaneLag() {
 				tag.NewInt64("source-high-watermark", s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID),
 				tag.NewBoolTag("lane-requested", requested),
 				tag.NewBoolTag("lane-paced", paced && now.Sub(pacedAt) < lanePacedWindow),
+				tag.NewBoolTag("lane-paused", lane.paused),
 				tag.NewBoolTag("lane-retiring", lane.retiring),
 				tag.NewBoolTag("handover-in-progress", s.handoverInProgress.Load()))
 		}

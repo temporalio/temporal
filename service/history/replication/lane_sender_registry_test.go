@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
@@ -128,6 +129,33 @@ func TestSenderLaneRegistryAvoidsActiveLaneIDCollision(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "duplicate", laneA.id)
 	require.Equal(t, "unique", laneB.id)
+}
+
+func TestSenderLaneRegistryPausedLaneDoesNotRetire(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil)
+	require.NoError(t, err)
+	lane, _, err := registry.Create("namespace:a", namespaceLaneFilter("a"), 10, nil)
+	require.NoError(t, err)
+	changed := registry.Changed()
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+	}})
+	// A pause wakes the lane's sender.
+	<-changed
+	require.True(t, registry.Paused("namespace:a"))
+	require.False(t, registry.RequestRetirement("namespace:a"))
+
+	// An ack without the lane keeps its pause.
+	registry.ObserveAcks(nil)
+	require.True(t, registry.Paused("namespace:a"))
+
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+	}})
+	require.False(t, registry.Paused("namespace:a"))
+	require.True(t, registry.RequestRetirement("namespace:a"))
 }
 
 func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {

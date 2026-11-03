@@ -34,6 +34,8 @@ type senderLaneSnapshot struct {
 	ackedTime  time.Time
 	// retiring records retirement intent. A finite scope end is the fixed handoff boundary.
 	retiring bool
+	// paused is whether the receiver's last ack paused the lane.
+	paused bool
 	// policyState is saved with the lane for the policy that created it.
 	policyState []byte
 }
@@ -195,8 +197,8 @@ func (r *senderLaneRegistry) Snapshots() []senderLaneSnapshot {
 	return out
 }
 
-// ObserveAcks records the lane watermarks from a receiver ack. A lane's acked position
-// never moves backwards.
+// ObserveAcks records the lane watermarks and pauses from a receiver ack. A lane's acked
+// position never moves backwards. A lane missing from the ack keeps its pause.
 func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.ReplicationState) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -211,10 +213,22 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 			lane.ackedTime = state.GetInclusiveLowWatermarkTime().AsTime()
 			changed = true
 		}
+		if paused := state.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE; paused != lane.paused {
+			lane.paused = paused
+			changed = true
+		}
 	}
 	if changed {
 		r.notifyChanged()
 	}
+}
+
+// Paused reports whether the receiver has paused a lane.
+func (r *senderLaneRegistry) Paused(logicalKey string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lane, ok := r.byKey[logicalKey]
+	return ok && lane.paused
 }
 
 // RequestRetirement withdraws a lane. It keeps sending until its cursor covers every
@@ -225,7 +239,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.retiring {
+	if !ok || lane.retiring || lane.paused {
 		return false
 	}
 	lane.retiring = true
