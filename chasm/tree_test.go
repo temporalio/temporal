@@ -6224,6 +6224,26 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Zero(s.nodeBackend.NumTasksAdded())
 	})
 
+	s.Run("ActiveWorkflowTaskRegenMarkerWorksWithCleanTree", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
+		s.timeSource.Update(baseTime)
+		root, err := s.newTestTree(nil)
+		s.Require().NoError(err)
+		s.Require().Equal(WorkflowArchetypeID, root.ArchetypeID())
+		root.subtreeIsDirty = false
+
+		task := timerTask(time.Hour, testPureTaskTypeID, 1)
+		task.PhysicalTaskStatus = physicalTaskStatusCreated
+		root.serializedNode.GetMetadata().GetComponentAttributes().PureTasks =
+			[]*persistencespb.ChasmComponentAttributes_Task{task}
+		root.MarkNeedsTimeSkippingTaskRegenForWorkflows()
+
+		err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Equal(1, s.nodeBackend.NumTasksAdded())
+	})
+
 	s.Run("NilTimeSkippingInfoIsSafeNoOp", func() {
 		s.nodeBackend = &MockNodeBackend{}
 		// default GetExecutionInfo returns an empty WorkflowExecutionInfo => nil TimeSkippingInfo
