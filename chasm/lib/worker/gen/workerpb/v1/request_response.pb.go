@@ -28,13 +28,13 @@ type RecordHeartbeatRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Grouping key shared by the workers in this request.
+	WorkerGroupingKey string `protobuf:"bytes,3,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
 	// The public heartbeat request, forwarded by Frontend for this group.
 	// All worker heartbeats must have the specified worker_grouping_key.
 	FrontendRequest *v1.RecordWorkerHeartbeatRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	// SDK grouping key, used as the worker state machine's CHASM Business ID.
-	WorkerGroupingKey string `protobuf:"bytes,3,opt,name=worker_grouping_key,json=workerGroupingKey,proto3" json:"worker_grouping_key,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RecordHeartbeatRequest) Reset() {
@@ -74,13 +74,6 @@ func (x *RecordHeartbeatRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *RecordHeartbeatRequest) GetFrontendRequest() *v1.RecordWorkerHeartbeatRequest {
-	if x != nil {
-		return x.FrontendRequest
-	}
-	return nil
-}
-
 func (x *RecordHeartbeatRequest) GetWorkerGroupingKey() string {
 	if x != nil {
 		return x.WorkerGroupingKey
@@ -88,7 +81,14 @@ func (x *RecordHeartbeatRequest) GetWorkerGroupingKey() string {
 	return ""
 }
 
-// RecordHeartbeatResponse is the response for recording a worker heartbeat.
+func (x *RecordHeartbeatRequest) GetFrontendRequest() *v1.RecordWorkerHeartbeatRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+// A successful RecordHeartbeatResponse acknowledges a persisted heartbeat update.
 type RecordHeartbeatResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The public heartbeat response to return through Frontend.
@@ -140,9 +140,9 @@ const file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_rawD
 	"\n" +
 	"@temporal/server/chasm/lib/worker/proto/v1/request_response.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xd5\x01\n" +
 	"\x16RecordHeartbeatRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12h\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequestR\x0ffrontendRequest\x12.\n" +
-	"\x13worker_grouping_key\x18\x03 \x01(\tR\x11workerGroupingKey\"\x86\x01\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12.\n" +
+	"\x13worker_grouping_key\x18\x03 \x01(\tR\x11workerGroupingKey\x12h\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequestR\x0ffrontendRequest\"\x86\x01\n" +
 	"\x17RecordHeartbeatResponse\x12k\n" +
 	"\x11frontend_response\x18\x01 \x01(\v2>.temporal.api.workflowservice.v1.RecordWorkerHeartbeatResponseR\x10frontendResponseB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 

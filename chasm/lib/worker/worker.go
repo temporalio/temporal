@@ -42,28 +42,18 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// newWorkerGroup applies the first heartbeat so successful creation includes
-// the initial lease and its expiry task.
-func newWorkerGroup(
-	ctx chasm.MutableContext,
-	groupingKey string,
-	heartbeats []*workerpb.WorkerHeartbeat,
-	leaseDuration time.Duration,
-) (*WorkerGroup, error) {
+// newWorkerGroup creates an active group with no workers or lease.
+func newWorkerGroup(groupingKey string) (*WorkerGroup, error) {
 	if groupingKey == "" {
 		return nil, serviceerror.NewInvalidArgument("worker grouping key is required")
 	}
-	group := &WorkerGroup{
+	return &WorkerGroup{
 		WorkerGroupState: &workerstatepb.WorkerGroupState{
 			WorkerGroupingKey: groupingKey,
 			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		},
 		Workers: make(chasm.Map[string, *Worker]),
-	}
-	if err := group.recordHeartbeat(ctx, heartbeats, leaseDuration); err != nil {
-		return nil, err
-	}
-	return group, nil
+	}, nil
 }
 
 func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -94,6 +84,8 @@ func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatu
 
 // recordHeartbeat adds new workers and renews the shared lease.
 // Workers omitted from the batch remain members.
+// TODO: Once heartbeat ordering is supported, treat workers missing from
+// the full heartbeat list as gone and reschedule their activities.
 // TODO: Handle ordering of heartbeats so that older heartbeats cannot undo newer
 // activity updates, and retried heartbeats are not applied twice.
 func (g *WorkerGroup) recordHeartbeat(
@@ -129,7 +121,7 @@ func (g *WorkerGroup) recordHeartbeat(
 func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
 	for _, heartbeat := range heartbeats {
 		key := heartbeat.GetWorkerInstanceKey()
-		// Keep existing workers, including duplicate keys within this batch.
+		// Reuse existing worker components so their state is preserved across heartbeats.
 		if _, exists := g.Workers[key]; exists {
 			continue
 		}

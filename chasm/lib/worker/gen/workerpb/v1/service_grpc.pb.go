@@ -27,8 +27,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerServiceClient interface {
-	// RecordHeartbeat updates worker metadata and renews the group's shared lease.
-	// Called by Frontend for workers with the same grouping key.
+	// RecordHeartbeat creates or updates workers with the same
+	// worker_grouping_key and renews their shared lease. When the lease expires,
+	// the current run for the group closes and activities still tracked by its
+	// workers are rescheduled. A later heartbeat starts a new run.
+	//
+	// Semantics:
+	// - Retried heartbeats are applied once.
+	// - Older heartbeats cannot undo newer updates.
 	RecordHeartbeat(ctx context.Context, in *RecordHeartbeatRequest, opts ...grpc.CallOption) (*RecordHeartbeatResponse, error)
 }
 
@@ -53,8 +59,14 @@ func (c *workerServiceClient) RecordHeartbeat(ctx context.Context, in *RecordHea
 // All implementations must embed UnimplementedWorkerServiceServer
 // for forward compatibility
 type WorkerServiceServer interface {
-	// RecordHeartbeat updates worker metadata and renews the group's shared lease.
-	// Called by Frontend for workers with the same grouping key.
+	// RecordHeartbeat creates or updates workers with the same
+	// worker_grouping_key and renews their shared lease. When the lease expires,
+	// the current run for the group closes and activities still tracked by its
+	// workers are rescheduled. A later heartbeat starts a new run.
+	//
+	// Semantics:
+	// - Retried heartbeats are applied once.
+	// - Older heartbeats cannot undo newer updates.
 	RecordHeartbeat(context.Context, *RecordHeartbeatRequest) (*RecordHeartbeatResponse, error)
 	mustEmbedUnimplementedWorkerServiceServer()
 }
