@@ -221,14 +221,15 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 		result.Error = fmt.Sprintf("read back source: %v", err)
 		return nil, errors.New(result.Error)
 	}
-	if err := validateNamespaceRepairReadback(
+	err = validateNamespaceRepairReadback(
 		frozen,
 		frozen,
 		prepared,
 		request.Plan.ProposedSourceConfigVersion,
 		frozen.GetFailoverVersion(),
 		r.verifier.dataKeysToIgnore,
-	); err != nil {
+	)
+	if err != nil {
 		result.Error = err.Error()
 		return nil, fmt.Errorf("source readback: %w", err)
 	}
@@ -407,14 +408,15 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 		result.Error = fmt.Sprintf("read back namespace: %v", err)
 		return result
 	}
-	if err := validateNamespaceRepairReadback(
+	err = validateNamespaceRepairReadback(
 		preparedSource,
 		failoverSource,
 		readback,
 		preparedSource.GetConfigVersion(),
 		failoverSource.GetFailoverVersion(),
 		r.verifier.dataKeysToIgnore,
-	); err != nil {
+	)
+	if err != nil {
 		result.Error = err.Error()
 		return result
 	}

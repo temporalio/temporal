@@ -386,6 +386,7 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	plan, err := planNamespaceReplicationRepair(observation, "repair-id", time.Unix(101, 0))
 	require.NoError(t, err)
 	require.Equal(t, int64(11), plan.ProposedSourceConfigVersion)
+	require.Equal(t, []string{namespaceReplicationWarningInitialHistory}, plan.Clusters[0].Warnings)
 
 	repairer := newNamespaceReplicationRepairer(verifier)
 	result, err := repairer.Execute(context.Background(), namespaceReplicationRepairExecutionRequest{
@@ -399,6 +400,7 @@ func TestNamespaceReplicationRepairerExecutesAndReconciles(t *testing.T) {
 	require.Equal(t, int64(11), source.GetConfigVersion())
 	require.Equal(t, int64(11), target.GetConfigVersion())
 	require.Equal(t, source.GetInfo().GetDescription(), target.GetInfo().GetDescription())
+	require.Empty(t, target.GetFailoverHistory())
 	require.NotNil(t, reconciliationRequest)
 	require.Equal(t, "repair-id", reconciliationRequest.GetRepairId())
 	require.Equal(t, []string{"cluster-b"}, reconciliationRequest.GetVerifiedPeerClusters())

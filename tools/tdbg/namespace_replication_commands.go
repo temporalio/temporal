@@ -238,7 +238,7 @@ func writeNamespaceReplicationRepairPlan(
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(plan)
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		writer,
 		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\nSource cluster: %s\nSource action: %s (%d -> %d)\n",
 		plan.Status,
@@ -249,7 +249,8 @@ func writeNamespaceReplicationRepairPlan(
 		plan.SourceAction,
 		plan.SourceConfigVersion,
 		plan.ProposedSourceConfigVersion,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	if plan.StatusDetail != "" {
@@ -264,12 +265,14 @@ func writeNamespaceReplicationRepairPlan(
 			Presence:      cluster.Presence,
 			ConfigVersion: optionalInt64String(cluster.CurrentConfigVersion),
 			Action:        cluster.Action,
+			Warnings:      strings.Join(cluster.Warnings, "; "),
 		})
 	}
 	return printTable(rows, writer)
 }
 
 type namespaceReplicationRepairPlanTableRow struct {
+	Warnings      string
 	Cluster       string
 	Presence      string
 	ConfigVersion string
@@ -288,7 +291,7 @@ func printNamespaceReplicationRepairExecution(
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		c.App.Writer,
 		"Status: %s\nRepair ID: %s\nNamespace: %s (%s)\nEffective reconciliation cutoff: %s\n",
 		result.Status,
@@ -296,7 +299,8 @@ func printNamespaceReplicationRepairExecution(
 		result.Plan.NamespaceName,
 		result.Plan.NamespaceID,
 		result.EffectiveCutoff.Format(time.RFC3339Nano),
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	if result.StatusDetail != "" {

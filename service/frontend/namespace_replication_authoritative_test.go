@@ -27,6 +27,41 @@ func enabledNamespaceReplicationMetadata(t *testing.T) *cluster.MockMetadata {
 	return metadata
 }
 
+func TestNamespaceRepairApplyAttribution(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
+	mh := metricstest.NewCaptureHandler()
+	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t),
+		metricsHandler: mh, namespaceMutationExecutor: executor}
+	task := shadowObservationTask()
+	payload, err := nsreplication.MarshalNamespaceTask(task)
+	require.NoError(t, err)
+	executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
+			metricContext, ok := nsreplication.TaskMetricsContextFromContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, nsreplication.OperatorRepairTransport, metricContext.Transport)
+			eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, "repair-id", eventContext.EventData.Details["repair_id"])
+			return nsreplication.ApplyOutcomeApplied, nil
+		})
+	response, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTaskPayload: payload, SourceCluster: "cellA",
+		Attribution: &adminservice.NamespaceMutationAttribution{
+			Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR, RepairId: "repair-id", Reason: "operator repair",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, nsreplication.OperatorRepairMode, recordings[0].Tags["mode"])
+}
+
 func TestNamespaceMutationRejectsDisabledGlobalNamespaces(t *testing.T) {
 	t.Parallel()
 	for _, shadow := range []bool{true, false} {

@@ -25,6 +25,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestNamespaceRepairRejectsFutureServerCutoff(t *testing.T) {
+	t.Parallel()
+	source := clock.NewEventTimeSource()
+	source.Update(time.Unix(100, 0))
+	handler := &AdminHandler{timeSource: source}
+	err := handler.validateNamespaceMutationRepair(t.Context(), &adminservice.ReconcileNamespaceMutationComponentsRequest{
+		NamespaceId: "namespace-id", RepairId: "repair-id", Reason: "repair",
+		CutoffTime: timestamppb.New(time.Unix(101, 0)),
+	})
+	require.ErrorContains(t, err, "server's future")
+}
+
 func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *testing.T) {
 	controller := gomock.NewController(t)
 	metadataManager := persistence.NewMockMetadataManager(controller)

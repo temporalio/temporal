@@ -241,14 +241,15 @@ func reconcilePendingPeer(
 		}
 		basis = namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET
 	}
-	if err := TransitionPeerManuallyReconciled.Apply(component, mctx, EventPeerManuallyReconciled{
+	err := TransitionPeerManuallyReconciled.Apply(component, mctx, EventPeerManuallyReconciled{
 		Time:       mctx.Now(component),
 		Cutoff:     cutoff,
 		TargetCell: peer,
 		RepairID:   request.GetRepairId(),
 		Reason:     request.GetReason(),
 		Basis:      basis,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, nil, err
 	}
 	result.Outcome = namespacereplicationpb.PeerReconciliation_OUTCOME_RECONCILED

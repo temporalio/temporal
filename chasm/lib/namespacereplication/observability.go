@@ -69,33 +69,7 @@ func emitComponentTerminal(
 		return
 	}
 
-	outcome := nsreplicationcommon.CHASMApplyOutcomeCompleted
-	if terminal.status == namespacereplicationpb.COMPONENT_STATUS_FAILED {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeFailed
-	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
-	}
-	nsreplicationcommon.EmitCHASMAuthoritativeApply(
-		eventLogger,
-		nsreplicationcommon.CHASMAuthoritativeApplyObservation{
-			Task:                task,
-			Stage:               nsreplicationcommon.CHASMApplyStageComponent,
-			Outcome:             outcome,
-			SourceCluster:       currentCluster,
-			ComponentBusinessID: ref.BusinessID,
-			ComponentRunID:      ref.RunID,
-			Error:               terminalErr,
-			Details: map[string]any{
-				"component_status":    terminal.status.String(),
-				"local_apply_outcome": terminal.localOutcome.String(),
-				"peer_count":          terminal.peerCount,
-				"peer_attempt_count":  terminal.peerAttemptCount,
-				"peer_outcomes":       terminal.peerOutcomes,
-				"peer_attempt_counts": terminal.peerAttemptCounts,
-				"peer_outcome_counts": terminal.peerOutcomeCounts,
-			},
-		},
-	)
+	nsreplicationcommon.EmitCHASMAuthoritativeApply(eventLogger, componentTerminalApplyObservation(currentCluster, ref, task, terminal, terminalErr))
 }
 
 func (h *applyLocalTaskHandler) observeLocalApplyResult(

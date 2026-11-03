@@ -42,10 +42,11 @@ type namespaceReplicationRepairPlan struct {
 }
 
 type namespaceReplicationClusterRepairPlan struct {
-	Cluster              string `json:"cluster"`
-	Presence             string `json:"presence"`
-	CurrentConfigVersion *int64 `json:"current_config_version,omitempty"`
-	Action               string `json:"action"`
+	Warnings             []string `json:"warnings,omitempty"`
+	Cluster              string   `json:"cluster"`
+	Presence             string   `json:"presence"`
+	CurrentConfigVersion *int64   `json:"current_config_version,omitempty"`
+	Action               string   `json:"action"`
 }
 
 func planNamespaceReplicationRepair(
@@ -99,6 +100,7 @@ func planNamespaceReplicationRepair(
 			continue
 		}
 		plan.Clusters = append(plan.Clusters, namespaceReplicationClusterRepairPlan{
+			Warnings:             slices.Clone(cluster.Warnings),
 			Cluster:              cluster.Cluster,
 			Presence:             cluster.Presence,
 			CurrentConfigVersion: cluster.ConfigVersion,
