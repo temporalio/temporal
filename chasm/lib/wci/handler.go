@@ -121,6 +121,9 @@ func (h *handler) validate(ctx context.Context, rc compute.RequestContext, spec 
 	if err := spec.Validate(); err != nil {
 		return err
 	}
+	if err := spec.ValidateWorkerSetTargets(); err != nil {
+		return err
+	}
 	if err := h.checkSupported(rc.NamespaceName, spec); err != nil {
 		return err
 	}
@@ -212,6 +215,9 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		if err := final.Validate(); err != nil {
+			return nil, err
+		}
+		if err := final.ValidateWorkerSetTargets(); err != nil {
 			return nil, err
 		}
 		w.applySpec(mctx, specsToCHASM(final), registrations)
@@ -373,6 +379,9 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 	}
 	if err := spec.Validate(); err != nil {
 		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+	if err := spec.ValidateWorkerSetTargets(); err != nil {
+		return nil, err
 	}
 	if req.GetMigrationToken() == "" || req.GetExpireTime() == nil {
 		return nil, serviceerror.NewInvalidArgument("migration token and expire time are required")
