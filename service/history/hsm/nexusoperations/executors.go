@@ -540,7 +540,7 @@ func (e taskExecutor) deferredOperationMetric(
 // to its resulting state: terminally failed/canceled/timed-out, or backing off for a retryable
 // attempt failure. It does not emit metrics; saveResult derives the caller-side metric from the
 // resulting state (see deferredOperationMetric).
-// It returns the metric reason for failed operations; timeouts and retries return no reason.
+// The returned reason is used only when the operation ends in FAILED.
 func (e taskExecutor) handleStartOperationError(
 	env hsm.Environment,
 	node *hsm.Node,
