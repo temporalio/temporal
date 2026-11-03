@@ -149,6 +149,9 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 	if request == nil {
 		return serviceerror.NewInvalidArgument("request is empty")
 	}
+	if err := v.config.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), request.GetNamespace()); err != nil {
+		return err
+	}
 
 	if err := v.ValidateWorkflowID(request.GetWorkflowId()); err != nil {
 		return err

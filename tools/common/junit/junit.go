@@ -63,6 +63,20 @@ func Read(path string) (*Testsuites, error) {
 	}
 }
 
+// ReadTestcases reads and flattens all test cases in a JUnit XML file.
+func ReadTestcases(path string) ([]Testcase, error) {
+	testsuites, err := Read(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var cases []Testcase
+	for _, suite := range testsuites.Suites {
+		cases = append(cases, suite.Testcases...)
+	}
+	return cases, nil
+}
+
 // Write writes a JUnit XML file.
 func Write(path string, testsuites *Testsuites) error {
 	f, err := os.Create(path)

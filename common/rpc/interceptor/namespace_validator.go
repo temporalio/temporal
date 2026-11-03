@@ -95,6 +95,8 @@ var (
 		api.WorkflowServicePrefix + "CountWorkflowExecutions":        {},
 		api.WorkflowServicePrefix + "ListSchedules":                  {},
 		api.WorkflowServicePrefix + "ListBatchOperations":            {},
+		api.AdminServicePrefix + "ListExecutions":                    {},
+		api.AdminServicePrefix + "CountExecutions":                   {},
 		// Matching
 		api.WorkflowServicePrefix + "ShutdownWorker": {},
 	}
@@ -368,6 +370,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 		*operatorservice.ListSearchAttributesRequest:
 		// Namespace is optional for search attributes operations.
 		// It's required when using SQL DB for visibility, but not when using Elasticsearch.
+		if !namespaceName.IsEmpty() {
+			return ni.namespaceRegistry.GetNamespace(namespaceName)
+		}
+		return nil, nil
+	case *adminservice.ListExecutionsRequest,
+		*adminservice.CountExecutionsRequest:
+		// Namespace is optional for admin visibility APIs.
 		if !namespaceName.IsEmpty() {
 			return ni.namespaceRegistry.GetNamespace(namespaceName)
 		}

@@ -353,11 +353,13 @@ func TestTransitionSucceeded(t *testing.T) {
 		completeTime       *time.Time
 		result             *commonpb.Payload
 		expectedClosedTime time.Time
+		includeBackendTag  bool
 	}{
 		{
 			name:               "uses default time",
 			result:             mustToPayload(t, "result"),
 			expectedClosedTime: defaultTime,
+			includeBackendTag:  true,
 		},
 		{
 			name:               "uses event CompleteTime",
@@ -386,12 +388,16 @@ func TestTransitionSucceeded(t *testing.T) {
 						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
 							IncludeServiceTag:   true,
 							IncludeOperationTag: true,
+							IncludeBackendTag:   tc.includeBackendTag,
 						}),
 					}),
 				},
 			}
 
 			operation := newTestOperation()
+			if tc.includeBackendTag {
+				operation.Store = chasm.NewMockParentPtr[OperationStore](&mockStoreComponent{})
+			}
 			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 			operation.StartedTime =
 				timestamppb.New(operation.ScheduledTime.AsTime().Add(time.Second))
@@ -416,6 +422,10 @@ func TestTransitionSucceeded(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			if tc.includeBackendTag {
+				countTags["backend"] = "chasm"
+				countTags["workflowType"] = "_unknown_"
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "succeeded"

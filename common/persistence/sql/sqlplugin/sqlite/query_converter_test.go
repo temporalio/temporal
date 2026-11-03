@@ -238,7 +238,7 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			},
 			pageSize: 20,
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility WHERE Keyword01 = 'foo' ORDER BY coalesce(close_time, '9999-12-31 23:59:59+00:00') DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility WHERE (Keyword01 = 'foo') ORDER BY coalesce(close_time, '9999-12-31 23:59:59+00:00') DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(sqlplugin.DbFields, ", "),
 			),
 			queryArgs: []any{20},
@@ -257,7 +257,43 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 				RunID:     runID,
 			},
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility WHERE Keyword01 = 'foo' AND ((coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time < ?) OR coalesce(close_time, '9999-12-31 23:59:59+00:00') < ?) ORDER BY coalesce(close_time, '9999-12-31 23:59:59+00:00') DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility WHERE (Keyword01 = 'foo') AND ((coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time < ?) OR coalesce(close_time, '9999-12-31 23:59:59+00:00') < ?) ORDER BY coalesce(close_time, '9999-12-31 23:59:59+00:00') DESC, start_time DESC, run_id LIMIT ?",
+				strings.Join(sqlplugin.DbFields, ", "),
+			),
+			queryArgs: []any{
+				closeTime,
+				startTime,
+				runID,
+				closeTime,
+				startTime,
+				closeTime,
+				20,
+			},
+		},
+		{
+			name: "or filter with token",
+			// The filter must be wrapped in parentheses, otherwise the token condition would
+			// bind only to the right hand side of the OR.
+			queryExpr: &sqlparser.OrExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    query.NewUnsafeSQLString("foo"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    query.NewUnsafeSQLString("bar"),
+				},
+			},
+			pageSize: 20,
+			token: &sqlplugin.VisibilityPageToken{
+				CloseTime: closeTime,
+				StartTime: startTime,
+				RunID:     runID,
+			},
+			stmt: fmt.Sprintf(
+				"SELECT %s FROM executions_visibility WHERE (Keyword01 = 'foo' or Keyword01 = 'bar') AND ((coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, '9999-12-31 23:59:59+00:00') = ? AND start_time < ?) OR coalesce(close_time, '9999-12-31 23:59:59+00:00') < ?) ORDER BY coalesce(close_time, '9999-12-31 23:59:59+00:00') DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(sqlplugin.DbFields, ", "),
 			),
 			queryArgs: []any{

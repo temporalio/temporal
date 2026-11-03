@@ -261,8 +261,8 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 	return versioningInfo.GetBehavior()
 }
 
-// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
-func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+// ShouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func ShouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
 	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
@@ -271,9 +271,14 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		return true
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:
+		// command events are never cherry-picked; user logic reschedules the command instead
+		return false
 	}
 
 	// events registered in the hsm framework that are potentially cherry-pickable
+	// CONSIDER: also check the CHASM workflow registry once HSM nexus events are removed.
 	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
 		return true
 	}

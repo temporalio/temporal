@@ -700,11 +700,6 @@ NexusOperationCompleted
 	}
 }
 
-// SetupSubTest makes assertion failures report on the active subtest.
-func (s *NexusStateReplicationSuite) SetupSubTest() {
-	s.setupTest()
-}
-
 // mixedFlagOperation contains the handles needed after failover.
 type mixedFlagOperation struct {
 	ctx               context.Context

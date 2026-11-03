@@ -453,6 +453,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.versionCache,
 		e.workerDeploymentClient.SignalVersionReactivation,
 		api.NewWorkflowLeaseAndContext,
+		/* allowDerivedRunID */ true,
 	)
 	if err != nil {
 		return nil, err
@@ -937,7 +938,7 @@ func (e *historyEngineImpl) NotifyFastForwardUpdate(
 		// Always set by NewEngineWithShardContext; a nil here means a hand-built engine.
 		// Fast-forward notification is best-effort (waiters re-poll on timeout), so log and
 		// skip rather than panic.
-		e.logger.Warn("fastForwardNotifier is not configured; skipping fast-forward notification",
+		e.logger.Warn("fastForwardNotifier is not configured; skipping time skipping fast-forward notification",
 			tag.WorkflowNamespaceID(key.NamespaceID),
 			tag.WorkflowID(key.WorkflowID))
 		return

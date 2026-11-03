@@ -3,7 +3,6 @@ package nexusoperation
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -20,46 +19,26 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	test "go.temporal.io/server/common/testing"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newTestValidator(config *Config) *validator {
+func newTestValidator(t *testing.T, config *Config) *validator {
 	return newValidator(
 		config,
 		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 		nil,
 		nil,
-		mustNewCallbackValidator(),
+		test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
 		newTestLinkValidator(10, 10),
 	)
-}
-
-func mustNewCallbackValidator() callbacks.Validator {
-	allowAllAddresses := callbacks.AddressMatchRules{
-		Rules: []callbacks.AddressMatchRule{
-			{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-		},
-	}
-	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		MaxIDLengthLimit:                 func() int { return 10 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 4096 },
-		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:             func(string) int { return 10 },
-		MaxOperationNameLength:           func(string) int { return 10 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
-	}
-
-	v, err := callbacks.NewValidator(cfg, nil)
-	if err != nil {
-		panic("creating callback validator: " + err.Error())
-	}
-	return v
 }
 
 func newNexusCallback() *commonpb.Callback {
@@ -92,6 +71,7 @@ func newNexusHandlerCallback() *commonpb.Callback {
 }
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
+	cbValidator := test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig())
 	ctrl := gomock.NewController(t)
 	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
 	mockVisibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
@@ -120,6 +100,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
+		TrackedHeaderPrefixes:              func(string) []string { return []string{"temporal-"} },
+		RejectedHeaderPrefixes:             func(string) []string { return nil },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
 		EnabledCallbackKinds: func(string) []callbacks.Kind {
 			return []callbacks.Kind{callbacks.KindNexus}
@@ -131,6 +113,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mutate       func(*workflowservice.StartNexusOperationExecutionRequest)
 		mutateConfig func(*Config)
 		wantErr      string
+		// Expected value of the "rejected" tag on the header prefix usage metric for the "temporal-" prefix, or empty if
+		// none is expected.
+		wantHeaderPrefixUsage string
 		// Check the request after validation, to verify situations where it normalizes values.
 		postValidateCheck func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
 	}{
@@ -347,6 +332,55 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			wantErr: "nexus_header contains a disallowed key",
 		},
 		{
+			name: "nexus_header - tracked prefix",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+			},
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, map[string]string{"temporal-a": "v"}, r.NexusHeader)
+			},
+			wantHeaderPrefixUsage: "false",
+		},
+		{
+			name: "nexus_header - not tracked without tracked prefixes",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+				c.TrackedHeaderPrefixes = func(string) []string { return nil }
+			},
+		},
+		{
+			name: "nexus_header - rejected prefix",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+				c.RejectedHeaderPrefixes = func(string) []string { return []string{"temporal-"} }
+			},
+			wantErr:               "nexus_header contains keys with a rejected prefix",
+			wantHeaderPrefixUsage: "true",
+		},
+		{
+			name: "nexus_header - tracked when a later validation fails",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+			},
+			wantErr:               "must not have an empty namespace",
+			wantHeaderPrefixUsage: "false",
+		},
+		{
 			name: "nexus_header - exceeds size limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"key": "too-long-val"}
@@ -557,9 +591,11 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				tc.mutateConfig(&caseConfig)
 			}
 
-			cbValidator := mustNewCallbackValidator()
 			logger := log.NewNoopLogger()
-			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
 
 			err := v.validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {
@@ -568,6 +604,17 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				require.Contains(t, err.Error(), tc.wantErr)
 			} else {
 				require.NoError(t, err)
+			}
+			recordings := capture.Snapshot()[HeaderPrefixUsageCounter.Name()]
+			if tc.wantHeaderPrefixUsage == "" {
+				require.Empty(t, recordings)
+			} else {
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, "default", recordings[0].Tags["namespace"])
+				require.Equal(t, HeaderPrefixSourceStandalone, recordings[0].Tags["request_source"])
+				require.Equal(t, "temporal-", recordings[0].Tags["prefix"])
+				require.Equal(t, tc.wantHeaderPrefixUsage, recordings[0].Tags["rejected"])
 			}
 			if tc.postValidateCheck != nil {
 				tc.postValidateCheck(t, req)
@@ -657,7 +704,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
+			err := newTestValidator(t, config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -744,7 +791,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -808,7 +855,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -895,7 +942,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -988,7 +1035,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -1007,7 +1054,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	t.Parallel()
 
 	// on_conflict_options validation is config-independent.
-	v := newTestValidator(&Config{})
+	v := newTestValidator(t, &Config{})
 	cb := newNexusCallback()
 
 	t.Run("Unset", func(t *testing.T) {

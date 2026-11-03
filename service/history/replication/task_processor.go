@@ -563,7 +563,8 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
-			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope),
+			metrics.ConcurrencyLimitGroupTag(""))
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:

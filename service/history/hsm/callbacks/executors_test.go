@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -143,6 +145,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
@@ -182,7 +186,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 							},
 						},
 					},
-					State: enumsspb.CALLBACK_STATE_SCHEDULED,
+					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
+					RequestId: "request-id",
 				},
 			}
 			coll := callbacks.MachineCollection(root)
@@ -190,7 +195,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 			env := fakeEnv{node}
 
-			key := definition.NewWorkflowKey("namespace-id", "", "")
+			key := definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id")
 			reg := hsm.NewRegistry()
 			require.NoError(t, callbacks.RegisterExecutor(
 				reg,
@@ -200,7 +205,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 					HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
-					Logger: log.NewNoopLogger(),
+					Logger: logger,
 					Config: &callbacks.Config{
 						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 						RetryPolicy: func() backoff.RetryPolicy {
@@ -237,6 +242,26 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			cb, err = coll.Data("ID")
 			require.NoError(t, err)
 			tc.assertOutcome(t, cb)
+
+			if tc.expectedMetricOutcome != "success" {
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            "namespace-name",
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": chasm.WorkflowArchetype,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.retryable,
+					},
+				})
+			}
 		})
 	}
 }
@@ -579,4 +604,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			tc.assertOutcome(t, cb)
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it matches this task type by its "callbacks." prefix.
+// This test fails if it is renamed without updating tasks.Tags.
+func TestInvocationTaskTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: callbacks.TaskTypeInvocation}},
+	}
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }

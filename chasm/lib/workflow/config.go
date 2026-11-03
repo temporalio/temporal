@@ -14,19 +14,25 @@ var EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 )
 
 type Config struct {
-	maxIDLengthLimit                  dynamicconfig.IntPropertyFn
-	defaultWorkflowRetrySettings      dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-	maxLinksPerRequest                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	linkMaxSize                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	enableSignalWithStartFromWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	maxIDLengthLimit                   dynamicconfig.IntPropertyFn
+	defaultWorkflowRetrySettings       dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+	maxLinksPerRequest                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	linkMaxSize                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	enableSignalWithStartFromWorkflow  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	workflowTimeSkippingEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	timeSkippingMaxSkipPerSession      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	timeSkippingMaxAccumulatedDuration dynamicconfig.DurationPropertyFn
 }
 
 func NewConfig(dc *dynamicconfig.Collection) Config {
 	return Config{
-		maxIDLengthLimit:                  dynamicconfig.MaxIDLengthLimit.Get(dc),
-		defaultWorkflowRetrySettings:      dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
-		maxLinksPerRequest:                dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
-		linkMaxSize:                       dynamicconfig.FrontendLinkMaxSize.Get(dc),
-		enableSignalWithStartFromWorkflow: dynamicconfig.EnableSignalWithStartFromWorkflow.Get(dc),
+		maxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
+		defaultWorkflowRetrySettings:       dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
+		maxLinksPerRequest:                 dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+		linkMaxSize:                        dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		enableSignalWithStartFromWorkflow:  dynamicconfig.EnableSignalWithStartFromWorkflow.Get(dc),
+		workflowTimeSkippingEnabled:        dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		timeSkippingMaxSkipPerSession:      dynamicconfig.TimeSkippingMaxSkipPerSession.Get(dc),
+		timeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
 	}
 }

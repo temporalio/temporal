@@ -31,6 +31,7 @@ type (
 		Clear()
 
 		Lock(ctx context.Context, lockPriority locks.Priority) error
+		TryLock(lockPriority locks.Priority) bool
 		Unlock()
 
 		IsDirty() bool
@@ -48,6 +49,13 @@ type (
 			shardContext ShardContext,
 			workflowEventsSlice ...*persistence.WorkflowEvents,
 		) (int64, error)
+
+		// SetCheckRunAlreadyExists makes the store confirm this run's derived run ID is unused on create.
+		// Set when the run ID is derived rather than random.
+		SetCheckRunAlreadyExists(verify bool)
+		// CheckRunAlreadyExists reports whether the run ID is derived rather than random, so creating the run must
+		// fail if it already exists.
+		CheckRunAlreadyExists() bool
 
 		CreateWorkflowExecution(
 			ctx context.Context,

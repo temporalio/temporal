@@ -818,7 +818,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 			},
 		},
 	}
-	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
@@ -845,7 +845,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 			},
 		},
 	}
-	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
@@ -853,6 +853,96 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_LocalNamespaceSkipsRefreshAndProcessing() {
+	s.config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+	namespaceEntry, err := namespace.FromPersistentState(
+		detail,
+		namespace.NewDefaultReplicationResolverFactory()(detail),
+		namespace.WithGlobalFlag(false),
+	)
+	s.NoError(err)
+	s.task.replicationTask.VersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: namespaceEntry.FailoverVersion("test-workflow-id") + 1,
+	}
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil)
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_SourceClusterNotInNamespaceSkipsRefreshAndProcessing() {
+	s.config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+	namespaceEntry, err := namespace.FromPersistentState(
+		detail,
+		namespace.NewDefaultReplicationResolverFactory()(detail),
+		namespace.WithGlobalFlag(true),
+	)
+	s.NoError(err)
+	s.task.replicationTask.VersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: namespaceEntry.FailoverVersion("test-workflow-id") + 1,
+	}
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil)
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_SourceClusterValidationDisabled() {
+	s.config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(false)
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	detail := &persistencespb.NamespaceDetail{
+		Info:   &persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+	namespaceEntry, err := namespace.FromPersistentState(
+		detail,
+		namespace.NewDefaultReplicationResolverFactory()(detail),
+		namespace.WithGlobalFlag(true),
+	)
+	s.NoError(err)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).Times(2)
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.True(toProcess)
 }
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
@@ -874,7 +964,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 			},
 		},
 	}
-	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
@@ -892,15 +982,23 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	s.Error(err)
 }
 
-func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteSuccess() {
+func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceNotFoundSkipsRefreshAndProcessing() {
+	s.config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceID := uuid.NewString()
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found"))
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.Empty(name)
+	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceNotFoundRefreshesWhenValidationDisabled() {
+	s.config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(false)
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	factory := namespace.NewDefaultReplicationResolverFactory()
 	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
-			Id:   namespaceID,
-			Name: namespaceName,
-		},
+		Info:   &persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 		Config: &persistencespb.NamespaceConfig{},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -910,14 +1008,15 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 			},
 		},
 	}
-	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	namespaceEntry, err := namespace.FromPersistentState(
+		detail,
+		namespace.NewDefaultReplicationResolverFactory()(detail),
+		namespace.WithGlobalFlag(true),
+	)
 	s.NoError(err)
-	// enable feature flag
-
-	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).Times(1)
-	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
-		namespaceEntry, nil)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found"))
+	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), s.sourceCluster).Return(namespaceEntry, nil)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil)
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
@@ -969,7 +1068,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		},
 		FailoverVersion: 10,
 	}
-	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
+	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 	detailNew := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
@@ -986,7 +1085,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		},
 		FailoverVersion: 100,
 	}
-	namespaceEntryNew, err := namespace.FromPersistentState(detailNew, factory(detailNew))
+	namespaceEntryNew, err := namespace.FromPersistentState(detailNew, factory(detailNew), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
@@ -1044,7 +1143,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		},
 		FailoverVersion: 10,
 	}
-	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
+	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld), namespace.WithGlobalFlag(true))
 	s.NoError(err)
 
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
@@ -1055,18 +1154,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Empty(name)
 	s.Error(err)
-	s.False(toProcess)
-}
-
-func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteFailed() {
-	namespaceID := uuid.NewString()
-
-	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).AnyTimes()
-	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
-		nil, errors.New("some error"))
-
-	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
-	s.NoError(err)
 	s.False(toProcess)
 }
 
@@ -1291,6 +1378,67 @@ func (s *executableTaskSuite) TestSyncState() {
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)
 	s.True(doContinue)
+}
+
+func (s *executableTaskSuite) TestSyncState_KeepsForceReplication() {
+	testCases := map[string]*replicationspb.ReplicationTask{
+		"SyncVersionedTransition attributes": {
+			Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
+				SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
+					VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{IsForceReplication: true},
+				},
+			},
+		},
+		// Verify and backfill tasks converted from a force replication task only keep the flag in the raw task.
+		"raw task info": {
+			RawTaskInfo: &persistencespb.ReplicationTaskInfo{IsForceReplication: true},
+		},
+	}
+	for name, replicationTask := range testCases {
+		s.Run(name, func() {
+			now := time.Now()
+			s.task = NewExecutableTask(
+				s.toolBox,
+				s.taskId,
+				"metrics-tag",
+				now,
+				now,
+				s.sourceCluster,
+				s.sourceShardKey,
+				replicationTask,
+			)
+			syncStateErr := &serviceerrors.SyncState{
+				NamespaceId: uuid.NewString(),
+				WorkflowId:  uuid.NewString(),
+				RunId:       uuid.NewString(),
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			}
+
+			mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+			s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).Times(1)
+			mockRemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).Return(&adminservice.SyncWorkflowStateResponse{
+				VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{},
+			}, nil).Times(1)
+
+			shardContext := historyi.NewMockShardContext(s.controller)
+			engine := historyi.NewMockEngine(s.controller)
+			s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+				namespace.ID(syncStateErr.NamespaceId),
+				syncStateErr.WorkflowId,
+			).Return(shardContext, nil).Times(1)
+			shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
+			engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, gomock.Any(), s.sourceCluster).DoAndReturn(
+				func(_ context.Context, _ chasm.ArchetypeID, artifact *replicationspb.VersionedTransitionArtifact, _ string) error {
+					s.True(artifact.GetIsForceReplication())
+					return nil
+				},
+			)
+
+			doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+			s.NoError(err)
+			s.True(doContinue)
+		})
+	}
 }
 
 func (s *executableTaskSuite) TestSyncState_NotFound() {

@@ -174,6 +174,15 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 				tag.String("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
+		if !resp.IsGlobalNamespace {
+			h.logger.Warn(
+				"Namespace replication task skipped because namespace is local",
+				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.WorkflowNamespace(resp.Namespace.Info.Name),
+				tag.String("namespace-operation", task.GetNamespaceOperation().String()),
+			)
+			return false, nil
+		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
@@ -207,6 +216,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+				BadBinaries:                  task.Config.GetBadBinaries(),
 				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),

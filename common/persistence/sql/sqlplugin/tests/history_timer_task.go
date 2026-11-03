@@ -13,11 +13,16 @@ import (
 )
 
 type (
+	historyTimerAndScheduledTaskStore interface {
+		sqlplugin.HistoryTimerTask
+		sqlplugin.HistoryScheduledTask
+	}
+
 	historyHistoryTimerTaskSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.HistoryTimerTask
+		store historyTimerAndScheduledTaskStore
 	}
 )
 
@@ -31,7 +36,7 @@ var (
 
 func NewHistoryTimerTaskSuite(
 	t *testing.T,
-	store sqlplugin.HistoryTimerTask,
+	store historyTimerAndScheduledTaskStore,
 ) *historyHistoryTimerTaskSuite {
 	return &historyHistoryTimerTaskSuite{
 		Assertions: require.New(t),
@@ -217,6 +222,68 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelectMultipleAtSameTimestamp()
 		rows[index].ShardID = shardID
 	}
 	s.Equal(tasks[1:], rows)
+}
+
+func (s *historyHistoryTimerTaskSuite) TestHistoryScheduledTasksPaginateAcrossTimestampTies() {
+	shardID := rand.Int31()
+	categoryID := rand.Int31()
+	otherCategoryID := categoryID + 1
+	timestamp := s.now()
+	laterTimestamp := timestamp.Add(time.Millisecond)
+	maxTimestamp := laterTimestamp.Add(time.Millisecond)
+
+	newRow := func(categoryID int32, timestamp time.Time, taskID int64) sqlplugin.HistoryScheduledTasksRow {
+		return sqlplugin.HistoryScheduledTasksRow{
+			ShardID:             shardID,
+			CategoryID:          categoryID,
+			VisibilityTimestamp: timestamp,
+			TaskID:              taskID,
+			Data:                shuffle.Bytes(testHistoryTimerTaskData),
+			DataEncoding:        testHistoryTimerTaskEncoding,
+		}
+	}
+	// Rows before the cursor, in another category and at the exclusive max must never be returned.
+	excluded := []sqlplugin.HistoryScheduledTasksRow{
+		newRow(categoryID, timestamp.Add(-time.Millisecond), 100),
+		newRow(categoryID, timestamp, 1),
+		newRow(otherCategoryID, timestamp, 2),
+		newRow(categoryID, maxTimestamp, 1),
+	}
+	expected := []sqlplugin.HistoryScheduledTasksRow{
+		newRow(categoryID, timestamp, 2),
+		newRow(categoryID, timestamp, 3),
+		newRow(categoryID, timestamp, 4),
+		newRow(categoryID, laterTimestamp, 1),
+		newRow(categoryID, laterTimestamp, 2),
+	}
+	_, err := s.store.InsertIntoHistoryScheduledTasks(newExecutionContext(), append(excluded, expected...))
+	s.Require().NoError(err)
+
+	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
+		ShardID:                         shardID,
+		CategoryID:                      categoryID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		InclusiveMinTaskID:              2,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        2,
+	}
+	var rows []sqlplugin.HistoryScheduledTasksRow
+	for {
+		page, err := s.store.RangeSelectFromHistoryScheduledTasks(newExecutionContext(), filter)
+		s.Require().NoError(err)
+		for index := range page {
+			page[index].ShardID = shardID
+			page[index].CategoryID = categoryID
+		}
+		rows = append(rows, page...)
+		if len(page) < filter.PageSize {
+			break
+		}
+		last := page[len(page)-1]
+		filter.InclusiveMinVisibilityTimestamp = last.VisibilityTimestamp
+		filter.InclusiveMinTaskID = last.TaskID + 1
+	}
+	s.Equal(expected, rows)
 }
 
 func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {

@@ -67,6 +67,12 @@ const (
 	mainBranch          = "main"
 )
 
+// rcBranchMarker identifies a release candidate cut of a cloud branch, as in
+// cloud/v1.33.0-165-rc.20261014113044 for cloud/v1.33.0-165. Candidates are cut
+// daily and discarded, so they are subject to the same dependency policy but do
+// not create api-go releases of their own.
+const rcBranchMarker = "-rc."
+
 func main() {
 	mode := flag.String("mode", modeCheck,
 		`Either "check", to validate go.mod against the base branch's policy, or `+
