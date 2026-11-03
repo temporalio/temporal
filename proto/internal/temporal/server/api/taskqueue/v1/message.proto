@@ -9,6 +9,7 @@ import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/server/api/deployment/v1/message.proto";
+import "temporal/server/api/enums/v1/flow_control.proto";
 import "temporal/server/api/enums/v1/task.proto";
 
 option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
@@ -202,4 +203,14 @@ message ClientPartitionCounts {
   bytes backlog_count = 3;
   // Backlog load balancing config from scaler, in compact8 format.
   int32 backlog_cap = 4;
+}
+
+// LimiterRef is a reference to a flow control limiter. Limiters have namespace scope.
+message LimiterRef {
+  // Type of limiter that owns the slot.
+  temporal.server.api.enums.v1.LimiterType limiter_type = 1;
+  // Identifier of the limiter within the namespace.
+  string key = 2;
+  // Identifier for the reserved or committed slot. Empty for limiters that don't allocate slots.
+  string slot_id = 3;
 }
