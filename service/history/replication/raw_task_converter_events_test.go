@@ -27,12 +27,16 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name             string
-		cached           bool
-		stateOnly        bool
-		existingEvents   bool
-		forceReplication bool
-		readError        error
+		name              string
+		cached            bool
+		stateOnly         bool
+		existingEvents    bool
+		forceReplication  bool
+		readError         error
+		snapshotHistory   []*historyspb.VersionHistoryItem
+		cachedHistory     []*historyspb.VersionHistoryItem
+		cachedNextEventID int64
+		omitEvents        bool
 	}{
 		{name: "cold progress with cached batches", cached: true},
 		{name: "cold progress with paginated persistence read"},
@@ -40,6 +44,31 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 		{name: "state only transition", stateOnly: true},
 		{name: "preserve events selected by target progress", existingEvents: true},
 		{name: "force replication retains task range", cached: true, forceReplication: true},
+		{
+			name: "rebuilt snapshot rejects discarded cached branch", cached: true, omitEvents: true,
+			snapshotHistory: []*historyspb.VersionHistoryItem{{EventId: 6, Version: 100}, {EventId: 18, Version: 200}},
+			cachedHistory:   []*historyspb.VersionHistoryItem{{EventId: 18, Version: 100}},
+		},
+		{
+			name: "shared prefix remains valid before divergence", cached: true,
+			snapshotHistory: []*historyspb.VersionHistoryItem{{EventId: 8, Version: 100}, {EventId: 18, Version: 200}},
+			cachedHistory:   []*historyspb.VersionHistoryItem{{EventId: 18, Version: 100}},
+		},
+		{
+			name: "validate cached batch beyond requested end", cached: true, omitEvents: true, cachedNextEventID: 11,
+			snapshotHistory: []*historyspb.VersionHistoryItem{{EventId: 8, Version: 100}, {EventId: 18, Version: 200}},
+			cachedHistory:   []*historyspb.VersionHistoryItem{{EventId: 18, Version: 100}},
+		},
+		{
+			name: "cached batch extends beyond snapshot tip", cached: true, omitEvents: true, cachedNextEventID: 11,
+			snapshotHistory: []*historyspb.VersionHistoryItem{{EventId: 8, Version: 100}},
+			cachedHistory:   []*historyspb.VersionHistoryItem{{EventId: 18, Version: 100}},
+		},
+		{
+			name: "unrelated cached history is omitted without failing task", cached: true, omitEvents: true,
+			snapshotHistory: []*historyspb.VersionHistoryItem{{EventId: 18, Version: 200}},
+			cachedHistory:   []*historyspb.VersionHistoryItem{{EventId: 18, Version: 100}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -51,6 +80,9 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 				Items: []*historyspb.VersionHistoryItem{
 					{EventId: 18, Version: 100},
 				},
+			}
+			if tc.snapshotHistory != nil {
+				versionHistory.Items = tc.snapshotHistory
 			}
 			transitionHistory := []*persistencespb.VersionedTransition{
 				{NamespaceFailoverVersion: 100, TransitionCount: 10},
@@ -116,10 +148,20 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 			logger := log.NewTestLogger()
 			cache := persistence.NewEventsBlobCache(1024*1024, time.Minute, logger)
 			if tc.cached {
-				for i, batch := range batches {
-					cache.Put(persistence.NewXDCCacheKey(key, 7+int64(i), 100), persistence.NewXDCCacheValue(
-						nil, versionHistory.Items, []*commonpb.DataBlob{batch}, 8+int64(i),
+				cachedHistory := tc.cachedHistory
+				if cachedHistory == nil {
+					cachedHistory = versionHistory.Items
+				}
+				if tc.cachedNextEventID != 0 {
+					cache.Put(persistence.NewXDCCacheKey(key, 7, 100), persistence.NewXDCCacheValue(
+						nil, cachedHistory, batches, tc.cachedNextEventID,
 					))
+				} else {
+					for i, batch := range batches {
+						cache.Put(persistence.NewXDCCacheKey(key, 7+int64(i), 100), persistence.NewXDCCacheValue(
+							nil, cachedHistory, []*commonpb.DataBlob{batch}, 8+int64(i),
+						))
+					}
 				}
 			} else if !tc.stateOnly && !tc.existingEvents {
 				request := &persistence.ReadHistoryBranchRequest{
@@ -160,7 +202,7 @@ func TestSyncTaskIncludesPersistedEvents(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if !tc.stateOnly {
+			if !tc.stateOnly && !tc.omitEvents {
 				protorequire.ProtoSliceEqual(t, batches, result.GetSyncVersionedTransitionTaskAttributes().GetVersionedTransitionArtifact().GetEventBatches())
 			} else {
 				require.Empty(t, result.GetSyncVersionedTransitionTaskAttributes().GetVersionedTransitionArtifact().GetEventBatches())
