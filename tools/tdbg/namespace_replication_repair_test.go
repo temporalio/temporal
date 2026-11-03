@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -22,6 +23,32 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestNamespaceRepairInvalidSourceReturnsBlockedJSON(t *testing.T) {
+	for _, state := range []string{"inactive", "handover"} {
+		t.Run(state, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			if state == "inactive" {
+				source.ReplicationConfig.ActiveClusterName = "cluster-b"
+			} else {
+				source.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
+			}
+			factory := &testNamespaceReplicationCLIClientFactory{
+				sourceAddress: "source-address", clients: map[string]*testNamespaceReplicationAdminClient{"source-address": testNamespaceReplicationSourceClient(source)},
+			}
+			app, output := testNamespaceReplicationCLIApp(factory)
+			err := app.Run([]string{"tdbg", "namespace", "replication", "repair", "--namespace", "namespace", "--print-json"})
+			var exit cli.ExitCoder
+			require.ErrorAs(t, err, &exit)
+			require.Equal(t, 2, exit.ExitCode())
+			var result namespaceReplicationRepairPlan
+			require.NoError(t, json.Unmarshal(output.Bytes(), &result))
+			require.Equal(t, namespaceReplicationRepairStatusBlocked, result.Status)
+			require.NotEmpty(t, result.StatusDetail)
+			require.Equal(t, namespaceReplicationRepairActionNone, result.SourceAction)
+		})
+	}
+}
 
 func TestNamespaceReplicationRepairCommandDryRun(t *testing.T) {
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)

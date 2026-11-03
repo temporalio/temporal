@@ -54,7 +54,7 @@ func planNamespaceReplicationRepair(
 	repairID string,
 	plannedAt time.Time,
 ) (*namespaceReplicationRepairPlan, error) {
-	if observation == nil || observation.result == nil || observation.sourceSnapshot == nil || !observation.sourceStable {
+	if observation == nil || observation.result == nil {
 		return nil, errors.New("repair planning requires a complete namespace replication observation")
 	}
 	verification := observation.result
@@ -76,6 +76,9 @@ func planNamespaceReplicationRepair(
 			plan.StatusDetail = "verification did not produce an executable repair plan"
 		}
 		return plan, nil
+	}
+	if observation.sourceSnapshot == nil || !observation.sourceStable {
+		return nil, errors.New("repair planning requires a complete namespace replication observation")
 	}
 
 	versionPlan, err := inspectNamespaceRepairVersions(verification, plan.SourceConfigVersion)
