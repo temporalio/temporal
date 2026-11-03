@@ -201,9 +201,9 @@ func peerRetryBackoff(completedAttempts int32) time.Duration {
 }
 
 // EventPeerRetry records a retriable peer failure without marking the peer
-// terminal: it updates the attempt count and last failure, keeps the peer
-// PENDING (so ApplyPeerTask.Validate lets the next attempt run), and schedules
-// a pure backoff task. On peer recovery a later attempt
+// terminal: it updates the attempt count and last failure, marks the peer
+// FAILED_RETRIABLE while waiting for a pure backoff task, and schedules that
+// task. On peer recovery a later attempt
 // succeeds; if the peer never recovers, recordPeerOutcome flips it to
 // FAILED_TERMINAL once the retry budget is exhausted.
 type EventPeerRetry struct {
@@ -224,8 +224,7 @@ var TransitionPeerRetry = chasm.NewTransition(
 		if status.GetFirstAttemptAt() == nil {
 			status.FirstAttemptAt = timestamppb.New(event.Time)
 		}
-		// Keep PENDING: the peer isn't done, it's between retries.
-		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
+		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 		status.AttemptCount = event.Attempts
 		status.LastAttemptAt = timestamppb.New(event.Time)
 		if event.Err != nil {
@@ -255,10 +254,52 @@ var TransitionPeerRetryReady = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventPeerRetryReady) error {
+		peer := c.GetPeerApply()[event.TargetCell]
+		if peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE ||
+			peer.GetAttemptCount() != event.Attempt {
+			return nil
+		}
+		// Invalidate the scheduled timer in the same transaction that dispatches
+		// the next delivery. Only PENDING peers can execute outbound tasks.
+		peer.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
 		ctx.AddTask(c, chasm.TaskAttributes{Destination: event.TargetCell}, &namespacereplicationpb.ApplyPeerTask{
 			TargetCell: event.TargetCell,
 			Attempt:    event.Attempt,
 		})
+		return nil
+	},
+)
+
+// EventPeerManuallyReconciled records that an operator repair superseded a
+// pending peer delivery. It is intentionally separate from EventPeerCompleted:
+// repair is not another transport attempt and must preserve the actual attempt
+// count, timestamps, and last failure.
+type EventPeerManuallyReconciled struct {
+	Time       time.Time
+	Cutoff     time.Time
+	TargetCell string
+	RepairID   string
+	Reason     string
+	Basis      namespacereplicationpb.ManualReconciliationBasis
+}
+
+var TransitionPeerManuallyReconciled = chasm.NewTransition(
+	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
+	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+	func(c *NamespaceMutationComponent, _ chasm.MutableContext, event EventPeerManuallyReconciled) error {
+		status := c.GetPeerApply()[event.TargetCell]
+		if status == nil || (status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING &&
+			status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE) {
+			return nil
+		}
+		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+		status.ManualReconciliation = &namespacereplicationpb.ManualReconciliation{
+			RepairId:     event.RepairID,
+			Reason:       event.Reason,
+			ReconciledAt: timestamppb.New(event.Time),
+			Cutoff:       timestamppb.New(event.Cutoff),
+			Basis:        event.Basis,
+		}
 		return nil
 	},
 )

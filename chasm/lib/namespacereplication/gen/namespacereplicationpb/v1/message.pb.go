@@ -12,8 +12,9 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v11 "go.temporal.io/api/failure/v1"
-	v1 "go.temporal.io/server/api/persistence/v1"
+	v12 "go.temporal.io/api/failure/v1"
+	v1 "go.temporal.io/server/api/enums/v1"
+	v11 "go.temporal.io/server/api/persistence/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -25,65 +26,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-type NamespaceOperation int32
-
-const (
-	NAMESPACE_OPERATION_UNSPECIFIED NamespaceOperation = 0
-	NAMESPACE_OPERATION_CREATE      NamespaceOperation = 1
-	NAMESPACE_OPERATION_UPDATE      NamespaceOperation = 2
-)
-
-// Enum value maps for NamespaceOperation.
-var (
-	NamespaceOperation_name = map[int32]string{
-		0: "NAMESPACE_OPERATION_UNSPECIFIED",
-		1: "NAMESPACE_OPERATION_CREATE",
-		2: "NAMESPACE_OPERATION_UPDATE",
-	}
-	NamespaceOperation_value = map[string]int32{
-		"NAMESPACE_OPERATION_UNSPECIFIED": 0,
-		"NAMESPACE_OPERATION_CREATE":      1,
-		"NAMESPACE_OPERATION_UPDATE":      2,
-	}
-)
-
-func (x NamespaceOperation) Enum() *NamespaceOperation {
-	p := new(NamespaceOperation)
-	*p = x
-	return p
-}
-
-func (x NamespaceOperation) String() string {
-	switch x {
-	case NAMESPACE_OPERATION_UNSPECIFIED:
-		return "Unspecified"
-	case NAMESPACE_OPERATION_CREATE:
-		return "Create"
-	case NAMESPACE_OPERATION_UPDATE:
-		return "Update"
-	default:
-		return strconv.Itoa(int(x))
-	}
-
-}
-
-func (NamespaceOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[0].Descriptor()
-}
-
-func (NamespaceOperation) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[0]
-}
-
-func (x NamespaceOperation) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use NamespaceOperation.Descriptor instead.
-func (NamespaceOperation) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
 
 type ComponentStatus int32
 
@@ -136,11 +78,11 @@ func (x ComponentStatus) String() string {
 }
 
 func (ComponentStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[1].Descriptor()
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[0].Descriptor()
 }
 
 func (ComponentStatus) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[1]
+	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[0]
 }
 
 func (x ComponentStatus) Number() protoreflect.EnumNumber {
@@ -149,7 +91,7 @@ func (x ComponentStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentStatus.Descriptor instead.
 func (ComponentStatus) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
 // LocalApplyOutcome reports the result of the local phase: pending until an
@@ -208,11 +150,11 @@ func (x LocalApplyOutcome) String() string {
 }
 
 func (LocalApplyOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[2].Descriptor()
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[1].Descriptor()
 }
 
 func (LocalApplyOutcome) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[2]
+	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[1]
 }
 
 func (x LocalApplyOutcome) Number() protoreflect.EnumNumber {
@@ -221,7 +163,7 @@ func (x LocalApplyOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LocalApplyOutcome.Descriptor instead.
 func (LocalApplyOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
 // PeerApplyOutcome reports the result of processing a mutation at a peer via
@@ -249,6 +191,11 @@ const (
 	// The peer processed a shadow request without writing receiver state and the
 	// received payload did not match the sender's fingerprint.
 	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
+	// An operator repair independently established the authoritative namespace
+	// state (or proved that the peer was removed from the replica set), making
+	// further delivery attempts unnecessary. This is terminal success, but is
+	// deliberately distinct from a transport apply/no-op outcome.
+	PEER_APPLY_OUTCOME_MANUALLY_RECONCILED PeerApplyOutcome = 9
 )
 
 // Enum value maps for PeerApplyOutcome.
@@ -263,17 +210,19 @@ var (
 		6: "PEER_APPLY_OUTCOME_NOT_ADMITTED",
 		7: "PEER_APPLY_OUTCOME_SHADOW_MATCH",
 		8: "PEER_APPLY_OUTCOME_SHADOW_MISMATCH",
+		9: "PEER_APPLY_OUTCOME_MANUALLY_RECONCILED",
 	}
 	PeerApplyOutcome_value = map[string]int32{
-		"PEER_APPLY_OUTCOME_UNSPECIFIED":      0,
-		"PEER_APPLY_OUTCOME_PENDING":          1,
-		"PEER_APPLY_OUTCOME_APPLIED":          2,
-		"PEER_APPLY_OUTCOME_NO_OP_STALE":      3,
-		"PEER_APPLY_OUTCOME_FAILED_RETRIABLE": 4,
-		"PEER_APPLY_OUTCOME_FAILED_TERMINAL":  5,
-		"PEER_APPLY_OUTCOME_NOT_ADMITTED":     6,
-		"PEER_APPLY_OUTCOME_SHADOW_MATCH":     7,
-		"PEER_APPLY_OUTCOME_SHADOW_MISMATCH":  8,
+		"PEER_APPLY_OUTCOME_UNSPECIFIED":         0,
+		"PEER_APPLY_OUTCOME_PENDING":             1,
+		"PEER_APPLY_OUTCOME_APPLIED":             2,
+		"PEER_APPLY_OUTCOME_NO_OP_STALE":         3,
+		"PEER_APPLY_OUTCOME_FAILED_RETRIABLE":    4,
+		"PEER_APPLY_OUTCOME_FAILED_TERMINAL":     5,
+		"PEER_APPLY_OUTCOME_NOT_ADMITTED":        6,
+		"PEER_APPLY_OUTCOME_SHADOW_MATCH":        7,
+		"PEER_APPLY_OUTCOME_SHADOW_MISMATCH":     8,
+		"PEER_APPLY_OUTCOME_MANUALLY_RECONCILED": 9,
 	}
 )
 
@@ -303,21 +252,22 @@ func (x PeerApplyOutcome) String() string {
 		return "ShadowMatch"
 	case PEER_APPLY_OUTCOME_SHADOW_MISMATCH:
 		return "ShadowMismatch"
-	default:
-		return strconv.
+	case PEER_APPLY_OUTCOME_MANUALLY_RECONCILED:
 
-			// Deprecated: Use PeerApplyOutcome.Descriptor instead.
-			Itoa(int(x))
+		// Deprecated: Use PeerApplyOutcome.Descriptor instead.
+		return "ManuallyReconciled"
+	default:
+		return strconv.Itoa(int(x))
 	}
 
 }
 
 func (PeerApplyOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[3].Descriptor()
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[2].Descriptor()
 }
 
 func (PeerApplyOutcome) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[3]
+	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[2]
 }
 
 func (x PeerApplyOutcome) Number() protoreflect.EnumNumber {
@@ -325,19 +275,146 @@ func (x PeerApplyOutcome) Number() protoreflect.EnumNumber {
 }
 
 func (PeerApplyOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{2}
+}
+
+type ManualReconciliationBasis int32
+
+const (
+	MANUAL_RECONCILIATION_BASIS_UNSPECIFIED ManualReconciliationBasis = 0
+	// The peer remains configured and its namespace state was verified after
+	// repair.
+	MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET ManualReconciliationBasis = 1
+	// The authoritative source no longer includes the peer in the namespace's
+	// replica set.
+	MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP ManualReconciliationBasis = 2
+)
+
+// Enum value maps for ManualReconciliationBasis.
+var (
+	ManualReconciliationBasis_name = map[int32]string{
+		0: "MANUAL_RECONCILIATION_BASIS_UNSPECIFIED",
+		1: "MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET",
+		2: "MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP",
+	}
+	ManualReconciliationBasis_value = map[string]int32{
+		"MANUAL_RECONCILIATION_BASIS_UNSPECIFIED":        0,
+		"MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET":    1,
+		"MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP": 2,
+	}
+)
+
+func (x ManualReconciliationBasis) Enum() *ManualReconciliationBasis {
+	p := new(ManualReconciliationBasis)
+	*p = x
+	return p
+}
+
+func (x ManualReconciliationBasis) String() string {
+	switch x {
+	case MANUAL_RECONCILIATION_BASIS_UNSPECIFIED:
+		return "Unspecified"
+	case MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET:
+		return "VerifiedTarget"
+	case MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP:
+		return "RemovedMembership"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (ManualReconciliationBasis) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[3].Descriptor()
+}
+
+func (ManualReconciliationBasis) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[3]
+}
+
+func (x ManualReconciliationBasis) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ManualReconciliationBasis.Descriptor instead.
+func (ManualReconciliationBasis) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{3}
+}
+
+type PeerReconciliation_Outcome int32
+
+const (
+	PeerReconciliation_OUTCOME_UNSPECIFIED      PeerReconciliation_Outcome = 0
+	PeerReconciliation_OUTCOME_RECONCILED       PeerReconciliation_Outcome = 1
+	PeerReconciliation_OUTCOME_ALREADY_TERMINAL PeerReconciliation_Outcome = 2
+	PeerReconciliation_OUTCOME_NOT_VERIFIED     PeerReconciliation_Outcome = 3
+)
+
+// Enum value maps for PeerReconciliation_Outcome.
+var (
+	PeerReconciliation_Outcome_name = map[int32]string{
+		0: "OUTCOME_UNSPECIFIED",
+		1: "OUTCOME_RECONCILED",
+		2: "OUTCOME_ALREADY_TERMINAL",
+		3: "OUTCOME_NOT_VERIFIED",
+	}
+	PeerReconciliation_Outcome_value = map[string]int32{
+		"OUTCOME_UNSPECIFIED":      0,
+		"OUTCOME_RECONCILED":       1,
+		"OUTCOME_ALREADY_TERMINAL": 2,
+		"OUTCOME_NOT_VERIFIED":     3,
+	}
+)
+
+func (x PeerReconciliation_Outcome) Enum() *PeerReconciliation_Outcome {
+	p := new(PeerReconciliation_Outcome)
+	*p = x
+	return p
+}
+
+func (x PeerReconciliation_Outcome) String() string {
+	switch x {
+	case PeerReconciliation_OUTCOME_UNSPECIFIED:
+		return "PeerReconciliationOutcomeUnspecified"
+	case PeerReconciliation_OUTCOME_RECONCILED:
+		return "PeerReconciliationOutcomeReconciled"
+	case PeerReconciliation_OUTCOME_ALREADY_TERMINAL:
+		return "PeerReconciliationOutcomeAlreadyTerminal"
+	case PeerReconciliation_OUTCOME_NOT_VERIFIED:
+		return "PeerReconciliationOutcomeNotVerified"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (PeerReconciliation_Outcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[4].Descriptor()
+}
+
+func (PeerReconciliation_Outcome) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes[4]
+}
+
+func (x PeerReconciliation_Outcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PeerReconciliation_Outcome.Descriptor instead.
+func (PeerReconciliation_Outcome) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{6, 0}
 }
 
 // NamespaceMutation is the input to a NamespaceMutationComponent. It contains
 // the full target state of the namespace and the local CAS guard.
 type NamespaceMutation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// CREATE or UPDATE. Mirrors transmission_task_handler's NamespaceOperation.
-	Operation NamespaceOperation `protobuf:"varint,1,opt,name=operation,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperation" json:"operation,omitempty"`
+	// CREATE or UPDATE.
+	Operation v1.NamespaceOperation `protobuf:"varint,1,opt,name=operation,proto3,enum=temporal.server.api.enums.v1.NamespaceOperation" json:"operation,omitempty"`
 	// Full target NamespaceDetail. The local apply writes this detail to the
 	// metadata store. Peer applies convert it to NamespaceTaskAttributes before
 	// invoking ApplyNamespaceMutation.
-	NamespaceDetail *v1.NamespaceDetail `protobuf:"bytes,2,opt,name=namespace_detail,json=namespaceDetail,proto3" json:"namespace_detail,omitempty"`
+	NamespaceDetail *v11.NamespaceDetail `protobuf:"bytes,2,opt,name=namespace_detail,json=namespaceDetail,proto3" json:"namespace_detail,omitempty"`
 	// CAS guard for the local apply. Must match the metadata store's current
 	// notification_version (today: cell-global counter; future: per-namespace).
 	ExpectedVersion int64 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
@@ -388,14 +465,14 @@ func (*NamespaceMutation) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *NamespaceMutation) GetOperation() NamespaceOperation {
+func (x *NamespaceMutation) GetOperation() v1.NamespaceOperation {
 	if x != nil {
 		return x.Operation
 	}
-	return NAMESPACE_OPERATION_UNSPECIFIED
+	return v1.NamespaceOperation(0)
 }
 
-func (x *NamespaceMutation) GetNamespaceDetail() *v1.NamespaceDetail {
+func (x *NamespaceMutation) GetNamespaceDetail() *v11.NamespaceDetail {
 	if x != nil {
 		return x.NamespaceDetail
 	}
@@ -503,6 +580,82 @@ func (x *NamespaceMutationState) GetPeerApply() map[string]*PeerApplyStatus {
 	return nil
 }
 
+type ManualReconciliation struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	RepairId      string                    `protobuf:"bytes,1,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	Reason        string                    `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	ReconciledAt  *timestamppb.Timestamp    `protobuf:"bytes,3,opt,name=reconciled_at,json=reconciledAt,proto3" json:"reconciled_at,omitempty"`
+	Cutoff        *timestamppb.Timestamp    `protobuf:"bytes,4,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	Basis         ManualReconciliationBasis `protobuf:"varint,5,opt,name=basis,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasis" json:"basis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManualReconciliation) Reset() {
+	*x = ManualReconciliation{}
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManualReconciliation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManualReconciliation) ProtoMessage() {}
+
+func (x *ManualReconciliation) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManualReconciliation.ProtoReflect.Descriptor instead.
+func (*ManualReconciliation) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ManualReconciliation) GetRepairId() string {
+	if x != nil {
+		return x.RepairId
+	}
+	return ""
+}
+
+func (x *ManualReconciliation) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ManualReconciliation) GetReconciledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReconciledAt
+	}
+	return nil
+}
+
+func (x *ManualReconciliation) GetCutoff() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Cutoff
+	}
+	return nil
+}
+
+func (x *ManualReconciliation) GetBasis() ManualReconciliationBasis {
+	if x != nil {
+		return x.Basis
+	}
+	return MANUAL_RECONCILIATION_BASIS_UNSPECIFIED
+}
+
 type LocalApplyStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Current outcome of the local phase.
@@ -510,14 +663,14 @@ type LocalApplyStatus struct {
 	// Time the local apply reached a terminal outcome. Unset while pending.
 	ResolvedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
 	// Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
-	Failure       *v11.Failure `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
+	Failure       *v12.Failure `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LocalApplyStatus) Reset() {
 	*x = LocalApplyStatus{}
-	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -529,7 +682,7 @@ func (x *LocalApplyStatus) String() string {
 func (*LocalApplyStatus) ProtoMessage() {}
 
 func (x *LocalApplyStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -542,7 +695,7 @@ func (x *LocalApplyStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocalApplyStatus.ProtoReflect.Descriptor instead.
 func (*LocalApplyStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *LocalApplyStatus) GetOutcome() LocalApplyOutcome {
@@ -559,7 +712,7 @@ func (x *LocalApplyStatus) GetResolvedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *LocalApplyStatus) GetFailure() *v11.Failure {
+func (x *LocalApplyStatus) GetFailure() *v12.Failure {
 	if x != nil {
 		return x.Failure
 	}
@@ -577,14 +730,17 @@ type PeerApplyStatus struct {
 	// Time the most recent apply attempt result was recorded.
 	LastAttemptAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
 	// Most recent failure. Retained after a later successful attempt for diagnostics.
-	LastFailure   *v11.Failure `protobuf:"bytes,5,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LastFailure *v12.Failure `protobuf:"bytes,5,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
+	// Set only when an operator repair superseded the pending delivery. Existing
+	// attempt counters, timestamps, and failure details remain untouched.
+	ManualReconciliation *ManualReconciliation `protobuf:"bytes,6,opt,name=manual_reconciliation,json=manualReconciliation,proto3" json:"manual_reconciliation,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PeerApplyStatus) Reset() {
 	*x = PeerApplyStatus{}
-	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -596,7 +752,7 @@ func (x *PeerApplyStatus) String() string {
 func (*PeerApplyStatus) ProtoMessage() {}
 
 func (x *PeerApplyStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -609,7 +765,7 @@ func (x *PeerApplyStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerApplyStatus.ProtoReflect.Descriptor instead.
 func (*PeerApplyStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PeerApplyStatus) GetOutcome() PeerApplyOutcome {
@@ -640,20 +796,155 @@ func (x *PeerApplyStatus) GetLastAttemptAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *PeerApplyStatus) GetLastFailure() *v11.Failure {
+func (x *PeerApplyStatus) GetLastFailure() *v12.Failure {
 	if x != nil {
 		return x.LastFailure
 	}
 	return nil
 }
 
+func (x *PeerApplyStatus) GetManualReconciliation() *ManualReconciliation {
+	if x != nil {
+		return x.ManualReconciliation
+	}
+	return nil
+}
+
+type ReconcileNamespaceMutationResponse struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Peers              []*PeerReconciliation  `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	ComponentCompleted bool                   `protobuf:"varint,2,opt,name=component_completed,json=componentCompleted,proto3" json:"component_completed,omitempty"`
+	ComponentEligible  bool                   `protobuf:"varint,3,opt,name=component_eligible,json=componentEligible,proto3" json:"component_eligible,omitempty"`
+	IneligibleReason   string                 `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ReconcileNamespaceMutationResponse) Reset() {
+	*x = ReconcileNamespaceMutationResponse{}
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReconcileNamespaceMutationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReconcileNamespaceMutationResponse) ProtoMessage() {}
+
+func (x *ReconcileNamespaceMutationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReconcileNamespaceMutationResponse.ProtoReflect.Descriptor instead.
+func (*ReconcileNamespaceMutationResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ReconcileNamespaceMutationResponse) GetPeers() []*PeerReconciliation {
+	if x != nil {
+		return x.Peers
+	}
+	return nil
+}
+
+func (x *ReconcileNamespaceMutationResponse) GetComponentCompleted() bool {
+	if x != nil {
+		return x.ComponentCompleted
+	}
+	return false
+}
+
+func (x *ReconcileNamespaceMutationResponse) GetComponentEligible() bool {
+	if x != nil {
+		return x.ComponentEligible
+	}
+	return false
+}
+
+func (x *ReconcileNamespaceMutationResponse) GetIneligibleReason() string {
+	if x != nil {
+		return x.IneligibleReason
+	}
+	return ""
+}
+
+type PeerReconciliation struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	TargetCell    string                     `protobuf:"bytes,1,opt,name=target_cell,json=targetCell,proto3" json:"target_cell,omitempty"`
+	Outcome       PeerReconciliation_Outcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation_Outcome" json:"outcome,omitempty"`
+	Basis         ManualReconciliationBasis  `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasis" json:"basis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PeerReconciliation) Reset() {
+	*x = PeerReconciliation{}
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PeerReconciliation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PeerReconciliation) ProtoMessage() {}
+
+func (x *PeerReconciliation) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PeerReconciliation.ProtoReflect.Descriptor instead.
+func (*PeerReconciliation) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PeerReconciliation) GetTargetCell() string {
+	if x != nil {
+		return x.TargetCell
+	}
+	return ""
+}
+
+func (x *PeerReconciliation) GetOutcome() PeerReconciliation_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return PeerReconciliation_OUTCOME_UNSPECIFIED
+}
+
+func (x *PeerReconciliation) GetBasis() ManualReconciliationBasis {
+	if x != nil {
+		return x.Basis
+	}
+	return MANUAL_RECONCILIATION_BASIS_UNSPECIFIED
+}
+
 var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xe7\x02\n" +
-	"\x11NamespaceMutation\x12i\n" +
-	"\toperation\x18\x01 \x01(\x0e2K.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperationR\toperation\x12^\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xcc\x02\n" +
+	"\x11NamespaceMutation\x12N\n" +
+	"\toperation\x18\x01 \x01(\x0e20.temporal.server.api.enums.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
 	"\x10expected_version\x18\x03 \x01(\x03R\x0fexpectedVersion\x12\x1d\n" +
 	"\n" +
@@ -669,22 +960,40 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"peer_apply\x18\x04 \x03(\v2^.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntryR\tpeerApply\x1a\x86\x01\n" +
 	"\x0ePeerApplyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
-	"\x05value\x18\x02 \x01(\v2H.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatusR\x05value:\x028\x01\"\xf1\x01\n" +
+	"\x05value\x18\x02 \x01(\v2H.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatusR\x05value:\x028\x01\"\xaa\x02\n" +
+	"\x14ManualReconciliation\x12\x1b\n" +
+	"\trepair_id\x18\x01 \x01(\tR\brepairId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12?\n" +
+	"\rreconciled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\freconciledAt\x122\n" +
+	"\x06cutoff\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06cutoff\x12h\n" +
+	"\x05basis\x18\x05 \x01(\x0e2R.temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasisR\x05basis\"\xf1\x01\n" +
 	"\x10LocalApplyStatus\x12d\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2J.temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcomeR\aoutcome\x12;\n" +
 	"\vresolved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"resolvedAt\x12:\n" +
-	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xea\x02\n" +
+	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xef\x03\n" +
 	"\x0fPeerApplyStatus\x12c\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2I.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcomeR\aoutcome\x12#\n" +
 	"\rattempt_count\x18\x02 \x01(\x05R\fattemptCount\x12D\n" +
 	"\x10first_attempt_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0efirstAttemptAt\x12B\n" +
 	"\x0flast_attempt_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rlastAttemptAt\x12C\n" +
-	"\flast_failure\x18\x05 \x01(\v2 .temporal.api.failure.v1.FailureR\vlastFailure*y\n" +
-	"\x12NamespaceOperation\x12#\n" +
-	"\x1fNAMESPACE_OPERATION_UNSPECIFIED\x10\x00\x12\x1e\n" +
-	"\x1aNAMESPACE_OPERATION_CREATE\x10\x01\x12\x1e\n" +
-	"\x1aNAMESPACE_OPERATION_UPDATE\x10\x02*\x8e\x01\n" +
+	"\flast_failure\x18\x05 \x01(\v2 .temporal.api.failure.v1.FailureR\vlastFailure\x12\x82\x01\n" +
+	"\x15manual_reconciliation\x18\x06 \x01(\v2M.temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationR\x14manualReconciliation\"\x94\x02\n" +
+	"\"ReconcileNamespaceMutationResponse\x12a\n" +
+	"\x05peers\x18\x01 \x03(\v2K.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliationR\x05peers\x12/\n" +
+	"\x13component_completed\x18\x02 \x01(\bR\x12componentCompleted\x12-\n" +
+	"\x12component_eligible\x18\x03 \x01(\bR\x11componentEligible\x12+\n" +
+	"\x11ineligible_reason\x18\x04 \x01(\tR\x10ineligibleReason\"\x82\x03\n" +
+	"\x12PeerReconciliation\x12\x1f\n" +
+	"\vtarget_cell\x18\x01 \x01(\tR\n" +
+	"targetCell\x12m\n" +
+	"\aoutcome\x18\x02 \x01(\x0e2S.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation.OutcomeR\aoutcome\x12h\n" +
+	"\x05basis\x18\x03 \x01(\x0e2R.temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasisR\x05basis\"r\n" +
+	"\aOutcome\x12\x17\n" +
+	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12OUTCOME_RECONCILED\x10\x01\x12\x1c\n" +
+	"\x18OUTCOME_ALREADY_TERMINAL\x10\x02\x12\x18\n" +
+	"\x14OUTCOME_NOT_VERIFIED\x10\x03*\x8e\x01\n" +
 	"\x0fComponentStatus\x12 \n" +
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_RUNNING\x10\x01\x12\x1e\n" +
@@ -695,7 +1004,7 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\x1bLOCAL_APPLY_OUTCOME_PENDING\x10\x01\x12!\n" +
 	"\x1dLOCAL_APPLY_OUTCOME_COMMITTED\x10\x02\x12\x1e\n" +
 	"\x1aLOCAL_APPLY_OUTCOME_FAILED\x10\x03\x12&\n" +
-	"\"LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW\x10\x04*\xdd\x02\n" +
+	"\"LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW\x10\x04*\x89\x03\n" +
 	"\x10PeerApplyOutcome\x12\"\n" +
 	"\x1ePEER_APPLY_OUTCOME_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aPEER_APPLY_OUTCOME_PENDING\x10\x01\x12\x1e\n" +
@@ -705,7 +1014,12 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\"PEER_APPLY_OUTCOME_FAILED_TERMINAL\x10\x05\x12#\n" +
 	"\x1fPEER_APPLY_OUTCOME_NOT_ADMITTED\x10\x06\x12#\n" +
 	"\x1fPEER_APPLY_OUTCOME_SHADOW_MATCH\x10\a\x12&\n" +
-	"\"PEER_APPLY_OUTCOME_SHADOW_MISMATCH\x10\bBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
+	"\"PEER_APPLY_OUTCOME_SHADOW_MISMATCH\x10\b\x12*\n" +
+	"&PEER_APPLY_OUTCOME_MANUALLY_RECONCILED\x10\t*\xad\x01\n" +
+	"\x19ManualReconciliationBasis\x12+\n" +
+	"'MANUAL_RECONCILIATION_BASIS_UNSPECIFIED\x10\x00\x12/\n" +
+	"+MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET\x10\x01\x122\n" +
+	".MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP\x10\x02BhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescOnce sync.Once
@@ -719,42 +1033,54 @@ func file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_goTypes = []any{
-	(NamespaceOperation)(0),        // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperation
-	(ComponentStatus)(0),           // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatus
-	(LocalApplyOutcome)(0),         // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
-	(PeerApplyOutcome)(0),          // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
-	(*NamespaceMutation)(nil),      // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
-	(*NamespaceMutationState)(nil), // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState
-	(*LocalApplyStatus)(nil),       // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
-	(*PeerApplyStatus)(nil),        // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
-	nil,                            // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
-	(*v1.NamespaceDetail)(nil),     // 9: temporal.server.api.persistence.v1.NamespaceDetail
-	(*timestamppb.Timestamp)(nil),  // 10: google.protobuf.Timestamp
-	(*v11.Failure)(nil),            // 11: temporal.api.failure.v1.Failure
+	(ComponentStatus)(0),                       // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatus
+	(LocalApplyOutcome)(0),                     // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
+	(PeerApplyOutcome)(0),                      // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
+	(ManualReconciliationBasis)(0),             // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasis
+	(PeerReconciliation_Outcome)(0),            // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation.Outcome
+	(*NamespaceMutation)(nil),                  // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
+	(*NamespaceMutationState)(nil),             // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState
+	(*ManualReconciliation)(nil),               // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliation
+	(*LocalApplyStatus)(nil),                   // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
+	(*PeerApplyStatus)(nil),                    // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
+	(*ReconcileNamespaceMutationResponse)(nil), // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse
+	(*PeerReconciliation)(nil),                 // 11: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation
+	nil,                                        // 12: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
+	(v1.NamespaceOperation)(0),                 // 13: temporal.server.api.enums.v1.NamespaceOperation
+	(*v11.NamespaceDetail)(nil),                // 14: temporal.server.api.persistence.v1.NamespaceDetail
+	(*timestamppb.Timestamp)(nil),              // 15: google.protobuf.Timestamp
+	(*v12.Failure)(nil),                        // 16: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_depIdxs = []int32{
-	0,  // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation.operation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperation
-	9,  // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation.namespace_detail:type_name -> temporal.server.api.persistence.v1.NamespaceDetail
-	4,  // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.mutation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
-	1,  // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.status:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatus
-	6,  // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.local_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
-	8,  // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.peer_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
-	2,  // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
-	10, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.resolved_at:type_name -> google.protobuf.Timestamp
-	11, // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.failure:type_name -> temporal.api.failure.v1.Failure
-	3,  // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
-	10, // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
-	10, // 11: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
-	11, // 12: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
-	7,  // 13: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry.value:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	13, // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation.operation:type_name -> temporal.server.api.enums.v1.NamespaceOperation
+	14, // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation.namespace_detail:type_name -> temporal.server.api.persistence.v1.NamespaceDetail
+	5,  // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.mutation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
+	0,  // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.status:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatus
+	8,  // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.local_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
+	12, // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.peer_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
+	15, // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliation.reconciled_at:type_name -> google.protobuf.Timestamp
+	15, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliation.cutoff:type_name -> google.protobuf.Timestamp
+	3,  // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliation.basis:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasis
+	1,  // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
+	15, // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.resolved_at:type_name -> google.protobuf.Timestamp
+	16, // 11: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.failure:type_name -> temporal.api.failure.v1.Failure
+	2,  // 12: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
+	15, // 13: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
+	15, // 14: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_attempt_at:type_name -> google.protobuf.Timestamp
+	16, // 15: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.last_failure:type_name -> temporal.api.failure.v1.Failure
+	7,  // 16: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.manual_reconciliation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliation
+	11, // 17: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse.peers:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation
+	4,  // 18: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation.Outcome
+	3,  // 19: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerReconciliation.basis:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.ManualReconciliationBasis
+	9,  // 20: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry.value:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_init() }
@@ -767,8 +1093,8 @@ func file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   5,
+			NumEnums:      5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

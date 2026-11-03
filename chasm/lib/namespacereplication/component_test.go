@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
@@ -15,7 +16,7 @@ import (
 // PENDING local apply and a PENDING per-peer entry for every peer cell.
 func TestNewNamespaceMutationComponent(t *testing.T) {
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
-		Operation: namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
+		Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
 		PeerCells: []string{"cellB", "cellC"},
 	})
 
@@ -115,6 +116,7 @@ func TestAllPeersTerminal(t *testing.T) {
 				"d": namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
 				"e": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
 				"f": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
+				"g": namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED,
 			},
 			want: true,
 		},

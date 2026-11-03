@@ -1588,6 +1588,10 @@ var (
 		"namespace_replication_chasm_peer_pending_threshold_exceeded",
 		WithDescription("The number of authoritative CHASM peer retries durably scheduled after the peer apply has been pending for at least one day."),
 	)
+	NamespaceReplicationCHASMManualReconciliations = NewCounterDef(
+		"namespace_replication_chasm_manual_reconciliations",
+		WithDescription("The number of pending CHASM namespace peer applies superseded by verified operator repair."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),

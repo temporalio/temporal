@@ -1015,9 +1015,27 @@ func (namespaceReplicationErrorWriter) Write([]byte) (int, error) {
 
 type testNamespaceReplicationAdminClient struct {
 	adminservice.AdminServiceClient
-	describeClusterFn func() (*adminservice.DescribeClusterResponse, error)
-	getNamespaceFn    func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
-	listClustersFn    func(*adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error)
+	describeClusterFn                      func() (*adminservice.DescribeClusterResponse, error)
+	getNamespaceFn                         func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error)
+	listClustersFn                         func(*adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error)
+	applyNamespaceMutationFn               func(*adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error)
+	reconcileNamespaceMutationComponentsFn func(*adminservice.ReconcileNamespaceMutationComponentsRequest) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error)
+}
+
+func (c *testNamespaceReplicationAdminClient) ApplyNamespaceMutation(
+	_ context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	return c.applyNamespaceMutationFn(request)
+}
+
+func (c *testNamespaceReplicationAdminClient) ReconcileNamespaceMutationComponents(
+	_ context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	return c.reconcileNamespaceMutationComponentsFn(request)
 }
 
 func (c *testNamespaceReplicationAdminClient) DescribeCluster(

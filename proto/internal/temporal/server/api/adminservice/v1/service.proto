@@ -241,4 +241,11 @@ service AdminService {
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
+
+  // ReconcileNamespaceMutationComponents discovers one page of running CHASM
+  // namespace mutation executions by namespace ID and updates each exact
+  // execution after a verified operator repair.
+  rpc ReconcileNamespaceMutationComponents(ReconcileNamespaceMutationComponentsRequest) returns (ReconcileNamespaceMutationComponentsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

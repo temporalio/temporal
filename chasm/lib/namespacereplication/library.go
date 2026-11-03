@@ -38,6 +38,7 @@ func newLibrary(
 func (l *Library) RegisterServices(server *grpc.Server) {
 	if l.handler != nil {
 		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.handler)
+		server.RegisterService(&namespacereplicationpb.NamespaceReplicationRepairService_ServiceDesc, l.handler)
 	}
 }
 

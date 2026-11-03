@@ -4,6 +4,7 @@ package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 import "google/protobuf/timestamp.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/persistence/v1/namespaces.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpb";
@@ -11,8 +12,8 @@ option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/na
 // NamespaceMutation is the input to a NamespaceMutationComponent. It contains
 // the full target state of the namespace and the local CAS guard.
 message NamespaceMutation {
-  // CREATE or UPDATE. Mirrors transmission_task_handler's NamespaceOperation.
-  NamespaceOperation operation = 1;
+  // CREATE or UPDATE.
+  temporal.server.api.enums.v1.NamespaceOperation operation = 1;
 
   // Full target NamespaceDetail. The local apply writes this detail to the
   // metadata store. Peer applies convert it to NamespaceTaskAttributes before
@@ -38,12 +39,6 @@ message NamespaceMutation {
   // Peer applies remain authoritative. This is deliberately distinct from
   // shadow, which suppresses writes in both the source and destination cells.
   bool replicate_only = 6;
-}
-
-enum NamespaceOperation {
-  NAMESPACE_OPERATION_UNSPECIFIED = 0;
-  NAMESPACE_OPERATION_CREATE = 1;
-  NAMESPACE_OPERATION_UPDATE = 2;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -105,6 +100,29 @@ enum PeerApplyOutcome {
   // The peer processed a shadow request without writing receiver state and the
   // received payload did not match the sender's fingerprint.
   PEER_APPLY_OUTCOME_SHADOW_MISMATCH = 8;
+  // An operator repair independently established the authoritative namespace
+  // state (or proved that the peer was removed from the replica set), making
+  // further delivery attempts unnecessary. This is terminal success, but is
+  // deliberately distinct from a transport apply/no-op outcome.
+  PEER_APPLY_OUTCOME_MANUALLY_RECONCILED = 9;
+}
+
+enum ManualReconciliationBasis {
+  MANUAL_RECONCILIATION_BASIS_UNSPECIFIED = 0;
+  // The peer remains configured and its namespace state was verified after
+  // repair.
+  MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET = 1;
+  // The authoritative source no longer includes the peer in the namespace's
+  // replica set.
+  MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP = 2;
+}
+
+message ManualReconciliation {
+  string repair_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp reconciled_at = 3;
+  google.protobuf.Timestamp cutoff = 4;
+  ManualReconciliationBasis basis = 5;
 }
 
 message LocalApplyStatus {
@@ -127,4 +145,27 @@ message PeerApplyStatus {
   google.protobuf.Timestamp last_attempt_at = 4;
   // Most recent failure. Retained after a later successful attempt for diagnostics.
   temporal.api.failure.v1.Failure last_failure = 5;
+  // Set only when an operator repair superseded the pending delivery. Existing
+  // attempt counters, timestamps, and failure details remain untouched.
+  ManualReconciliation manual_reconciliation = 6;
+}
+
+message ReconcileNamespaceMutationResponse {
+  repeated PeerReconciliation peers = 1;
+  bool component_completed = 2;
+  bool component_eligible = 3;
+  string ineligible_reason = 4;
+}
+
+message PeerReconciliation {
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_RECONCILED = 1;
+    OUTCOME_ALREADY_TERMINAL = 2;
+    OUTCOME_NOT_VERIFIED = 3;
+  }
+
+  string target_cell = 1;
+  Outcome outcome = 2;
+  ManualReconciliationBasis basis = 3;
 }

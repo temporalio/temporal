@@ -89,6 +89,10 @@ type namespaceReplicationObservation struct {
 	sourceSnapshot   *adminservice.GetNamespaceResponse
 	targetSnapshots  map[string]*adminservice.GetNamespaceResponse
 	clusterAddresses map[string]string
+	// sourceStable is set only after the final source read matches the source
+	// snapshot used to compare targets. Repair must not reconcile CHASM peers
+	// from a partial observation whose authority may have moved mid-scan.
+	sourceStable bool
 }
 
 type namespaceReplicationAdminClientConnection struct {
@@ -334,6 +338,7 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 	observation.sourceSnapshot = finalSource
+	observation.sourceStable = true
 
 	if err := deriveNamespaceReplicationStatus(result); err != nil {
 		result.Status = namespaceReplicationStatusBlocked

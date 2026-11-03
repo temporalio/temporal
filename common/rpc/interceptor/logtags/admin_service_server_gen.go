@@ -192,6 +192,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.RebuildMutableStateResponse:
 		return nil
+	case *adminservice.ReconcileNamespaceMutationComponentsRequest:
+		return nil
+	case *adminservice.ReconcileNamespaceMutationComponentsResponse:
+		return nil
 	case *adminservice.RefreshWorkflowTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

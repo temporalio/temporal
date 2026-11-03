@@ -3,6 +3,7 @@ syntax = "proto3";
 package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 import "chasm/lib/namespacereplication/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
@@ -24,6 +25,21 @@ service NamespaceReplicationService {
     //   business_id         -> ExecutionKey.BusinessID  (namespace_id + ":" + uuid)
     // Routing here MUST stay in lockstep with handler.go's executionKey(); the
     // TestTriggerNamespaceMutationRoutingMatchesExecution test pins that.
+    option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+}
+
+// NamespaceReplicationRepairService is kept separate from the normal mutation
+// trigger client so adding break-glass repair does not widen the interface used
+// by the normal frontend namespace path.
+service NamespaceReplicationRepairService {
+  // ReconcileNamespaceMutation applies an operator repair to one exact
+  // namespace-mutation execution. Discovery and paging happen at frontend;
+  // routing by the exact business ID keeps the CHASM update shard-local.
+  rpc ReconcileNamespaceMutation(ReconcileNamespaceMutationRequest) returns (ReconcileNamespaceMutationResponse) {
     option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
     option (temporal.server.api.routing.v1.routing).business_id = "business_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
@@ -54,3 +70,18 @@ message TriggerNamespaceMutationRequest {
 }
 
 message TriggerNamespaceMutationResponse {}
+
+message ReconcileNamespaceMutationRequest {
+  string system_namespace_id = 1;
+  string business_id = 2;
+  string run_id = 3;
+  string namespace_id = 4;
+  string repair_id = 5;
+  string reason = 6;
+  google.protobuf.Timestamp cutoff = 7;
+  // Current peers in the frozen authoritative source replica set (excluding
+  // the source cell).
+  repeated string authoritative_peer_cells = 8;
+  // Configured peers whose repaired state passed final verification.
+  repeated string verified_peer_cells = 9;
+}

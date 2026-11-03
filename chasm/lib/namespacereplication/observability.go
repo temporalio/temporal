@@ -62,34 +62,41 @@ func emitComponentTerminal(
 	if terminal == nil || emitNamespaceLifecycleEvents == nil || !emitNamespaceLifecycleEvents() {
 		return
 	}
+	observation := componentTerminalApplyObservation(currentCluster, ref, task, terminal, terminalErr)
+	nsreplicationcommon.EmitCHASMAuthoritativeApply(eventLogger, observation)
+}
 
+func componentTerminalApplyObservation(
+	currentCluster string,
+	ref chasm.ComponentRef,
+	task *replicationspb.NamespaceTaskAttributes,
+	terminal *componentTerminalObservation,
+	terminalErr error,
+) nsreplicationcommon.CHASMAuthoritativeApplyObservation {
 	outcome := nsreplicationcommon.CHASMApplyOutcomeCompleted
 	if terminal.status == namespacereplicationpb.COMPONENT_STATUS_FAILED {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeFailed
 	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
 	}
-	nsreplicationcommon.EmitCHASMAuthoritativeApply(
-		eventLogger,
-		nsreplicationcommon.CHASMAuthoritativeApplyObservation{
-			Task:                task,
-			Stage:               nsreplicationcommon.CHASMApplyStageComponent,
-			Outcome:             outcome,
-			SourceCluster:       currentCluster,
-			ComponentBusinessID: ref.BusinessID,
-			ComponentRunID:      ref.RunID,
-			Error:               terminalErr,
-			Details: map[string]any{
-				"component_status":    terminal.status.String(),
-				"local_apply_outcome": terminal.localOutcome.String(),
-				"peer_count":          terminal.peerCount,
-				"peer_attempt_count":  terminal.peerAttemptCount,
-				"peer_outcomes":       terminal.peerOutcomes,
-				"peer_attempt_counts": terminal.peerAttemptCounts,
-				"peer_outcome_counts": terminal.peerOutcomeCounts,
-			},
+	return nsreplicationcommon.CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               nsreplicationcommon.CHASMApplyStageComponent,
+		Outcome:             outcome,
+		SourceCluster:       currentCluster,
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		Error:               terminalErr,
+		Details: map[string]any{
+			"component_status":    terminal.status.String(),
+			"local_apply_outcome": terminal.localOutcome.String(),
+			"peer_count":          terminal.peerCount,
+			"peer_attempt_count":  terminal.peerAttemptCount,
+			"peer_outcomes":       terminal.peerOutcomes,
+			"peer_attempt_counts": terminal.peerAttemptCounts,
+			"peer_outcome_counts": terminal.peerOutcomeCounts,
 		},
-	)
+	}
 }
 
 func (h *applyLocalTaskHandler) observeLocalApplyResult(
@@ -169,6 +176,10 @@ func (h *applyPeerTaskHandler) observePeerApply(
 		"retry_scheduled":        retryScheduled,
 		"retry_exhausted":        recorded.retryExhausted,
 	}
+	if recorded.stateUpdateSkipped {
+		details["state_update_skipped"] = true
+		details["state_update_skip_reason"] = recorded.stateUpdateSkipReason
+	}
 	if saveErr != nil {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
 		observationErr = saveErr
@@ -179,15 +190,11 @@ func (h *applyPeerTaskHandler) observePeerApply(
 			details["apply_error"] = applyErr.Error()
 		}
 	} else {
-		persistedOutcome := recorded.outcome
-		if recorded.retryScheduled {
-			persistedOutcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
-		}
-		details["persisted_peer_outcome"] = persistedOutcome.String()
+		details["persisted_peer_outcome"] = recorded.outcome.String()
 	}
 
 	var pendingDuration *time.Duration
-	if saveErr == nil && !recorded.retryScheduled && !recorded.firstAttemptAt.IsZero() {
+	if saveErr == nil && !recorded.stateUpdateSkipped && !recorded.retryScheduled && !recorded.firstAttemptAt.IsZero() {
 		duration := recorded.resolvedAt.Sub(recorded.firstAttemptAt)
 		pendingDuration = &duration
 	}
@@ -239,6 +246,9 @@ func (h *applyPeerTaskHandler) observePeerApply(
 }
 
 func chasmPeerApplyOutcome(recorded peerOutcomeRecord) string {
+	if recorded.stateUpdateSkipped {
+		return nsreplicationcommon.CHASMApplyOutcomeNoChange
+	}
 	if recorded.retryExhausted {
 		return nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
 	}

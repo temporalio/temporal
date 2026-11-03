@@ -1,0 +1,248 @@
+package tdbg
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"slices"
+	"time"
+
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	namespaceReplicationRepairActionNone                  = "NONE"
+	namespaceReplicationRepairActionCreate                = "CREATE"
+	namespaceReplicationRepairActionApplySource           = "APPLY_SOURCE"
+	namespaceReplicationRepairActionPrepareSource         = "PREPARE_SOURCE"
+	namespaceReplicationRepairActionPrepareSourceAndApply = "PREPARE_SOURCE_AND_APPLY"
+
+	namespaceReplicationRepairStatusPlanned   = "PLANNED"
+	namespaceReplicationRepairStatusNoChanges = "NO_CHANGES"
+	namespaceReplicationRepairStatusBlocked   = "BLOCKED"
+)
+
+type namespaceReplicationRepairPlan struct {
+	RepairID                    string                                  `json:"repair_id"`
+	PlannedAt                   time.Time                               `json:"planned_at"`
+	NamespaceName               string                                  `json:"namespace_name,omitempty"`
+	NamespaceID                 string                                  `json:"namespace_id,omitempty"`
+	SourceCluster               string                                  `json:"source_cluster,omitempty"`
+	Status                      string                                  `json:"status"`
+	StatusDetail                string                                  `json:"status_detail,omitempty"`
+	SourceConfigVersion         int64                                   `json:"source_config_version"`
+	ProposedSourceConfigVersion int64                                   `json:"proposed_source_config_version"`
+	SourceAction                string                                  `json:"source_action"`
+	Clusters                    []namespaceReplicationClusterRepairPlan `json:"clusters,omitempty"`
+}
+
+type namespaceReplicationClusterRepairPlan struct {
+	Cluster              string `json:"cluster"`
+	Presence             string `json:"presence"`
+	CurrentConfigVersion *int64 `json:"current_config_version,omitempty"`
+	Action               string `json:"action"`
+}
+
+func planNamespaceReplicationRepair(
+	observation *namespaceReplicationObservation,
+	repairID string,
+	plannedAt time.Time,
+) (*namespaceReplicationRepairPlan, error) {
+	if observation == nil || observation.result == nil || observation.sourceSnapshot == nil || !observation.sourceStable {
+		return nil, errors.New("repair planning requires a complete namespace replication observation")
+	}
+	verification := observation.result
+	plan := &namespaceReplicationRepairPlan{
+		RepairID:                    repairID,
+		PlannedAt:                   plannedAt.UTC(),
+		NamespaceName:               verification.NamespaceName,
+		NamespaceID:                 verification.NamespaceID,
+		SourceCluster:               verification.SourceCluster,
+		Status:                      namespaceReplicationRepairStatusBlocked,
+		StatusDetail:                verification.StatusDetail,
+		SourceConfigVersion:         observation.sourceSnapshot.GetConfigVersion(),
+		ProposedSourceConfigVersion: observation.sourceSnapshot.GetConfigVersion(),
+		SourceAction:                namespaceReplicationRepairActionNone,
+	}
+	if verification.Status != namespaceReplicationStatusHealthy &&
+		verification.Status != namespaceReplicationStatusRepairRequired {
+		if plan.StatusDetail == "" {
+			plan.StatusDetail = "verification did not produce an executable repair plan"
+		}
+		return plan, nil
+	}
+
+	versionPlan, err := inspectNamespaceRepairVersions(verification, plan.SourceConfigVersion)
+	if err != nil {
+		return nil, err
+	}
+	if versionPlan.requiresIncrement && versionPlan.maxConfigVersion == math.MaxInt64 {
+		plan.StatusDetail = "cannot choose a repair config version without overflowing int64"
+		return plan, nil
+	}
+	if versionPlan.requiresIncrement {
+		plan.ProposedSourceConfigVersion = versionPlan.maxConfigVersion + 1
+	} else if !versionPlan.anyDivergentTarget && versionPlan.maxConfigVersion > plan.SourceConfigVersion {
+		plan.ProposedSourceConfigVersion = versionPlan.maxConfigVersion
+	}
+	if plan.ProposedSourceConfigVersion != plan.SourceConfigVersion {
+		plan.SourceAction = namespaceReplicationRepairActionPrepareSource
+	}
+
+	for _, cluster := range verification.Clusters {
+		if cluster.Role == "SOURCE" {
+			continue
+		}
+		plan.Clusters = append(plan.Clusters, namespaceReplicationClusterRepairPlan{
+			Cluster:              cluster.Cluster,
+			Presence:             cluster.Presence,
+			CurrentConfigVersion: cluster.ConfigVersion,
+			Action:               namespaceRepairTargetAction(cluster, plan.SourceAction),
+		})
+	}
+	slices.SortFunc(plan.Clusters, func(left, right namespaceReplicationClusterRepairPlan) int {
+		if left.Cluster < right.Cluster {
+			return -1
+		}
+		if left.Cluster > right.Cluster {
+			return 1
+		}
+		return 0
+	})
+
+	plan.Status = namespaceReplicationRepairStatusNoChanges
+	if plan.SourceAction != namespaceReplicationRepairActionNone || slices.ContainsFunc(
+		plan.Clusters,
+		func(cluster namespaceReplicationClusterRepairPlan) bool {
+			return cluster.Action != namespaceReplicationRepairActionNone
+		},
+	) {
+		plan.Status = namespaceReplicationRepairStatusPlanned
+	}
+	plan.StatusDetail = ""
+	return plan, nil
+}
+
+type namespaceRepairVersionPlan struct {
+	maxConfigVersion   int64
+	anyDivergentTarget bool
+	requiresIncrement  bool
+}
+
+func inspectNamespaceRepairVersions(
+	verification *namespaceReplicationVerificationResult,
+	sourceConfigVersion int64,
+) (namespaceRepairVersionPlan, error) {
+	result := namespaceRepairVersionPlan{maxConfigVersion: sourceConfigVersion}
+	allObservedTargetsBelowSource := true
+	for _, cluster := range verification.Clusters {
+		if cluster.Role == "SOURCE" || cluster.Presence != namespaceReplicationPresencePresent {
+			continue
+		}
+		if cluster.ConfigVersion == nil {
+			return result, fmt.Errorf("cluster %q has no config version", cluster.Cluster)
+		}
+		result.maxConfigVersion = max(result.maxConfigVersion, *cluster.ConfigVersion)
+		allObservedTargetsBelowSource = allObservedTargetsBelowSource && *cluster.ConfigVersion < sourceConfigVersion
+		result.anyDivergentTarget = result.anyDivergentTarget || cluster.ConfigMatch != namespaceReplicationMatchMatch
+	}
+	result.requiresIncrement = result.anyDivergentTarget && !allObservedTargetsBelowSource
+	return result, nil
+}
+
+func namespaceRepairTargetAction(
+	cluster namespaceReplicationClusterVerification,
+	sourceAction string,
+) string {
+	if cluster.Presence == namespaceReplicationPresenceMissing {
+		return namespaceReplicationRepairActionCreate
+	}
+	if cluster.Presence != namespaceReplicationPresencePresent || cluster.ConfigMatch == namespaceReplicationMatchMatch {
+		return namespaceReplicationRepairActionNone
+	}
+	if sourceAction == namespaceReplicationRepairActionPrepareSource {
+		return namespaceReplicationRepairActionPrepareSourceAndApply
+	}
+	return namespaceReplicationRepairActionApplySource
+}
+
+type namespaceRepairDataPolicy int
+
+const (
+	namespaceRepairDataSourceExact namespaceRepairDataPolicy = iota
+	namespaceRepairDataPreserveTargetIgnored
+	namespaceRepairDataExcludeIgnored
+)
+
+func buildNamespaceReplicationRepairTask(
+	source *adminservice.GetNamespaceResponse,
+	failoverSource *adminservice.GetNamespaceResponse,
+	configVersion int64,
+	failoverVersion int64,
+	dataKeysToIgnore map[string]struct{},
+	dataPolicy namespaceRepairDataPolicy,
+) (*replicationspb.NamespaceTaskAttributes, error) {
+	configProjection, _, err := namespaceReplicationProjections(source, nil)
+	if err != nil {
+		return nil, fmt.Errorf("project repair source config: %w", err)
+	}
+	_, failoverProjection, err := namespaceReplicationProjections(failoverSource, nil)
+	if err != nil {
+		return nil, fmt.Errorf("project repair failover state: %w", err)
+	}
+
+	task := proto.CloneOf(configProjection)
+	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
+	task.ConfigVersion = configVersion
+	task.FailoverVersion = failoverVersion
+	// The receiver treats a nil BadBinaries field as "leave unchanged". Repair
+	// must send an explicit empty value when the source has cleared all entries.
+	if task.Config.BadBinaries == nil {
+		task.Config.BadBinaries = &namespacepb.BadBinaries{}
+	}
+	task.ReplicationConfig.ActiveClusterName = failoverProjection.GetReplicationConfig().GetActiveClusterName()
+	task.ReplicationConfig.State = failoverProjection.GetReplicationConfig().GetState()
+	task.FailoverHistory = make([]*replicationpb.FailoverStatus, 0, len(failoverProjection.GetFailoverHistory()))
+	for _, status := range failoverProjection.GetFailoverHistory() {
+		task.FailoverHistory = append(task.FailoverHistory, proto.CloneOf(status))
+	}
+	if len(task.FailoverHistory) == 0 {
+		task.FailoverHistory = nil
+	}
+
+	switch dataPolicy {
+	case namespaceRepairDataSourceExact:
+		task.Info.Data = cloneStringMap(source.GetInfo().GetData())
+	case namespaceRepairDataPreserveTargetIgnored:
+		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
+		for key := range dataKeysToIgnore {
+			if value, ok := failoverSource.GetInfo().GetData()[key]; ok {
+				if task.Info.Data == nil {
+					task.Info.Data = make(map[string]string)
+				}
+				task.Info.Data[key] = value
+			}
+		}
+	case namespaceRepairDataExcludeIgnored:
+		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
+	default:
+		return nil, errors.New("unknown namespace repair data policy")
+	}
+	return task, nil
+}
+
+func cloneStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
+}

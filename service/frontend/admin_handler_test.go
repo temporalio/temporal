@@ -227,6 +227,8 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
+		nil, // chasmVisibilityManager - only needed by namespace replication repair tests
+		nil, // chasmNamespaceReplicationRepairClient - only needed by namespace replication repair tests
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
 		metrics.NoopMetricsHandler,
@@ -473,6 +475,74 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
 	s.True(ok)
 	s.Equal(nsreplication.CHASMReplicationTransport, metricsContext.Transport)
 	s.Equal(s.currentClusterName, metricsContext.TargetCluster)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_OperatorRepairAttribution() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	s.namespaceMutationExecutor.outcome = nsreplication.ApplyOutcomeApplied
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        namespaceTask,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+		SourceCluster:        "source-cluster",
+		NamespaceTaskPayload: payload,
+		Attribution: &adminservice.NamespaceMutationAttribution{
+			Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+			RepairId: "repair-id",
+			Reason:   "operator reason",
+		},
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+	metricsContext, ok := nsreplication.TaskMetricsContextFromContext(s.namespaceMutationExecutor.ctx)
+	s.True(ok)
+	s.Equal(nsreplication.OperatorRepairTransport, metricsContext.Transport)
+	eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(s.namespaceMutationExecutor.ctx)
+	s.Require().True(ok)
+	s.Equal(nsreplication.OperatorRepairTransport, eventContext.EventData.Details["transport"])
+	s.Equal(nsreplication.OperatorRepairMode, eventContext.EventData.Details["mode"])
+	s.Equal("operator_repair", eventContext.EventData.Details["origin"])
+	s.Equal("repair-id", eventContext.EventData.Details["repair_id"])
+	s.Equal("operator reason", eventContext.EventData.Details["operator_reason"])
+	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	s.Require().Len(recordings, 1)
+	s.Equal(nsreplication.OperatorRepairTransport, recordings[0].Tags[metrics.TransportTag("").Key])
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsInvalidOperatorRepairAttribution() {
+	for _, request := range []*adminservice.ApplyNamespaceMutationRequest{
+		{
+			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
+			Attribution: &adminservice.NamespaceMutationAttribution{
+				RepairId: "repair-id",
+			},
+		},
+		{
+			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
+			Shadow:        true,
+			Attribution: &adminservice.NamespaceMutationAttribution{
+				Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+				RepairId: "repair-id",
+				Reason:   "operator reason",
+			},
+		},
+		{
+			NamespaceTask: &replicationspb.NamespaceTaskAttributes{},
+			Attribution: &adminservice.NamespaceMutationAttribution{
+				Origin: adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+			},
+		},
+	} {
+		_, err := s.handler.ApplyNamespaceMutation(context.Background(), request)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	}
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadDiffersFromTypedTask() {

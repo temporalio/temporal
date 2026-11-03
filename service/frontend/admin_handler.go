@@ -35,6 +35,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -89,34 +90,36 @@ type (
 
 		status int32
 
-		logger                     log.Logger
-		eventLogger                otellog.Logger
-		numberOfHistoryShards      int32
-		config                     *Config
-		namespaceDLQHandler        nsreplication.DLQMessageHandler
-		namespaceMutationExecutor  nsreplication.MutationTaskExecutor
-		eventSerializer            serialization.Serializer
-		visibilityMgr              manager.VisibilityManager
-		persistenceExecutionName   string
-		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
-		taskManager                persistence.TaskManager
-		fairTaskManager            persistence.FairTaskManager
-		clusterMetadataManager     persistence.ClusterMetadataManager
-		persistenceMetadataManager persistence.MetadataManager
-		clientFactory              serverClient.Factory
-		historyClient              historyservice.HistoryServiceClient
-		sdkClientFactory           sdk.ClientFactory
-		membershipMonitor          membership.Monitor
-		hostInfoProvider           membership.HostInfoProvider
-		namespaceRegistry          namespace.Registry
-		saMapperProvider           searchattribute.MapperProvider
-		saValidator                *searchattribute.Validator
-		clusterMetadata            cluster.Metadata
-		healthServer               *health.Server
-		historyHealthChecker       HealthChecker
-		chasmRegistry              *chasm.Registry
-		schedulerClient            schedulerpb.SchedulerServiceClient
-		metricsHandler             metrics.Handler
+		logger                                log.Logger
+		eventLogger                           otellog.Logger
+		numberOfHistoryShards                 int32
+		config                                *Config
+		namespaceDLQHandler                   nsreplication.DLQMessageHandler
+		namespaceMutationExecutor             nsreplication.MutationTaskExecutor
+		eventSerializer                       serialization.Serializer
+		visibilityMgr                         manager.VisibilityManager
+		persistenceExecutionName              string
+		namespaceReplicationQueue             persistence.NamespaceReplicationQueue
+		taskManager                           persistence.TaskManager
+		fairTaskManager                       persistence.FairTaskManager
+		clusterMetadataManager                persistence.ClusterMetadataManager
+		persistenceMetadataManager            persistence.MetadataManager
+		clientFactory                         serverClient.Factory
+		historyClient                         historyservice.HistoryServiceClient
+		sdkClientFactory                      sdk.ClientFactory
+		membershipMonitor                     membership.Monitor
+		hostInfoProvider                      membership.HostInfoProvider
+		namespaceRegistry                     namespace.Registry
+		saMapperProvider                      searchattribute.MapperProvider
+		saValidator                           *searchattribute.Validator
+		clusterMetadata                       cluster.Metadata
+		healthServer                          *health.Server
+		historyHealthChecker                  HealthChecker
+		chasmRegistry                         *chasm.Registry
+		chasmVisibilityManager                chasm.VisibilityManager
+		chasmNamespaceReplicationRepairClient namespacereplicationpb.NamespaceReplicationRepairServiceClient
+		schedulerClient                       schedulerpb.SchedulerServiceClient
+		metricsHandler                        metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -125,34 +128,36 @@ type (
 	}
 
 	NewAdminHandlerArgs struct {
-		PersistenceConfig                   *config.Persistence
-		Config                              *Config
-		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
-		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		visibilityMgr                       manager.VisibilityManager
-		Logger                              log.Logger
-		EventLogger                         otellog.Logger
-		TaskManager                         persistence.TaskManager
-		FairTaskManager                     persistence.FairTaskManager
-		PersistenceExecutionManager         persistence.ExecutionManager
-		ClusterMetadataManager              persistence.ClusterMetadataManager
-		PersistenceMetadataManager          persistence.MetadataManager
-		ClientFactory                       serverClient.Factory
-		HistoryClient                       historyservice.HistoryServiceClient
-		sdkClientFactory                    sdk.ClientFactory
-		MembershipMonitor                   membership.Monitor
-		HostInfoProvider                    membership.HostInfoProvider
-		NamespaceRegistry                   namespace.Registry
-		SaMapperProvider                    searchattribute.MapperProvider
-		saValidator                         *searchattribute.Validator
-		ClusterMetadata                     cluster.Metadata
-		HealthServer                        *health.Server
-		EventSerializer                     serialization.Serializer
-		TimeSource                          clock.TimeSource
-		ChasmRegistry                       *chasm.Registry
-		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
-		SchedulerClient                     schedulerpb.SchedulerServiceClient
-		MetricsHandler                      metrics.Handler
+		PersistenceConfig                     *config.Persistence
+		Config                                *Config
+		NamespaceReplicationQueue             persistence.NamespaceReplicationQueue
+		ReplicatorNamespaceReplicationQueue   persistence.NamespaceReplicationQueue
+		visibilityMgr                         manager.VisibilityManager
+		Logger                                log.Logger
+		EventLogger                           otellog.Logger
+		TaskManager                           persistence.TaskManager
+		FairTaskManager                       persistence.FairTaskManager
+		PersistenceExecutionManager           persistence.ExecutionManager
+		ClusterMetadataManager                persistence.ClusterMetadataManager
+		PersistenceMetadataManager            persistence.MetadataManager
+		ClientFactory                         serverClient.Factory
+		HistoryClient                         historyservice.HistoryServiceClient
+		sdkClientFactory                      sdk.ClientFactory
+		MembershipMonitor                     membership.Monitor
+		HostInfoProvider                      membership.HostInfoProvider
+		NamespaceRegistry                     namespace.Registry
+		SaMapperProvider                      searchattribute.MapperProvider
+		saValidator                           *searchattribute.Validator
+		ClusterMetadata                       cluster.Metadata
+		HealthServer                          *health.Server
+		EventSerializer                       serialization.Serializer
+		TimeSource                            clock.TimeSource
+		ChasmRegistry                         *chasm.Registry
+		ChasmVisibilityManager                chasm.VisibilityManager
+		ChasmNamespaceReplicationRepairClient namespacereplicationpb.NamespaceReplicationRepairServiceClient
+		NamespaceDataMerger                   nsreplication.NamespaceDataMerger
+		SchedulerClient                       schedulerpb.SchedulerServiceClient
+		MetricsHandler                        metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -180,37 +185,39 @@ func NewAdminHandler(
 	)
 
 	return &AdminHandler{
-		logger:                     args.Logger,
-		eventLogger:                args.EventLogger,
-		status:                     common.DaemonStatusInitialized,
-		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
-		config:                     args.Config,
-		namespaceDLQHandler:        namespaceDLQHandler,
-		namespaceMutationExecutor:  namespaceMutationExecutor,
-		eventSerializer:            args.EventSerializer,
-		visibilityMgr:              args.visibilityMgr,
-		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
-		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
-		taskManager:                args.TaskManager,
-		fairTaskManager:            args.FairTaskManager,
-		clusterMetadataManager:     args.ClusterMetadataManager,
-		persistenceMetadataManager: args.PersistenceMetadataManager,
-		clientFactory:              args.ClientFactory,
-		historyClient:              args.HistoryClient,
-		sdkClientFactory:           args.sdkClientFactory,
-		membershipMonitor:          args.MembershipMonitor,
-		hostInfoProvider:           args.HostInfoProvider,
-		namespaceRegistry:          args.NamespaceRegistry,
-		saMapperProvider:           args.SaMapperProvider,
-		saValidator:                args.saValidator,
-		clusterMetadata:            args.ClusterMetadata,
-		healthServer:               args.HealthServer,
-		historyHealthChecker:       historyHealthChecker,
-		taskCategoryRegistry:       args.CategoryRegistry,
-		matchingClient:             args.matchingClient,
-		chasmRegistry:              args.ChasmRegistry,
-		schedulerClient:            args.SchedulerClient,
-		metricsHandler:             args.MetricsHandler,
+		logger:                                args.Logger,
+		eventLogger:                           args.EventLogger,
+		status:                                common.DaemonStatusInitialized,
+		numberOfHistoryShards:                 args.PersistenceConfig.NumHistoryShards,
+		config:                                args.Config,
+		namespaceDLQHandler:                   namespaceDLQHandler,
+		namespaceMutationExecutor:             namespaceMutationExecutor,
+		eventSerializer:                       args.EventSerializer,
+		visibilityMgr:                         args.visibilityMgr,
+		persistenceExecutionName:              args.PersistenceExecutionManager.GetName(),
+		namespaceReplicationQueue:             args.NamespaceReplicationQueue,
+		taskManager:                           args.TaskManager,
+		fairTaskManager:                       args.FairTaskManager,
+		clusterMetadataManager:                args.ClusterMetadataManager,
+		persistenceMetadataManager:            args.PersistenceMetadataManager,
+		clientFactory:                         args.ClientFactory,
+		historyClient:                         args.HistoryClient,
+		sdkClientFactory:                      args.sdkClientFactory,
+		membershipMonitor:                     args.MembershipMonitor,
+		hostInfoProvider:                      args.HostInfoProvider,
+		namespaceRegistry:                     args.NamespaceRegistry,
+		saMapperProvider:                      args.SaMapperProvider,
+		saValidator:                           args.saValidator,
+		clusterMetadata:                       args.ClusterMetadata,
+		healthServer:                          args.HealthServer,
+		historyHealthChecker:                  historyHealthChecker,
+		taskCategoryRegistry:                  args.CategoryRegistry,
+		matchingClient:                        args.matchingClient,
+		chasmRegistry:                         args.ChasmRegistry,
+		chasmVisibilityManager:                args.ChasmVisibilityManager,
+		chasmNamespaceReplicationRepairClient: args.ChasmNamespaceReplicationRepairClient,
+		schedulerClient:                       args.SchedulerClient,
+		metricsHandler:                        args.MetricsHandler,
 	}
 }
 
@@ -1050,6 +1057,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil || request.GetNamespaceTask() == nil {
 		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
 	}
+	if err := validateNamespaceMutationAttribution(request); err != nil {
+		return nil, err
+	}
 	payloadTask, actualFingerprint, matches, err := validateNamespaceMutationPayload(request)
 	if err != nil {
 		if request.GetShadow() {
@@ -1133,7 +1143,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 		SourceCluster: request.GetSourceCluster(),
 		TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
-		Transport:     nsreplication.CHASMReplicationTransport,
+		Transport:     namespaceMutationTransport(request),
 	})
 	ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request)
 	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)

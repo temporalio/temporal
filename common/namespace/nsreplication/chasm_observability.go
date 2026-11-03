@@ -17,6 +17,7 @@ const (
 	CHASMApplyStagePeer       = "peer"
 	CHASMApplyStageComponent  = "component"
 	CHASMReplicationTransport = "chasm"
+	OperatorRepairTransport   = "operator_repair"
 
 	CHASMApplyOutcomeApplied               = "applied"
 	CHASMApplyOutcomeCreated               = "created"
@@ -33,8 +34,10 @@ const (
 	CHASMApplyOutcomeCompleted             = "completed"
 	CHASMApplyOutcomeCompletedWithFailures = "completed_with_failures"
 	CHASMApplyOutcomeFailed                = "failed"
+	CHASMApplyOutcomeManuallyReconciled    = "manually_reconciled"
 
 	chasmAuthoritativeMode = "authoritative"
+	OperatorRepairMode     = "operator_repair"
 	chasmApplyStageTag     = "apply_stage"
 )
 
@@ -54,6 +57,8 @@ type CHASMAuthoritativeApplyObservation struct {
 	PendingAgeThresholdExceeded bool
 	Error                       error
 	Details                     map[string]any
+	Transport                   string
+	Mode                        string
 }
 
 // RecordCHASMAuthoritativeApply records bounded-cardinality metrics for one apply attempt.
@@ -68,6 +73,7 @@ func RecordCHASMAuthoritativeApply(
 	tags := []metrics.Tag{
 		metrics.SourceClusterTag(observation.SourceCluster),
 		metrics.TargetClusterTag(observation.TargetCluster),
+		metrics.TransportTag(chasmObservationTransport(observation)),
 		metrics.OperationTag(namespaceReplicationOperation(observation.Task)),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
 		metrics.OutcomeTag(observation.Outcome),
@@ -146,8 +152,8 @@ func CHASMAuthoritativeApplyEventData(
 	if eventData.Details == nil {
 		eventData.Details = make(map[string]any)
 	}
-	eventData.Details["transport"] = CHASMReplicationTransport
-	eventData.Details["mode"] = chasmAuthoritativeMode
+	eventData.Details["transport"] = chasmObservationTransport(observation)
+	eventData.Details["mode"] = chasmObservationMode(observation)
 	eventData.Details[chasmApplyStageTag] = observation.Stage
 	if observation.ComponentBusinessID != "" {
 		eventData.Details["component_business_id"] = observation.ComponentBusinessID
@@ -162,4 +168,18 @@ func CHASMAuthoritativeApplyEventData(
 		eventData.Details["pending_age_ms"] = max(*observation.PendingAge, 0).Milliseconds()
 	}
 	return eventData, true
+}
+
+func chasmObservationTransport(observation CHASMAuthoritativeApplyObservation) string {
+	if observation.Transport != "" {
+		return observation.Transport
+	}
+	return CHASMReplicationTransport
+}
+
+func chasmObservationMode(observation CHASMAuthoritativeApplyObservation) string {
+	if observation.Mode != "" {
+		return observation.Mode
+	}
+	return chasmAuthoritativeMode
 }

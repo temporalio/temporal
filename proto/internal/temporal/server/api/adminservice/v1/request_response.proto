@@ -226,6 +226,10 @@ message ApplyNamespaceMutationRequest {
   // Exact deterministic protobuf encoding of namespace_task. The receiver
   // verifies these bytes before decoding them with its local schema.
   bytes namespace_task_payload = 8;
+
+  // Attribution for direct operator repair. Ordinary CHASM peer delivery
+  // leaves this unset.
+  NamespaceMutationAttribution attribution = 9;
 }
 
 message ApplyNamespaceMutationResponse {
@@ -739,3 +743,60 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+message NamespaceMutationAttribution {
+  enum Origin {
+    ORIGIN_UNSPECIFIED = 0;
+    ORIGIN_OPERATOR_REPAIR = 1;
+  }
+
+  Origin origin = 1;
+  string repair_id = 2;
+  string reason = 3;
+}
+
+// ReconcileNamespaceMutationComponentsRequest closes only pending CHASM peer
+// fan-outs that a verified operator repair has superseded.
+message ReconcileNamespaceMutationComponentsRequest {
+  string namespace_id = 1;
+  string repair_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp cutoff_time = 4;
+  repeated string authoritative_peer_clusters = 5;
+  repeated string verified_peer_clusters = 6;
+  int32 page_size = 7;
+  bytes next_page_token = 8;
+}
+
+message ReconcileNamespaceMutationComponentsResponse {
+  repeated NamespaceMutationComponentReconciliation components = 1;
+  bytes next_page_token = 2;
+}
+
+message NamespaceMutationComponentReconciliation {
+  string business_id = 1;
+  string run_id = 2;
+  bool eligible = 3;
+  string ineligible_reason = 4;
+  bool completed = 5;
+  repeated NamespaceMutationPeerReconciliation peers = 6;
+  string error = 7;
+}
+
+message NamespaceMutationPeerReconciliation {
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_RECONCILED = 1;
+    OUTCOME_ALREADY_TERMINAL = 2;
+    OUTCOME_NOT_VERIFIED = 3;
+  }
+  enum Basis {
+    BASIS_UNSPECIFIED = 0;
+    BASIS_VERIFIED_TARGET = 1;
+    BASIS_REMOVED_MEMBERSHIP = 2;
+  }
+
+  string target_cluster = 1;
+  Outcome outcome = 2;
+  Basis basis = 3;
+}

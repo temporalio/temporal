@@ -108,3 +108,93 @@ func (c *NamespaceReplicationServiceLayeredClient) TriggerNamespaceMutation(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+
+// NamespaceReplicationRepairServiceLayeredClient is a client for NamespaceReplicationRepairService.
+type NamespaceReplicationRepairServiceLayeredClient struct {
+	metricsHandler metrics.Handler
+	numShards      int32
+	redirector     history.Redirector[NamespaceReplicationRepairServiceClient]
+	retryPolicy    backoff.RetryPolicy
+}
+
+// NewNamespaceReplicationRepairServiceLayeredClient initializes a new NamespaceReplicationRepairServiceLayeredClient.
+func NewNamespaceReplicationRepairServiceLayeredClient(
+	lc fx.Lifecycle,
+	dc *dynamicconfig.Collection,
+	rpcFactory common.RPCFactory,
+	monitor membership.Monitor,
+	config *config.Persistence,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) (NamespaceReplicationRepairServiceClient, error) {
+	resolver, err := monitor.GetResolver(primitives.HistoryService)
+	if err != nil {
+		return nil, err
+	}
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewNamespaceReplicationRepairServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
+	var redirector history.Redirector[NamespaceReplicationRepairServiceClient]
+	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
+		redirector = history.NewCachingRedirector(
+			connections,
+			resolver,
+			logger,
+			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
+		)
+	} else {
+		redirector = history.NewBasicRedirector(connections, resolver)
+	}
+	client := &NamespaceReplicationRepairServiceLayeredClient{
+		metricsHandler: metricsHandler,
+		redirector:     redirector,
+		numShards:      config.NumHistoryShards,
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
+	}
+	lc.Append(fx.StopHook(client.Stop))
+	return client, nil
+}
+func (c *NamespaceReplicationRepairServiceLayeredClient) Stop() {
+	c.redirector.Close()
+}
+func (c *NamespaceReplicationRepairServiceLayeredClient) callReconcileNamespaceMutationNoRetry(
+	ctx context.Context,
+	request *ReconcileNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*ReconcileNamespaceMutationResponse, error) {
+	var response *ReconcileNamespaceMutationResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("NamespaceReplicationRepairService.ReconcileNamespaceMutation"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetSystemNamespaceId(), request.GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client NamespaceReplicationRepairServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.ReconcileNamespaceMutation(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *NamespaceReplicationRepairServiceLayeredClient) ReconcileNamespaceMutation(
+	ctx context.Context,
+	request *ReconcileNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*ReconcileNamespaceMutationResponse, error) {
+	call := func(ctx context.Context) (*ReconcileNamespaceMutationResponse, error) {
+		return c.callReconcileNamespaceMutationNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

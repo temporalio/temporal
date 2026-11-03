@@ -20,53 +20,54 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AdminService_RebuildMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
-	AdminService_ImportWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
-	AdminService_DescribeMutableState_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
-	AdminService_DescribeHistoryHost_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
-	AdminService_GetShard_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
-	AdminService_CloseShard_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
-	AdminService_ListHistoryTasks_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
-	AdminService_RemoveTask_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
-	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
-	AdminService_GetWorkflowExecutionRawHistory_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
-	AdminService_GetReplicationMessages_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
-	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
-	AdminService_ApplyNamespaceMutation_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
-	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
-	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
-	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
-	AdminService_RemoveSearchAttributes_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
-	AdminService_GetSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
-	AdminService_DescribeCluster_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
-	AdminService_ListClusters_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
-	AdminService_ListClusterMembers_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
-	AdminService_AddOrUpdateRemoteCluster_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
-	AdminService_RemoveRemoteCluster_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
-	AdminService_GetDLQMessages_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
-	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
-	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
-	AdminService_RefreshWorkflowTasks_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
-	AdminService_StartAdminBatchOperation_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
-	AdminService_ResendReplicationTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
-	AdminService_GetTaskQueueTasks_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
-	AdminService_DeleteWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
-	AdminService_StreamWorkflowReplicationMessages_FullMethodName   = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
-	AdminService_GetNamespace_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
-	AdminService_GetDLQTasks_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
-	AdminService_PurgeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
-	AdminService_MergeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
-	AdminService_DescribeDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
-	AdminService_CancelDLQJob_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
-	AdminService_AddTasks_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
-	AdminService_ListQueues_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
-	AdminService_DeepHealthCheck_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
-	AdminService_SyncWorkflowState_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
-	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
-	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
-	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
-	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
-	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_RebuildMutableState_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
+	AdminService_ImportWorkflowExecution_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
+	AdminService_DescribeMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
+	AdminService_DescribeHistoryHost_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
+	AdminService_GetShard_FullMethodName                             = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
+	AdminService_CloseShard_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
+	AdminService_ListHistoryTasks_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
+	AdminService_RemoveTask_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
+	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
+	AdminService_GetWorkflowExecutionRawHistory_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
+	AdminService_GetReplicationMessages_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
+	AdminService_GetNamespaceReplicationMessages_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
+	AdminService_ApplyNamespaceMutation_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
+	AdminService_GetDLQReplicationMessages_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
+	AdminService_ReapplyEvents_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
+	AdminService_AddSearchAttributes_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
+	AdminService_RemoveSearchAttributes_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
+	AdminService_GetSearchAttributes_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
+	AdminService_DescribeCluster_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
+	AdminService_ListClusters_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
+	AdminService_ListClusterMembers_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
+	AdminService_AddOrUpdateRemoteCluster_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
+	AdminService_RemoveRemoteCluster_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
+	AdminService_GetDLQMessages_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
+	AdminService_PurgeDLQMessages_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
+	AdminService_MergeDLQMessages_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
+	AdminService_RefreshWorkflowTasks_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
+	AdminService_StartAdminBatchOperation_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
+	AdminService_ResendReplicationTasks_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
+	AdminService_GetTaskQueueTasks_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
+	AdminService_DeleteWorkflowExecution_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
+	AdminService_StreamWorkflowReplicationMessages_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
+	AdminService_GetNamespace_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
+	AdminService_GetDLQTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
+	AdminService_PurgeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
+	AdminService_MergeDLQTasks_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
+	AdminService_DescribeDLQJob_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
+	AdminService_CancelDLQJob_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
+	AdminService_AddTasks_FullMethodName                             = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
+	AdminService_ListQueues_FullMethodName                           = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
+	AdminService_DeepHealthCheck_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
+	AdminService_SyncWorkflowState_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
+	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName  = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
+	AdminService_DescribeTaskQueuePartition_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
+	AdminService_ForceUnloadTaskQueuePartition_FullMethodName        = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
+	AdminService_GetTaskQueueUserData_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
+	AdminService_MigrateSchedule_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_ReconcileNamespaceMutationComponents_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/ReconcileNamespaceMutationComponents"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -166,6 +167,10 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	// ReconcileNamespaceMutationComponents discovers one page of running CHASM
+	// namespace mutation executions by namespace ID and updates each exact
+	// execution after a verified operator repair.
+	ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -621,6 +626,15 @@ func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateSch
 	return out, nil
 }
 
+func (c *adminServiceClient) ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error) {
+	out := new(ReconcileNamespaceMutationComponentsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ReconcileNamespaceMutationComponents_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -718,6 +732,10 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	// ReconcileNamespaceMutationComponents discovers one page of running CHASM
+	// namespace mutation executions by namespace ID and updates each exact
+	// execution after a verified operator repair.
+	ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -865,6 +883,9 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconcileNamespaceMutationComponents not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1733,6 +1754,24 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ReconcileNamespaceMutationComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileNamespaceMutationComponentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ReconcileNamespaceMutationComponents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ReconcileNamespaceMutationComponents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ReconcileNamespaceMutationComponents(ctx, req.(*ReconcileNamespaceMutationComponentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1923,6 +1962,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "ReconcileNamespaceMutationComponents",
+			Handler:    _AdminService_ReconcileNamespaceMutationComponents_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

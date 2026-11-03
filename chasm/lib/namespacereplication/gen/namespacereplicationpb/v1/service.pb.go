@@ -15,6 +15,7 @@ import (
 	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -142,20 +143,144 @@ func (*TriggerNamespaceMutationResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDescGZIP(), []int{1}
 }
 
+type ReconcileNamespaceMutationRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	SystemNamespaceId string                 `protobuf:"bytes,1,opt,name=system_namespace_id,json=systemNamespaceId,proto3" json:"system_namespace_id,omitempty"`
+	BusinessId        string                 `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	NamespaceId       string                 `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	RepairId          string                 `protobuf:"bytes,5,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	Reason            string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Cutoff            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	// Current peers in the frozen authoritative source replica set (excluding
+	// the source cell).
+	AuthoritativePeerCells []string `protobuf:"bytes,8,rep,name=authoritative_peer_cells,json=authoritativePeerCells,proto3" json:"authoritative_peer_cells,omitempty"`
+	// Configured peers whose repaired state passed final verification.
+	VerifiedPeerCells []string `protobuf:"bytes,9,rep,name=verified_peer_cells,json=verifiedPeerCells,proto3" json:"verified_peer_cells,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ReconcileNamespaceMutationRequest) Reset() {
+	*x = ReconcileNamespaceMutationRequest{}
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReconcileNamespaceMutationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReconcileNamespaceMutationRequest) ProtoMessage() {}
+
+func (x *ReconcileNamespaceMutationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReconcileNamespaceMutationRequest.ProtoReflect.Descriptor instead.
+func (*ReconcileNamespaceMutationRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetSystemNamespaceId() string {
+	if x != nil {
+		return x.SystemNamespaceId
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetBusinessId() string {
+	if x != nil {
+		return x.BusinessId
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetRepairId() string {
+	if x != nil {
+		return x.RepairId
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetCutoff() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Cutoff
+	}
+	return nil
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetAuthoritativePeerCells() []string {
+	if x != nil {
+		return x.AuthoritativePeerCells
+	}
+	return nil
+}
+
+func (x *ReconcileNamespaceMutationRequest) GetVerifiedPeerCells() []string {
+	if x != nil {
+		return x.VerifiedPeerCells
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/service.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1aEtemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\xfd\x01\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/service.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1aEtemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\xfd\x01\n" +
 	"\x1fTriggerNamespaceMutationRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12f\n" +
 	"\bmutation\x18\x02 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12.\n" +
 	"\x13system_namespace_id\x18\x03 \x01(\tR\x11systemNamespaceId\x12\x1f\n" +
 	"\vbusiness_id\x18\x04 \x01(\tR\n" +
 	"businessId\"\"\n" +
-	" TriggerNamespaceMutationResponse2\x9d\x02\n" +
+	" TriggerNamespaceMutationResponse\"\x81\x03\n" +
+	"!ReconcileNamespaceMutationRequest\x12.\n" +
+	"\x13system_namespace_id\x18\x01 \x01(\tR\x11systemNamespaceId\x12\x1f\n" +
+	"\vbusiness_id\x18\x02 \x01(\tR\n" +
+	"businessId\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12!\n" +
+	"\fnamespace_id\x18\x04 \x01(\tR\vnamespaceId\x12\x1b\n" +
+	"\trepair_id\x18\x05 \x01(\tR\brepairId\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x122\n" +
+	"\x06cutoff\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x06cutoff\x128\n" +
+	"\x18authoritative_peer_cells\x18\b \x03(\tR\x16authoritativePeerCells\x12.\n" +
+	"\x13verified_peer_cells\x18\t \x03(\tR\x11verifiedPeerCells2\x9d\x02\n" +
 	"\x1bNamespaceReplicationService\x12\xfd\x01\n" +
-	"\x18TriggerNamespaceMutation\x12X.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest\x1aY.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_idBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
+	"\x18TriggerNamespaceMutation\x12X.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest\x1aY.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_id2\xa9\x02\n" +
+	"!NamespaceReplicationRepairService\x12\x83\x02\n" +
+	"\x1aReconcileNamespaceMutation\x12Z.temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest\x1a[.temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_idBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDescOnce sync.Once
@@ -169,21 +294,27 @@ func file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_goTypes = []any{
-	(*TriggerNamespaceMutationRequest)(nil),  // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest
-	(*TriggerNamespaceMutationResponse)(nil), // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse
-	(*NamespaceMutation)(nil),                // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
+	(*TriggerNamespaceMutationRequest)(nil),    // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest
+	(*TriggerNamespaceMutationResponse)(nil),   // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse
+	(*ReconcileNamespaceMutationRequest)(nil),  // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest
+	(*NamespaceMutation)(nil),                  // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
+	(*timestamppb.Timestamp)(nil),              // 4: google.protobuf.Timestamp
+	(*ReconcileNamespaceMutationResponse)(nil), // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse
 }
 var file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_depIdxs = []int32{
-	2, // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest.mutation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
-	0, // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest
-	1, // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest.mutation:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutation
+	4, // 1: temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest.cutoff:type_name -> google.protobuf.Timestamp
+	0, // 2: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest
+	2, // 3: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationRepairService.ReconcileNamespaceMutation:input_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationRequest
+	1, // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationService.TriggerNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse
+	5, // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceReplicationRepairService.ReconcileNamespaceMutation:output_type -> temporal.server.chasm.lib.namespacereplication.proto.v1.ReconcileNamespaceMutationResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_init() }
@@ -198,9 +329,9 @@ func file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDesc), len(file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_depIdxs,

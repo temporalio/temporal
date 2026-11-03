@@ -170,6 +170,7 @@ func TestApplyPeerTaskHandler_Validate(t *testing.T) {
 		{"component not running -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_FAILED, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, pending), 0, false},
 		{"peer missing -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, nil), 0, false},
 		{"peer already applied -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, &namespacereplicationpb.PeerApplyStatus{Outcome: namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED}), 0, false},
+		{"peer manually reconciled -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, &namespacereplicationpb.PeerApplyStatus{Outcome: namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED}), 0, false},
 		{"stale attempt -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, &namespacereplicationpb.PeerApplyStatus{Outcome: namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, AttemptCount: 2}), 1, false},
 	}
 	for _, tc := range testCases {
@@ -420,7 +421,7 @@ func TestNamespaceDetailsEqualAfterPersistenceRead(t *testing.T) {
 // A successful local UPDATE commits and schedules one peer task per peer cell.
 func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationpb.NamespaceMutation {
 	return &namespacereplicationpb.NamespaceMutation{
-		Operation:       namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
+		Operation:       enumsspb.NAMESPACE_OPERATION_UPDATE,
 		NamespaceDetail: testDetail(),
 		ExpectedVersion: 7,
 		PeerCells:       peers,
@@ -581,7 +582,7 @@ func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -665,7 +666,7 @@ func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateRetryRecoversCommittedWrite(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
@@ -689,7 +690,7 @@ func TestApplyLocalTask_Execute_CreateRetryRecoversCommittedWrite(t *testing.T) 
 func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	gomock.InOrder(
@@ -726,7 +727,7 @@ func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateCollisionStillFails(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
@@ -992,10 +993,12 @@ func TestApplyPeerTask_Execute_ComponentEventWaitsForAllPeers(t *testing.T) {
 	}, details["peer_attempt_counts"])
 }
 
-func TestApplyPeerTask_Execute_StateTransitionFailureObserved(t *testing.T) {
+func TestApplyPeerTask_Execute_LateSuccessDoesNotOverwriteManualReconciliation(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	metricsCapture, eventLogger := env.enableObservability()
-	ref := env.startCommitted("cellB")
+	ref := env.start(env.mutationUpdate("cellB", "cellC"), func(component *NamespaceMutationComponent) {
+		component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	})
 
 	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
 	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1004,7 +1007,7 @@ func TestApplyPeerTask_Execute_StateTransitionFailureObserved(t *testing.T) {
 				env.engineCtx,
 				ref,
 				func(_ chasm.MutableContext, component chasm.Component) error {
-					component.(*NamespaceMutationComponent).Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
 					return nil
 				},
 			)
@@ -1015,7 +1018,58 @@ func TestApplyPeerTask_Execute_StateTransitionFailureObserved(t *testing.T) {
 		},
 	)
 
-	err := env.peerHandler.Execute(
+	require.NoError(t, env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	))
+	details := requireAuthoritativeObservation(
+		t,
+		metricsCapture,
+		eventLogger,
+		nsreplicationcommon.CHASMApplyStagePeer,
+		nsreplicationcommon.CHASMApplyOutcomeNoChange,
+	)
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(), details["attempted_peer_outcome"])
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED.String(), details["persisted_peer_outcome"])
+	require.Equal(t, true, details["state_update_skipped"])
+	require.Equal(t, "peer_not_pending", details["state_update_skip_reason"])
+	require.Equal(
+		t,
+		namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED,
+		env.read(ref).GetPeerApply()["cellB"].GetOutcome(),
+	)
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()))
+}
+
+func TestApplyPeerTask_Execute_LateRetryDoesNotOverwriteManualReconciliation(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.start(env.mutationUpdate("cellB", "cellC"), func(component *NamespaceMutationComponent) {
+		component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	})
+	beforeTasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	beforeTimers := len(beforeTasks[historytasks.CategoryTimer])
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return nil, serviceerror.NewUnavailable("peer down")
+		},
+	)
+
+	err = env.peerHandler.Execute(
 		env.engineCtx,
 		ref,
 		chasm.TaskAttributes{Destination: "cellB"},
@@ -1027,19 +1081,22 @@ func TestApplyPeerTask_Execute_StateTransitionFailureObserved(t *testing.T) {
 		metricsCapture,
 		eventLogger,
 		nsreplicationcommon.CHASMApplyStagePeer,
-		nsreplicationcommon.CHASMApplyOutcomeStateTransitionError,
+		nsreplicationcommon.CHASMApplyOutcomeNoChange,
 	)
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED.String(), details["attempted_peer_outcome"])
-	require.NotContains(t, details, "persisted_peer_outcome")
-	require.Equal(
-		t,
-		namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
-		env.read(ref).GetPeerApply()["cellB"].GetOutcome(),
-	)
-	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingLatency.Name()))
+	require.Equal(t, false, details["retry_scheduled"])
+	require.Equal(t, true, details["state_update_skipped"])
+	require.Equal(t, "peer_not_pending", details["state_update_skip_reason"])
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED.String(), details["persisted_peer_outcome"])
+	require.NotContains(t, details, "retry_requested")
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name()))
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
+	afterTasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	require.Len(t, afterTasks[historytasks.CategoryTimer], beforeTimers)
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED, env.read(ref).GetPeerApply()["cellB"].GetOutcome())
 }
 
-func TestApplyPeerTask_Execute_RetryTransitionFailureIsNotReportedAsScheduled(t *testing.T) {
+func TestApplyPeerTask_Execute_LateOutcomeDoesNotOverwriteNewerAttempt(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	metricsCapture, eventLogger := env.enableObservability()
 	ref := env.startCommitted("cellB")
@@ -1051,33 +1108,35 @@ func TestApplyPeerTask_Execute_RetryTransitionFailureIsNotReportedAsScheduled(t 
 				env.engineCtx,
 				ref,
 				func(_ chasm.MutableContext, component chasm.Component) error {
-					component.(*NamespaceMutationComponent).Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].AttemptCount = 1
 					return nil
 				},
 			)
 			require.NoError(t, err)
-			return nil, serviceerror.NewUnavailable("peer down")
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			}, nil
 		},
 	)
 
-	err := env.peerHandler.Execute(
+	require.NoError(t, env.peerHandler.Execute(
 		env.engineCtx,
 		ref,
 		chasm.TaskAttributes{Destination: "cellB"},
 		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
-	)
-	require.Error(t, err)
+	))
 	details := requireAuthoritativeObservation(
 		t,
 		metricsCapture,
 		eventLogger,
 		nsreplicationcommon.CHASMApplyStagePeer,
-		nsreplicationcommon.CHASMApplyOutcomeStateTransitionError,
+		nsreplicationcommon.CHASMApplyOutcomeNoChange,
 	)
-	require.Equal(t, false, details["retry_scheduled"])
-	require.Equal(t, true, details["retry_requested"])
-	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name()))
-	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
+	require.Equal(t, true, details["state_update_skipped"])
+	require.Equal(t, "attempt_mismatch", details["state_update_skip_reason"])
+	peer := env.read(ref).GetPeerApply()["cellB"]
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome())
+	require.Equal(t, int32(1), peer.GetAttemptCount())
 }
 
 func TestApplyPeerTask_Execute_ShadowOutcome(t *testing.T) {
@@ -1174,7 +1233,7 @@ func TestApplyPeerTask_Execute_TerminalError(t *testing.T) {
 	require.Equal(t, map[string]any{"cellB": float64(1)}, componentDetails["peer_attempt_counts"])
 }
 
-// A retriable peer error keeps the peer PENDING, bumps the attempt, and does not
+// A retriable peer error marks the peer FAILED_RETRIABLE, bumps the attempt, and does not
 // complete the component — a later attempt within the retry budget can converge.
 func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 	env := newNsreplTestEnv(t)
@@ -1191,7 +1250,7 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "retriable failure keeps peer pending")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome())
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus(), "component not complete while a peer is still retrying")
 	requireAuthoritativeMetric(
@@ -1221,14 +1280,14 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		{
 			name:             "below pending alert threshold retries",
 			elapsed:          peerPendingAlertThreshold - time.Nanosecond,
-			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 		},
 		{
 			name:             "at pending alert threshold retries and emits threshold metric",
 			elapsed:          peerPendingAlertThreshold,
-			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 			wantThreshold:    true,
@@ -1236,7 +1295,7 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		{
 			name:             "below budget retries",
 			elapsed:          peerRetryBudget - time.Nanosecond,
-			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 			wantThreshold:    true,
@@ -1714,7 +1773,7 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 	require.Equal(t, []string{"cellB"}, applier.cells)
 	c := env.read(ref)
 	peer := c.GetPeerApply()["cellB"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "an unknown result must not be recorded as applied")
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, peer.GetOutcome(), "an unknown result must not be recorded as applied")
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Contains(t, peer.GetLastFailure().GetMessage(), "unknown peer apply result: 999")
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())

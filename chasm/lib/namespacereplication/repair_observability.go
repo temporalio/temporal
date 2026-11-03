@@ -1,0 +1,122 @@
+package namespacereplication
+
+import (
+	"time"
+
+	otellog "go.opentelemetry.io/otel/log"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
+	"go.uber.org/fx"
+)
+
+const manualReconciliationBasisTag = "reconciliation_basis"
+
+type namespaceRepairHandlerOptions struct {
+	fx.In
+
+	Logger          log.Logger
+	EventLogger     otellog.Logger
+	MetricsHandler  metrics.Handler
+	ClusterMetadata cluster.Metadata
+	DynamicConfig   *dynamicconfig.Collection
+}
+
+type namespaceRepairObserver struct {
+	eventLogger                  otellog.Logger
+	metricsHandler               metrics.Handler
+	currentCluster               string
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+}
+
+type manualPeerReconciliationObservation struct {
+	targetCell   string
+	basis        namespacereplicationpb.ManualReconciliationBasis
+	attemptCount int32
+	lastFailure  string
+}
+
+func newNamespaceRepairHandler(options namespaceRepairHandlerOptions) *handler {
+	h := newHandler(options.Logger)
+	h.repairObserver = &namespaceRepairObserver{
+		eventLogger:                  options.EventLogger,
+		metricsHandler:               options.MetricsHandler,
+		currentCluster:               options.ClusterMetadata.GetCurrentClusterName(),
+		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(options.DynamicConfig),
+	}
+	return h
+}
+
+func (o *namespaceRepairObserver) observe(
+	ref chasm.ComponentRef,
+	task *replicationspb.NamespaceTaskAttributes,
+	request *namespacereplicationpb.ReconcileNamespaceMutationRequest,
+	peers []manualPeerReconciliationObservation,
+	terminal *componentTerminalObservation,
+) {
+	for _, peer := range peers {
+		metrics.NamespaceReplicationCHASMManualReconciliations.With(o.metricsHandler).Record(
+			1,
+			metrics.SourceClusterTag(o.currentCluster),
+			metrics.TargetClusterTag(peer.targetCell),
+			metrics.OperationTag(namespaceReplicationOperationMetricValue(task.GetNamespaceOperation())),
+			metrics.OutcomeTag(nsreplicationcommon.CHASMApplyOutcomeManuallyReconciled),
+			metrics.StringTag(manualReconciliationBasisTag, peer.basis.String()),
+		)
+		if o.emitNamespaceLifecycleEvents == nil || !o.emitNamespaceLifecycleEvents() {
+			continue
+		}
+		details := map[string]any{
+			"repair_id":             request.GetRepairId(),
+			"operator_reason":       request.GetReason(),
+			"reconciliation_cutoff": request.GetCutoff().AsTime().Format(time.RFC3339Nano),
+			"reconciliation_basis":  peer.basis.String(),
+		}
+		if peer.lastFailure != "" {
+			details["last_delivery_failure"] = peer.lastFailure
+		}
+		nsreplicationcommon.EmitCHASMAuthoritativeApply(
+			o.eventLogger,
+			nsreplicationcommon.CHASMAuthoritativeApplyObservation{
+				Task:                task,
+				Stage:               nsreplicationcommon.CHASMApplyStagePeer,
+				Outcome:             nsreplicationcommon.CHASMApplyOutcomeManuallyReconciled,
+				SourceCluster:       o.currentCluster,
+				TargetCluster:       peer.targetCell,
+				ComponentBusinessID: ref.BusinessID,
+				ComponentRunID:      ref.RunID,
+				AttemptCount:        int(peer.attemptCount),
+				Details:             details,
+				Transport:           nsreplicationcommon.OperatorRepairTransport,
+				Mode:                nsreplicationcommon.OperatorRepairMode,
+			},
+		)
+	}
+	if terminal != nil && o.emitNamespaceLifecycleEvents != nil && o.emitNamespaceLifecycleEvents() {
+		observation := componentTerminalApplyObservation(o.currentCluster, ref, task, terminal, nil)
+		observation.Transport = nsreplicationcommon.OperatorRepairTransport
+		observation.Mode = nsreplicationcommon.OperatorRepairMode
+		observation.Details["origin"] = "operator_repair"
+		observation.Details["repair_id"] = request.GetRepairId()
+		observation.Details["operator_reason"] = request.GetReason()
+		observation.Details["reconciliation_cutoff"] = request.GetCutoff().AsTime().Format(time.RFC3339Nano)
+		nsreplicationcommon.EmitCHASMAuthoritativeApply(o.eventLogger, observation)
+	}
+}
+
+func namespaceReplicationOperationMetricValue(operation enumsspb.NamespaceOperation) string {
+	switch operation {
+	case enumsspb.NAMESPACE_OPERATION_CREATE:
+		return "create"
+	case enumsspb.NAMESPACE_OPERATION_UPDATE:
+		return "update"
+	default:
+		return "unknown"
+	}
+}
