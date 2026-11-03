@@ -60,6 +60,8 @@ func newNamespaceReplicationCommands(
 				{
 					Name:  "repair",
 					Usage: "Plan or execute guarded namespace replication repair",
+					Description: "Repairs current replicas and reconciles eligible historical CHASM deliveries. " +
+						"SUCCEEDED does not imply former replicas were synchronized; deliveries to removed peers are abandoned without inspecting or updating them.",
 					Flags: []cli.Flag{
 						&cli.StringFlag{
 							Name:    FlagNamespace,
@@ -187,7 +189,7 @@ func repairNamespaceReplication(
 	} else {
 		prompter.Prompt(prompt)
 	}
-	repairer := newNamespaceReplicationRepairer(verifier)
+	repairer := &namespaceReplicationRepairer{verifier: verifier}
 	result, executeErr := repairer.Execute(c.Context, namespaceReplicationRepairExecutionRequest{
 		VerifyRequest:   verifyRequest,
 		Observation:     observation,
@@ -331,11 +333,31 @@ func printNamespaceReplicationRepairExecution(
 	if err := printTable(rows, c.App.Writer); err != nil {
 		return err
 	}
+	return printNamespaceReplicationComponentReconciliation(c, result)
+}
+
+func printNamespaceReplicationComponentReconciliation(c *cli.Context, result *namespaceReplicationRepairExecutionResult) error {
+	for _, warning := range result.Warnings {
+		if _, err := fmt.Fprintf(c.App.Writer, "Warning: %s\n", warning); err != nil {
+			return err
+		}
+	}
+	if result.ComponentReconciliationError != "" {
+		if _, err := fmt.Fprintf(c.App.Writer, "Component reconciliation incomplete: %s\n", result.ComponentReconciliationError); err != nil {
+			return err
+		}
+	}
 	if result.ComponentReconciliation == nil {
 		return nil
 	}
+	if _, err := fmt.Fprintln(c.App.Writer, result.ComponentDiscoveryNote); err != nil {
+		return err
+	}
 	if len(result.ComponentReconciliation.GetComponents()) == 0 {
-		_, err := fmt.Fprintln(c.App.Writer, "Component reconciliation: no running components found")
+		if result.ComponentReconciliationError != "" {
+			return nil
+		}
+		_, err := fmt.Fprintln(c.App.Writer, "Component reconciliation: no running components found in visibility")
 		return err
 	}
 	if _, err := fmt.Fprintln(c.App.Writer, "Component reconciliation:"); err != nil {
@@ -343,29 +365,17 @@ func printNamespaceReplicationRepairExecution(
 	}
 	var componentRows []any
 	for _, component := range result.ComponentReconciliation.GetComponents() {
+		row := namespaceReplicationComponentRepairTableRow{
+			BusinessID: component.GetBusinessId(), RunID: component.GetRunId(), Eligible: component.GetEligible(), Completed: component.GetCompleted(),
+			IneligibleReason: component.GetIneligibleReason(), Error: component.GetError(),
+		}
 		if len(component.GetPeers()) == 0 {
-			componentRows = append(componentRows, namespaceReplicationComponentRepairTableRow{
-				BusinessID:       component.GetBusinessId(),
-				RunID:            component.GetRunId(),
-				Eligible:         component.GetEligible(),
-				Completed:        component.GetCompleted(),
-				IneligibleReason: component.GetIneligibleReason(),
-				Error:            component.GetError(),
-			})
+			componentRows = append(componentRows, row)
 			continue
 		}
 		for _, peer := range component.GetPeers() {
-			componentRows = append(componentRows, namespaceReplicationComponentRepairTableRow{
-				BusinessID:       component.GetBusinessId(),
-				RunID:            component.GetRunId(),
-				Eligible:         component.GetEligible(),
-				Completed:        component.GetCompleted(),
-				Peer:             peer.GetTargetCluster(),
-				Outcome:          peer.GetOutcome().String(),
-				Basis:            peer.GetBasis().String(),
-				IneligibleReason: component.GetIneligibleReason(),
-				Error:            component.GetError(),
-			})
+			row.Peer, row.Outcome, row.Basis = peer.GetTargetCluster(), peer.GetOutcome().String(), peer.GetBasis().String()
+			componentRows = append(componentRows, row)
 		}
 	}
 	return printTable(componentRows, c.App.Writer)

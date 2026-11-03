@@ -4,7 +4,6 @@ import (
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
@@ -64,12 +63,17 @@ func (o *namespaceRepairObserver) observe(
 ) {
 	var telemetryPanic error
 	defer log.CapturePanic(o.logger, &telemetryPanic)
+	if terminal != nil && terminal.shadowCompletion != nil {
+		observer := shadowCompletionObserver{logger: o.logger, metricsHandler: o.metricsHandler, eventLogger: o.eventLogger,
+			emitNamespaceLifecycleEvents: o.emitNamespaceLifecycleEvents, sourceCluster: o.currentCluster}
+		observer.observe(ref, terminal.shadowCompletion)
+	}
 	for _, peer := range peers {
 		metrics.NamespaceReplicationCHASMManualReconciliations.With(o.metricsHandler).Record(
 			1,
 			metrics.SourceClusterTag(o.currentCluster),
 			metrics.TargetClusterTag(peer.targetCell),
-			metrics.OperationTag(namespaceReplicationOperationMetricValue(task.GetNamespaceOperation())),
+			metrics.OperationTag(nsreplicationcommon.OperationMetricValue(task.GetNamespaceOperation())),
 			metrics.OutcomeTag(nsreplicationcommon.CHASMApplyOutcomeManuallyReconciled),
 			metrics.StringTag(manualReconciliationBasisTag, peer.basis.String()),
 		)
@@ -77,10 +81,12 @@ func (o *namespaceRepairObserver) observe(
 			continue
 		}
 		details := map[string]any{
-			"repair_id":             request.GetRepairId(),
-			"operator_reason":       request.GetReason(),
-			"reconciliation_cutoff": request.GetCutoff().AsTime().Format(time.RFC3339Nano),
-			"reconciliation_basis":  peer.basis.String(),
+			"verified_config_version":   request.GetVerifiedConfigVersion().GetValue(),
+			"verified_failover_version": request.GetVerifiedFailoverVersion().GetValue(),
+			"repair_id":                 request.GetRepairId(),
+			"operator_reason":           request.GetReason(),
+			"reconciliation_cutoff":     request.GetCutoff().AsTime().Format(time.RFC3339Nano),
+			"reconciliation_basis":      peer.basis.String(),
 		}
 		if peer.lastFailure != "" {
 			details["last_delivery_failure"] = peer.lastFailure
@@ -110,17 +116,8 @@ func (o *namespaceRepairObserver) observe(
 		observation.Details["repair_id"] = request.GetRepairId()
 		observation.Details["operator_reason"] = request.GetReason()
 		observation.Details["reconciliation_cutoff"] = request.GetCutoff().AsTime().Format(time.RFC3339Nano)
+		observation.Details["verified_config_version"] = request.GetVerifiedConfigVersion().GetValue()
+		observation.Details["verified_failover_version"] = request.GetVerifiedFailoverVersion().GetValue()
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(o.eventLogger, observation)
-	}
-}
-
-func namespaceReplicationOperationMetricValue(operation enumsspb.NamespaceOperation) string {
-	switch operation {
-	case enumsspb.NAMESPACE_OPERATION_CREATE:
-		return "create"
-	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return "update"
-	default:
-		return "unknown"
 	}
 }

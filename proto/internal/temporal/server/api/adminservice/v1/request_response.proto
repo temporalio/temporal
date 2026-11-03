@@ -4,6 +4,7 @@ package temporal.server.api.adminservice.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
@@ -839,6 +840,9 @@ message ReconcileNamespaceMutationComponentsRequest {
   repeated string verified_peer_clusters = 6;
   int32 page_size = 7;
   bytes next_page_token = 8;
+  // Source versions covered by the final verification. Required even when zero.
+  google.protobuf.Int64Value verified_config_version = 9;
+  google.protobuf.Int64Value verified_failover_version = 10;
 }
 
 message ReconcileNamespaceMutationComponentsResponse {
@@ -866,6 +870,8 @@ message NamespaceMutationPeerReconciliation {
   enum Basis {
     BASIS_UNSPECIFIED = 0;
     BASIS_VERIFIED_TARGET = 1;
+    // Delivery was abandoned because the source no longer includes this peer.
+    // The peer was not inspected or updated and may retain stale membership.
     BASIS_REMOVED_MEMBERSHIP = 2;
   }
 

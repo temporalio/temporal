@@ -3,11 +3,14 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	chasmspb "go.temporal.io/server/api/chasm/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -19,13 +22,109 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func TestNamespaceRepairRejectsFutureServerCutoff(t *testing.T) {
+func TestNamespaceRepairReconcilesConcurrentlyAndPreservesPartialResults(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	metadata := persistence.NewMockMetadataManager(controller)
+	clusters := cluster.NewMockMetadata(controller)
+	visibility := chasm.NewMockVisibilityManager(controller)
+	clusters.EXPECT().GetCurrentClusterName().Return("cluster-a")
+	metadata.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "namespace-id"}).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cluster-a", Clusters: []string{"cluster-a", "cluster-b"}},
+		},
+	}, nil)
+	memo, err := payload.Encode(&emptypb.Empty{})
+	require.NoError(t, err)
+	executions := make([]*chasmspb.VisibilityExecutionInfo, 8)
+	releases := make(map[string]chan struct{}, len(executions))
+	for i := range executions {
+		id := fmt.Sprintf("business-%d", i)
+		executions[i] = &chasmspb.VisibilityExecutionInfo{
+			BusinessId: id, RunId: fmt.Sprintf("run-%d", i), ChasmMemo: memo,
+			StartTime: timestamppb.New(time.Unix(1, 0)), CloseTime: timestamppb.New(time.Time{}),
+		}
+		releases[id] = make(chan struct{})
+	}
+	visibility.EXPECT().ListExecutions(gomock.Any(), gomock.Any(), gomock.Any()).Return(&visibilityservice.ListChasmExecutionsResponse{Executions: executions}, nil)
+	started := make(chan string, len(executions))
+	var active, maxActive atomic.Int32
+	client := &testNamespaceReplicationRepairClient{call: func(ctx context.Context, request *namespacereplicationpb.ReconcileNamespaceMutationRequest) (*namespacereplicationpb.ReconcileNamespaceMutationResponse, error) {
+		count := active.Add(1)
+		defer active.Add(-1)
+		for previous := maxActive.Load(); count > previous; previous = maxActive.Load() {
+			if maxActive.CompareAndSwap(previous, count) {
+				break
+			}
+		}
+		started <- request.GetBusinessId()
+		select {
+		case <-releases[request.GetBusinessId()]:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		if request.GetBusinessId() == "business-2" {
+			return nil, serviceerror.NewUnavailable("history unavailable")
+		}
+		return &namespacereplicationpb.ReconcileNamespaceMutationResponse{ComponentEligible: true, ComponentCompleted: true}, nil
+	}}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), persistenceMetadataManager: metadata, clusterMetadata: clusters, chasmVisibilityManager: visibility, chasmNamespaceReplicationRepairClient: client}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	type result struct {
+		response *adminservice.ReconcileNamespaceMutationComponentsResponse
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		response, callErr := handler.ReconcileNamespaceMutationComponents(ctx, &adminservice.ReconcileNamespaceMutationComponentsRequest{
+			NamespaceId: "namespace-id", RepairId: "repair-id", Reason: "repair", CutoffTime: timestamppb.New(time.Unix(10, 0)),
+			VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
+			AuthoritativePeerClusters: []string{"cluster-b"}, VerifiedPeerClusters: []string{"cluster-b"},
+		})
+		done <- result{response, callErr}
+	}()
+	first := make([]string, 4)
+	for i := range first {
+		first[i] = await.Rcv(t, started)
+	}
+	require.ElementsMatch(t, []string{"business-0", "business-1", "business-2", "business-3"}, first)
+	require.Equal(t, int32(4), active.Load())
+	second := make([]string, 4)
+	for i := range first {
+		close(releases[first[len(first)-1-i]])
+		second[i] = await.Rcv(t, started)
+	}
+	for _, id := range second {
+		close(releases[id])
+	}
+	got := await.Rcv(t, done)
+	require.NoError(t, got.err)
+	require.Equal(t, int32(4), maxActive.Load())
+	require.Len(t, got.response.GetComponents(), len(executions))
+	for i, component := range got.response.GetComponents() {
+		require.Equal(t, executions[i].GetBusinessId(), component.GetBusinessId())
+		require.Equal(t, executions[i].GetRunId(), component.GetRunId())
+		if i == 2 {
+			require.Equal(t, "history unavailable", component.GetError())
+		} else {
+			require.Empty(t, component.GetError())
+			require.True(t, component.GetCompleted())
+		}
+	}
+}
+
+func TestNamespaceRepairRequiresVerifiedVersions(t *testing.T) {
 	t.Parallel()
 	source := clock.NewEventTimeSource()
 	source.Update(time.Unix(100, 0))
@@ -34,7 +133,7 @@ func TestNamespaceRepairRejectsFutureServerCutoff(t *testing.T) {
 		NamespaceId: "namespace-id", RepairId: "repair-id", Reason: "repair",
 		CutoffTime: timestamppb.New(time.Unix(101, 0)),
 	})
-	require.ErrorContains(t, err, "server's future")
+	require.ErrorContains(t, err, "verified config and failover versions are required")
 }
 
 func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *testing.T) {
@@ -44,7 +143,8 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	visibilityManager := chasm.NewMockVisibilityManager(controller)
 	repairClient := &testNamespaceReplicationRepairClient{}
 	handler := &AdminHandler{
-		timeSource:                            clock.NewRealTimeSource(),
+		// This frontend clock trails the snapshot's frontend; versions fence coverage.
+		timeSource:                            clock.NewEventTimeSource(),
 		logger:                                log.NewTestLogger(),
 		persistenceMetadataManager:            metadataManager,
 		clusterMetadata:                       clusterMetadata,
@@ -110,10 +210,11 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	}
 
 	request := &adminservice.ReconcileNamespaceMutationComponentsRequest{
-		NamespaceId:               "namespace-id",
-		RepairId:                  "repair-id",
-		Reason:                    "operator repair",
-		CutoffTime:                timestamppb.New(time.Unix(10, 0)),
+		NamespaceId:           "namespace-id",
+		RepairId:              "repair-id",
+		Reason:                "operator repair",
+		CutoffTime:            timestamppb.New(time.Unix(10, 0)),
+		VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
 		AuthoritativePeerClusters: []string{"cluster-b"},
 		VerifiedPeerClusters:      []string{"cluster-b"},
 		PageSize:                  25,
@@ -133,6 +234,35 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	require.Equal(t, "namespace-id", repairClient.requests[0].GetNamespaceId())
 	require.Equal(t, adminservice.NamespaceMutationPeerReconciliation_OUTCOME_RECONCILED, response.GetComponents()[0].GetPeers()[0].GetOutcome())
 	require.Equal(t, adminservice.NamespaceMutationPeerReconciliation_BASIS_VERIFIED_TARGET, response.GetComponents()[0].GetPeers()[0].GetBasis())
+}
+
+func TestNamespaceRepairRejectsChangedSourceVersions(t *testing.T) {
+	t.Parallel()
+	for _, failoverChanged := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failoverChanged=%v", failoverChanged), func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			metadata := persistence.NewMockMetadataManager(ctrl)
+			clusters := cluster.NewMockMetadata(ctrl)
+			clusters.EXPECT().GetCurrentClusterName().Return("cluster-a")
+			detail := &persistencespb.NamespaceDetail{
+				Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cluster-a", Clusters: []string{"cluster-a", "cluster-b"}},
+			}
+			if failoverChanged {
+				detail.FailoverVersion = 1
+			} else {
+				detail.ConfigVersion = 1
+			}
+			metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{Namespace: detail, IsGlobalNamespace: true}, nil)
+			handler := &AdminHandler{clusterMetadata: clusters, persistenceMetadataManager: metadata}
+			err := handler.validateNamespaceMutationRepair(t.Context(), &adminservice.ReconcileNamespaceMutationComponentsRequest{
+				NamespaceId: "namespace-id", RepairId: "repair-id", Reason: "repair", CutoffTime: timestamppb.New(time.Unix(100, 0)),
+				VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0), AuthoritativePeerClusters: []string{"cluster-b"},
+			})
+			require.ErrorContains(t, err, "versions changed after verification")
+		})
+	}
 }
 
 func TestReconcileNamespaceMutationExecutionReportsPerComponentError(t *testing.T) {
@@ -159,13 +289,17 @@ type testNamespaceReplicationRepairClient struct {
 	requests []*namespacereplicationpb.ReconcileNamespaceMutationRequest
 	response *namespacereplicationpb.ReconcileNamespaceMutationResponse
 	err      error
+	call     func(context.Context, *namespacereplicationpb.ReconcileNamespaceMutationRequest) (*namespacereplicationpb.ReconcileNamespaceMutationResponse, error)
 }
 
 func (c *testNamespaceReplicationRepairClient) ReconcileNamespaceMutation(
-	_ context.Context,
+	ctx context.Context,
 	request *namespacereplicationpb.ReconcileNamespaceMutationRequest,
 	_ ...grpc.CallOption,
 ) (*namespacereplicationpb.ReconcileNamespaceMutationResponse, error) {
+	if c.call != nil {
+		return c.call(ctx, request)
+	}
 	c.requests = append(c.requests, request)
 	return c.response, c.err
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
@@ -30,14 +32,17 @@ type namespaceReplicationRepairExecutionRequest struct {
 }
 
 type namespaceReplicationRepairExecutionResult struct {
-	Plan                    *namespaceReplicationRepairPlan                            `json:"plan"`
-	Status                  string                                                     `json:"status"`
-	StatusDetail            string                                                     `json:"status_detail,omitempty"`
-	EffectiveCutoff         time.Time                                                  `json:"effective_cutoff"`
-	Source                  namespaceReplicationRepairApplyResult                      `json:"source"`
-	Targets                 []namespaceReplicationRepairApplyResult                    `json:"targets,omitempty"`
-	FinalVerification       *namespaceReplicationVerificationResult                    `json:"final_verification,omitempty"`
-	ComponentReconciliation *adminservice.ReconcileNamespaceMutationComponentsResponse `json:"component_reconciliation,omitempty"`
+	ComponentReconciliationError string                                                     `json:"component_reconciliation_error,omitempty"`
+	Plan                         *namespaceReplicationRepairPlan                            `json:"plan"`
+	Status                       string                                                     `json:"status"`
+	StatusDetail                 string                                                     `json:"status_detail,omitempty"`
+	EffectiveCutoff              time.Time                                                  `json:"effective_cutoff"`
+	Source                       namespaceReplicationRepairApplyResult                      `json:"source"`
+	Targets                      []namespaceReplicationRepairApplyResult                    `json:"targets,omitempty"`
+	FinalVerification            *namespaceReplicationVerificationResult                    `json:"final_verification,omitempty"`
+	ComponentReconciliation      *adminservice.ReconcileNamespaceMutationComponentsResponse `json:"component_reconciliation,omitempty"`
+	ComponentDiscoveryNote       string                                                     `json:"component_discovery_note,omitempty"`
+	Warnings                     []string                                                   `json:"warnings,omitempty"`
 }
 
 type namespaceReplicationRepairApplyResult struct {
@@ -50,12 +55,6 @@ type namespaceReplicationRepairApplyResult struct {
 
 type namespaceReplicationRepairer struct {
 	verifier *namespaceReplicationVerifier
-}
-
-func newNamespaceReplicationRepairer(verifier *namespaceReplicationVerifier) *namespaceReplicationRepairer {
-	return &namespaceReplicationRepairer{
-		verifier: verifier,
-	}
 }
 
 func (r *namespaceReplicationRepairer) Execute(
@@ -112,9 +111,14 @@ func (r *namespaceReplicationRepairer) Execute(
 		sourceConnection.client,
 		request,
 		effectiveCutoff,
-		verifiedRepairPeers(finalObservation),
+		finalObservation,
 	)
 	result.ComponentReconciliation = reconciliation
+	result.Warnings = namespaceReplicationRepairWarnings(reconciliation)
+	if reconcileErr != nil {
+		result.ComponentReconciliationError = reconcileErr.Error()
+	}
+	result.ComponentDiscoveryNote = "Component reconciliation covers executions currently visible; rerun to catch delayed visibility records."
 
 	failures := namespaceReplicationRepairFailures(result, finalObservation, finalErr, reconciliation, reconcileErr)
 	if len(failures) != 0 {
@@ -122,7 +126,27 @@ func (r *namespaceReplicationRepairer) Execute(
 		return result, errors.New(result.StatusDetail)
 	}
 	result.Status = namespaceReplicationRepairExecutionSucceeded
+	result.StatusDetail = "Current replicas verified; success does not imply former replicas were synchronized."
 	return result, nil
+}
+
+func namespaceReplicationRepairWarnings(response *adminservice.ReconcileNamespaceMutationComponentsResponse) []string {
+	var removedPeers []string
+	for _, component := range response.GetComponents() {
+		for _, peer := range component.GetPeers() {
+			if peer.GetBasis() == adminservice.NamespaceMutationPeerReconciliation_BASIS_REMOVED_MEMBERSHIP {
+				removedPeers = append(removedPeers, peer.GetTargetCluster())
+			}
+		}
+	}
+	if len(removedPeers) == 0 {
+		return nil
+	}
+	slices.Sort(removedPeers)
+	return []string{fmt.Sprintf(
+		"Deliveries to removed peers were abandoned: %s. These peers were not inspected or updated and may retain stale namespace membership.",
+		strings.Join(slices.Compact(removedPeers), ", "),
+	)}
 }
 
 func validateNamespaceReplicationRepairExecution(request namespaceReplicationRepairExecutionRequest) error {
@@ -201,39 +225,11 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 	if err != nil {
 		return nil, err
 	}
-	outcome, err := r.applyRepairTask(ctx, client, request.Plan.SourceCluster, request.Plan, request.Reason, task)
+	prepared, err := r.applyRepairAndReadback(ctx, client, request, task, result)
 	if err != nil {
 		result.Error = err.Error()
 		return nil, fmt.Errorf("prepare source: %w", err)
 	}
-	result.Outcome = outcome.String()
-	if outcome != adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED {
-		result.Error = fmt.Sprintf("unexpected apply outcome %s", outcome)
-		return nil, errors.New(result.Error)
-	}
-	prepared, err := getNamespace(
-		ctx,
-		r.verifier.rpcTimeout,
-		client,
-		namespaceReplicationSelector{ID: request.Plan.NamespaceID},
-	)
-	if err != nil {
-		result.Error = fmt.Sprintf("read back source: %v", err)
-		return nil, errors.New(result.Error)
-	}
-	err = validateNamespaceRepairReadback(
-		frozen,
-		frozen,
-		prepared,
-		request.Plan.ProposedSourceConfigVersion,
-		frozen.GetFailoverVersion(),
-		r.verifier.dataKeysToIgnore,
-	)
-	if err != nil {
-		result.Error = err.Error()
-		return nil, fmt.Errorf("source readback: %w", err)
-	}
-	result.Readback = true
 	return prepared, nil
 }
 
@@ -259,9 +255,13 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 	client adminservice.AdminServiceClient,
 	request namespaceReplicationRepairExecutionRequest,
 	cutoff time.Time,
-	verifiedPeers []string,
+	finalObservation *namespaceReplicationObservation,
 ) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
 	result := &adminservice.ReconcileNamespaceMutationComponentsResponse{}
+	if finalObservation == nil || !finalObservation.sourceStable || finalObservation.sourceSnapshot == nil {
+		return result, errors.New("component reconciliation requires a stable final source observation")
+	}
+	verifiedPeers := verifiedRepairPeers(finalObservation)
 	seenPageTokens := make(map[string]struct{})
 	var nextPageToken []byte
 	for {
@@ -280,6 +280,8 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 						VerifiedPeerClusters:      verifiedPeers,
 						PageSize:                  namespaceReplicationRepairReconciliationPageSize,
 						NextPageToken:             nextPageToken,
+						VerifiedConfigVersion:     wrapperspb.Int64(finalObservation.sourceSnapshot.GetConfigVersion()),
+						VerifiedFailoverVersion:   wrapperspb.Int64(finalObservation.sourceSnapshot.GetFailoverVersion()),
 					},
 				)
 			},
@@ -360,14 +362,33 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 	}()
 
 	failoverSource := request.Observation.targetSnapshots[clusterPlan.Cluster]
+	freshTarget, err := getNamespace(ctx, r.verifier.rpcTimeout, connection.client, namespaceReplicationSelector{ID: request.Plan.NamespaceID})
+	if clusterPlan.Action == namespaceReplicationRepairActionCreate {
+		if !isNamespaceNotFound(err) {
+			result.Error = "target appeared or could not be checked after planning; rerun verification"
+			return result
+		}
+		_, nameErr := getNamespace(ctx, r.verifier.rpcTimeout, connection.client, namespaceReplicationSelector{Name: preparedSource.GetInfo().GetName()})
+		if !isNamespaceNotFound(nameErr) {
+			result.Error = "target namespace name appeared or could not be checked after planning; rerun verification"
+			return result
+		}
+	} else {
+		if err != nil {
+			result.Error = fmt.Sprintf("refresh target: %v", err)
+			return result
+		}
+		equal, compareErr := namespaceReplicationSnapshotsEqual(failoverSource, freshTarget, r.verifier.dataKeysToIgnore)
+		if compareErr != nil || !equal {
+			result.Error = "target configuration or versions changed after planning; rerun verification"
+			return result
+		}
+		failoverSource = freshTarget
+	}
 	dataPolicy := namespaceRepairDataPreserveTargetIgnored
 	if clusterPlan.Action == namespaceReplicationRepairActionCreate {
 		failoverSource = preparedSource
 		dataPolicy = namespaceRepairDataExcludeIgnored
-	}
-	if failoverSource == nil {
-		result.Error = "repair plan has no target snapshot"
-		return result
 	}
 	task, err := buildNamespaceReplicationRepairTask(
 		preparedSource,
@@ -381,55 +402,45 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 		result.Error = err.Error()
 		return result
 	}
-	outcome, err := r.applyRepairTask(
-		ctx,
-		connection.client,
-		request.Plan.SourceCluster,
-		request.Plan,
-		request.Reason,
-		task,
-	)
+	_, err = r.applyRepairAndReadback(ctx, connection.client, request, task, &result)
 	if err != nil {
 		result.Error = err.Error()
-		return result
+	}
+	return result
+}
+
+func (r *namespaceReplicationRepairer) applyRepairAndReadback(
+	ctx context.Context,
+	client adminservice.AdminServiceClient,
+	request namespaceReplicationRepairExecutionRequest,
+	task *replicationspb.NamespaceTaskAttributes,
+	result *namespaceReplicationRepairApplyResult,
+) (*adminservice.GetNamespaceResponse, error) {
+	outcome, err := r.applyRepairTask(ctx, client, request, task)
+	if err != nil {
+		return nil, err
 	}
 	result.Outcome = outcome.String()
-	if !acceptableNamespaceRepairOutcome(clusterPlan.Action, outcome) {
-		result.Error = fmt.Sprintf("unexpected apply outcome %s", outcome)
-		return result
+	// Receiver retries can report a no-op after a committed write. Accept that
+	// response only when readback proves the requested state and exact versions.
+	if !acceptableNamespaceRepairOutcome(result.Action, outcome) {
+		return nil, fmt.Errorf("unexpected apply outcome %s", outcome)
 	}
-	readback, err := getNamespace(
-		ctx,
-		r.verifier.rpcTimeout,
-		connection.client,
-		namespaceReplicationSelector{ID: request.Plan.NamespaceID},
-	)
+	actual, err := getNamespace(ctx, r.verifier.rpcTimeout, client, namespaceReplicationSelector{ID: task.GetId()})
 	if err != nil {
-		result.Error = fmt.Sprintf("read back namespace: %v", err)
-		return result
+		return nil, fmt.Errorf("read back namespace: %w", err)
 	}
-	err = validateNamespaceRepairReadback(
-		preparedSource,
-		failoverSource,
-		readback,
-		preparedSource.GetConfigVersion(),
-		failoverSource.GetFailoverVersion(),
-		r.verifier.dataKeysToIgnore,
-	)
-	if err != nil {
-		result.Error = err.Error()
-		return result
+	if err := validateNamespaceRepairReadback(task, actual, r.verifier.dataKeysToIgnore); err != nil {
+		return nil, err
 	}
 	result.Readback = true
-	return result
+	return actual, nil
 }
 
 func (r *namespaceReplicationRepairer) applyRepairTask(
 	ctx context.Context,
 	client adminservice.AdminServiceClient,
-	sourceCluster string,
-	plan *namespaceReplicationRepairPlan,
-	reason string,
+	request namespaceReplicationRepairExecutionRequest,
 	task *replicationspb.NamespaceTaskAttributes,
 ) (adminservice.ApplyNamespaceMutationResponse_Outcome, error) {
 	payload, err := nsreplication.MarshalNamespaceTask(task)
@@ -442,12 +453,12 @@ func (r *namespaceReplicationRepairer) applyRepairTask(
 		func(rpcCtx context.Context) (*adminservice.ApplyNamespaceMutationResponse, error) {
 			return client.ApplyNamespaceMutation(rpcCtx, &adminservice.ApplyNamespaceMutationRequest{
 				NamespaceTask:        task,
-				SourceCluster:        sourceCluster,
+				SourceCluster:        request.Plan.SourceCluster,
 				NamespaceTaskPayload: payload,
 				Attribution: &adminservice.NamespaceMutationAttribution{
 					Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
-					RepairId: plan.RepairID,
-					Reason:   reason,
+					RepairId: request.Plan.RepairID,
+					Reason:   request.Reason,
 				},
 			})
 		},
@@ -465,8 +476,10 @@ func acceptableNamespaceRepairOutcome(
 	switch action {
 	case namespaceReplicationRepairActionCreate:
 		return outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED ||
-			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE
-	case namespaceReplicationRepairActionApplySource,
+			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE ||
+			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED ||
+			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE
+	case namespaceReplicationRepairActionPrepareSource, namespaceReplicationRepairActionApplySource,
 		namespaceReplicationRepairActionPrepareSourceAndApply:
 		return outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED ||
 			outcome == adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE
@@ -476,20 +489,21 @@ func acceptableNamespaceRepairOutcome(
 }
 
 func validateNamespaceRepairReadback(
-	expectedConfig *adminservice.GetNamespaceResponse,
-	expectedFailover *adminservice.GetNamespaceResponse,
+	expected *replicationspb.NamespaceTaskAttributes,
 	actual *adminservice.GetNamespaceResponse,
-	configVersion int64,
-	failoverVersion int64,
 	dataKeysToIgnore map[string]struct{},
 ) error {
-	expectedConfigProjection, _, err := namespaceReplicationProjections(expectedConfig, dataKeysToIgnore)
+	expectedSnapshot := &adminservice.GetNamespaceResponse{
+		Info: proto.CloneOf(expected.GetInfo()), Config: expected.GetConfig(), ReplicationConfig: expected.GetReplicationConfig(),
+		FailoverHistory: expected.GetFailoverHistory(), IsGlobalNamespace: true,
+	}
+	expectedSnapshot.Info.Id = expected.GetId()
+	expectedConfigProjection, expectedFailoverProjection, err := namespaceReplicationProjections(expectedSnapshot, dataKeysToIgnore)
 	if err != nil {
 		return err
 	}
-	_, expectedFailoverProjection, err := namespaceReplicationProjections(expectedFailover, dataKeysToIgnore)
-	if err != nil {
-		return err
+	if !actual.GetIsGlobalNamespace() {
+		return errors.New("readback namespace is not global")
 	}
 	actualConfigProjection, actualFailoverProjection, err := namespaceReplicationProjections(actual, dataKeysToIgnore)
 	if err != nil {
@@ -501,11 +515,11 @@ func validateNamespaceRepairReadback(
 	if !proto.Equal(expectedFailoverProjection, actualFailoverProjection) {
 		return errors.New("failover readback changed during config repair")
 	}
-	if actual.GetConfigVersion() != configVersion {
-		return fmt.Errorf("config version readback is %d, expected %d", actual.GetConfigVersion(), configVersion)
+	if actual.GetConfigVersion() != expected.GetConfigVersion() {
+		return fmt.Errorf("config version readback is %d, expected %d", actual.GetConfigVersion(), expected.GetConfigVersion())
 	}
-	if actual.GetFailoverVersion() != failoverVersion {
-		return fmt.Errorf("failover version readback is %d, expected %d", actual.GetFailoverVersion(), failoverVersion)
+	if actual.GetFailoverVersion() != expected.GetFailoverVersion() {
+		return fmt.Errorf("failover version readback is %d, expected %d", actual.GetFailoverVersion(), expected.GetFailoverVersion())
 	}
 	return nil
 }

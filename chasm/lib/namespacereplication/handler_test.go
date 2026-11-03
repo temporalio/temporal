@@ -2,6 +2,7 @@ package namespacereplication
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,9 +18,12 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestTriggerNamespaceMutationRoutingMatchesExecution(t *testing.T) {
@@ -324,120 +328,160 @@ func validTriggerNamespaceMutationRequest(t *testing.T) *namespacereplicationpb.
 }
 
 func TestReconcileNamespaceMutationPreservesAttemptsAndCompletes(t *testing.T) {
-	logger := log.NewTestLogger()
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(NewNilLibrary()))
-	engine := chasmtest.NewEngine(t, registry)
-	ctx := chasm.NewEngineContext(context.Background(), engine)
-	key := chasm.ExecutionKey{
-		NamespaceID: primitives.SystemNamespaceID,
-		BusinessID:  "namespace-id:mutation-id",
-		RunID:       "run-id",
-	}
-	resolvedAt := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
-	firstAttemptAt := resolvedAt.Add(time.Minute)
-	lastAttemptAt := resolvedAt.Add(2 * time.Minute)
-	_, err := chasm.StartExecution(
-		ctx,
-		key,
-		func(_ chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
-			component := NewNamespaceMutationComponent(mutation)
-			component.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-				Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
-				ResolvedAt: timestamppb.New(resolvedAt),
+	for _, tc := range []struct{ shadow, mismatch bool }{{}, {shadow: true}, {shadow: true, mismatch: true}} {
+		t.Run(fmt.Sprintf("shadow=%v/mismatch=%v", tc.shadow, tc.mismatch), func(t *testing.T) {
+			shadow := tc.shadow
+			logger := log.NewTestLogger()
+			registry := chasm.NewRegistry(logger)
+			require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+			require.NoError(t, registry.Register(NewNilLibrary()))
+			engine := chasmtest.NewEngine(t, registry)
+			ctx := chasm.NewEngineContext(context.Background(), engine)
+			key := chasm.ExecutionKey{
+				NamespaceID: primitives.SystemNamespaceID,
+				BusinessID:  "namespace-id:mutation-id",
+				RunID:       "run-id",
 			}
-			component.PeerApply["cell-b"] = &namespacereplicationpb.PeerApplyStatus{
-				Outcome:        namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
-				AttemptCount:   7,
-				FirstAttemptAt: timestamppb.New(firstAttemptAt),
-				LastAttemptAt:  timestamppb.New(lastAttemptAt),
-				LastFailure:    &failurepb.Failure{Message: "peer unavailable"},
+			resolvedAt := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+			firstAttemptAt := resolvedAt.Add(time.Minute)
+			lastAttemptAt := resolvedAt.Add(2 * time.Minute)
+			_, err := chasm.StartExecution(
+				ctx,
+				key,
+				func(_ chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
+					component := NewNamespaceMutationComponent(mutation)
+					component.LocalApply = &namespacereplicationpb.LocalApplyStatus{
+						Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+						ResolvedAt: timestamppb.New(resolvedAt),
+					}
+					if shadow {
+						component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW
+					}
+					component.PeerApply["cell-b"] = &namespacereplicationpb.PeerApplyStatus{
+						Outcome:        namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
+						AttemptCount:   7,
+						FirstAttemptAt: timestamppb.New(firstAttemptAt),
+						LastAttemptAt:  timestamppb.New(lastAttemptAt),
+						LastFailure:    &failurepb.Failure{Message: "peer unavailable"},
+					}
+					component.PeerApply["already-applied-cell"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
+					if shadow {
+						component.PeerApply["already-applied-cell"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH
+					}
+					if tc.mismatch {
+						component.PeerApply["already-applied-cell"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH
+					}
+					return component, nil
+				},
+				&namespacereplicationpb.NamespaceMutation{
+					Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+					Shadow:    shadow,
+					NamespaceDetail: &persistencespb.NamespaceDetail{
+						Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
+						Config:            &persistencespb.NamespaceConfig{},
+						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+					},
+					PeerCells: []string{"cell-b", "removed-cell", "already-applied-cell"},
+				},
+			)
+			require.NoError(t, err)
+
+			handler := newServiceHandler(logger)
+			mh := metricstest.NewCaptureHandler()
+			capture := mh.StartCapture()
+			defer mh.StopCapture(capture)
+			handler.repairObserver = &namespaceRepairObserver{logger: logger, metricsHandler: mh, currentCluster: "cell-a"}
+			request := &namespacereplicationpb.ReconcileNamespaceMutationRequest{
+				VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
+				SystemNamespaceId:      primitives.SystemNamespaceID,
+				BusinessId:             key.BusinessID,
+				RunId:                  key.RunID,
+				NamespaceId:            "namespace-id",
+				RepairId:               "repair-id",
+				Reason:                 "break-glass repair",
+				Cutoff:                 timestamppb.New(resolvedAt.Add(time.Hour)),
+				AuthoritativePeerCells: []string{"cell-b"},
+				VerifiedPeerCells:      []string{"cell-b"},
 			}
-			component.PeerApply["already-applied-cell"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
-			return component, nil
-		},
-		&namespacereplicationpb.NamespaceMutation{
-			Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
-			NamespaceDetail: &persistencespb.NamespaceDetail{
-				Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
-				Config:            &persistencespb.NamespaceConfig{},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-			},
-			PeerCells: []string{"cell-b", "removed-cell", "already-applied-cell"},
-		},
-	)
-	require.NoError(t, err)
+			response, err := handler.ReconcileNamespaceMutation(ctx, request)
+			require.NoError(t, err)
+			require.True(t, response.GetComponentEligible())
+			require.True(t, response.GetComponentCompleted())
+			require.Len(t, response.GetPeers(), 3)
 
-	handler := newServiceHandler(logger)
-	request := &namespacereplicationpb.ReconcileNamespaceMutationRequest{
-		SystemNamespaceId:      primitives.SystemNamespaceID,
-		BusinessId:             key.BusinessID,
-		RunId:                  key.RunID,
-		NamespaceId:            "namespace-id",
-		RepairId:               "repair-id",
-		Reason:                 "break-glass repair",
-		Cutoff:                 timestamppb.New(resolvedAt.Add(time.Hour)),
-		AuthoritativePeerCells: []string{"cell-b"},
-		VerifiedPeerCells:      []string{"cell-b"},
-	}
-	response, err := handler.ReconcileNamespaceMutation(ctx, request)
-	require.NoError(t, err)
-	require.True(t, response.GetComponentEligible())
-	require.True(t, response.GetComponentCompleted())
-	require.Len(t, response.GetPeers(), 3)
+			component, err := chasm.ReadComponent(
+				chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentObserve),
+				chasm.NewComponentRef[*NamespaceMutationComponent](key),
+				func(component *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (*NamespaceMutationComponent, error) {
+					return component, nil
+				},
+				nil,
+			)
+			require.NoError(t, err)
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, component.GetStatus())
+			configured := component.GetPeerApply()["cell-b"]
+			require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED, configured.GetOutcome())
+			require.Equal(t, int32(7), configured.GetAttemptCount())
+			require.Equal(t, firstAttemptAt, configured.GetFirstAttemptAt().AsTime())
+			require.Equal(t, lastAttemptAt, configured.GetLastAttemptAt().AsTime())
+			require.Equal(t, "peer unavailable", configured.GetLastFailure().GetMessage())
+			require.Equal(t, "repair-id", configured.GetManualReconciliation().GetRepairId())
+			require.Equal(t, namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET, configured.GetManualReconciliation().GetBasis())
+			require.Equal(
+				t,
+				namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP,
+				component.GetPeerApply()["removed-cell"].GetManualReconciliation().GetBasis(),
+			)
+			wantExisting := namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
+			if shadow {
+				wantExisting = namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH
+			}
+			if tc.mismatch {
+				wantExisting = namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH
+			}
+			require.Equal(t, wantExisting, component.GetPeerApply()["already-applied-cell"].GetOutcome())
 
-	component, err := chasm.ReadComponent(
-		chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentObserve),
-		chasm.NewComponentRef[*NamespaceMutationComponent](key),
-		func(component *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (*NamespaceMutationComponent, error) {
-			return component, nil
-		},
-		nil,
-	)
-	require.NoError(t, err)
-	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, component.GetStatus())
-	configured := component.GetPeerApply()["cell-b"]
-	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED, configured.GetOutcome())
-	require.Equal(t, int32(7), configured.GetAttemptCount())
-	require.Equal(t, firstAttemptAt, configured.GetFirstAttemptAt().AsTime())
-	require.Equal(t, lastAttemptAt, configured.GetLastAttemptAt().AsTime())
-	require.Equal(t, "peer unavailable", configured.GetLastFailure().GetMessage())
-	require.Equal(t, "repair-id", configured.GetManualReconciliation().GetRepairId())
-	require.Equal(t, namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET, configured.GetManualReconciliation().GetBasis())
-	require.Equal(
-		t,
-		namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP,
-		component.GetPeerApply()["removed-cell"].GetManualReconciliation().GetBasis(),
-	)
-	require.Equal(
-		t,
-		namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED,
-		component.GetPeerApply()["already-applied-cell"].GetOutcome(),
-	)
+			// The exact repair RPC can be retried after its first response is lost. CHASM
+			// has already closed the execution at that point, so the retry must return
+			// the durable terminal result instead of attempting another update.
+			retryResponse, err := handler.ReconcileNamespaceMutation(ctx, request)
+			require.NoError(t, err)
+			require.True(t, retryResponse.GetComponentEligible())
+			require.True(t, retryResponse.GetComponentCompleted())
+			require.Len(t, retryResponse.GetPeers(), 3)
+			for _, peer := range retryResponse.GetPeers() {
+				require.Equal(t, namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL, peer.GetOutcome())
+			}
 
-	// The exact repair RPC can be retried after its first response is lost. CHASM
-	// has already closed the execution at that point, so the retry must return
-	// the durable terminal result instead of attempting another update.
-	retryResponse, err := handler.ReconcileNamespaceMutation(ctx, request)
-	require.NoError(t, err)
-	require.True(t, retryResponse.GetComponentEligible())
-	require.True(t, retryResponse.GetComponentCompleted())
-	require.Len(t, retryResponse.GetPeers(), 3)
-	for _, peer := range retryResponse.GetPeers() {
-		require.Equal(t, namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL, peer.GetOutcome())
+			completions := capture.SnapshotMetric(metrics.NamespaceReplicationShadowCompletionOutcomes.Name())
+			if shadow {
+				require.Len(t, completions, 1)
+				wantSummary := "manually_reconciled"
+				if tc.mismatch {
+					wantSummary = "mismatch"
+				}
+				require.Equal(t, wantSummary, completions[0].Tags["outcome"])
+			} else {
+				require.Empty(t, completions)
+			}
+
+		})
 	}
 }
 
 func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 	for _, testCase := range []struct {
 		name                 string
+		configVersion        int64
+		failoverVersion      int64
 		cutoff               time.Time
 		verifiedPeers        []string
 		wantEligible         bool
 		wantIneligibleReason string
 		wantPeerOutcome      namespacereplicationpb.PeerReconciliation_Outcome
 	}{
+		{name: "newer config with old history clock", configVersion: 1, cutoff: time.Unix(101, 0), verifiedPeers: []string{"cell-b"}, wantIneligibleReason: "mutation versions are newer than the verified source"},
+		{name: "newer failover with old history clock", failoverVersion: 1, cutoff: time.Unix(101, 0), verifiedPeers: []string{"cell-b"}, wantIneligibleReason: "mutation versions are newer than the verified source"},
 		{
 			name:                 "local apply after cutoff",
 			cutoff:               time.Unix(99, 0),
@@ -468,6 +512,8 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 				key,
 				func(_ chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
 					component := NewNamespaceMutationComponent(mutation)
+					component.Mutation.NamespaceDetail.ConfigVersion = testCase.configVersion
+					component.Mutation.NamespaceDetail.FailoverVersion = testCase.failoverVersion
 					component.LocalApply = &namespacereplicationpb.LocalApplyStatus{
 						Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
 						ResolvedAt: timestamppb.New(time.Unix(100, 0)),
@@ -487,6 +533,7 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 			require.NoError(t, err)
 
 			response, err := newServiceHandler(logger).ReconcileNamespaceMutation(ctx, &namespacereplicationpb.ReconcileNamespaceMutationRequest{
+				VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
 				SystemNamespaceId:      primitives.SystemNamespaceID,
 				BusinessId:             key.BusinessID,
 				RunId:                  key.RunID,

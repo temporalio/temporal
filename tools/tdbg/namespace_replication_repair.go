@@ -82,13 +82,13 @@ func planNamespaceReplicationRepair(
 	if err != nil {
 		return nil, err
 	}
-	if versionPlan.requiresIncrement && versionPlan.maxConfigVersion == math.MaxInt64 {
+	if versionPlan.requiresIncrement && versionPlan.maxDivergentConfigVersion == math.MaxInt64 {
 		plan.StatusDetail = "cannot choose a repair config version without overflowing int64"
 		return plan, nil
 	}
 	if versionPlan.requiresIncrement {
-		plan.ProposedSourceConfigVersion = versionPlan.maxConfigVersion + 1
-	} else if !versionPlan.anyDivergentTarget && versionPlan.maxConfigVersion > plan.SourceConfigVersion {
+		plan.ProposedSourceConfigVersion = max(versionPlan.maxConfigVersion, versionPlan.maxDivergentConfigVersion+1)
+	} else if versionPlan.maxConfigVersion > plan.SourceConfigVersion {
 		plan.ProposedSourceConfigVersion = versionPlan.maxConfigVersion
 	}
 	if plan.ProposedSourceConfigVersion != plan.SourceConfigVersion {
@@ -131,9 +131,9 @@ func planNamespaceReplicationRepair(
 }
 
 type namespaceRepairVersionPlan struct {
-	maxConfigVersion   int64
-	anyDivergentTarget bool
-	requiresIncrement  bool
+	maxConfigVersion          int64
+	maxDivergentConfigVersion int64
+	requiresIncrement         bool
 }
 
 func inspectNamespaceRepairVersions(
@@ -141,7 +141,6 @@ func inspectNamespaceRepairVersions(
 	sourceConfigVersion int64,
 ) (namespaceRepairVersionPlan, error) {
 	result := namespaceRepairVersionPlan{maxConfigVersion: sourceConfigVersion}
-	allObservedTargetsBelowSource := true
 	for _, cluster := range verification.Clusters {
 		if cluster.Role == "SOURCE" || cluster.Presence != namespaceReplicationPresencePresent {
 			continue
@@ -150,10 +149,11 @@ func inspectNamespaceRepairVersions(
 			return result, fmt.Errorf("cluster %q has no config version", cluster.Cluster)
 		}
 		result.maxConfigVersion = max(result.maxConfigVersion, *cluster.ConfigVersion)
-		allObservedTargetsBelowSource = allObservedTargetsBelowSource && *cluster.ConfigVersion < sourceConfigVersion
-		result.anyDivergentTarget = result.anyDivergentTarget || cluster.ConfigMatch != namespaceReplicationMatchMatch
+		if cluster.ConfigMatch != namespaceReplicationMatchMatch {
+			result.maxDivergentConfigVersion = max(result.maxDivergentConfigVersion, *cluster.ConfigVersion)
+			result.requiresIncrement = result.requiresIncrement || *cluster.ConfigVersion >= sourceConfigVersion
+		}
 	}
-	result.requiresIncrement = result.anyDivergentTarget && !allObservedTargetsBelowSource
 	return result, nil
 }
 
@@ -219,7 +219,7 @@ func buildNamespaceReplicationRepairTask(
 
 	switch dataPolicy {
 	case namespaceRepairDataSourceExact:
-		task.Info.Data = cloneStringMap(source.GetInfo().GetData())
+		task.Info.Data = cloneNonEmptyStringMap(source.GetInfo().GetData())
 	case namespaceRepairDataPreserveTargetIgnored:
 		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
 		for key := range dataKeysToIgnore {
@@ -236,15 +236,4 @@ func buildNamespaceReplicationRepairTask(
 		return nil, errors.New("unknown namespace repair data policy")
 	}
 	return task, nil
-}
-
-func cloneStringMap(input map[string]string) map[string]string {
-	if len(input) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(input))
-	for key, value := range input {
-		result[key] = value
-	}
-	return result
 }

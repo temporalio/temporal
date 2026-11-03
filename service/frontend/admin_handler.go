@@ -1112,6 +1112,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
 	if !request.GetShadow() {
+		if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
+			ctx = nsreplication.WithOperatorRepair(ctx)
+		}
 		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
 			Transport: namespaceMutationTransport(request),

@@ -197,10 +197,10 @@ const (
 	// The peer processed a shadow request without writing receiver state and the
 	// received payload differed from the legacy reference.
 	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
-	// An operator repair independently established the authoritative namespace
-	// state (or proved that the peer was removed from the replica set), making
-	// further delivery attempts unnecessary. This is terminal success, but is
-	// deliberately distinct from a transport apply/no-op outcome.
+	// An operator repair verified the peer's namespace state, or abandoned its
+	// delivery because the source no longer includes it in the replica set.
+	// Removed peers are not inspected or updated and may retain stale membership.
+	// This closes delivery successfully without proving a transport apply/no-op.
 	PEER_APPLY_OUTCOME_MANUALLY_RECONCILED PeerApplyOutcome = 9
 )
 
@@ -292,7 +292,8 @@ const (
 	// repair.
 	MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET ManualReconciliationBasis = 1
 	// The authoritative source no longer includes the peer in the namespace's
-	// replica set.
+	// replica set. Its delivery was abandoned without inspecting or updating the
+	// peer, which may still retain stale namespace membership.
 	MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP ManualReconciliationBasis = 2
 )
 

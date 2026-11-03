@@ -2,6 +2,7 @@ package namespacereplication
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"time"
 
@@ -89,18 +90,17 @@ func (h *serviceHandler) ReconcileNamespaceMutation(
 ) (response *namespacereplicationpb.ReconcileNamespaceMutationResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
-	if err := validateReconcileNamespaceMutationRequest(req); err != nil {
+	authoritativePeers, verifiedPeers, err := validateReconcileNamespaceMutationRequest(req)
+	if err != nil {
 		return nil, err
 	}
-	authoritativePeers := stringSet(req.GetAuthoritativePeerCells())
-	verifiedPeers := stringSet(req.GetVerifiedPeerCells())
 	cutoff := req.GetCutoff().AsTime()
 	ref := chasm.NewComponentRef[*NamespaceMutationComponent](chasm.ExecutionKey{
 		NamespaceID: req.GetSystemNamespaceId(),
 		BusinessID:  req.GetBusinessId(),
 		RunID:       req.GetRunId(),
 	})
-	if existing, closed, err := readClosedReconciliationResult(ctx, ref, req); err != nil {
+	if existing, closed, err := readReconciliationResult(ctx, ref, req); err != nil {
 		return nil, err
 	} else if closed {
 		return existing, nil
@@ -132,7 +132,7 @@ func (h *serviceHandler) ReconcileNamespaceMutation(
 		nil,
 	)
 	if err != nil {
-		if existing, closed, readErr := readClosedReconciliationResult(ctx, ref, req); readErr == nil && closed {
+		if existing, closed, readErr := readReconciliationResult(ctx, ref, req); readErr == nil && closed {
 			return existing, nil
 		}
 		return nil, err
@@ -156,6 +156,22 @@ type namespaceMutationReconciliationUpdate struct {
 	task         *replicationspb.NamespaceTaskAttributes
 }
 
+func namespaceReconciliationIneligibleReason(component *NamespaceMutationComponent, request *namespacereplicationpb.ReconcileNamespaceMutationRequest) string {
+	local := component.GetLocalApply()
+	if !localApplyAllowsPeerFanout(local.GetOutcome()) {
+		return "local apply is not successful"
+	}
+	detail := component.GetMutation().GetNamespaceDetail()
+	// Version bounds protect newer mutations even when frontend and history clocks differ.
+	if detail.GetConfigVersion() > request.GetVerifiedConfigVersion().GetValue() || detail.GetFailoverVersion() > request.GetVerifiedFailoverVersion().GetValue() {
+		return "mutation versions are newer than the verified source"
+	}
+	if local.GetResolvedAt() == nil || local.GetResolvedAt().AsTime().After(request.GetCutoff().AsTime()) {
+		return "local apply resolved after repair cutoff"
+	}
+	return ""
+}
+
 func reconcileRunningNamespaceMutation(
 	component *NamespaceMutationComponent,
 	mctx chasm.MutableContext,
@@ -170,20 +186,13 @@ func reconcileRunningNamespaceMutation(
 	update := &namespaceMutationReconciliationUpdate{
 		response: &namespacereplicationpb.ReconcileNamespaceMutationResponse{},
 	}
-	local := component.GetLocalApply()
-	if local.GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED &&
-		local.GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW {
-		update.response.IneligibleReason = "local apply is not successful"
-		return update, nil
-	}
-	if local.GetResolvedAt() == nil || local.GetResolvedAt().AsTime().After(cutoff) {
-		update.response.IneligibleReason = "local apply resolved after repair cutoff"
+	if reason := namespaceReconciliationIneligibleReason(component, request); reason != "" {
+		update.response.IneligibleReason = reason
 		return update, nil
 	}
 
 	update.response.ComponentEligible = true
-	peers := mapsKeys(component.GetPeerApply())
-	slices.Sort(peers)
+	peers := slices.Sorted(maps.Keys(component.GetPeerApply()))
 	for _, peer := range peers {
 		peerResult, observation, err := reconcilePendingPeer(
 			component,
@@ -208,6 +217,9 @@ func reconcileRunningNamespaceMutation(
 		}
 		update.response.ComponentCompleted = true
 		update.terminal = newComponentTerminalObservation(component, component.GetStatus())
+		if component.GetMutation().GetShadow() {
+			update.terminal.shadowCompletion = newShadowCompletionRecord(component, mctx.Now(component))
+		}
 	}
 	update.task = nsreplicationcommon.NamespaceDetailToTaskAttributes(
 		component.GetMutation().GetOperation(),
@@ -263,7 +275,7 @@ func reconcilePendingPeer(
 	}, nil
 }
 
-func readClosedReconciliationResult(
+func readReconciliationResult(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	req *namespacereplicationpb.ReconcileNamespaceMutationRequest,
@@ -280,6 +292,9 @@ func readClosedReconciliationResult(
 				return nil, serviceerror.NewFailedPrecondition("component namespace does not match repair namespace")
 			}
 			if component.GetStatus() == namespacereplicationpb.COMPONENT_STATUS_RUNNING {
+				if reason := namespaceReconciliationIneligibleReason(component, req); reason != "" {
+					return &readResult{closed: true, response: &namespacereplicationpb.ReconcileNamespaceMutationResponse{IneligibleReason: reason}}, nil
+				}
 				return &readResult{}, nil
 			}
 			response := &namespacereplicationpb.ReconcileNamespaceMutationResponse{
@@ -289,8 +304,7 @@ func readClosedReconciliationResult(
 			if component.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_COMPLETED {
 				response.IneligibleReason = "component is not running"
 			}
-			peers := mapsKeys(component.GetPeerApply())
-			slices.Sort(peers)
+			peers := slices.Sorted(maps.Keys(component.GetPeerApply()))
 			for _, peer := range peers {
 				response.Peers = append(response.Peers, &namespacereplicationpb.PeerReconciliation{
 					TargetCell: peer,
@@ -307,66 +321,39 @@ func readClosedReconciliationResult(
 	return result.response, result.closed, nil
 }
 
-func validateReconcileNamespaceMutationRequest(req *namespacereplicationpb.ReconcileNamespaceMutationRequest) error {
+func validateReconcileNamespaceMutationRequest(req *namespacereplicationpb.ReconcileNamespaceMutationRequest) (authoritativePeers, verifiedPeers map[string]struct{}, err error) {
 	if req == nil {
-		return serviceerror.NewInvalidArgument("request is required")
+		return nil, nil, serviceerror.NewInvalidArgument("request is required")
 	}
 	if req.GetSystemNamespaceId() != primitives.SystemNamespaceID {
-		return serviceerror.NewInvalidArgument("system_namespace_id must be the Temporal system namespace ID")
+		return nil, nil, serviceerror.NewInvalidArgument("system_namespace_id must be the Temporal system namespace ID")
 	}
 	if req.GetBusinessId() == "" || req.GetRunId() == "" || req.GetNamespaceId() == "" {
-		return serviceerror.NewInvalidArgument("business_id, run_id, and namespace_id are required")
+		return nil, nil, serviceerror.NewInvalidArgument("business_id, run_id, and namespace_id are required")
 	}
 	if req.GetRepairId() == "" || req.GetReason() == "" {
-		return serviceerror.NewInvalidArgument("repair_id and reason are required")
+		return nil, nil, serviceerror.NewInvalidArgument("repair_id and reason are required")
+	}
+	if req.VerifiedConfigVersion == nil || req.VerifiedFailoverVersion == nil {
+		return nil, nil, serviceerror.NewInvalidArgument("verified config and failover versions are required")
 	}
 	if req.GetCutoff() == nil || req.GetCutoff().CheckValid() != nil {
-		return serviceerror.NewInvalidArgument("a valid cutoff is required")
+		return nil, nil, serviceerror.NewInvalidArgument("a valid cutoff is required")
 	}
-	authoritativePeers, err := validatePeerSet("authoritative_peer_cells", req.GetAuthoritativePeerCells())
+	authoritativePeers, err = nsreplicationcommon.ValidatePeerSet("authoritative_peer_cells", req.GetAuthoritativePeerCells())
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	verifiedPeers, err := validatePeerSet("verified_peer_cells", req.GetVerifiedPeerCells())
+	verifiedPeers, err = nsreplicationcommon.ValidatePeerSet("verified_peer_cells", req.GetVerifiedPeerCells())
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	for peer := range verifiedPeers {
 		if _, ok := authoritativePeers[peer]; !ok {
-			return serviceerror.NewInvalidArgument("verified_peer_cells must be a subset of authoritative_peer_cells")
+			return nil, nil, serviceerror.NewInvalidArgument("verified_peer_cells must be a subset of authoritative_peer_cells")
 		}
 	}
-	return nil
-}
-
-func validatePeerSet(field string, peers []string) (map[string]struct{}, error) {
-	result := make(map[string]struct{}, len(peers))
-	for _, peer := range peers {
-		if peer == "" {
-			return nil, serviceerror.NewInvalidArgument(field + " contains an empty peer")
-		}
-		if _, duplicate := result[peer]; duplicate {
-			return nil, serviceerror.NewInvalidArgument(field + " contains duplicate peer " + peer)
-		}
-		result[peer] = struct{}{}
-	}
-	return result, nil
-}
-
-func stringSet(values []string) map[string]struct{} {
-	result := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		result[value] = struct{}{}
-	}
-	return result
-}
-
-func mapsKeys[V any](values map[string]V) []string {
-	result := make([]string, 0, len(values))
-	for key := range values {
-		result = append(result, key)
-	}
-	return result
+	return authoritativePeers, verifiedPeers, nil
 }
 
 func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.TriggerNamespaceMutationRequest) error {

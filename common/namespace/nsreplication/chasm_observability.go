@@ -75,7 +75,6 @@ func RecordCHASMAuthoritativeApply(
 		metrics.OperationTag(OperationMetricValue(observation.Task.GetNamespaceOperation())),
 		metrics.StringTag(chasmApplyStageTag, observation.Stage),
 		metrics.StringTag("mode", chasmObservationMode(observation)),
-		metrics.TransportTag(chasmObservationTransport(observation)),
 		metrics.OutcomeTag(observation.Outcome),
 	}
 	metrics.NamespaceReplicationCHASMApplyOutcomes.With(metricsHandler).Record(

@@ -12,8 +12,10 @@ import (
 	chasmnsreplication "go.temporal.io/server/chasm/lib/namespacereplication"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -52,14 +54,21 @@ func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
 	}
 	response := &adminservice.ReconcileNamespaceMutationComponentsResponse{
 		NextPageToken: page.NextPageToken,
+		Components:    make([]*adminservice.NamespaceMutationComponentReconciliation, len(page.Executions)),
 	}
-	for _, execution := range page.Executions {
-		response.Components = append(response.Components, adh.reconcileNamespaceMutationExecution(
-			ctx,
-			request,
-			execution.BusinessID,
-			execution.RunID,
-		))
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(4)
+	for i, execution := range page.Executions {
+		group.Go(func() error {
+			if err := groupCtx.Err(); err != nil {
+				return err
+			}
+			response.Components[i] = adh.reconcileNamespaceMutationExecution(groupCtx, request, execution.BusinessID, execution.RunID)
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
 	}
 	return response, nil
 }
@@ -77,17 +86,17 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 	if request.GetCutoffTime() == nil || request.GetCutoffTime().CheckValid() != nil {
 		return serviceerror.NewInvalidArgument("a valid cutoff_time is required")
 	}
-	if request.GetCutoffTime().AsTime().After(adh.timeSource.Now()) {
-		return serviceerror.NewInvalidArgument("cutoff_time cannot be in the server's future")
+	if request.VerifiedConfigVersion == nil || request.VerifiedFailoverVersion == nil {
+		return serviceerror.NewInvalidArgument("verified config and failover versions are required")
 	}
-	authoritativePeers, err := validateNamespaceRepairPeerSet(
+	authoritativePeers, err := nsreplication.ValidatePeerSet(
 		"authoritative_peer_clusters",
 		request.GetAuthoritativePeerClusters(),
 	)
 	if err != nil {
 		return err
 	}
-	verifiedPeers, err := validateNamespaceRepairPeerSet(
+	verifiedPeers, err := nsreplication.ValidatePeerSet(
 		"verified_peer_clusters",
 		request.GetVerifiedPeerClusters(),
 	)
@@ -111,6 +120,9 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 		return err
 	}
 	detail := namespaceResponse.Namespace
+	if detail.GetConfigVersion() != request.GetVerifiedConfigVersion().GetValue() || detail.GetFailoverVersion() != request.GetVerifiedFailoverVersion().GetValue() {
+		return serviceerror.NewFailedPrecondition("source namespace versions changed after verification")
+	}
 	if !namespaceResponse.IsGlobalNamespace || detail.GetInfo().GetId() != request.GetNamespaceId() {
 		return serviceerror.NewFailedPrecondition("repair namespace is not a matching global namespace")
 	}
@@ -125,14 +137,9 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 		return serviceerror.NewFailedPrecondition("namespace replication state must be NORMAL")
 	}
 
-	actualPeers := make([]string, 0, len(replicationConfig.GetClusters()))
-	for _, cluster := range replicationConfig.GetClusters() {
-		if cluster != currentCluster {
-			actualPeers = append(actualPeers, cluster)
-		}
-	}
+	actualPeers := slices.Clone(replicationConfig.GetClusters())
 	slices.Sort(actualPeers)
-	expectedPeers := slices.Clone(request.GetAuthoritativePeerClusters())
+	expectedPeers := append(slices.Clone(request.GetAuthoritativePeerClusters()), currentCluster)
 	slices.Sort(expectedPeers)
 	if !slices.Equal(actualPeers, expectedPeers) {
 		return serviceerror.NewFailedPrecondition("authoritative namespace replica set changed before component reconciliation")
@@ -153,15 +160,17 @@ func (adh *AdminHandler) reconcileNamespaceMutationExecution(
 	response, err := adh.chasmNamespaceReplicationRepairClient.ReconcileNamespaceMutation(
 		ctx,
 		&namespacereplicationpb.ReconcileNamespaceMutationRequest{
-			SystemNamespaceId:      primitives.SystemNamespaceID,
-			BusinessId:             businessID,
-			RunId:                  runID,
-			NamespaceId:            request.GetNamespaceId(),
-			RepairId:               request.GetRepairId(),
-			Reason:                 request.GetReason(),
-			Cutoff:                 request.GetCutoffTime(),
-			AuthoritativePeerCells: request.GetAuthoritativePeerClusters(),
-			VerifiedPeerCells:      request.GetVerifiedPeerClusters(),
+			SystemNamespaceId:       primitives.SystemNamespaceID,
+			BusinessId:              businessID,
+			RunId:                   runID,
+			NamespaceId:             request.GetNamespaceId(),
+			RepairId:                request.GetRepairId(),
+			Reason:                  request.GetReason(),
+			Cutoff:                  request.GetCutoffTime(),
+			VerifiedConfigVersion:   request.VerifiedConfigVersion,
+			VerifiedFailoverVersion: request.VerifiedFailoverVersion,
+			AuthoritativePeerCells:  request.GetAuthoritativePeerClusters(),
+			VerifiedPeerCells:       request.GetVerifiedPeerClusters(),
 		},
 	)
 	if err != nil {
@@ -207,18 +216,4 @@ func namespaceMutationPeerReconciliationBasis(
 	default:
 		return adminservice.NamespaceMutationPeerReconciliation_BASIS_UNSPECIFIED
 	}
-}
-
-func validateNamespaceRepairPeerSet(field string, peers []string) (map[string]struct{}, error) {
-	result := make(map[string]struct{}, len(peers))
-	for _, peer := range peers {
-		if peer == "" {
-			return nil, serviceerror.NewInvalidArgument(field + " contains an empty cluster")
-		}
-		if _, duplicate := result[peer]; duplicate {
-			return nil, serviceerror.NewInvalidArgument(field + " contains duplicate cluster " + peer)
-		}
-		result[peer] = struct{}{}
-	}
-	return result, nil
 }

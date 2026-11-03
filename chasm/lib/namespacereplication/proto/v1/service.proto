@@ -4,6 +4,7 @@ package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 import "chasm/lib/namespacereplication/proto/v1/message.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
@@ -84,4 +85,6 @@ message ReconcileNamespaceMutationRequest {
   repeated string authoritative_peer_cells = 8;
   // Configured peers whose repaired state passed final verification.
   repeated string verified_peer_cells = 9;
+  google.protobuf.Int64Value verified_config_version = 10;
+  google.protobuf.Int64Value verified_failover_version = 11;
 }
