@@ -101,6 +101,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
+		expectDeleted              bool
 		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
 		// performing a real request.
 		httpCallerErr error
@@ -477,6 +478,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 		{
 			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
+			expectDeleted:         true,
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
@@ -488,6 +490,12 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetTimeoutFailureInfo())
 				require.Equal(t, "operation timed out", failure.Message)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				recordings := snapshot[chasmnexus.NexusOperationTimeoutCount.Name()]
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(), recordings[0].Tags["timeout_type"])
 			},
 		},
 		{
@@ -707,6 +715,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.expectDeleted {
+				_, err = node.Parent.Child([]hsm.Key{node.Key})
+				require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+			}
 			if tc.checkCallerMetrics != nil {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
@@ -770,6 +782,8 @@ func TestProcessTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -795,6 +809,25 @@ func TestProcessTimeoutTask(t *testing.T) {
 			},
 		},
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
+}
+
+func TestProcessTimeoutTaskDoesNotEmitMetricWhenDeletionFails(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), nil))
+	// A parent without the operation makes deletion fail after the timeout transition.
+	node.Parent = newRoot(t, backend)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		MetricsHandler: captureHandler,
+		Config:         &nexusoperations.Config{},
+	}))
+
+	err := reg.ExecuteTimerTask(fakeEnv{node}, node, nexusoperations.ScheduleToCloseTimeoutTask{})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+	require.Empty(t, capture.Snapshot()[chasmnexus.NexusOperationTimeoutCount.Name()])
 }
 
 func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
@@ -920,6 +953,8 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -979,6 +1014,8 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	// Should have TIMED_OUT event (STARTED event is not added by the transition)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
