@@ -3116,7 +3116,7 @@ a low priority workflow lock before subsequent stream sender conversion attempts
 		"history.TaskDLQEnabled",
 		true,
 		`HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
-Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.`,
+The history task DLQ is backed by persistence QueueV2, which is supported by Cassandra, MySQL, PostgreSQL, and SQLite.`,
 	)
 	HistoryTaskDLQUnexpectedErrorAttempts = NewGlobalIntSetting(
 		"history.TaskDLQUnexpectedErrorAttempts",
