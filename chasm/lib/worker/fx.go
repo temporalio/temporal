@@ -14,6 +14,7 @@ func Register(
 
 var Module = fx.Module(
 	"chasm.lib.worker",
-	fx.Provide(NewLibrary),
+	fx.Provide(newHandler),
+	fx.Provide(newLibrary),
 	fx.Invoke(Register),
 )

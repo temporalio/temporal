@@ -3925,6 +3925,18 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
+	EnableDurableWorkerHeartbeats = NewNamespaceBoolSetting(
+		"worker.enableDurableWorkerHeartbeats",
+		false,
+		`Enable forwarding worker heartbeats from Frontend to the worker state machine.`,
+	)
+	MinWorkerHeartbeatTimeout = NewNamespaceDurationSetting(
+		"worker.minHeartbeatTimeout",
+		// Leave slack beyond the SDK's default one-minute heartbeat interval.
+		2*time.Minute,
+		`Minimum allowed worker heartbeat timeout.`,
+	)
+
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
 	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(

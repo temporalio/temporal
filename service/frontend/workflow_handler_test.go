@@ -210,6 +210,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
+		nil, // Not initializing the worker state machine client here.
 		nil,
 		nil, // Not initializing the scheduler client here.
 		s.mockResource.GetArchiverProvider(),
