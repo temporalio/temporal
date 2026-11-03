@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -131,22 +132,30 @@ func Test_fetchCACertFromFile(t *testing.T) {
 	}
 }
 
-// callerInfoCapturingAdminServer records the caller-name/caller-type headers seen on
-// DescribeMutableState, so tests can verify what tdbg's client actually put on the wire.
-type callerInfoCapturingAdminServer struct {
+// metadataCapturingAdminServer records the metadata seen on DescribeMutableState, so tests can
+// verify what tdbg's client actually put on the wire.
+type metadataCapturingAdminServer struct {
 	adminservice.UnimplementedAdminServiceServer
-	callerName []string
-	callerType []string
+	md metadata.MD
 }
 
-func (s *callerInfoCapturingAdminServer) DescribeMutableState(
+func (s *metadataCapturingAdminServer) DescribeMutableState(
 	ctx context.Context,
 	_ *adminservice.DescribeMutableStateRequest,
 ) (*adminservice.DescribeMutableStateResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	s.callerName = md.Get(headers.CallerNameHeaderName)
-	s.callerType = md.Get(headers.CallerTypeHeaderName)
+	s.md, _ = metadata.FromIncomingContext(ctx)
 	return &adminservice.DescribeMutableStateResponse{}, nil
+}
+
+// startAdminServer serves adminServer on a local port and returns its address.
+func startAdminServer(t *testing.T, adminServer adminservice.AdminServiceServer, opts ...grpc.ServerOption) string {
+	server := grpc.NewServer(opts...)
+	adminservice.RegisterAdminServiceServer(server, adminServer)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	return listener.Addr().String()
 }
 
 // newTestCLIContext builds a *cli.Context with the same flags (and defaults) as the real
@@ -161,23 +170,75 @@ func newTestCLIContext(t *testing.T) *cli.Context {
 }
 
 func TestCreateGRPCConnection_TagsCallerInfoAsOperator(t *testing.T) {
-	adminServer := &callerInfoCapturingAdminServer{}
-	server := grpc.NewServer()
-	adminservice.RegisterAdminServiceServer(server, adminServer)
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() { _ = listener.Close() }()
-	go func() { _ = server.Serve(listener) }()
-	defer server.Stop()
-
-	factory := NewClientFactory(WithFrontendAddress(listener.Addr().String()))
+	adminServer := &metadataCapturingAdminServer{}
+	factory := NewClientFactory(WithFrontendAddress(startAdminServer(t, adminServer)))
 	client := factory.AdminClient(newTestCLIContext(t))
 
 	// example API call - this tag should be set for all APIs called by tdbg
-	_, err = client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
+	_, err := client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"tdbg"}, adminServer.callerName)
-	require.Equal(t, []string{headers.CallerTypeOperator}, adminServer.callerType)
+	require.Equal(t, []string{"tdbg"}, adminServer.md.Get(headers.CallerNameHeaderName))
+	require.Equal(t, []string{headers.CallerTypeOperator}, adminServer.md.Get(headers.CallerTypeHeaderName))
+}
+
+func TestCreateGRPCConnection_APIKey(t *testing.T) {
+	// The API key enables TLS, so the server needs a certificate: reuse httptest's self-signed one.
+	// The client trusts no CA for it, hence --tls-disable-host-verification below.
+	httpsServer := httptest.NewTLSServer(nil)
+	cert := httpsServer.TLS.Certificates[0]
+	httpsServer.Close()
+
+	tests := []struct {
+		name     string
+		grpcMeta []string
+		want     []string
+	}{
+		{name: "API key only", want: []string{"Bearer test-key"}},
+		{name: "grpc-meta replaces API key", grpcMeta: []string{"authorization=Bearer other"}, want: []string{"Bearer other"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adminServer := &metadataCapturingAdminServer{}
+			address := startAdminServer(t, adminServer, grpc.Creds(credentials.NewServerTLSFromCert(&cert)))
+			c := newTestCLIContext(t)
+			require.NoError(t, c.Set(FlagAPIKey, "test-key"))
+			require.NoError(t, c.Set(FlagTLSDisableHostVerification, "true"))
+			for _, pair := range tt.grpcMeta {
+				require.NoError(t, c.Set(FlagGRPCMeta, pair))
+			}
+
+			client := NewClientFactory(WithFrontendAddress(address)).AdminClient(c)
+			_, err := client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
+			require.NoError(t, err)
+
+			require.Equal(t, tt.want, adminServer.md.Get("authorization"))
+		})
+	}
+}
+
+func TestCreateGRPCConnection_GRPCMeta(t *testing.T) {
+	adminServer := &metadataCapturingAdminServer{}
+	c := newTestCLIContext(t)
+	require.NoError(t, c.Set(FlagGRPCMeta, "foo=bar"))
+	require.NoError(t, c.Set(FlagGRPCMeta, "baz=a=b"))
+	require.NoError(t, c.Set(FlagGRPCMeta, "qux=1"))
+	require.NoError(t, c.Set(FlagGRPCMeta, "qux=2"))
+
+	client := NewClientFactory(WithFrontendAddress(startAdminServer(t, adminServer))).AdminClient(c)
+	_, err := client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"bar"}, adminServer.md.Get("foo"))
+	require.Equal(t, []string{"a=b"}, adminServer.md.Get("baz"))
+	require.Equal(t, []string{"2"}, adminServer.md.Get("qux"))
+}
+
+func TestCreateGRPCConnection_InvalidGRPCMeta(t *testing.T) {
+	c := newTestCLIContext(t)
+	require.NoError(t, c.Set(FlagGRPCMeta, "foo"))
+
+	factory := &clientFactory{frontendAddressProvider: staticFrontendAddress("127.0.0.1:7233")}
+	_, err := factory.createGRPCConnection(c)
+	require.EqualError(t, err, `invalid --grpc-meta "foo", expected KEY=VALUE`)
 }

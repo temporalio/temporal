@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -85,13 +86,19 @@ func WithFrontendAddress(address string) ClientFactoryOption {
 
 // AdminClient builds an admin client.
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, err := b.createGRPCConnection(c)
+	if err != nil {
+		b.logger.Fatal("Failed to create connection", tag.Error(err))
+	}
 
 	return adminservice.NewAdminServiceClient(connection)
 }
 
 func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, err := b.createGRPCConnection(c)
+	if err != nil {
+		b.logger.Fatal("Failed to create connection", tag.Error(err))
+	}
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
@@ -110,17 +117,40 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	dialOpts := []grpc.DialOption{
-		grpcSecurityOptions,
-		grpc.WithChainUnaryInterceptor(callerInfoInterceptor),
+	outgoingMetadata := metadata.MD{}
+	if apiKey := c.String(FlagAPIKey); apiKey != "" {
+		outgoingMetadata.Set("authorization", "Bearer "+apiKey)
+	}
+	for _, pair := range c.StringSlice(FlagGRPCMeta) {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid --%s %q, expected KEY=VALUE", FlagGRPCMeta, pair)
+		}
+		outgoingMetadata.Set(key, value)
 	}
 
-	connection, err := grpc.NewClient(frontendAddress, dialOpts...)
-	if err != nil {
-		b.logger.Fatal("Failed to create connection", tag.Error(err))
-		return nil, err
+	dialOpts := []grpc.DialOption{
+		grpcSecurityOptions,
+		grpc.WithChainUnaryInterceptor(callerInfoInterceptor, outgoingMetadataInterceptor(outgoingMetadata)),
 	}
-	return connection, nil
+
+	return grpc.NewClient(frontendAddress, dialOpts...)
+}
+
+// outgoingMetadataInterceptor attaches md to every outgoing call.
+func outgoingMetadataInterceptor(md metadata.MD) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply any,
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		outgoing, _ := metadata.FromOutgoingContext(ctx)
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Join(outgoing, md))
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }
 
 // callerInfoInterceptor tags every outgoing tdbg call as CallerTypeOperator. tdbg is exclusively
@@ -157,7 +187,6 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 
 	serverName := c.String(FlagTLSServerName)
 
-	var host string
 	var cert *tls.Certificate
 	var caPool *x509.CertPool
 
@@ -177,36 +206,28 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 		}
 		cert = &myCert
 	}
-	// If we are given arguments to verify either server or client, configure TLS
-	if caPool != nil || cert != nil {
-		if serverName != "" {
-			host = serverName
-		} else {
-			hostPort := c.String(FlagAddress)
-			if hostPort == "" {
-				hostPort = DefaultFrontendAddress
-			}
-			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
-			host, _, _ = net.SplitHostPort(hostPort)
-		}
-		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
-		if caPool != nil {
-			tlsConfig.RootCAs = caPool
-		}
-		if cert != nil {
-			tlsConfig.Certificates = []tls.Certificate{*cert}
-		}
-
-		return tlsConfig, nil
+	// Enable TLS when a CA, client certificate, server name, or API key is given.
+	// The API key is a bearer credential, so it is never sent over plaintext.
+	if caPool == nil && cert == nil && serverName == "" && c.String(FlagAPIKey) == "" {
+		return nil, nil
 	}
-	// If we are given a server name, set the TLS server name for DNS resolution
-	if serverName != "" {
-		host = serverName
-		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
-		return tlsConfig, nil
+	host := serverName
+	if host == "" {
+		hostPort := c.String(FlagAddress)
+		if hostPort == "" {
+			hostPort = DefaultFrontendAddress
+		}
+		// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
+		host, _, _ = net.SplitHostPort(hostPort)
 	}
-
-	return nil, nil
+	tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
+	if caPool != nil {
+		tlsConfig.RootCAs = caPool
+	}
+	if cert != nil {
+		tlsConfig.Certificates = []tls.Certificate{*cert}
+	}
+	return tlsConfig, nil
 }
 
 func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
