@@ -336,6 +336,8 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
+	// Tests inject a failure after the metadata write succeeds but before the CHASM
+	// commit, verifying that retries reconcile the write and schedule peer delivery.
 	namespaceName := namespace.Name(loaded.Detail.GetInfo().GetName())
 	var commitErr error
 	if fault, ok := testhooks.Get(h.testHooks, testhooks.NamespaceReplicationBeforeLocalCommit, namespaceName); ok {
