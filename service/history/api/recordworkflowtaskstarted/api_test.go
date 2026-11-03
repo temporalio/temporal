@@ -129,16 +129,18 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier, modifyRequest
 
 func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 	for _, tc := range []struct {
-		name, stableIdentity string
-		singleSession        bool
+		name, stableIdentity, stickyQueue string
+		singleSession                     bool
 	}{
-		{name: "normal poll cannot start bound workflow"},
-		{name: "different session cannot start bound workflow", singleSession: true, stableIdentity: "other"},
+		{name: "normal poll cannot start bound workflow", stickyQueue: "S"},
+		{name: "different session cannot start bound workflow", singleSession: true, stableIdentity: "other", stickyQueue: "S"},
+		{name: "sticky mirror cannot override binding", singleSession: true, stableIdentity: "other", stickyQueue: "other"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := invoke(t, func(ms *historyi.MockMutableState) {
 				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-					SingleSessionBound: true, StickyTaskQueue: "S",
+					SessionState:    &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"},
+					StickyTaskQueue: tc.stickyQueue,
 				}).AnyTimes()
 				// Validate the destination even for a duplicate task-start request.
 				ms.EXPECT().GetWorkflowTaskByID(gomock.Any()).Return(&historyi.WorkflowTaskInfo{

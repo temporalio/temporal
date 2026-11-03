@@ -13,6 +13,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // matchingTaskVersion represents the task schema version
@@ -188,10 +189,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
-		expiryTTL, ttlErr := taskQueueMetadataTTL(request, time.Now())
-		if ttlErr != nil {
-			return nil, ttlErr
-		}
+		expiryTTL := taskQueueMetadataTTL(request.ExpiryTime, time.Now())
 		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),
@@ -251,14 +249,11 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func taskQueueMetadataTTL(request *p.InternalUpdateTaskQueueRequest, now time.Time) (int64, error) {
-	if request.SingleSessionAssigned {
-		return 0, nil
+func taskQueueMetadataTTL(expiryTime *timestamppb.Timestamp, now time.Time) int64 {
+	if expiryTime == nil {
+		return 0
 	}
-	if request.ExpiryTime == nil {
-		return 0, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
-	}
-	return min(convert.Int64Ceil(timestamp.TimeValue(request.ExpiryTime).Sub(now).Seconds()), maxCassandraTTL), nil
+	return min(convert.Int64Ceil(timestamp.TimeValue(expiryTime).Sub(now).Seconds()), maxCassandraTTL)
 }
 
 func (d *taskQueueStore) ListTaskQueue(

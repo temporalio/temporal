@@ -277,7 +277,6 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	require.NoError(t, err)
 
 	// After unloading the sticky task queue partition, the newly scheduled workflow task shall be spooled by loading the task queue partition again.
-	// This block also checks that repeated timeouts keep replacement tasks on the same task queue
 	await.Require(t.Context(), t, func(t *await.T) {
 		history := env.SdkClient().GetWorkflowHistory(t.Context(), tv.WorkflowID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		var timeoutCount int
@@ -297,7 +296,7 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 				timeoutCount++
 			}
 		}
-		require.GreaterOrEqual(t, timeoutCount, 3, "worker remains absent through multiple five-second retry cycles")
+		require.Zero(t, timeoutCount, "the bound workflow task remains queued until a worker resumes")
 		response, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 			NamespaceId: env.NamespaceID().String(), TaskQueuePartition: partition,
 			Versions:    &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
@@ -320,7 +319,7 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	require.NoError(t, err)
 	_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
-		require.Equal(t, int32(1), task.GetAttempt(), "schedule-to-start expiry does not increase the attempt")
+		require.Equal(t, int32(1), task.GetAttempt(), "the original workflow task resumes without a retry")
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)

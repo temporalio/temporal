@@ -679,7 +679,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 			s.Equal(taskQueue, persistedExecutionInfo.GetTaskQueue())
 			s.Equal(response.GetStartedEventId(), persistedExecutionInfo.GetWorkflowTaskStartedEventId())
 			if tc.singleSession {
-				s.True(persistedExecutionInfo.GetSingleSessionBound())
+				s.True(persistedExecutionInfo.GetSessionState().GetExclusiveWorker())
+				s.Equal("S", persistedExecutionInfo.GetSessionState().GetWorkerAddress())
 				s.Equal("S", persistedExecutionInfo.GetStickyTaskQueue())
 				s.Empty(persistedExecutionInfo.GetAssignedBuildId())
 			} else {
@@ -824,7 +825,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	for _, name := range []string{"ordinary", "acquire", "replacement"} {
-		singleSessionBound := name != "ordinary"
+		exclusiveWorker := name != "ordinary"
 		s.Run(name, func() {
 			fakeHistory := []*historypb.HistoryEvent{
 				{
@@ -852,7 +853,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 			}
 
 			historyReads := 1
-			if singleSessionBound {
+			if exclusiveWorker {
 				historyReads++
 			}
 			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
@@ -876,18 +877,19 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
 				ms.SetStickyTaskQueue("S", nil)
-				ms.GetExecutionInfo().SingleSessionBound = true
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 				info := request.UpdateWorkflowMutation.ExecutionInfo
-				s.Equal(singleSessionBound, info.GetSingleSessionBound())
+				s.Equal(exclusiveWorker, info.GetSessionState().GetExclusiveWorker())
 				s.Equal(tl, info.GetTaskQueue())
 				s.Equal(int64(3), info.GetWorkflowTaskStartedEventId())
-				if singleSessionBound {
+				if exclusiveWorker {
 					s.Equal("S", info.GetStickyTaskQueue())
+					s.Equal("S", info.GetSessionState().GetWorkerAddress())
 				}
 				return tests.UpdateWorkflowExecutionResponse, nil
 			})
@@ -912,7 +914,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 			release(nil)
 
 			var sessionOptions *sessionpb.WorkerSessionOptions
-			if singleSessionBound {
+			if exclusiveWorker {
 				sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"}}}
 			}
 			request := &historyservice.RecordWorkflowTaskStartedRequest{
@@ -945,9 +947,9 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				id3: {},
 			}
 			s.Equal(expectedQueryMap, response.GetQueries())
-			if singleSessionBound {
+			if exclusiveWorker {
 				s.True(response.GetStickyExecutionEnabled())
-				s.True(loadedMS.GetExecutionInfo().GetSingleSessionBound())
+				s.True(loadedMS.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
 				s.Equal("S", loadedMS.CurrentTaskQueue().GetName())
 				retry := common.CloneProto(request)
 				retry.PollRequest.Identity = "retry-process"

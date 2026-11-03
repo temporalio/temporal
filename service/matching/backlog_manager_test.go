@@ -1347,13 +1347,13 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 			_, err := store.CreateTaskQueue(t.Context(), &persistence.CreateTaskQueueRequest{
 				RangeID: 1,
 				TaskQueueInfo: &persistencespb.TaskQueueInfo{
-					NamespaceId:           queue.NamespaceId(),
-					Name:                  queue.PersistenceName(),
-					TaskType:              queue.TaskType(),
-					Kind:                  enumspb.TASK_QUEUE_KIND_STICKY,
-					LastUpdateTime:        timestamppb.Now(),
-					ExpiryTime:            timestamppb.New(time.Now().Add(time.Hour)),
-					SingleSessionAssigned: tc.assigned,
+					NamespaceId:             queue.NamespaceId(),
+					Name:                    queue.PersistenceName(),
+					TaskType:                queue.TaskType(),
+					Kind:                    enumspb.TASK_QUEUE_KIND_STICKY,
+					LastUpdateTime:          timestamppb.Now(),
+					ExpiryTime:              timestamppb.New(time.Now().Add(time.Hour)),
+					ExclusiveWorkerAssigned: tc.assigned,
 				},
 			})
 			require.NoError(t, err)
@@ -1369,7 +1369,7 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 					NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 				})
 				require.NoError(t, err)
-				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetSingleSessionAssigned())
+				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
 				require.Equal(t, int64(iteration+1), persisted.TaskQueueInfo.GetAckLevel())
 				if tc.assigned {
 					require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
@@ -1393,21 +1393,21 @@ func TestSingleSessionAssignmentPersists(t *testing.T) {
 	db := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
 	_, err := db.RenewLease(t.Context())
 	require.NoError(t, err)
-	require.False(t, db.SingleSessionAssigned())
+	require.False(t, db.ExclusiveWorkerAssigned())
 	staleRange := db.rangeID
 
-	changed, err := db.assignSingleSession(t.Context())
+	changed, err := db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
 	require.True(t, changed)
 	persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 	})
 	require.NoError(t, err)
-	require.True(t, persisted.TaskQueueInfo.GetSingleSessionAssigned())
+	require.True(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
 	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
 	require.Equal(t, staleRange+1, persisted.RangeID, "assignment fences snapshots taken before retention")
 
-	changed, err = db.assignSingleSession(t.Context())
+	changed, err = db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, persisted.RangeID, db.rangeID)
@@ -1415,6 +1415,6 @@ func TestSingleSessionAssignmentPersists(t *testing.T) {
 	reloaded := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
 	_, err = reloaded.RenewLease(t.Context())
 	require.NoError(t, err)
-	require.True(t, reloaded.SingleSessionAssigned())
+	require.True(t, reloaded.ExclusiveWorkerAssigned())
 	require.NoError(t, reloaded.SyncState(t.Context()))
 }

@@ -172,7 +172,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			errForRelease = retError
 		}
 		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() &&
-			!ms.GetExecutionInfo().GetSingleSessionBound() {
+			!ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
 			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
 			// New WFT will also be created on sticky task queue and sent to worker.
 			// Because worker doesn't have a workflow in cache, it needs to replay it from the beginning,
@@ -185,8 +185,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// This is NOT 100% bulletproof solution because this write operation may also fail.
 			// TODO: remove this call when GetWorkflowExecutionHistory includes speculative WFT events.
 			//
-			// Note: Single-Session workflow tasks are not affected by this logic since once a workflow is assigned to a single-session, aka a worker's sticky
-			// task queue, the task should never go back to the normal task queue.
+			// TODO(Shivam): This piece of code seems stale given that history.sendTransientOrSpeculativeWorkflowTaskEvents is true by default.
+			// Revisit this if exclusive workers in the future need added support for this.
 			if clearStickyErr := handler.clearStickyTaskQueue(ctx, workflowLease.GetContext()); clearStickyErr != nil {
 				handler.logger.Error("Failed to clear stickiness after speculative workflow task failed to complete.",
 					tag.NewErrorTag("clear-sticky-error", clearStickyErr),
@@ -217,9 +217,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.GetSingleSessionBound() {
+	sessionState := executionInfo.GetSessionState()
+	if sessionState.GetExclusiveWorker() {
 		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
-		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != executionInfo.GetStickyTaskQueue() {
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetWorkerAddress() {
 			releaseLeaseWithError = false
 			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
 		}

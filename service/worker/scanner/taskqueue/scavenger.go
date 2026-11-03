@@ -201,7 +201,7 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 		taskQueueState: taskQueueState{
 			rangeID:        info.RangeID,
 			lastUpdated:    info.Data.LastUpdateTime.AsTime(),
-			retainMetadata: p.IsTaskQueueMetadataRetained(info.Data),
+			retainMetadata: p.IsExclusiveWorkerAssigned(info.Data),
 		},
 		scvg: s,
 	}

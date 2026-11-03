@@ -331,7 +331,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	taskQueue, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
-	singleSessionBound := mutableState.GetExecutionInfo().GetSingleSessionBound()
+	exclusiveWorker := mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
@@ -351,7 +351,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		historyi.TransactionPolicyActive,
 	)
 
-	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok && !singleSessionBound {
+	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok && !exclusiveWorker {
 		// sticky worker is unavailable, switch to original normal task queue. Note: Sending back to the normal task queue is done
 		// only if the workflow task is not assigned to a single session.
 		taskQueue = &taskqueuepb.TaskQueue{

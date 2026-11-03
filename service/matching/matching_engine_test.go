@@ -7123,19 +7123,24 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
 			queue := UnversionedQueueKey(partition)
 			if !tc.missing {
-				expiry := timestamppb.New(time.Now().Add(time.Hour))
-				if tc.assigned {
-					expiry = nil
+				info := &persistencespb.TaskQueueInfo{
+					NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
+					Kind: enumspb.TASK_QUEUE_KIND_STICKY, LastUpdateTime: timestamppb.Now(),
+					ExpiryTime: timestamppb.New(time.Now().Add(time.Hour)),
 				}
 				_, err := s.v1TaskManager.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
-					RangeID: 1,
-					TaskQueueInfo: &persistencespb.TaskQueueInfo{
-						NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
-						Kind: enumspb.TASK_QUEUE_KIND_STICKY, SingleSessionAssigned: tc.assigned,
-						LastUpdateTime: timestamppb.Now(), ExpiryTime: expiry,
-					},
+					RangeID: 1, TaskQueueInfo: info,
 				})
 				require.NoError(t, err)
+				if tc.assigned {
+					info = common.CloneProto(info)
+					info.ExclusiveWorkerAssigned = true
+					info.ExpiryTime = nil
+					_, err = s.v1TaskManager.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+						RangeID: 2, PrevRangeID: 1, TaskQueueInfo: info,
+					})
+					require.NoError(t, err)
+				}
 			}
 			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
 			require.NoError(t, err)

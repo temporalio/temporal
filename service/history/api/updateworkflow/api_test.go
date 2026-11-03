@@ -241,7 +241,7 @@ func TestSingleSessionSpeculativeDispatchDoesNotFallback(t *testing.T) {
 			u := &Updater{
 				req: createUpdateRequest("update"), shardCtx: shard, matchingClient: client,
 				scheduledEventID: 5, taskQueue: &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
-				normalTaskQueueName: "foo", singleSessionBound: bound,
+				normalTaskQueueName: "foo", exclusiveWorker: bound,
 			}
 			_, err := u.OnSuccess(context.Background())
 			require.ErrorIs(t, err, namespaceErr)

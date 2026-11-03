@@ -3004,7 +3004,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 			}
 			local := tc.assigned || tc.activity || tc.ordinary
 			if !tc.activity && !tc.ordinary {
-				queue.EXPECT().SingleSessionAssigned().Return(tc.assigned)
+				queue.EXPECT().ExclusiveWorkerAssigned().Return(tc.assigned)
 			}
 			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
 			var expectedErr error
@@ -3028,7 +3028,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 					return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
 				})
 				if expectedErr == nil {
-					queue.EXPECT().AssignSingleSession().After(forwarded).Return(tc.assignmentErr)
+					queue.EXPECT().AssignExclusiveWorker().After(forwarded).Return(tc.assignmentErr)
 					expectedErr = tc.assignmentErr
 				}
 			}
@@ -3068,7 +3068,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
 				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
 				var assigned atomic.Bool
-				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
+				queue.EXPECT().ExclusiveWorkerAssigned().DoAndReturn(assigned.Load).AnyTimes()
 				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
@@ -3095,7 +3095,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 						}
 						return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
 					})
-				queue.EXPECT().AssignSingleSession().DoAndReturn(func() error {
+				queue.EXPECT().AssignExclusiveWorker().DoAndReturn(func() error {
 					assigned.Store(true)
 					if tc.persistBlocked {
 						return block()
@@ -3141,8 +3141,8 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 				other := s.newEagerDispatchPartitionManager(0, nil)
 				other.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName() + "-2")
 				otherQueue := other.defaultQueue().(*MockphysicalTaskQueueManager)
-				otherQueue.EXPECT().SingleSessionAssigned().Return(false)
-				otherQueue.EXPECT().AssignSingleSession().Return(nil)
+				otherQueue.EXPECT().ExclusiveWorkerAssigned().Return(false)
+				otherQueue.EXPECT().AssignExclusiveWorker().Return(nil)
 				otherQueue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
 				task, _, err = other.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
@@ -3200,7 +3200,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
 				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
 				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
 				var assigned atomic.Bool
-				queue.EXPECT().SingleSessionAssigned().DoAndReturn(assigned.Load).AnyTimes()
+				queue.EXPECT().ExclusiveWorkerAssigned().DoAndReturn(assigned.Load).AnyTimes()
 				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
@@ -3218,7 +3218,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
 							return nil, ctx.Err()
 						}
 					})
-				queue.EXPECT().AssignSingleSession().DoAndReturn(func() error {
+				queue.EXPECT().AssignExclusiveWorker().DoAndReturn(func() error {
 					assigned.Store(true)
 					return nil
 				})

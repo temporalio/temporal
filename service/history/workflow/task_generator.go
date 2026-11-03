@@ -432,7 +432,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternalf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID)
 	}
 
-	if r.mutableState.IsStickyTaskQueueSet() {
+	// Bound tasks wait for a replacement worker on the same queue, so an S2S timer would only recreate them.
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout := timeout.AsDuration()
 		wttt := &tasks.WorkflowTaskTimeoutTask{
@@ -474,11 +475,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 ) error {
 
 	var scheduleToStartTimeout time.Duration
-	if r.mutableState.IsStickyTaskQueueSet() {
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout = timeout.AsDuration()
 	} else {
-		// Speculative WT has ScheduleToStart timeout even on normal task queue.
+		// Speculative WT needs a finite recovery timeout even on normal and single-session queues.
 		// Normally WT should be added to matching right after being created
 		// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
 		// there is no good way to handle the error.

@@ -368,8 +368,9 @@ func queryDirectlyThroughMatching(
 		false,
 	)
 
-	//  Always choose the sticky query path for a bound execution
-	if msResp.GetSingleSessionBound() || (msResp.GetIsStickyTaskQueueEnabled() &&
+	exclusiveWorker := msResp.GetSessionState().GetExclusiveWorker()
+	// Queries for exclusive workers must not fall back to the normal task queue.
+	if exclusiveWorker || (msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace())) {
 
@@ -386,9 +387,10 @@ func queryDirectlyThroughMatching(
 		// Note: For session based queries, the timeout used is the timeout provided by the caller itself and
 		// not the default sticky query timeout. This is because unlike the non-session query, the session based query
 		// is not dispatched to the normal queue on timeout.
+		// TODO (Shivam): Think about how session moves shall be done with queries that are dispatched via matching.
 		var stickyContext context.Context
 		var cancel context.CancelFunc
-		if msResp.GetSingleSessionBound() {
+		if exclusiveWorker {
 			stickyContext, cancel = context.WithCancel(ctx)
 		} else {
 			stickyContext, cancel = rpc.ResetContextTimeout(ctx, timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
@@ -405,7 +407,7 @@ func queryDirectlyThroughMatching(
 					QueryRejected: matchingResp.GetQueryRejected(),
 				}}, nil
 		}
-		if msResp.GetSingleSessionBound() {
+		if exclusiveWorker {
 			// Return errors without clearing stickiness if single-session is enabled
 			return nil, err
 		}

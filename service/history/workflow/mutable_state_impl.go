@@ -1468,22 +1468,33 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
-	if ms.executionInfo.GetSingleSessionBound() && name != ms.executionInfo.GetStickyTaskQueue() {
-		// Workflow-task completion rejects a different destination before calling this setter, which is why
+	sessionState := ms.executionInfo.GetSessionState()
+	if sessionState.GetExclusiveWorker() && name != sessionState.GetWorkerAddress() {
+		softassert.Fail(ms.logger, "attempted to change sticky task queue for a workflow bound to a single session",
+			tag.WorkflowTaskQueueName(sessionState.GetWorkerAddress()),
+			tag.NewStringTag("requested-task-queue", name),
+		)
+		// This check is already done in workflow task completion, which is why
 		// we do not need to return an error here.
 		return
 	}
 	ms.executionInfo.StickyTaskQueue = name
 	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
+	if sessionState != nil {
+		sessionState.WorkerAddress = name
+	}
 }
 
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	// If the sticky task queue is already bound to a single sesssion, then clearing it is not allowed.
-	if ms.executionInfo.GetSingleSessionBound() {
+	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
 		return
 	}
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
+	if sessionState := ms.executionInfo.GetSessionState(); sessionState != nil {
+		sessionState.WorkerAddress = ""
+	}
 }
 
 func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
@@ -1495,9 +1506,11 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 // in mutable state and provided name.
 // ScheduleToStartTimeout is set based on queue kind and workflow task type.
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
-	if ms.executionInfo.GetSingleSessionBound() {
-		// TODO (Shivam) -- may require more thinking if we want a larger TTL for session tasks?
-		return ms.CurrentTaskQueue(), durationpb.New(tasks.SingleSessionWorkflowTaskScheduleToStartTimeout)
+	// If the workflow is bound to an exclusive worker, then the schedule to start timeout is
+	// the WorkflowRunTimeout. This is because unlike regular sticky tasks, exclusive worker tasks do not fall back
+	// on the normal task queue.
+	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+		return ms.CurrentTaskQueue(), ms.executionInfo.WorkflowRunTimeout
 	}
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {

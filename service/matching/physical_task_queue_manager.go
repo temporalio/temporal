@@ -973,14 +973,14 @@ func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.Ta
 	return result
 }
 
-func (c *physicalTaskQueueManagerImpl) SingleSessionAssigned() bool {
-	return c.backlogMgr.getDB().SingleSessionAssigned()
+func (c *physicalTaskQueueManagerImpl) ExclusiveWorkerAssigned() bool {
+	return c.backlogMgr.getDB().ExclusiveWorkerAssigned()
 }
 
-func (c *physicalTaskQueueManagerImpl) AssignSingleSession() error {
+func (c *physicalTaskQueueManagerImpl) AssignExclusiveWorker() error {
 	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 	defer cancel()
-	changed, err := c.backlogMgr.getDB().assignSingleSession(ctx)
+	changed, err := c.backlogMgr.getDB().assignExclusiveWorker(ctx)
 	if changed {
 		// Assignment advances the lease fence; reload to give the task writer a consistent ID block.
 		c.UnloadFromPartitionManager(unloadCauseUnspecified)

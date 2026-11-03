@@ -270,33 +270,52 @@ func (s *engineSuite) TearDownTest() {
 }
 
 func (s *engineSuite) TestGetMutableStateSync() {
-	ctx := context.Background()
+	for _, exclusiveWorker := range []bool{false, true} {
+		name := "ordinary"
+		if exclusiveWorker {
+			name = "exclusive worker"
+		}
+		s.Run(name, func() {
+			ctx := s.T().Context()
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: s.T().Name(),
+				RunId:      tests.RunID,
+			}
+			taskqueue := "testTaskQueue"
+			identity := "testIdentity"
 
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "test-get-workflow-execution-event-id",
-		RunId:      tests.RunID,
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+				execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+			wt := addWorkflowTaskScheduledEvent(ms)
+			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+			var expectedSessionState *persistencespb.SessionState
+			if exclusiveWorker {
+				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				ms.SetStickyTaskQueue("S", nil)
+				ms.GetExecutionInfo().SessionState = common.CloneProto(expectedSessionState)
+			}
+			wfMs := workflow.TestCloneToProto(ctx, ms)
+			gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+			request := &historyservice.GetMutableStateRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution:   &execution,
+			}
+			response, err := s.historyEngine.GetMutableState(ctx, request)
+			s.Require().NoError(err)
+			s.Equal(int64(4), response.GetNextEventId())
+			s.Equal(tests.RunID, response.GetFirstExecutionRunId())
+			protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
+			if exclusiveWorker {
+				response.GetSessionState().WorkerAddress = "other"
+				response, err = s.historyEngine.GetMutableState(ctx, request)
+				s.Require().NoError(err)
+				protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
+			}
+		})
 	}
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wt := addWorkflowTaskScheduledEvent(ms)
-	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	// right now the next event ID is 4
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
-
-	// test get the next event ID instantly
-	response, err := s.historyEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		Execution:   &execution,
-	})
-	s.Nil(err)
-	s.Equal(int64(4), response.GetNextEventId())
-	s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 }
 
 func (s *engineSuite) TestGetMutableState_IntestRunID() {
@@ -735,7 +754,7 @@ func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
 			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
 			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
 			ms.SetStickyTaskQueue("S", nil)
-			ms.GetExecutionInfo().SingleSessionBound = true
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
 

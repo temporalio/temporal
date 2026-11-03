@@ -667,12 +667,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
+	// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	}
 	if sticky && !stickyWorkerAvailable(pm) {
-		assigned, err := e.singleSessionAssigned(ctx, partition)
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
 		if err != nil {
 			return "", false, err
 		}
@@ -776,7 +777,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
 	queue := UnversionedQueueKey(partition)
 	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(),
@@ -789,7 +790,7 @@ func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partitio
 	if err != nil {
 		return false, err
 	}
-	return persistence.IsTaskQueueMetadataRetained(response.TaskQueueInfo), nil
+	return persistence.IsExclusiveWorkerAssigned(response.TaskQueueInfo), nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(
@@ -926,6 +927,9 @@ pollLoop:
 			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
+		// TODO (Shivam): Consider the edge case in the case of exclusive workers where the call to recordWorkflowTaskStarted succeeded
+		// but the response never reached matching. You could have a world in where workflow execution A has a worker address of S
+		// and so does workflow execution B.
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {

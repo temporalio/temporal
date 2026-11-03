@@ -1014,7 +1014,7 @@ func (pm *taskQueuePartitionManagerImpl) beginSingleSessionAcquisition(
 	if ctx.Err() != nil {
 		return false, errNoTasks
 	}
-	if queue.SingleSessionAssigned() {
+	if queue.ExclusiveWorkerAssigned() {
 		return false, nil
 	}
 	if pm.partition.TaskQueue().Name() == "" {
@@ -1045,7 +1045,7 @@ func (pm *taskQueuePartitionManagerImpl) acquireSingleSession(
 	if err != nil {
 		return nil, err
 	}
-	if err := queue.AssignSingleSession(); err != nil {
+	if err := queue.AssignExclusiveWorker(); err != nil {
 		return nil, err
 	}
 	task.namespace = pm.ns.Name()

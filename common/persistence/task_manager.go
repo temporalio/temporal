@@ -41,11 +41,11 @@ func (m *taskManagerImpl) GetName() string {
 	return m.taskStore.GetName()
 }
 
-// IsTaskQueueMetadataRetained reports whether deleting metadata would discard a single-session assignment.
-func IsTaskQueueMetadataRetained(info *persistencespb.TaskQueueInfo) bool {
+// IsExclusiveWorkerAssigned reports whether an exclusive worker's sticky queue has acquired a workflow.
+func IsExclusiveWorkerAssigned(info *persistencespb.TaskQueueInfo) bool {
 	return info.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY &&
 		info.GetTaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
-		info.GetSingleSessionAssigned()
+		info.GetExclusiveWorkerAssigned()
 }
 
 func (m *taskManagerImpl) CreateTaskQueue(
@@ -56,7 +56,9 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && !IsTaskQueueMetadataRetained(taskQueueInfo) {
+	// TODO (Shivam): Revisit this if and when we add a Placement concept on Workflow Start requests
+	// and if that requires assignment before queue creation.
+	if taskQueueInfo.GetExpiryTime() == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -87,7 +89,10 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && !IsTaskQueueMetadataRetained(taskQueueInfo) {
+	expiryTime := taskQueueInfo.GetExpiryTime()
+	if IsExclusiveWorkerAssigned(taskQueueInfo) {
+		expiryTime = nil
+	} else if expiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -102,9 +107,8 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		RangeID:       request.RangeID,
 		TaskQueueInfo: taskQueueInfoBlob,
 
-		TaskQueueKind:         request.TaskQueueInfo.GetKind(),
-		ExpiryTime:            taskQueueInfo.ExpiryTime,
-		SingleSessionAssigned: IsTaskQueueMetadataRetained(taskQueueInfo),
+		TaskQueueKind: request.TaskQueueInfo.GetKind(),
+		ExpiryTime:    expiryTime,
 
 		PrevRangeID: request.PrevRangeID,
 	}
