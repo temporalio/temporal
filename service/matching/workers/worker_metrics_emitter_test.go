@@ -549,27 +549,23 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		TotalStickyCacheHit:    500,
 		TotalStickyCacheMiss:   20,
 	}
-	// The registry passes the last-interval counts summed since the previous event.
-	intervalTasks := workerIntervalTaskCounts{workflow: intervalTaskCounts{processed: 250, failed: 4}}
-
-	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb, intervalTasks)
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
 
 	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
+	// The last-interval task counts are not exported.
 	require.Equal(t, map[string]any{
-		"namespace":                              "ns",
-		"task_queue":                             "my-queue",
-		"worker_instance_key":                    "w1",
-		"workflow_total_slots":                   int64(10),
-		"workflow_used_slots":                    int64(2),
-		"workflow_current_pollers":               int64(3),
-		"workflow_current_sticky_pollers":        int64(2),
-		"workflow_total_processed_tasks":         int64(1000),
-		"workflow_total_failed_tasks":            int64(10),
-		"workflow_last_interval_processed_tasks": int64(250),
-		"workflow_last_interval_failure_tasks":   int64(4),
-		"sticky_cache_size":                      int64(100),
-		"sticky_cache_hit":                       int64(500),
-		"sticky_cache_miss":                      int64(20),
+		"namespace":                       "ns",
+		"task_queue":                      "my-queue",
+		"worker_instance_key":             "w1",
+		"workflow_total_slots":            int64(10),
+		"workflow_used_slots":             int64(2),
+		"workflow_current_pollers":        int64(3),
+		"workflow_current_sticky_pollers": int64(2),
+		"workflow_total_processed_tasks":  int64(1000),
+		"workflow_total_failed_tasks":     int64(10),
+		"sticky_cache_size":               int64(100),
+		"sticky_cache_hit":                int64(500),
+		"sticky_cache_miss":               int64(20),
 	}, singleEventAttrs(t, eventLogger))
 }
 
@@ -584,7 +580,7 @@ func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
 	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey:      "w1",
 		CurrentStickyCacheSize: 50,
-	}, workerIntervalTaskCounts{})
+	})
 
 	// Event is emitted even without slots — sticky cache data is still useful
 	require.Equal(t, map[string]any{
@@ -611,7 +607,7 @@ func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
 			CurrentAvailableSlots: -1,
 			CurrentUsedSlots:      5,
 		},
-	}, workerIntervalTaskCounts{})
+	})
 
 	attrs := singleEventAttrs(t, eventLogger)
 	require.Equal(t, int64(-1), attrs["workflow_total_slots"])
@@ -632,7 +628,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 5,
 		},
-	}, workerIntervalTaskCounts{})
+	})
 
 	// Activity only has pollers, and the task types without messages have no attributes at all.
 	require.Equal(t, map[string]any{
@@ -644,20 +640,4 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		"sticky_cache_hit":         int64(0),
 		"sticky_cache_miss":        int64(0),
 	}, singleEventAttrs(t, eventLogger))
-}
-
-func TestWorkerIntervalTaskCountsAdd(t *testing.T) {
-	var counts workerIntervalTaskCounts
-	hb := &workerpb.WorkerHeartbeat{
-		WorkflowTaskSlotsInfo:  &workerpb.WorkerSlotsInfo{LastIntervalProcessedTasks: 3, LastIntervalFailureTasks: 1},
-		LocalActivitySlotsInfo: &workerpb.WorkerSlotsInfo{LastIntervalProcessedTasks: 7},
-	}
-	counts.add(hb)
-	counts.add(hb)
-
-	// Missing slot messages count as zero.
-	require.Equal(t, workerIntervalTaskCounts{
-		workflow:      intervalTaskCounts{processed: 6, failed: 2},
-		localActivity: intervalTaskCounts{processed: 14},
-	}, counts)
 }

@@ -79,34 +79,22 @@ type WorkerTaskTypeStats struct {
 	CurrentStickyPollers *int32
 	TotalProcessedTasks  *int32
 	TotalFailedTasks     *int32
-	// LastIntervalProcessedTasks and LastIntervalFailureTasks count the tasks
-	// since the worker's previous worker_metrics event, summed across the
-	// heartbeats in between.
-	LastIntervalProcessedTasks *int64
-	LastIntervalFailureTasks   *int64
 }
 
 // appendAttributes adds one attribute per reported stat, prefixed with the
 // task type (e.g. workflow_used_slots).
 func (s WorkerTaskTypeStats) appendAttributes(attrs []log.KeyValue, taskType string) []log.KeyValue {
-	appendInt32 := func(name string, v *int32) {
+	appendStat := func(name string, v *int32) {
 		if v != nil {
 			attrs = append(attrs, log.Int64(taskType+"_"+name, int64(*v)))
 		}
 	}
-	appendInt64 := func(name string, v *int64) {
-		if v != nil {
-			attrs = append(attrs, log.Int64(taskType+"_"+name, *v))
-		}
-	}
-	appendInt32("total_slots", s.TotalSlots)
-	appendInt32("used_slots", s.UsedSlots)
-	appendInt32("current_pollers", s.CurrentPollers)
-	appendInt32("current_sticky_pollers", s.CurrentStickyPollers)
-	appendInt32("total_processed_tasks", s.TotalProcessedTasks)
-	appendInt32("total_failed_tasks", s.TotalFailedTasks)
-	appendInt64("last_interval_processed_tasks", s.LastIntervalProcessedTasks)
-	appendInt64("last_interval_failure_tasks", s.LastIntervalFailureTasks)
+	appendStat("total_slots", s.TotalSlots)
+	appendStat("used_slots", s.UsedSlots)
+	appendStat("current_pollers", s.CurrentPollers)
+	appendStat("current_sticky_pollers", s.CurrentStickyPollers)
+	appendStat("total_processed_tasks", s.TotalProcessedTasks)
+	appendStat("total_failed_tasks", s.TotalFailedTasks)
 	return attrs
 }
 

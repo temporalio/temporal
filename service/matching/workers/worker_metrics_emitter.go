@@ -158,43 +158,12 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 	})
 }
 
-// intervalTaskCounts sums a task type's last_interval_* task counts across heartbeats. The SDK
-// resets them on every heartbeat, so heartbeats that don't emit a worker_metrics event would
-// otherwise lose their counts.
-type intervalTaskCounts struct {
-	processed int64
-	failed    int64
-}
-
-func (c *intervalTaskCounts) add(slots *workerpb.WorkerSlotsInfo) {
-	c.processed += int64(slots.GetLastIntervalProcessedTasks())
-	c.failed += int64(slots.GetLastIntervalFailureTasks())
-}
-
-// workerIntervalTaskCounts holds a worker's intervalTaskCounts for each task type.
-type workerIntervalTaskCounts struct {
-	workflow      intervalTaskCounts
-	activity      intervalTaskCounts
-	nexus         intervalTaskCounts
-	localActivity intervalTaskCounts
-}
-
-func (c *workerIntervalTaskCounts) add(hb *workerpb.WorkerHeartbeat) {
-	c.workflow.add(hb.GetWorkflowTaskSlotsInfo())
-	c.activity.add(hb.GetActivityTaskSlotsInfo())
-	c.nexus.add(hb.GetNexusTaskSlotsInfo())
-	c.localActivity.add(hb.GetLocalActivitySlotsInfo())
-}
-
-// emitWorkerMetricsEvent emits a worker_metrics event for hb. intervalTasks holds the
-// last_interval_* task counts summed since the worker's previous worker_metrics event.
-func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat, intervalTasks workerIntervalTaskCounts) {
+func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
 	// Stats are only set for the source messages present in the heartbeat.
 	taskTypeStats := func(
 		slots *workerpb.WorkerSlotsInfo,
 		pollerInfo *workerpb.WorkerPollerInfo,
 		stickyInfo *workerpb.WorkerPollerInfo,
-		interval intervalTaskCounts,
 	) wideevents.WorkerTaskTypeStats {
 		s := wideevents.WorkerTaskTypeStats{}
 		if pollerInfo != nil {
@@ -212,8 +181,6 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 			s.UsedSlots = new(slots.GetCurrentUsedSlots())
 			s.TotalProcessedTasks = new(slots.GetTotalProcessedTasks())
 			s.TotalFailedTasks = new(slots.GetTotalFailedTasks())
-			s.LastIntervalProcessedTasks = new(interval.processed)
-			s.LastIntervalFailureTasks = new(interval.failed)
 		}
 		return s
 	}
@@ -222,10 +189,10 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		Namespace:         nsName.String(),
 		TaskQueue:         hb.GetTaskQueue(),
 		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
-		Workflow:          taskTypeStats(hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo(), intervalTasks.workflow),
-		Activity:          taskTypeStats(hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil, intervalTasks.activity),
-		Nexus:             taskTypeStats(hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil, intervalTasks.nexus),
-		LocalActivity:     taskTypeStats(hb.GetLocalActivitySlotsInfo(), nil, nil, intervalTasks.localActivity), // local activities run in-process, no pollers
+		Workflow:          taskTypeStats(hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()),
+		Activity:          taskTypeStats(hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil),
+		Nexus:             taskTypeStats(hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil),
+		LocalActivity:     taskTypeStats(hb.GetLocalActivitySlotsInfo(), nil, nil), // local activities run in-process, no pollers
 		StickyCacheSize:   hb.GetCurrentStickyCacheSize(),
 		StickyCacheHit:    hb.GetTotalStickyCacheHit(),
 		StickyCacheMiss:   hb.GetTotalStickyCacheMiss(),
