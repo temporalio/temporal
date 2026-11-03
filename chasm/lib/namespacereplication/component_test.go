@@ -63,7 +63,7 @@ func TestLifecycleState(t *testing.T) {
 	}
 }
 
-func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
+func TestTerminateWhileLocalApplyPendingRecordsIndeterminateOutcome(t *testing.T) {
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	ctx := &chasm.MockMutableContext{
@@ -75,12 +75,28 @@ func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
 	_, err := c.Terminate(ctx, chasm.TerminateComponentRequest{Reason: "execution state too large"})
 	require.NoError(t, err)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, c.GetStatus())
-	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, c.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE, c.GetLocalApply().GetOutcome())
 	require.Equal(t, now, c.GetLocalApply().GetResolvedAt().AsTime())
-	require.Equal(t, "execution state too large", c.GetLocalApply().GetFailure().GetMessage())
+	require.Equal(
+		t,
+		"namespace mutation terminated while local apply outcome was unresolved: execution state too large",
+		c.GetLocalApply().GetFailure().GetMessage(),
+	)
 	appInfo := c.GetLocalApply().GetFailure().GetApplicationFailureInfo()
-	require.Equal(t, localFailureInternal, appInfo.GetType())
-	require.True(t, appInfo.GetNonRetryable())
+	require.Equal(t, localFailureUnavailable, appInfo.GetType())
+	require.False(t, appInfo.GetNonRetryable())
+}
+
+func TestTerminateBeforeLocalResolutionDoesNotAssumeMutationOutcome(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
+
+	_, err := c.Terminate(&chasm.MockMutableContext{}, chasm.TerminateComponentRequest{})
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"namespace mutation terminated while local apply outcome was unresolved",
+		c.GetLocalApply().GetFailure().GetMessage(),
+	)
 }
 
 func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
@@ -94,8 +110,8 @@ func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
 }
 
 // TestAllPeersTerminal verifies the completion predicate: true only when every
-// peer reached a terminal outcome, false while any peer is still Pending or
-// FailedRetriable.
+// peer reached a terminal outcome, including shadow match or mismatch. It is
+// false while any peer is still pending or retriable.
 func TestAllPeersTerminal(t *testing.T) {
 	testCases := []struct {
 		name  string

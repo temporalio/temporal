@@ -8,6 +8,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
@@ -51,6 +52,20 @@ func TestDefaultAdmitter_Admit(t *testing.T) {
 		// Defensive: a caller passing "" should never be admitted even if "" somehow slipped into the list.
 		require.False(t, admitter.Admit(ctx, "", build("cluster-a", "cluster-b")))
 	})
+}
+
+func TestDefaultAdmitterExplicitRemoval(t *testing.T) {
+	t.Parallel()
+	task := newTaskForAdmitterTest()
+	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
+	task.ReplicationConfig.Clusters = []*replicationpb.ClusterReplicationConfig{{ClusterName: "cluster-other"}}
+	admitter := NewDefaultAdmitter()
+	require.False(t, admitter.Admit(t.Context(), "cluster-local", task), "ordinary delivery retains legacy admission")
+	ctx := WithRemovedPeerDelivery(t.Context())
+	require.True(t, admitter.Admit(ctx, "cluster-local", task))
+	require.False(t, admitter.Admit(ctx, "", task))
+	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
+	require.False(t, admitter.Admit(ctx, "cluster-local", task))
 }
 
 // stubAdmitter is a deterministic admitter used by shouldProcessTask tests.

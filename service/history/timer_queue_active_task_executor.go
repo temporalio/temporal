@@ -335,11 +335,12 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		mutableState.GetNamespaceEntry().Name(),
 		ai.TaskQueue,
 		workflow.ActivityCompletionMetrics{
-			Status:             workflow.ActivityStatusTimeout,
-			AttemptStartedTime: timestamp.TimeValue(ai.StartedTime),
-			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
-			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
-			TimerType:          timerSequenceID.TimerType,
+			Status:                     workflow.ActivityStatusTimeout,
+			AttemptStartedTime:         timestamp.TimeValue(ai.StartedTime),
+			FirstScheduledTime:         timestamp.TimeValue(ai.FirstScheduledTime),
+			HasTimeSkippingClockOffset: workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset(),
+			Closed:                     retryState != enumspb.RETRY_STATE_IN_PROGRESS,
+			TimerType:                  timerSequenceID.TimerType,
 			VersioningInfo: workflow.VersioningMetricContext{
 				Behavior:          mutableState.GetEffectiveVersioningBehavior(),
 				DeploymentVersion: deploymentVersion,
@@ -975,7 +976,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		// framework then records failure/corruption metrics, logs, and drops the task (or DLQs it
 		// only if that is enabled for the category).
 		errorMsg := fmt.Sprintf(
-			"time-skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
+			"time skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
 			task.VersionedTransition == nil,
 			ffVT == nil,
 		)

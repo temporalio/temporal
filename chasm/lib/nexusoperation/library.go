@@ -34,50 +34,15 @@ type OperationContext struct {
 	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
-// componentOnlyLibrary registers just the components without task executors or gRPC handlers.
-// Used in the frontend to enable component ref serialization.
-type componentOnlyLibrary struct {
+// Library registers the Nexus operation components and tasks. The history service builds it with newLibrary, which
+// provides the task and gRPC handlers and the OperationContext dependencies. The frontend and offline readers such as
+// tdbg use NewNilLibrary, which leaves them nil: they only need the registrations to serialize component refs and
+// decode persisted trees.
+type Library struct {
 	chasm.UnimplementedLibrary
+
 	destinationBlocked DestinationBlockedFn
 	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
-}
-
-func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {
-	return &componentOnlyLibrary{
-		metricTagConfig: MetricTagConfiguration.Get(dc),
-	}
-}
-
-func (l *componentOnlyLibrary) Name() string {
-	return libraryName
-}
-
-func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Operation](
-			componentName,
-			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
-			chasm.WithSearchAttributes(
-				EndpointSearchAttribute,
-				ServiceSearchAttribute,
-				OperationSearchAttribute,
-				RequestIDSearchAttribute,
-				StatusSearchAttribute,
-			),
-			chasm.WithBusinessIDAlias("OperationId"),
-			chasm.WithContextValues(map[any]any{
-				OperationContextKey: &OperationContext{
-					MetricTagConfig:    l.metricTagConfig,
-					DestinationBlocked: l.destinationBlocked,
-				},
-			}),
-		),
-		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
-	}
-}
-
-type Library struct {
-	componentOnlyLibrary
 
 	handler *handler
 
@@ -103,15 +68,13 @@ type libraryParams struct {
 	CancellationInvocationTaskHandler          *cancellationInvocationTaskHandler
 	CancellationBackoffTaskHandler             *cancellationBackoffTaskHandler
 	DynamicConfig                              *dynamicconfig.Collection
-	DestinationBlocked                         DestinationBlockedFn `optional:"true"`
+	DestinationBlocked                         DestinationBlockedFn
 }
 
 func newLibrary(params libraryParams) *Library {
 	return &Library{
-		componentOnlyLibrary: componentOnlyLibrary{
-			metricTagConfig:    MetricTagConfiguration.Get(params.DynamicConfig),
-			destinationBlocked: params.DestinationBlocked,
-		},
+		metricTagConfig:                            MetricTagConfiguration.Get(params.DynamicConfig),
+		destinationBlocked:                         params.DestinationBlocked,
 		handler:                                    params.Handler,
 		operationBackoffTaskHandler:                params.OperationBackoffTaskHandler,
 		operationInvocationTaskHandler:             params.OperationInvocationTaskHandler,
@@ -123,9 +86,36 @@ func newLibrary(params libraryParams) *Library {
 	}
 }
 
-// NewNilLibrary returns a Library with nil handlers, for decoding contexts such as tdbg where
-// no task execution happens.
+// NewNilLibrary returns a Library with nil handlers, for contexts where no task execution happens.
 func NewNilLibrary() *Library { return &Library{} }
+
+func (l *Library) Name() string {
+	return libraryName
+}
+
+func (l *Library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Operation](
+			componentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
+			chasm.WithSearchAttributes(
+				EndpointSearchAttribute,
+				ServiceSearchAttribute,
+				OperationSearchAttribute,
+				RequestIDSearchAttribute,
+				StatusSearchAttribute,
+			),
+			chasm.WithBusinessIDAlias("OperationId"),
+			chasm.WithContextValues(map[any]any{
+				OperationContextKey: &OperationContext{
+					MetricTagConfig:    l.metricTagConfig,
+					DestinationBlocked: l.destinationBlocked,
+				},
+			}),
+		),
+		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
+	}
+}
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{

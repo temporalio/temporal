@@ -42,5 +42,6 @@ func GetPerActivityEagerExecutionScope(
 		tqid.UnsafeTaskQueueFamily(namespaceName, taskQueueName),
 		taskQueueBreakdown,
 		OperationTag(operation),
+		TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 	)
 }

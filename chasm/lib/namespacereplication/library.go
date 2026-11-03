@@ -12,7 +12,7 @@ type Library struct {
 	ApplyLocalTaskHandler  *applyLocalTaskHandler
 	ApplyPeerTaskHandler   *applyPeerTaskHandler
 	PeerBackoffTaskHandler *applyPeerBackoffTaskHandler
-	handler                *handler
+	serviceHandler         *serviceHandler
 }
 
 // NewNilLibrary creates a Library with all nil handlers. Useful for
@@ -25,19 +25,19 @@ func newLibrary(
 	applyLocal *applyLocalTaskHandler,
 	applyPeer *applyPeerTaskHandler,
 	peerBackoff *applyPeerBackoffTaskHandler,
-	handler *handler,
+	serviceHandler *serviceHandler,
 ) *Library {
 	return &Library{
 		ApplyLocalTaskHandler:  applyLocal,
 		ApplyPeerTaskHandler:   applyPeer,
 		PeerBackoffTaskHandler: peerBackoff,
-		handler:                handler,
+		serviceHandler:         serviceHandler,
 	}
 }
 
 func (l *Library) RegisterServices(server *grpc.Server) {
-	if l.handler != nil {
-		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.handler)
+	if l.serviceHandler != nil {
+		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.serviceHandler)
 	}
 }
 

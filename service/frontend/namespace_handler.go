@@ -3,13 +3,10 @@
 package frontend
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -64,7 +62,6 @@ type (
 	}
 
 	namespaceReplicationTransportMode int
-	namespaceMutationMode             int
 )
 
 const (
@@ -76,21 +73,6 @@ const (
 	namespaceReplicationTransportLegacy namespaceReplicationTransportMode = iota
 	namespaceReplicationTransportShadow
 	namespaceReplicationTransportCHASM
-)
-
-const (
-	// Authoritative mutations write both the source namespace and its peers.
-	namespaceMutationModeAuthoritative namespaceMutationMode = iota
-	// Shadow mutations compare at peers but never write namespace state.
-	namespaceMutationModeShadow
-	// Replicate-only mutations skip the already-authoritative source and write peers.
-	namespaceMutationModeReplicateOnly
-)
-
-const (
-	namespaceReplicationShadowOutcomeMatch    = "match"
-	namespaceReplicationShadowOutcomeMismatch = "mismatch"
-	namespaceReplicationShadowOutcomeError    = "error"
 )
 
 var (
@@ -288,39 +270,13 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 	transportMode := d.effectiveNamespaceReplicationTransportMode()
 
-	namespaceID := info.Id
-	if d.shouldUseCHASMNamespaceReplication(
-		transportMode,
-		isGlobalNamespace,
-		false,
-		info.GetState(),
-		replicationConfig.GetClusters(),
-	) {
-		if _, err := d.triggerNamespaceMutation(
-			ctx,
-			enumsspb.NAMESPACE_OPERATION_CREATE,
-			namespaceRequest.Namespace,
-			0,
-			peerCellsFromClusters(
-				d.clusterMetadata.GetCurrentClusterName(),
-				replicationConfig.GetClusters(),
-				nil,
-			),
-			namespaceID+":"+uuid.NewString(),
-			namespaceMutationModeAuthoritative,
-		); err != nil {
-			return nil, err
-		}
-		d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceID, registerRequest))
-	} else {
-		namespaceResponse, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
+	applyLegacy := func() (string, error) {
+		response, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		namespaceID = namespaceResponse.ID
-		d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceID, registerRequest))
-
-		if err := d.namespaceReplicator.HandleTransmissionTask(
+		d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, response.ID, registerRequest))
+		err = d.namespaceReplicator.HandleTransmissionTask(
 			ctx,
 			enumsspb.NAMESPACE_OPERATION_CREATE,
 			namespaceRequest.Namespace.Info,
@@ -332,27 +288,53 @@ func (d *namespaceHandler) RegisterNamespace(
 			namespaceRequest.IsGlobalNamespace,
 			nil,
 			false, // forceReplicate
-		); err != nil {
-			return nil, err
-		}
-
-		d.invokeShadowNamespaceMutation(
-			transportMode,
-			enumsspb.NAMESPACE_OPERATION_CREATE,
-			namespaceRequest.Namespace,
-			nsreplication.NamespaceDetailFromTransmissionTask(
-				namespaceRequest.Namespace.Info,
-				namespaceRequest.Namespace.Config,
-				namespaceRequest.Namespace.ReplicationConfig,
-				namespaceRequest.Namespace.ConfigVersion,
-				namespaceRequest.Namespace.FailoverVersion,
-				namespaceRequest.Namespace.ReplicationConfig.GetFailoverHistory(),
-			),
-			0,
-			nil,
-			isGlobalNamespace,
-			false,
 		)
+		return response.ID, err
+	}
+
+	var namespaceID string
+	switch transportMode {
+	case namespaceReplicationTransportCHASM:
+		if nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), false, info.GetState()) {
+			namespaceID = info.GetId()
+			err = d.triggerNamespaceMutation(ctx, namespaceID+":"+uuid.NewString(), &namespacereplicationpb.NamespaceMutation{
+				Operation:         enumsspb.NAMESPACE_OPERATION_CREATE,
+				NamespaceDetail:   namespaceRequest.Namespace,
+				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationConfig.GetClusters(), nil),
+				IsGlobalNamespace: isGlobalNamespace,
+			})
+			if err == nil {
+				d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceID, registerRequest))
+			}
+		} else {
+			namespaceID, err = applyLegacy()
+		}
+	case namespaceReplicationTransportShadow:
+		namespaceID, err = applyLegacy()
+		if err == nil {
+			d.invokeShadowNamespaceMutation(
+				ctx,
+				enumsspb.NAMESPACE_OPERATION_CREATE,
+				namespaceRequest.Namespace,
+				nsreplication.NamespaceDetailFromTransmissionTask(
+					namespaceRequest.Namespace.Info,
+					namespaceRequest.Namespace.Config,
+					namespaceRequest.Namespace.ReplicationConfig,
+					namespaceRequest.Namespace.ConfigVersion,
+					namespaceRequest.Namespace.FailoverVersion,
+					nil,
+				),
+				0,
+				nil,
+				isGlobalNamespace,
+				false,
+			)
+		}
+	default:
+		namespaceID, err = applyLegacy()
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	d.logger.Info("Register namespace succeeded",
@@ -689,28 +671,12 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 	}
 
-	transportMode := d.effectiveNamespaceReplicationTransportMode()
-	useCHASMNamespaceReplication := d.shouldUseCHASMNamespaceReplication(
-		transportMode,
-		isGlobalNamespace,
-		clusterListChanged,
-		info.GetState(),
-		replicationConfig.GetClusters(),
-	)
-	hasLocalMutation := configurationChanged || activeClusterChanged || needsNamespacePromotion
-	var chasmPeerCells []string
-	var chasmBusinessID string
-	if useCHASMNamespaceReplication {
-		chasmPeerCells = peerCellsFromClusters(
-			d.clusterMetadata.GetCurrentClusterName(),
-			replicationConfig.GetClusters(),
-			oldReplicationClusters,
-		)
-		chasmBusinessID = info.GetId() + ":" + uuid.NewString()
-	}
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
-	} else if hasLocalMutation {
+	}
+	transportMode := d.effectiveNamespaceReplicationTransportMode()
+	namespaceChanged := configurationChanged || activeClusterChanged || needsNamespacePromotion
+	if namespaceChanged {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
@@ -735,75 +701,39 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 
 		replicationConfig.FailoverHistory = failoverHistory
-		updateReq := &persistence.UpdateNamespaceRequest{
-			Namespace: &persistencespb.NamespaceDetail{
-				Info:                        info,
-				Config:                      config,
-				ReplicationConfig:           replicationConfig,
-				ConfigVersion:               configVersion,
-				FailoverVersion:             failoverVersion,
-				FailoverNotificationVersion: failoverNotificationVersion,
-			},
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:                        info,
+		Config:                      config,
+		ReplicationConfig:           replicationConfig,
+		ConfigVersion:               configVersion,
+		FailoverVersion:             failoverVersion,
+		FailoverNotificationVersion: failoverNotificationVersion,
+	}
+	var updateReq *persistence.UpdateNamespaceRequest
+	if namespaceChanged {
+		updateReq = &persistence.UpdateNamespaceRequest{
+			Namespace:           detail,
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
 		}
-		if useCHASMNamespaceReplication {
-			if _, err := d.triggerNamespaceMutation(
-				ctx,
-				enumsspb.NAMESPACE_OPERATION_UPDATE,
+	}
+
+	applyLegacy := func() error {
+		if updateReq != nil {
+			if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+				return err
+			}
+			d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
+				eventBefore,
 				updateReq.Namespace,
-				notificationVersion,
-				chasmPeerCells,
-				chasmBusinessID,
-				namespaceMutationModeAuthoritative,
-			); err != nil {
-				return nil, err
-			}
-		} else {
-			err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
-			if err != nil {
-				return nil, err
-			}
+				isGlobalNamespace,
+				activeClusterChanged && isGlobalNamespace,
+				needsNamespacePromotion,
+				updateRequest,
+			))
 		}
-
-		d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
-			eventBefore,
-			updateReq.Namespace,
-			isGlobalNamespace,
-			activeClusterChanged && isGlobalNamespace,
-			needsNamespacePromotion,
-			updateRequest,
-		))
-	}
-
-	if useCHASMNamespaceReplication && !hasLocalMutation {
-		// Legacy UpdateNamespace republishes even when the request changes no local
-		// fields. Preserve that repair mechanism without rewriting the already-
-		// authoritative source row or advancing its notification-version CAS slot.
-		// The replicate-only mutation still schedules normal authoritative peer
-		// applies; unlike shadow mode, destination writes are not suppressed.
-		if _, err := d.triggerNamespaceMutation(
-			ctx,
-			enumsspb.NAMESPACE_OPERATION_UPDATE,
-			&persistencespb.NamespaceDetail{
-				Info:                        info,
-				Config:                      config,
-				ReplicationConfig:           replicationConfig,
-				ConfigVersion:               configVersion,
-				FailoverVersion:             failoverVersion,
-				FailoverNotificationVersion: failoverNotificationVersion,
-			},
-			notificationVersion,
-			chasmPeerCells,
-			chasmBusinessID,
-			namespaceMutationModeReplicateOnly,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	if !useCHASMNamespaceReplication {
-		if err := d.namespaceReplicator.HandleTransmissionTask(
+		return d.namespaceReplicator.HandleTransmissionTask(
 			ctx,
 			enumsspb.NAMESPACE_OPERATION_UPDATE,
 			info,
@@ -815,34 +745,61 @@ func (d *namespaceHandler) UpdateNamespace(
 			isGlobalNamespace,
 			failoverHistory,
 			false, // forceReplicate
-		); err != nil {
-			return nil, err
-		}
-
-		d.invokeShadowNamespaceMutation(
-			transportMode,
-			enumsspb.NAMESPACE_OPERATION_UPDATE,
-			&persistencespb.NamespaceDetail{
-				Info:                        info,
-				Config:                      config,
-				ReplicationConfig:           replicationConfig,
-				ConfigVersion:               configVersion,
-				FailoverVersion:             failoverVersion,
-				FailoverNotificationVersion: failoverNotificationVersion,
-			},
-			nsreplication.NamespaceDetailFromTransmissionTask(
-				info,
-				config,
-				replicationConfig,
-				configVersion,
-				failoverVersion,
-				failoverHistory,
-			),
-			notificationVersion,
-			oldReplicationClusters,
-			isGlobalNamespace,
-			clusterListChanged,
 		)
+	}
+
+	switch transportMode {
+	case namespaceReplicationTransportCHASM:
+		if nsreplication.ShouldReplicateNamespace(false, isGlobalNamespace, replicationConfig.GetClusters(), clusterListChanged, info.GetState()) {
+			err = d.triggerNamespaceMutation(ctx, info.GetId()+":"+uuid.NewString(), &namespacereplicationpb.NamespaceMutation{
+				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+				NamespaceDetail:   detail,
+				ExpectedVersion:   notificationVersion,
+				PeerCells:         peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), replicationConfig.GetClusters(), oldReplicationClusters),
+				IsGlobalNamespace: isGlobalNamespace,
+				// A no-op republishes the source snapshot without a local write
+				// or consuming a notification-version CAS slot.
+				ReplicateOnly: updateReq == nil,
+			})
+			if err == nil && updateReq != nil {
+				d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
+					eventBefore,
+					updateReq.Namespace,
+					isGlobalNamespace,
+					activeClusterChanged && isGlobalNamespace,
+					needsNamespacePromotion,
+					updateRequest,
+				))
+			}
+		} else {
+			err = applyLegacy()
+		}
+	case namespaceReplicationTransportShadow:
+		err = applyLegacy()
+		if err == nil {
+			d.invokeShadowNamespaceMutation(
+				ctx,
+				enumsspb.NAMESPACE_OPERATION_UPDATE,
+				detail,
+				nsreplication.NamespaceDetailFromTransmissionTask(
+					info,
+					config,
+					replicationConfig,
+					configVersion,
+					failoverVersion,
+					failoverHistory,
+				),
+				notificationVersion,
+				oldReplicationClusters,
+				isGlobalNamespace,
+				clusterListChanged,
+			)
+		}
+	default:
+		err = applyLegacy()
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
@@ -1548,7 +1505,7 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 }
 
 func (d *namespaceHandler) invokeShadowNamespaceMutation(
-	transportMode namespaceReplicationTransportMode,
+	ctx context.Context,
 	operation enumsspb.NamespaceOperation,
 	chasmDetail *persistencespb.NamespaceDetail,
 	legacyDetail *persistencespb.NamespaceDetail,
@@ -1557,107 +1514,47 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	isGlobalNamespace bool,
 	clusterListChanged bool,
 ) {
-	if transportMode != namespaceReplicationTransportShadow ||
-		!nsreplication.ShouldReplicateNamespace(
-			false,
-			isGlobalNamespace,
-			chasmDetail.GetReplicationConfig().GetClusters(),
-			clusterListChanged,
-			chasmDetail.GetInfo().GetState(),
-		) {
+	if !nsreplication.ShouldReplicateNamespace(
+		false,
+		isGlobalNamespace,
+		chasmDetail.GetReplicationConfig().GetClusters(),
+		clusterListChanged,
+		chasmDetail.GetInfo().GetState(),
+	) {
 		return
 	}
 
 	legacyTask := nsreplication.NamespaceDetailToTaskAttributes(operation, legacyDetail)
-	chasmTask := nsreplication.NamespaceDetailToTaskAttributes(operation, chasmDetail)
 	namespaceID := chasmDetail.GetInfo().GetId()
-	currentCluster := d.clusterMetadata.GetCurrentClusterName()
-	peerCells := peerCellsFromClusters(
-		currentCluster,
-		chasmDetail.GetReplicationConfig().GetClusters(),
-		previousClusters,
-	)
-	legacyFingerprint, err := nsreplication.NamespaceTaskFingerprint(legacyTask)
-	if err != nil {
-		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
-		d.emitShadowBuildComparison(
-			legacyTask,
-			chasmTask,
-			nil,
-			nil,
-			nil,
-			"",
-			currentCluster,
-			peerCells,
-			namespaceReplicationShadowOutcomeError,
-			err,
-		)
-		d.logger.Error("namespace replication shadow legacy fingerprint failed", tag.Error(err))
-		return
-	}
-	chasmFingerprint, err := nsreplication.NamespaceTaskFingerprint(chasmTask)
-	if err != nil {
-		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
-		d.emitShadowBuildComparison(
-			legacyTask,
-			chasmTask,
-			legacyFingerprint,
-			nil,
-			nil,
-			"",
-			currentCluster,
-			peerCells,
-			namespaceReplicationShadowOutcomeError,
-			err,
-		)
-		d.logger.Error("namespace replication shadow CHASM fingerprint failed", tag.Error(err))
-		return
-	}
 	businessID := namespaceID + ":" + uuid.NewString()
-	outcome := namespaceReplicationShadowOutcomeMatch
-	var differingFields []string
-	if !bytes.Equal(legacyFingerprint, chasmFingerprint) {
-		outcome = namespaceReplicationShadowOutcomeMismatch
-		differingFields = nsreplication.DifferingNamespaceTaskFields(legacyTask, chasmTask)
-		d.logger.Warn(
-			"namespace replication shadow build mismatch",
-			tag.WorkflowNamespaceID(chasmDetail.GetInfo().GetId()),
-			tag.NewStringTag("differing_fields", strings.Join(differingFields, ",")),
-			tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(legacyFingerprint)),
-			tag.NewStringTag("chasm_fingerprint", hex.EncodeToString(chasmFingerprint)),
-		)
+	peerCells := peerCellsFromClusters(d.clusterMetadata.GetCurrentClusterName(), chasmDetail.GetReplicationConfig().GetClusters(), previousClusters)
+	legacyPayload, err := nsreplication.MarshalNamespaceTask(legacyTask)
+	d.recordShadowSourceOutcome(legacyTask, legacyPayload, businessID, peerCells, "prepare", err)
+	if err != nil {
+		d.logger.Error("namespace replication shadow legacy reference preparation failed", tag.Error(err))
+		return
 	}
-	d.recordShadowBuildComparison(operation, outcome)
-	d.emitShadowBuildComparison(
-		legacyTask,
-		chasmTask,
-		legacyFingerprint,
-		chasmFingerprint,
-		differingFields,
-		businessID,
-		currentCluster,
-		peerCells,
-		outcome,
-		nil,
-	)
 
 	// Shadow validation must not add latency or failure coupling to the
-	// authoritative legacy request. This timeout bounds only the detached
+	// authoritative legacy request. Preserve its trace context but detach from
+	// its cancellation and deadline. This timeout bounds only the detached
 	// TriggerNamespaceMutation start/poll RPC; if StartExecution already persisted
 	// the component, its local transition and peer fan-out continue independently.
 	go func() {
-		backgroundCtx, cancel := context.WithTimeout(context.Background(), namespaceReplicationShadowTimeout)
+		backgroundCtx, cancel := rpc.ResetContextTimeout(ctx, namespaceReplicationShadowTimeout)
 		defer cancel()
 		backgroundCtx = headers.SetCallerInfo(backgroundCtx, headers.SystemBackgroundLowCallerInfo)
-		if _, err := d.triggerNamespaceMutation(
-			backgroundCtx,
-			operation,
-			chasmDetail,
-			expectedVersion,
-			peerCells,
-			businessID,
-			namespaceMutationModeShadow,
-		); err != nil {
+		err := d.triggerNamespaceMutation(backgroundCtx, businessID, &namespacereplicationpb.NamespaceMutation{
+			Operation:               operation,
+			NamespaceDetail:         chasmDetail,
+			ExpectedVersion:         expectedVersion,
+			PeerCells:               peerCells,
+			IsGlobalNamespace:       isGlobalNamespace,
+			Shadow:                  true,
+			ShadowLegacyTaskPayload: legacyPayload,
+		})
+		d.recordShadowSourceOutcome(legacyTask, legacyPayload, businessID, peerCells, "trigger", err)
+		if err != nil {
 			d.logger.Warn(
 				"namespace replication shadow trigger RPC did not complete",
 				tag.WorkflowNamespaceID(namespaceID),
@@ -1665,32 +1562,6 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			)
 		}
 	}()
-}
-
-func (d *namespaceHandler) recordShadowBuildComparison(
-	operation enumsspb.NamespaceOperation,
-	outcome string,
-) {
-	if d.metricsHandler == nil {
-		return
-	}
-	metrics.NamespaceReplicationShadowBuildComparisonOutcomes.With(d.metricsHandler).Record(
-		1,
-		metrics.SourceClusterTag(d.clusterMetadata.GetCurrentClusterName()),
-		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
-		metrics.OutcomeTag(outcome),
-	)
-}
-
-func namespaceReplicationOperationMetricValue(operation enumsspb.NamespaceOperation) string {
-	switch operation {
-	case enumsspb.NAMESPACE_OPERATION_CREATE:
-		return "create"
-	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return "update"
-	default:
-		return "unknown"
-	}
 }
 
 func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespaceReplicationTransportMode {
@@ -1713,44 +1584,16 @@ func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespac
 
 func (d *namespaceHandler) triggerNamespaceMutation(
 	ctx context.Context,
-	operation enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-	expectedVersion int64,
-	peerCells []string,
 	businessID string,
-	mode namespaceMutationMode,
-) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
-	namespaceID := detail.GetInfo().GetId()
-	return d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
-		NamespaceId:       namespaceID,
+	mutation *namespacereplicationpb.NamespaceMutation,
+) error {
+	_, err := d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
+		NamespaceId:       mutation.GetNamespaceDetail().GetInfo().GetId(),
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        businessID,
-		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation:       operation,
-			NamespaceDetail: detail,
-			ExpectedVersion: expectedVersion,
-			PeerCells:       peerCells,
-			Shadow:          mode == namespaceMutationModeShadow,
-			ReplicateOnly:   mode == namespaceMutationModeReplicateOnly,
-		},
+		Mutation:          mutation,
 	})
-}
-
-func (d *namespaceHandler) shouldUseCHASMNamespaceReplication(
-	transportMode namespaceReplicationTransportMode,
-	isGlobalNamespace bool,
-	clusterListChanged bool,
-	state enumspb.NamespaceState,
-	clusters []string,
-) bool {
-	return transportMode == namespaceReplicationTransportCHASM &&
-		nsreplication.ShouldReplicateNamespace(
-			false,
-			isGlobalNamespace,
-			clusters,
-			clusterListChanged,
-			state,
-		)
+	return err
 }
 
 func peerCellsFromClusters(currentCluster string, newClusters, previousClusters []string) []string {

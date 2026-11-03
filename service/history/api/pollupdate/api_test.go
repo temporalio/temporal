@@ -2,6 +2,7 @@ package pollupdate_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -97,8 +98,11 @@ func TestPollOutcome(t *testing.T) {
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
 	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
+	// wfLock stands in for the workflow lock: it is held from lease acquisition until release, and the
+	// test holds it while mutating an Update, as the real Update API does.
+	var wfLock sync.Mutex
 	apiCtx := mockWorkflowLeaseCtx{
-		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) {} },
+		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) { wfLock.Unlock() } },
 		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},
@@ -110,6 +114,7 @@ func TestPollOutcome(t *testing.T) {
 			workflowKey definition.WorkflowKey,
 			lockPriority locks.Priority,
 		) (api.WorkflowLease, error) {
+			wfLock.Lock()
 			return apiCtx, nil
 		},
 	}
@@ -225,9 +230,11 @@ func TestPollOutcome(t *testing.T) {
 		}()
 
 		evStore := mockUpdateEventStore{}
+		wfLock.Lock()
 		require.NoError(t, upd.Admit(&reqMsg, evStore))
 		upd.Send(false, &protocolpb.Message_EventId{EventId: 2208})
 		require.NoError(t, upd.OnProtocolMessage(&rejMsg, evStore))
+		wfLock.Unlock()
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh

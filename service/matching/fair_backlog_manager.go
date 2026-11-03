@@ -219,7 +219,7 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -371,10 +371,11 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
 			},
-			LoadedTasks:             int64(r.getLoadedTasks()),
-			FairMaxReadLevel:        maxReadLevel.toProto(),
-			ApproximateBacklogCount: count,
-			BacklogDrained:          r.isDrained(),
+			LoadedTasks:              int64(r.getLoadedTasks()),
+			FairMaxReadLevel:         maxReadLevel.toProto(),
+			ApproximateBacklogCount:  count,
+			BacklogDrained:           r.isDrained(),
+			FairnessKeyCountEstimate: c.taskWriter.getFairnessKeyCountEstimate(subqueueIndex(i)),
 		}
 	}
 	return status
@@ -402,8 +403,8 @@ func (c *fairBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.Task
 	c.logger.Error("Persistent store operation failure",
 		tag.StoreOperationStopTaskQueue,
 		tag.Error(err),
-		tag.WorkflowTaskQueueName(c.queueKey().PersistenceName()),
-		tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
+		tag.TaskQueueName(c.queueKey().PersistenceName()),
+		tag.TaskQueueType(c.queueKey().TaskType()))
 	// Skip final update since persistence is having problems.
 	c.skipFinalUpdate.Store(true)
 	c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)

@@ -211,7 +211,7 @@ func (c *priBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -376,8 +376,8 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 	c.logger.Error("Persistent store operation failure",
 		tag.StoreOperationStopTaskQueue,
 		tag.Error(err),
-		tag.WorkflowTaskQueueName(c.queueKey().PersistenceName()),
-		tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
+		tag.TaskQueueName(c.queueKey().PersistenceName()),
+		tag.TaskQueueType(c.queueKey().TaskType()))
 	// Skip final update since persistence is having problems.
 	c.skipFinalUpdate.Store(true)
 	c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)

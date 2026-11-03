@@ -1203,61 +1203,6 @@ func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
 }
 
-func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
-	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
-	req := &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId:   tv.NamespaceID().String(),
-		TaskQueue:     tv.TaskQueue().Name,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}
-	var didUpdate atomic.Bool
-	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
-			didUpdate.Store(true)
-			return s.matchingEngine.UpdateFairnessState(ctx, req)
-		},
-	)
-	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	cMgr := mgr.(*taskQueuePartitionManagerImpl)
-	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
-	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
-	mgr.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err := mgr.WaitUntilInitialized(ctx)
-	s.Require().NoError(err)
-	cancel()
-
-	_, _, err = s.matchingEngine.AddWorkflowTask(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			Execution:   tv.WorkflowExecution(),
-			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-				FairnessKey: "myFairnessKey",
-			},
-		},
-	)
-	// The task may or may not be enqueued before a shutdown, so ignore that error
-	if err != errShutdown {
-		s.Require().NoError(err)
-	}
-	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
-
-	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
-	data, _, _ := mgr.GetUserDataManager().GetUserData()
-	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
-	// At this point the partition manager should be unloaded
-	select {
-	case <-cMgr.initCtx.Done():
-	case <-time.After(time.Second):
-		s.Require().Fail("our partition manager was not unloaded")
-	}
-}
-
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -2744,7 +2689,6 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsC
 }
 
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
-	captureHandler := s.captureDroppedOnEngine()
 	clockedCurrent := &persistencespb.TaskQueueUserData{
 		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2752,13 +2696,11 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		},
 	}
 	tests := []struct {
-		name        string
-		incoming    *persistencespb.TaskQueueUserData
-		wantDropped bool
+		name     string
+		incoming *persistencespb.TaskQueueUserData
 	}{
 		{
-			name:        "clockless incoming",
-			wantDropped: true,
+			name: "clockless incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
@@ -2766,8 +2708,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			},
 		},
 		{
-			name:        "older clocked incoming",
-			wantDropped: true,
+			name: "older clocked incoming",
 			incoming: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -2781,18 +2722,10 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		s.Run(test.name, func() {
 			taskQueue := uuid.NewString()
 			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
-			capture := captureHandler.StartCapture()
-			defer captureHandler.StopCapture(capture)
 
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
 
 			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
-			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
-			if test.wantDropped {
-				s.Len(recordings, 1)
-			} else {
-				s.Empty(recordings)
-			}
 		})
 	}
 }
@@ -3170,7 +3103,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 		s.NoError(err)
 		s.Equal("wf", task.event.Data.WorkflowId)
 		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(taskFinishResult{consumedToken: true})
+		task.finish(nil)
 		wg.Done()
 	}()
 
@@ -3279,7 +3212,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Require().NoError(err)
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(taskFinishResult{consumedToken: true})
+	task.finish(nil)
 }
 
 type mockRoutingMatchingClient struct {
@@ -3770,23 +3703,36 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
-
-	// Only count tasks above the ack level: acked tasks may not have been gc'ed yet.
 	db := ptqMgr.backlogMgr.getDB()
-	db.Lock()
-	ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
 	if s.fairness {
-		ackLevel = fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
-	}
-	db.Unlock()
-	dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		bm := ptqMgr.backlogMgr.(*fairBacklogManagerImpl)
+		bm.subqueueLock.Lock()
+		tr := bm.subqueues[subqueueZero]
+		bm.subqueueLock.Unlock()
+		tr.lock.Lock()
+		defer tr.lock.Unlock()
 
-	if s.fairness {
-		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
-		// read, making it more accurate in theory, but breaking this test's assumptions.
-		s.InDelta(dbTasks, backlogCount, 2)
+		db.Lock()
+		backlogCount := db.subqueues[subqueueZero].ApproximateBacklogCount
+		ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+		completedTasks := tr.completedTaskCountLocked()
+
+		// Completed tasks above the ack level may already be excluded from the estimate.
+		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.
+		s.LessOrEqual(completedTasks, dbTasks)
+		s.GreaterOrEqual(backlogCount, dbTasks-completedTasks)
+		// This upper bound only holds because these tests don't inject CreateTasks faults.
+		// A write that fails without definitely failing (e.g. Unavailable) leaves the count
+		// incremented even if no task was written, so the count could legitimately exceed dbTasks.
+		s.LessOrEqual(backlogCount, dbTasks)
 	} else {
+		backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
+		db.Lock()
+		ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
+		db.Unlock()
+		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
 		s.LessOrEqual(dbTasks, backlogCount)
 	}
 }
@@ -5193,11 +5139,15 @@ func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 }
 
 func (m *testTaskManager) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5218,11 +5168,15 @@ func (m *testTaskManager) CreateTaskQueue(
 }
 
 func (m *testTaskManager) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5243,9 +5197,13 @@ func (m *testTaskManager) UpdateTaskQueue(
 }
 
 func (m *testTaskManager) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	tlm := m.getQueueData(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -5274,13 +5232,17 @@ func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairL
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
 	}
 
 	m.delay()
@@ -5348,13 +5310,17 @@ func (m *testTaskManager) fault(method, err string) bool {
 }
 
 func (m *testTaskManager) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5421,7 +5387,7 @@ func (m *testTaskManager) CreateTasks(
 }
 
 func (m *testTaskManager) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.Value(request))
@@ -5430,6 +5396,10 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	} else if !m.fairness && request.InclusiveMinPass != 0 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	m.delay()
@@ -6061,7 +6031,6 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.AutoEnableV2Sub = trueTaskQueueSub
 	// Always update metadata on append in tests so backlog count assertions are exact.
 	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
 	return config
@@ -6098,10 +6067,6 @@ func useFairness(config *Config) {
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
-}
-
-func trueTaskQueueSub(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
-	return true, func() {}
 }
 
 func TestCancelOutstandingWorkerPolls(t *testing.T) {
@@ -6885,8 +6850,7 @@ func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
 
-// TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes
-func TestAutoEnableV2ConfigChange(t *testing.T) {
+func TestMatchingConfigIgnoresPersistedFairnessState(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
@@ -6910,10 +6874,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is EnableFairness=true
-	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
-	defer cleanupAutoEnable()
 	defer cleanupFairness()
 
 	testNamespaceID := uuid.NewString()
@@ -6964,24 +6925,19 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
+	require.False(t, pm.config.EnableFairness)
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable OFF -> effective config changes to EnableFairness=false
-	cleanupAutoEnable()
-	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
-
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2()
-	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
 
 	require.Eventually(t, func() bool {
 		return pq.(*physicalTaskQueueManagerImpl).tqCtx.Err() != nil
 	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
 }
 
-func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testing.T) {
+func TestFairnessConfigOverridesPersistedV0(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
@@ -7005,10 +6961,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is EnableFairness=true
-	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
-	defer cleanupAutoEnable()
 	defer cleanupFairness()
 
 	testNamespaceID := uuid.NewString()
@@ -7031,7 +6984,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 			Data: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
-						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+						FairnessState: enumsspb.FAIRNESS_STATE_V0,
 					},
 				},
 			},
@@ -7060,27 +7013,5 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2() && pm.config.EnableFairness
-	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
-
-	pq, err := pm.defaultQueueFuture.Get(ctx)
-	require.NoError(t, err)
-
-	// Turn autoEnable ON -> effective config stays EnableFairness=true (same as before)
-	cleanupAutoEnable()
-	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
-
-	require.Eventually(t, func() bool {
-		return pm.config.AutoEnableV2()
-	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
-
-	require.Never(t, func() bool {
-		select {
-		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
-			return true
-		default:
-			return false
-		}
-	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
+	require.True(t, pm.config.EnableFairness)
 }

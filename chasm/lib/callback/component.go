@@ -359,22 +359,6 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 	}
 }
 
-// ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,
-// triggering their invocation. Used by both workflows and standalone activities
-// when the execution reaches a terminal state.
-func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *Callback]) error {
-	for _, field := range callbacks {
-		cb := field.Get(ctx)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-			continue
-		}
-		if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // buildCallbackLink returns a commonpb.Link_Callback encoded as a nexus.Link, referring to
 // the given CHASM component.
 func buildCallbackLink(ctx chasm.Context, parentComponent chasm.Component, cbRequestID string) (nexus.Link, error) {

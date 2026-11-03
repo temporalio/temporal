@@ -14,6 +14,7 @@ func register(
 
 var Module = fx.Module(
 	"chasm.lib.namespacereplication",
+	fx.Provide(configProvider),
 	fx.Provide(newApplyLocalTaskHandler),
 	// Default peer transport (admin RPC). Provided as the PeerApplier interface so
 	// a deployment can override it via fx (e.g. fx.Decorate in the history service
@@ -21,7 +22,7 @@ var Module = fx.Module(
 	fx.Provide(newAdminClientPeerApplier),
 	fx.Provide(newApplyPeerTaskHandler),
 	fx.Provide(newApplyPeerBackoffTaskHandler),
-	fx.Provide(newHandler),
+	fx.Provide(newServiceHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

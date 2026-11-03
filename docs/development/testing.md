@@ -7,7 +7,6 @@ This document describes the project's testing setup, utilities and best practice
 ### Build tags
 - `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
-- `disable_grpc_modules`: Disables gRPC modules for faster compilation during unit tests.
 
 ### Environment variables
 - `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
@@ -245,6 +244,52 @@ env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfau
     }
 })
 ```
+
+### Persistence fault injection
+
+Use `testcore.InjectPersistenceFault` to return custom errors from persistence calls. The fault is
+active before the test cluster starts. You can filter it by store and method.
+
+```go
+option := testcore.InjectPersistenceFault(
+    func(config.FaultInjectionTarget) error {
+        return context.DeadlineExceeded
+    },
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+```
+
+The test fails if no matching call reaches the faulty path. This ensures that if we end up refactoring
+the code (i.e., "UpdateShard" doesn't exist anymore), and the path isn't reachable, that the test
+that injects fault there will intentionally fail.
+
+### Persistence order enforcement
+
+Use `testcore.NewPersistenceCallGate` when a test must control call order. It returns a
+`*testcore.PersistenceCallGate` and a `TestOption` that installs the gate. Matching calls block at
+the gate. Call `WaitForPersistenceCall` before you check other state. Call `Release` on the gate to
+continue the persistence operation. Call `ReleaseWithError` to return an error from the blocked
+operation. 
+
+```go
+gate, option := testcore.NewPersistenceCallGate(
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+
+// Wait until one UpdateShard call blocks at the gate.
+testcore.WaitForPersistenceCall(t, gate, 10*time.Second)
+
+// Check state, do work, make assertions, etc... while the call is blocked.
+
+// Later, release the gate manually.
+gate.Release() // Or gate.ReleaseWithError(err) to fail the blocked call.
+```
+
+The test fails if no matching call reaches the gate.
 
 ### testhooks package
 
