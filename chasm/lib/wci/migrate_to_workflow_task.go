@@ -79,6 +79,8 @@ func (h *MigrateToWorkflowTaskHandler) Execute(ctx context.Context, ref chasm.Co
 		if err != nil {
 			return migrationTarget{}, err
 		}
+		// Past due by activation, so the workflow polls at once and catches task-adds rejected while migrating.
+		args.State.NextPollTime = timestamppb.New(cctx.Now(w))
 		args.PendingMigration = &iface.PendingMigration{
 			Token:      w.MigrationToken,
 			ExpireTime: timestamppb.New(cctx.Now(w).Add(h.pendingTTL())),
