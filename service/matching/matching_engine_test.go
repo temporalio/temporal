@@ -3334,6 +3334,7 @@ func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
 	}
 
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).Return(time.Time{}).AnyTimes()
 
 	// p2 and p3 move away partway through a gradual change, without a membership changed
 	// event. p1 doesn't move.
@@ -3384,6 +3385,67 @@ func (s *matchingEngineSuite) TestUnloadDuringGradualMembershipChange() {
 	s.NoError(err)
 	s.NotNil(tqm)
 	s.Equal(int32(1), p1Lookups.Load(), "p1 should only have been checked on the membership event")
+}
+
+func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembershipChange() {
+	// need to create a new engine for this test to customize mockServiceResolver
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
+	self := s.mockHostInfoProvider.HostInfo()
+	other := membership.NewHostInfoFromAddress("other")
+
+	config := s.newConfig()
+	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
+	e.Start()
+	defer e.Stop()
+
+	// The endpoints table moves away partway through a gradual change, without a membership
+	// changed event.
+	var gradual atomic.Bool
+	switchAt := time.Now().Add(500 * time.Millisecond)
+	moved := func() bool { return !time.Now().Before(switchAt) }
+	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).DoAndReturn(func(string) (membership.HostInfo, error) {
+		if moved() {
+			return other, nil
+		}
+		return self, nil
+	}).AnyTimes()
+	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).DoAndReturn(func(string, int) time.Time {
+		if !gradual.Load() || moved() {
+			return time.Time{}
+		}
+		return switchAt
+	}).AnyTimes()
+
+	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
+	s.NoError(err)
+	s.True(isOwner)
+
+	// one event for the start of the gradual change, which finds the switch time
+	gradual.Store(true)
+	e.membershipChangedCh <- nil
+
+	select {
+	case <-ownershipLostCh:
+		s.Fail("ownership lost should not be signaled before the switch time")
+	case <-time.After(time.Until(switchAt) - 100*time.Millisecond):
+	}
+	select {
+	case <-ownershipLostCh:
+	case <-time.After(5 * time.Second):
+		s.Fail("ownership lost should have been signaled at the switch time")
+	}
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {

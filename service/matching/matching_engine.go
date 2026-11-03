@@ -489,8 +489,13 @@ func (e *matchingEngineImpl) watchMembership() {
 	checkTimer := time.NewTimer(0)
 	checkTimer.Stop() // until we have something in the queue
 
+	// Ownership of the Nexus endpoints table can also change during a gradual membership
+	// change, so we check it at its next change time too.
+	var nexusCheckAt time.Time
+
 	for {
 		scanAll := false
+		nexusDue := false
 		var due []tqid.Partition
 		select {
 		case _, ok := <-e.membershipChangedCh:
@@ -503,6 +508,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			for !checks.IsEmpty() && !checks.Peek().at.After(now) {
 				due = append(due, checks.Remove().partition)
 			}
+			nexusDue = !nexusCheckAt.IsZero() && !nexusCheckAt.After(now)
 		case <-e.routeChecksCh:
 			e.routeChecksLock.Lock()
 			for _, c := range e.routeChecksLoaded {
@@ -515,11 +521,16 @@ func (e *matchingEngineImpl) watchMembership() {
 		delay := e.config.MembershipUnloadDelay()
 		if delay == 0 {
 			checks = newChecks()
+			nexusCheckAt = time.Time{}
 			continue
 		}
 
-		if scanAll {
+		if scanAll || nexusDue {
+			// As for partitions below, get the next change time before checking ownership.
+			nexusCheckAt = e.serviceResolver.NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1)
 			e.notifyNexusEndpointsOwnershipChange()
+		}
+		if scanAll {
 			// We're about to recompute change times for all partitions.
 			checks = newChecks()
 		}
@@ -548,10 +559,14 @@ func (e *matchingEngineImpl) watchMembership() {
 				checks.Add(routeCheck{at: next, partition: p})
 			}
 		}
-		if checks.IsEmpty() {
+		nextCheck := nexusCheckAt
+		if !checks.IsEmpty() && (nextCheck.IsZero() || checks.Peek().at.Before(nextCheck)) {
+			nextCheck = checks.Peek().at
+		}
+		if nextCheck.IsZero() {
 			checkTimer.Stop()
 		} else {
-			checkTimer.Reset(time.Until(checks.Peek().at) + gradualMembershipChangeBatchDelay)
+			checkTimer.Reset(time.Until(nextCheck) + gradualMembershipChangeBatchDelay)
 		}
 
 		// Note that batches of this slice are retained by the unload timers below, so we can't
