@@ -42,28 +42,18 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// newWorkerGroup applies the first heartbeat so successful creation includes
-// the initial lease and its expiry task.
-func newWorkerGroup(
-	ctx chasm.MutableContext,
-	groupingKey string,
-	heartbeats []*workerpb.WorkerHeartbeat,
-	leaseDuration time.Duration,
-) (*WorkerGroup, error) {
+// newWorkerGroup creates an active group with no workers or lease.
+func newWorkerGroup(groupingKey string) (*WorkerGroup, error) {
 	if groupingKey == "" {
 		return nil, serviceerror.NewInvalidArgument("worker grouping key is required")
 	}
-	group := &WorkerGroup{
+	return &WorkerGroup{
 		WorkerGroupState: &workerstatepb.WorkerGroupState{
 			WorkerGroupingKey: groupingKey,
 			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
 		},
 		Workers: make(chasm.Map[string, *Worker]),
-	}
-	if err := group.recordHeartbeat(ctx, heartbeats, leaseDuration); err != nil {
-		return nil, err
-	}
-	return group, nil
+	}, nil
 }
 
 func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {

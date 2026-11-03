@@ -23,8 +23,9 @@ func TestRecordHeartbeat(t *testing.T) {
 	first := workerHeartbeat("worker-1", "group-1")
 	second := workerHeartbeat("worker-2", "group-1")
 	// Create worker children under one shared lease.
-	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first, second}, time.Minute)
+	group, err := newWorkerGroup("group-1")
 	require.NoError(t, err)
+	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{first, second}, time.Minute))
 	protorequire.ProtoEqual(t, &workerstatepb.WorkerGroupState{
 		WorkerGroupingKey:   "group-1",
 		Status:              workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
@@ -73,8 +74,9 @@ func TestRecordHeartbeatInvalidBatch(t *testing.T) {
 			t.Parallel()
 			ctx := &chasm.MockMutableContext{}
 			first := workerHeartbeat("worker-1", "group-1")
-			group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first}, time.Minute)
+			group, err := newWorkerGroup("group-1")
 			require.NoError(t, err)
+			require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{first}, time.Minute))
 			before := common.CloneProto(group.WorkerGroupState)
 			err = group.recordHeartbeat(ctx, tc.heartbeats, tc.leaseDuration)
 			require.Error(t, err)
@@ -91,8 +93,9 @@ func TestRecordHeartbeatDuplicateWorker(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	first := workerHeartbeat("worker-1", "group-1")
 	// Duplicate entries create one worker component and share one lease.
-	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{first, first}, time.Minute)
+	group, err := newWorkerGroup("group-1")
 	require.NoError(t, err)
+	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{first, first}, time.Minute))
 	require.Len(t, group.Workers, 1)
 	require.Equal(t, ctx.Tasks[0].Attributes.ScheduledTime.UTC(), group.GetLeaseExpirationTime().AsTime())
 	require.Len(t, ctx.Tasks, 1)
@@ -100,18 +103,17 @@ func TestRecordHeartbeatDuplicateWorker(t *testing.T) {
 
 func TestNewWorkerGroupMissingKey(t *testing.T) {
 	t.Parallel()
-	ctx := &chasm.MockMutableContext{}
-	group, err := newWorkerGroup(ctx, "", []*workerpb.WorkerHeartbeat{workerHeartbeat("worker-1", "")}, time.Minute)
+	group, err := newWorkerGroup("")
 	require.Nil(t, group)
 	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-	require.Empty(t, ctx.Tasks)
 }
 
 func TestRecordHeartbeatInactiveGroup(t *testing.T) {
 	t.Parallel()
 	ctx := &chasm.MockMutableContext{}
-	group, err := newWorkerGroup(ctx, "group-1", []*workerpb.WorkerHeartbeat{workerHeartbeat("worker-1", "group-1")}, time.Minute)
+	group, err := newWorkerGroup("group-1")
 	require.NoError(t, err)
+	require.NoError(t, group.recordHeartbeat(ctx, []*workerpb.WorkerHeartbeat{workerHeartbeat("worker-1", "group-1")}, time.Minute))
 	_, err = group.Terminate(ctx, chasm.TerminateComponentRequest{})
 	require.NoError(t, err)
 	before := common.CloneProto(group.WorkerGroupState)
