@@ -107,9 +107,10 @@ func NewCliApp(opts ...Option) *cli.App {
 			Usage:   "API key or JWT sent as a bearer token in the authorization header. Enables TLS",
 			EnvVars: []string{"TEMPORAL_API_KEY"},
 		},
-		&cli.StringSliceFlag{
+		&cli.GenericFlag{
 			Name:  FlagGRPCMeta,
 			Usage: "gRPC metadata to send with requests (KEY=VALUE, repeatable)",
+			Value: &stringArray{},
 		},
 		&cli.StringFlag{
 			Name:  "color",

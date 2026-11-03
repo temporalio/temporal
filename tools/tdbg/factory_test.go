@@ -224,6 +224,7 @@ func TestCreateGRPCConnection_GRPCMeta(t *testing.T) {
 	require.NoError(t, c.Set(FlagGRPCMeta, "baz=a=b"))
 	require.NoError(t, c.Set(FlagGRPCMeta, "qux=1"))
 	require.NoError(t, c.Set(FlagGRPCMeta, "qux=2"))
+	require.NoError(t, c.Set(FlagGRPCMeta, "list=a,b"))
 
 	client := NewClientFactory(WithFrontendAddress(startAdminServer(t, adminServer))).AdminClient(c)
 	_, err := client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
@@ -232,6 +233,7 @@ func TestCreateGRPCConnection_GRPCMeta(t *testing.T) {
 	require.Equal(t, []string{"bar"}, adminServer.md.Get("foo"))
 	require.Equal(t, []string{"a=b"}, adminServer.md.Get("baz"))
 	require.Equal(t, []string{"2"}, adminServer.md.Get("qux"))
+	require.Equal(t, []string{"a,b"}, adminServer.md.Get("list"))
 }
 
 func TestCreateGRPCConnection_InvalidGRPCMeta(t *testing.T) {

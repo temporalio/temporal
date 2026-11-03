@@ -121,12 +121,14 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	if apiKey := c.String(FlagAPIKey); apiKey != "" {
 		outgoingMetadata.Set("authorization", "Bearer "+apiKey)
 	}
-	for _, pair := range c.StringSlice(FlagGRPCMeta) {
-		key, value, ok := strings.Cut(pair, "=")
-		if !ok {
-			return nil, fmt.Errorf("invalid --%s %q, expected KEY=VALUE", FlagGRPCMeta, pair)
+	if pairs, ok := c.Generic(FlagGRPCMeta).(*stringArray); ok {
+		for _, pair := range *pairs {
+			key, value, ok := strings.Cut(pair, "=")
+			if !ok {
+				return nil, fmt.Errorf("invalid --%s %q, expected KEY=VALUE", FlagGRPCMeta, pair)
+			}
+			outgoingMetadata.Set(key, value)
 		}
-		outgoingMetadata.Set(key, value)
 	}
 
 	dialOpts := []grpc.DialOption{
