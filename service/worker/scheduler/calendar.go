@@ -355,18 +355,46 @@ func handlePredefinedCronStrings(c string) string {
 	}
 }
 
+// makeBits encodes the set of values matched by ranges as a bitmask: bit i is set iff value
+// i matches. Every field except year has values < 64, so one uint64 holds the whole set.
+//
+// Example: [{Start: 1, End: 5, Step: 2}, {Start: 8}] matches 1,3,5,8
+//
+//	=> 0b1_0010_1010 (0x12a)
+//	      ^    ^ ^ ^
+//	      8    5 3 1
 func makeBits(ranges []*schedulepb.Range) uint64 {
 	var bits uint64
 	iterateRanges(ranges, func(i int) { bits |= 1 << i })
 	return bits
 }
 
+// makeBitMatcher returns an O(1) membership test over the bitmask from makeBits.
+//
+// Example: for [{Start: 1, End: 5, Step: 2}, {Start: 8}],
+// match(3) == true, match(4) == false, match(8) == true.
+//
+// It must stay consistent with the raw bitmask that next() stores alongside it
+// (compiledCalendar.*Bits): next() jumps with nextSetBit and assumes the value it lands on
+// satisfies this matcher.
 func makeBitMatcher(ranges []*schedulepb.Range) func(int) bool {
 	bits := makeBits(ranges)
 	return func(v int) bool { return (1<<v)&bits != 0 }
 }
 
 // nextSetBit returns the smallest set bit >= from, or limit if there is none below limit.
+// It is the jump equivalent of `for v := from; v < limit && !match(v); v++ {}`: shift away
+// the bits below from, then count trailing zeros to find the next set one. Returning limit
+// signals overflow (e.g. 13 for months, 24 for hours), so the caller carries into the next
+// larger unit.
+//
+// Examples with bits = 0x12a (values 1,3,5,8):
+//
+//	nextSetBit(bits, 2, 13) == 3   // next match after 1 is 3
+//	nextSetBit(bits, 3, 13) == 3   // from itself is included
+//	nextSetBit(bits, 6, 13) == 8   // skips 6,7 in one step
+//	nextSetBit(bits, 9, 13) == 13  // nothing left: overflow
+//	nextSetBit(bits, 6, 7)  == 7   // 8 is set but beyond limit: still overflow
 func nextSetBit(bits uint64, from, limit int) int {
 	if from >= limit || from >= 64 {
 		return limit
@@ -379,7 +407,14 @@ func nextSetBit(bits uint64, from, limit int) int {
 }
 
 // makeNextYear returns a func giving the smallest matching year > y, or
-// maxCalendarYear+1 if there is none. Only called when year ranges are non-empty.
+// maxCalendarYear+1 if there is none. Years (2000-2100) don't fit in a uint64 bitmask,
+// so this uses a sorted slice and binary search instead of nextSetBit.
+//
+// Only called when year ranges are non-empty: an empty list means "every year", so
+// makeYearMatcher always matches and next() never needs to jump.
+//
+// Example: for [{Start: 2030, End: 2040, Step: 10}] (years 2030, 2040),
+// nextYear(2026) == 2030, nextYear(2030) == 2040, nextYear(2040) == 2101 (none left).
 func makeNextYear(ranges []*schedulepb.Range) func(int) int {
 	var years []int
 	iterateRanges(ranges, func(i int) { years = append(years, i) })
@@ -393,6 +428,12 @@ func makeNextYear(ranges []*schedulepb.Range) func(int) int {
 	}
 }
 
+// makeYearMatcher returns a membership test for years. Unlike the other fields, an empty
+// range list means "every year" (see makeRange's parseModeYear), and years are too large
+// for a uint64 bitmask, so it scans a small list instead.
+//
+// Example: makeYearMatcher(nil)(1999) == true;
+// for [{Start: 2030, End: 2040, Step: 10}], match(2030) == true, match(2035) == false.
 func makeYearMatcher(ranges []*schedulepb.Range) func(int) bool {
 	if len(ranges) == 0 {
 		// special case for year: all is represented as empty range list
@@ -412,6 +453,11 @@ func makeYearMatcher(ranges []*schedulepb.Range) func(int) bool {
 	}
 }
 
+// iterateRanges calls f for every value matched by ranges. A Range is inclusive
+// [Start, End] stepping by Step; proto defaults are compacted, so Step == 0 means 1 and
+// End < Start (including End == 0) means the single value Start.
+//
+// Example: [{Start: 1, End: 5, Step: 2}, {Start: 8}] calls f(1), f(3), f(5), f(8).
 func iterateRanges(ranges []*schedulepb.Range, f func(i int)) {
 	for _, r := range ranges {
 		start, end, step := int(r.GetStart()), int(r.GetEnd()), int(r.GetStep())
