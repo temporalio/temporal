@@ -41,6 +41,8 @@ type catchupCase struct {
 	chunked          int                            // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
 	args             *schedulespb.StartScheduleArgs // overrides the args built from gap
 	dcMatchesPerTask *int                           // worker.schedulerV1CatchupMatchesPerTask, injected as fx.go does
+	now              time.Time                      // workflow start time; zero: baseStartTime
+	startedRunning   bool                           // workflows the action starts never complete
 }
 
 // catchupResult is what the first task did.
@@ -191,7 +193,11 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 	capture := mh.StartCapture()
 	ts.SetMetricsHandler(sdk.NewMetricsHandler(mh))
 	env := ts.NewTestWorkflowEnvironment()
-	env.SetStartTime(baseStartTime)
+	if c.now.IsZero() {
+		env.SetStartTime(baseStartTime)
+	} else {
+		env.SetStartTime(c.now)
+	}
 	deadlockTimeout := c.deadlockTimeout
 	if deadlockTimeout == 0 {
 		deadlockTimeout = completingDeadlockTimeout
@@ -215,7 +221,7 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 		})
 	env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Maybe().Return(
 		func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-			if req.Execution.WorkflowId == runningID && !req.LongPoll {
+			if (req.Execution.WorkflowId == runningID || c.startedRunning) && !req.LongPoll {
 				return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 			}
 			if req.LongPoll {
