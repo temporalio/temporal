@@ -8,7 +8,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
@@ -728,24 +727,14 @@ func (a *Activity) applyUnpaused(
 // It handles both active attempts and start-to-close expiry during handoff retry backoff or queue wait.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
-	var selectedRetryType retryType
-	switch event.retryType {
-	case activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY:
-		selectedRetryType = retryTypeActivity
-	case activitypb.ACTIVITY_RETRY_TYPE_HANDOFF:
-		selectedRetryType = retryTypeHandoff
-	default:
-		return serviceerror.NewInternal("invalid activity retry transition type")
-	}
-
-	nextActivityAttempt, nextHandoffAttempt, err := nextRetryCounts(a.GetAsyncHandoffOptions() != nil, selectedRetryType, attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount())
+	nextActivityAttempt, nextHandoffAttempt, err := nextRetryCounts(a.GetAsyncHandoffOptions() != nil, event.retryType, attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount())
 	if err != nil {
 		return err
 	}
 
 	attempt.Count = nextActivityAttempt
 	attempt.Stamp++
-	attempt.PendingRetryType = activityRetryType(selectedRetryType)
+	attempt.PendingRetryType = event.retryType
 	if a.GetAsyncHandoffOptions() != nil {
 		attempt.AsyncHandoffState.Count = nextHandoffAttempt
 	}

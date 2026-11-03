@@ -690,7 +690,7 @@ func TestHandoffTimeoutTasks(t *testing.T) {
 				timeoutType := testCase.timeoutType
 				a, ctx := newHandoffRetryTestActivity(t)
 				a.AwaitingCompletion = timeoutType == enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE
-				typ := activityRetryType(retryTypeForTimeout(true, a.GetAwaitingCompletion(), timeoutType))
+				typ := retryTypeForTimeout(true, a.GetAwaitingCompletion(), timeoutType)
 				policy, count := a.retryPolicyAndCount(ctx, typ)
 				expectedType := timeoutType
 				expectedState := enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED

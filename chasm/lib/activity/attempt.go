@@ -209,19 +209,8 @@ type retryEvent struct {
 	failure                 *failurepb.Failure
 }
 
-func activityRetryType(typ retryType) activitypb.ActivityRetryType {
-	switch typ {
-	case retryTypeActivity:
-		return activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
-	case retryTypeHandoff:
-		return activitypb.ACTIVITY_RETRY_TYPE_HANDOFF
-	default:
-		return activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
-	}
-}
-
 func (a *Activity) retryTypeForFailure() activitypb.ActivityRetryType {
-	return activityRetryType(retryTypeForFailure(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion()))
+	return retryTypeForFailure(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion())
 }
 
 func (a *Activity) retryPolicyAndCount(ctx chasm.Context, retryType activitypb.ActivityRetryType) (*commonpb.RetryPolicy, int32) {
@@ -239,7 +228,7 @@ func (a *Activity) tryReschedule(ctx chasm.MutableContext, event retryEvent) (en
 	if event.serverTimeoutType == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
 		retryType = a.retryTypeForFailure()
 	} else {
-		retryType = activityRetryType(retryTypeForTimeout(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion(), event.serverTimeoutType))
+		retryType = retryTypeForTimeout(a.GetAsyncHandoffOptions() != nil, a.GetAwaitingCompletion(), event.serverTimeoutType)
 	}
 
 	if retryType == activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED {
@@ -570,43 +559,36 @@ func createActivityTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Fa
 	}
 }
 
-// retryType identifies the policy and counter advanced by an attempt boundary.
-type retryType uint8
-
-const (
-	retryTypeNone retryType = iota
-	retryTypeActivity
-	retryTypeHandoff
-)
-
-func retryTypeForFailure(optionsPresent, awaitingCompletion bool) retryType {
+func retryTypeForFailure(optionsPresent, awaitingCompletion bool) activitypb.ActivityRetryType {
 	if optionsPresent && !awaitingCompletion {
-		return retryTypeHandoff
+		return activitypb.ACTIVITY_RETRY_TYPE_HANDOFF
 	}
 
-	return retryTypeActivity
+	return activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
 }
 
 // retryTypeForTimeout classifies authoritative server timers, not worker-reported failures.
-func retryTypeForTimeout(optionsPresent, awaitingCompletion bool, timeoutType enumspb.TimeoutType) retryType {
+func retryTypeForTimeout(optionsPresent, awaitingCompletion bool, timeoutType enumspb.TimeoutType) activitypb.ActivityRetryType {
 	switch timeoutType {
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		return retryTypeActivity
+		return activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		return retryTypeForFailure(optionsPresent, awaitingCompletion)
 	case enumspb.TIMEOUT_TYPE_START_TO_HANDOFF:
-		if optionsPresent {
-			return retryTypeHandoff
+		if !optionsPresent {
+			return activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
 		}
-	case enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
-		if optionsPresent {
-			return retryTypeActivity
-		}
-	default:
-		return retryTypeNone
-	}
 
-	return retryTypeNone
+		return activitypb.ACTIVITY_RETRY_TYPE_HANDOFF
+	case enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
+		if !optionsPresent {
+			return activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
+		}
+
+		return activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
+	default:
+		return activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
+	}
 }
 
 // activeHeartbeatTimeout selects the configured timeout for an opted-in activity's current phase.
@@ -618,13 +600,13 @@ func activeHeartbeatTimeout(awaitingCompletion bool, activityTimeout, handoffTim
 	return activityTimeout
 }
 
-func nextRetryCounts(optionsPresent bool, typ retryType, activityAttempt, handoffAttempt int32) (nextActivityAttempt, nextHandoffAttempt int32, err error) {
+func nextRetryCounts(optionsPresent bool, typ activitypb.ActivityRetryType, activityAttempt, handoffAttempt int32) (nextActivityAttempt, nextHandoffAttempt int32, err error) {
 	if activityAttempt <= 0 || optionsPresent && handoffAttempt <= 0 {
 		return 0, 0, serviceerror.NewInternal("activity retry counters must be positive")
 	}
 
 	switch typ {
-	case retryTypeActivity:
+	case activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY:
 		if activityAttempt == math.MaxInt32 {
 			return 0, 0, serviceerror.NewInternal("activity attempt counter overflow")
 		}
@@ -634,19 +616,19 @@ func nextRetryCounts(optionsPresent bool, typ retryType, activityAttempt, handof
 		}
 
 		return activityAttempt + 1, 0, nil
-	case retryTypeHandoff:
-		if optionsPresent {
-			if handoffAttempt == math.MaxInt32 {
-				return 0, 0, serviceerror.NewInternal("handoff attempt counter overflow")
-			}
-
-			return activityAttempt, handoffAttempt + 1, nil
+	case activitypb.ACTIVITY_RETRY_TYPE_HANDOFF:
+		if !optionsPresent {
+			return 0, 0, serviceerror.NewInternal("handoff retry requires async handoff options")
 		}
+
+		if handoffAttempt == math.MaxInt32 {
+			return 0, 0, serviceerror.NewInternal("handoff attempt counter overflow")
+		}
+
+		return activityAttempt, handoffAttempt + 1, nil
 	default:
 		return 0, 0, serviceerror.NewInternal("invalid activity retry type")
 	}
-
-	return 0, 0, serviceerror.NewInternal("invalid activity retry type")
 }
 
 // handoffDeadlineInput describes timeouts affected by async handoff. The caller calculates schedule-to-start
