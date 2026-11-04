@@ -17,7 +17,7 @@ import (
 const AppliedSizeUnknown = -1
 
 // WorkflowStateToCHASM converts workflow args into a CreateFromMigrationStateRequest. instanceID is
-// the routing business ID; region_ids are dropped (rejected by Validate until supported).
+// the routing business ID.
 func WorkflowStateToCHASM(instanceID string, args *iface.WorkerControllerInstanceWorkflowArgs) (*wcipb.CreateFromMigrationStateRequest, error) {
 	local := args.State
 	if local == nil {
