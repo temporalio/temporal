@@ -1800,10 +1800,28 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Error(executable.HandleErr(throttleErr))
 	key := queues.ThrottleKeyOf(executable)
 	s.NotEqual(queues.ThrottleKey{}, key)
-	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace), key)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, 0), key)
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
 	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+}
+
+func (s *executableSuite) TestHandleErr_ShardThrottleKeyCarriesShardID() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace per-shard persistence limit reached",
+	}
+
+	s.Error(executable.HandleErr(throttleErr))
+	shardID := int32(tasks.GetShardIDForTask(executable.GetTask(), 1))
+	s.NotZero(shardID)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, shardID), queues.ThrottleKeyOf(executable))
 }
 
 func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
@@ -1847,7 +1865,7 @@ func (s *executableSuite) TestNack_ParksInTheClassItFailedUnder() {
 	executable.Nack(throttleErr)
 
 	s.Equal(
-		queues.NewThrottleKey(throttleErr.Cause, tests.Namespace),
+		queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, 0),
 		parked,
 		"the task must be parked on the budget that refused it, not ungoverned",
 	)

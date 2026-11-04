@@ -925,7 +925,13 @@ func (e *executableImpl) reportThrottle(
 	if err != nil {
 		return
 	}
-	e.throttleKey = NewThrottleKey(cause, nsName)
+	var shardID int32
+	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT {
+		currentClusterName := e.clusterMetadata.GetCurrentClusterName()
+		numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
+		shardID = int32(tasks.GetShardIDForTask(e.Task, int(numShards)))
+	}
+	e.throttleKey = NewThrottleKey(cause, nsName, shardID)
 
 	// A metered rejection belongs to the class that issued the release, whichever budget
 	// refused it; an unmetered one is recorded against the new class but must not move it.

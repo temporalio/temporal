@@ -44,7 +44,7 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
-	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", 0)
 	require.Equal(t, issuing, e.throttleKey)
 
 	// ...and the rescheduler then releases it from that class.
@@ -72,7 +72,7 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
-	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", 0)
 	require.Equal(t, issuing, e.throttleKey)
 
 	// ...and the rescheduler then releases it from that class.
