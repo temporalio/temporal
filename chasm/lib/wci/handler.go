@@ -55,8 +55,9 @@ func refFor(namespaceID, instanceID string) chasm.ComponentRef {
 // snapshotOf is what a request reads under the lock before working without it.
 type snapshotOf struct {
 	exists bool
-	// activatedToken of a closed instance, carried onto a re-created one.
-	activatedToken string
+	// activatedToken of a closed instance, carried onto a re-created one with its applied mark.
+	activatedToken    string
+	appliedTaskAddSeq int64
 	state          *wcipb.WorkerControllerInstanceState
 	spec           *iface.WorkerControllerInstanceSpec
 	statuses       map[string]iface.ScalingAlgorithmStatus
@@ -69,7 +70,7 @@ func read(ctx context.Context, namespaceID, instanceID string) (snapshotOf, erro
 			return snapshotOf{}, errPendingInvisible
 		}
 		if w.LifecycleState(cctx).IsClosed() {
-			return snapshotOf{activatedToken: w.ActivatedMigrationToken}, ErrClosed
+			return snapshotOf{activatedToken: w.ActivatedMigrationToken, appliedTaskAddSeq: w.AppliedTaskAddSeq}, ErrClosed
 		}
 		statuses := map[string]iface.ScalingAlgorithmStatus{}
 		for id, field := range w.ScalingGroups {
@@ -167,7 +168,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	cur, err := read(ctx, req.GetNamespaceId(), req.GetInstanceId())
 	if errors.Is(err, ErrClosed) {
 		// Re-create: update-with-start starts a new execution over the closed one.
-		cur, err = snapshotOf{spec: &iface.WorkerControllerInstanceSpec{}, activatedToken: cur.activatedToken}, nil
+		cur, err = snapshotOf{spec: &iface.WorkerControllerInstanceSpec{}, activatedToken: cur.activatedToken, appliedTaskAddSeq: cur.appliedTaskAddSeq}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -240,6 +241,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 			// Short-term workaround: the engine drops children added by updateFn on create (see plan.md, 5c).
 			created = NewWorkerControllerInstance(mctx, req.GetDeploymentName(), req.GetBuildId(), nil)
 			created.ActivatedMigrationToken = cur.activatedToken
+			created.AppliedTaskAddSeq = cur.appliedTaskAddSeq
 			resp, err := apply(created, mctx)
 			createdResp = resp
 			return created, err
@@ -446,8 +448,10 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
 		// A retried activation; the instance may since have been deleted or migrated back.
 		if w.ActivatedMigrationToken != "" && w.ActivatedMigrationToken == req.GetMigrationToken() {
-			// Still the instance this token activated: apply what the source queued since.
-			if req.GetFirstTaskAddSeq() > 0 && w.Status == wcipb.WCI_STATUS_RUNNING && w.MigrationToken == req.GetMigrationToken() {
+			// Live, or handing over to the workflow: take what the source queued since. The mark travels with
+			// the token onto a re-created instance, so nothing applies twice.
+			live := w.Status == wcipb.WCI_STATUS_RUNNING || w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW
+			if req.GetFirstTaskAddSeq() > 0 && live {
 				return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 			}
 			return struct{}{}, nil
