@@ -435,3 +435,37 @@ func TestRegistrationSkipsGroupsInactiveHere(t *testing.T) {
 	require.Contains(t, regs, "east")
 	require.NotContains(t, regs, "west")
 }
+
+func TestTaskDestination(t *testing.T) {
+	spec := func(regions ...string) *wcipb.ScalingGroupSpec {
+		return &wcipb.ScalingGroupSpec{Compute: &wcipb.ComputeProviderSpec{ProviderType: "aws-lambda"}, RegionIds: regions}
+	}
+	require.Equal(t, "aws-lambda", taskDestination(spec()))
+	require.Equal(t, "aws-lambda/aws-us-east-1", taskDestination(spec(testEast)))
+	require.Equal(t, taskDestination(spec(testEast, testWest)), taskDestination(spec(testWest, testEast)), "order-insensitive")
+	require.NotEqual(t, taskDestination(spec(testEast)), taskDestination(spec(testWest)))
+}
+
+// Each region's compute tasks get their own outbound breaker key.
+func TestRegionalComputeTasksHaveRegionalDestinations(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		action scalingalgorithm.ScalingAction
+	}{
+		{name: "resize", action: scalingalgorithm.ScalingAction{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(2)}},
+		{name: "invoke", action: scalingalgorithm.ScalingAction{Action: scalingalgorithm.ActionTypeInvokeWorker}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _, ctx := newRegionalTest(t, fakeAlgo{actions: []scalingalgorithm.ScalingAction{tc.action}}, testEast)
+			require.NoError(t, w.ProcessTaskAdd(ctx, &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}))
+			var destinations []string
+			for _, task := range ctx.Tasks {
+				switch task.Payload.(type) {
+				case *wcipb.ResizeTask, *wcipb.InvokeTask:
+					destinations = append(destinations, task.Attributes.Destination)
+				}
+			}
+			require.Equal(t, []string{"test-invoke/" + testEast}, destinations)
+		})
+	}
+}

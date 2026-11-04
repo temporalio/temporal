@@ -54,10 +54,10 @@ func (g *ScalingGroup) SetStateMachineState(status wcipb.ScalingGroupStatus) {
 
 // Decide records an UpdateWorkerSetSize decision; only an IDLE group starts a resize, a busy one
 // picks the new size up when its resize completes.
-func (g *ScalingGroup) Decide(ctx chasm.MutableContext, desiredSize int32, providerType string) error {
+func (g *ScalingGroup) Decide(ctx chasm.MutableContext, desiredSize int32, destination string) error {
 	if g.Status != wcipb.SCALING_GROUP_STATUS_IDLE {
 		g.DesiredSize = desiredSize
 		return nil
 	}
-	return TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: desiredSize, ProviderType: providerType})
+	return TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: desiredSize, Destination: destination})
 }

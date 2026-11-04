@@ -95,8 +95,8 @@ var TransitionDelete = chasm.NewTransition(
 // ---- ScalingGroup (UpdateWorkerSetSize only) ----
 
 type EventScaleDecided struct {
-	DesiredSize  int32
-	ProviderType string
+	DesiredSize int32
+	Destination string
 }
 
 var TransitionScaleDecided = chasm.NewTransition(
@@ -105,7 +105,7 @@ var TransitionScaleDecided = chasm.NewTransition(
 	func(g *ScalingGroup, ctx chasm.MutableContext, event EventScaleDecided) error {
 		g.DesiredSize = event.DesiredSize
 		g.Attempt = 1
-		g.scheduleResize(ctx, event.ProviderType)
+		g.scheduleResize(ctx, event.Destination)
 		return nil
 	},
 )
@@ -127,8 +127,8 @@ var TransitionResizeSucceeded = chasm.NewTransition(
 
 // EventResizeSucceededStale means the resize landed but desired_size moved meanwhile.
 type EventResizeSucceededStale struct {
-	AppliedSize  int32
-	ProviderType string
+	AppliedSize int32
+	Destination string
 }
 
 var TransitionResizeSucceededStale = chasm.NewTransition(
@@ -137,7 +137,7 @@ var TransitionResizeSucceededStale = chasm.NewTransition(
 	func(g *ScalingGroup, ctx chasm.MutableContext, event EventResizeSucceededStale) error {
 		g.AppliedSize = event.AppliedSize
 		g.Attempt++
-		g.scheduleResize(ctx, event.ProviderType)
+		g.scheduleResize(ctx, event.Destination)
 		return nil
 	},
 )
@@ -159,7 +159,7 @@ var TransitionResizeRetryable = chasm.NewTransition(
 )
 
 type EventBackoffElapsed struct {
-	ProviderType string
+	Destination string
 }
 
 var TransitionBackoffElapsed = chasm.NewTransition(
@@ -168,7 +168,7 @@ var TransitionBackoffElapsed = chasm.NewTransition(
 	func(g *ScalingGroup, ctx chasm.MutableContext, event EventBackoffElapsed) error {
 		g.NextAttemptTime = nil
 		g.Attempt++
-		g.scheduleResize(ctx, event.ProviderType)
+		g.scheduleResize(ctx, event.Destination)
 		return nil
 	},
 )
@@ -189,13 +189,13 @@ var TransitionResizeFailed = chasm.NewTransition(
 )
 
 // CompleteResize picks Succeeded or SucceededStale by comparing desired with applied.
-func (g *ScalingGroup) CompleteResize(ctx chasm.MutableContext, appliedSize int32, providerType string) error {
+func (g *ScalingGroup) CompleteResize(ctx chasm.MutableContext, appliedSize int32, destination string) error {
 	if g.DesiredSize == appliedSize {
 		return TransitionResizeSucceeded.Apply(g, ctx, EventResizeSucceeded{AppliedSize: appliedSize})
 	}
-	return TransitionResizeSucceededStale.Apply(g, ctx, EventResizeSucceededStale{AppliedSize: appliedSize, ProviderType: providerType})
+	return TransitionResizeSucceededStale.Apply(g, ctx, EventResizeSucceededStale{AppliedSize: appliedSize, Destination: destination})
 }
 
-func (g *ScalingGroup) scheduleResize(ctx chasm.MutableContext, providerType string) {
-	ctx.AddTask(g, chasm.TaskAttributes{Destination: providerType}, &wcipb.ResizeTask{Attempt: g.Attempt})
+func (g *ScalingGroup) scheduleResize(ctx chasm.MutableContext, destination string) {
+	ctx.AddTask(g, chasm.TaskAttributes{Destination: destination}, &wcipb.ResizeTask{Attempt: g.Attempt})
 }

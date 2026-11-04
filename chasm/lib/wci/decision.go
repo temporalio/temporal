@@ -289,7 +289,7 @@ func (w *WorkerControllerInstance) applyActions(
 				ctx.Logger().Warn("UpdateWorkerSetSize without a count; dropping")
 				continue
 			}
-			if err := group.Decide(ctx, *action.Count, providerType); err != nil {
+			if err := group.Decide(ctx, *action.Count, taskDestination(w.ScalingGroupSpecs[groupID])); err != nil {
 				return err
 			}
 		case scalingalgorithm.ActionTypeDeferredScalingDecision:
@@ -305,7 +305,7 @@ func (w *WorkerControllerInstance) applyActions(
 			})
 		case scalingalgorithm.ActionTypeInvokeWorker:
 			wcimetrics.ScaleUpCount.With(metricsFor(ctx, w, providerType)).Record(1)
-			w.requestInvoke(ctx, group, providerType)
+			w.requestInvoke(ctx, group, taskDestination(w.ScalingGroupSpecs[groupID]))
 		default:
 			ctx.Logger().Warn("Unknown scaling action; dropping", tag.NewStringTag("action", string(action.Action)))
 		}
