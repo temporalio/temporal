@@ -428,7 +428,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 				Cause: resourceErr.Cause, Scope: resourceErr.Scope,
 			})
 			if err != nil {
-				return err
+				return handlerErr
 			}
 			handlerErr.Cause = &nexus.FailureError{Failure: nexus.Failure{
 				Message:  errMessage,
