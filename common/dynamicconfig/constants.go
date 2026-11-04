@@ -17,6 +17,7 @@ import (
 const (
 	NamespaceReplicationTransportModeLegacy = "legacy"
 	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
 )
 
 var (
@@ -86,9 +87,11 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 	)
 	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
-		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow, NamespaceReplicationTransportModeCHASM}),
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
+		`NamespaceReplicationTransportMode selects the outgoing namespace replication transport: legacy, shadow, or chasm.
+Enable chasm only after compatible frontend/history binaries and authoritative replication observability are deployed on every participating cluster.
+Changing this setting does not disable incoming authoritative deliveries or stop existing CHASM executions.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
