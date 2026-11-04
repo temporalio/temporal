@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
+	wciconfig "go.temporal.io/auto-scaled-workers/wci/client"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/chasm"
@@ -229,6 +230,21 @@ func (w *WorkerControllerInstance) CheckMutable() error {
 		return errPendingInvisible
 	default:
 		return ErrClosed
+	}
+}
+
+// hostRegionOf is the region this history serves; empty without a StaticConfig, so region-scoped groups stay inactive.
+func hostRegionOf(sc *wciconfig.StaticConfig) string {
+	if sc == nil {
+		return ""
+	}
+	return sc.RegionID
+}
+
+// recordHostRegion notes the region of the history running this transaction.
+func (w *WorkerControllerInstance) recordHostRegion(region string) {
+	if w.HostRegion != region {
+		w.HostRegion = region
 	}
 }
 

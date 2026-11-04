@@ -38,6 +38,8 @@ message WorkerControllerInstanceState {
   int64 applied_task_add_seq = 16;
   // Task-adds received while MIGRATING_TO_WORKFLOW, for the workflow; replayed here on abort.
   repeated TaskAddEvent migration_task_adds = 17;
+  // Region of the history that last changed this instance; resolves region-scoped groups.
+  string host_region = 18;
 }
 
 // Per-group runtime state; the spec lives on the root.

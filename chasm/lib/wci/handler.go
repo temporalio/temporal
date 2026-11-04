@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	wciconfig "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
@@ -28,6 +29,7 @@ type HandlerOptions struct {
 	FrontendClient    workflowservice.WorkflowServiceClient
 	NamespaceRegistry namespace.Registry
 	Logger            log.Logger
+	StaticConfig      *wciconfig.StaticConfig `optional:"true"`
 }
 
 type handler struct {
@@ -36,6 +38,7 @@ type handler struct {
 	compute    ComputeClient
 	frontend   workflowservice.WorkflowServiceClient
 	namespaces namespace.Registry
+	hostRegion string
 	logger     log.Logger
 }
 
@@ -45,6 +48,7 @@ func newHandler(opts HandlerOptions) *handler {
 		frontend:   opts.FrontendClient,
 		namespaces: opts.NamespaceRegistry,
 		logger:     opts.Logger,
+		hostRegion: hostRegionOf(opts.StaticConfig),
 	}
 }
 
@@ -58,9 +62,9 @@ type snapshotOf struct {
 	// activatedToken of a closed instance, carried onto a re-created one with its applied mark.
 	activatedToken    string
 	appliedTaskAddSeq int64
-	state          *wcipb.WorkerControllerInstanceState
-	spec           *iface.WorkerControllerInstanceSpec
-	statuses       map[string]iface.ScalingAlgorithmStatus
+	state             *wcipb.WorkerControllerInstanceState
+	spec              *iface.WorkerControllerInstanceSpec
+	statuses          map[string]iface.ScalingAlgorithmStatus
 }
 
 // read returns the current instance; a missing execution reads as an empty, non-existent one.
@@ -221,6 +225,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		if err := final.ValidateWorkerSetTargets(); err != nil {
 			return nil, err
 		}
+		w.recordHostRegion(h.hostRegion)
 		w.applySpec(mctx, specsToCHASM(final), registrations)
 		w.LastModifierIdentity = req.GetIdentity()
 		w.recordSpecChange(mctx)
@@ -360,6 +365,7 @@ func (h *handler) RecordTaskAdd(ctx context.Context, req *wcipb.RecordTaskAddReq
 		if err := w.CheckMutable(); err != nil {
 			return struct{}{}, err
 		}
+		w.recordHostRegion(h.hostRegion)
 		w.healPollTimer(mctx)
 		return struct{}{}, w.ProcessTaskAdd(mctx, req.GetEvent())
 	}, nil)
@@ -452,6 +458,7 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 			// the token onto a re-created instance, so nothing applies twice.
 			live := w.Status == wcipb.WCI_STATUS_RUNNING || w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW
 			if req.GetFirstTaskAddSeq() > 0 && live {
+				w.recordHostRegion(h.hostRegion)
 				return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 			}
 			return struct{}{}, nil
@@ -462,6 +469,7 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 		if err := TransitionMigrationActivated.Apply(w, mctx, EventMigrationActivated{}); err != nil {
 			return struct{}{}, err
 		}
+		w.recordHostRegion(h.hostRegion)
 		return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 	}, nil)
 	if err != nil {

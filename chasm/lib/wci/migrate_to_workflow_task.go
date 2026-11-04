@@ -34,6 +34,7 @@ type MigrateToWorkflowTaskHandlerOptions struct {
 	HistoryClient  resource.HistoryClient
 	DynamicConfig  *dynamicconfig.Collection
 	MetricsHandler metrics.Handler
+	StaticConfig   *wciconfig.StaticConfig `optional:"true"`
 }
 
 // MigrateToWorkflowTaskHandler coordinates the CHASM → workflow handover: it starts the workflow
@@ -44,6 +45,7 @@ type MigrateToWorkflowTaskHandler struct {
 	taskQueue      dynamicconfig.StringPropertyFn
 	pendingTTL     dynamicconfig.DurationPropertyFn
 	metricsHandler metrics.Handler
+	hostRegion     string
 }
 
 func NewMigrateToWorkflowTaskHandler(opts MigrateToWorkflowTaskHandlerOptions) *MigrateToWorkflowTaskHandler {
@@ -52,6 +54,7 @@ func NewMigrateToWorkflowTaskHandler(opts MigrateToWorkflowTaskHandlerOptions) *
 		taskQueue:      WorkflowTaskQueue.Get(opts.DynamicConfig),
 		pendingTTL:     wciconfig.WorkerControllerCHASMMigrationPendingTTL.Get(opts.DynamicConfig),
 		metricsHandler: opts.MetricsHandler,
+		hostRegion:     hostRegionOf(opts.StaticConfig),
 	}
 }
 
@@ -148,6 +151,7 @@ func (h *MigrateToWorkflowTaskHandler) Execute(ctx context.Context, ref chasm.Co
 			if err := TransitionWorkflowMigrationAborted.Apply(w, mctx, EventWorkflowMigrationAborted{}); err != nil {
 				return struct{}{}, err
 			}
+			w.recordHostRegion(h.hostRegion)
 			// The workflow never activated, so it applied none of them.
 			for _, event := range w.MigrationTaskAdds {
 				if err := w.ProcessTaskAdd(mctx, event); err != nil {
