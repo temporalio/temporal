@@ -48,7 +48,7 @@ func TestNamespaceRepairObserverEmitsManualAndTerminalObservability(t *testing.T
 		request,
 		[]manualPeerReconciliationObservation{{
 			targetCell:   "cluster-b",
-			basis:        namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET,
+			basis:        enumsspb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET,
 			attemptCount: 7,
 			lastFailure:  "peer unavailable",
 		}},
@@ -59,7 +59,7 @@ func TestNamespaceRepairObserverEmitsManualAndTerminalObservability(t *testing.T
 	require.Len(t, recordings, 1)
 	require.Equal(t, "cluster-a", recordings[0].Tags[metrics.SourceClusterTag("").Key])
 	require.Equal(t, "cluster-b", recordings[0].Tags[metrics.TargetClusterTag("").Key])
-	require.Equal(t, namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET.String(), recordings[0].Tags[manualReconciliationBasisTag])
+	require.Equal(t, enumsspb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET.String(), recordings[0].Tags[manualReconciliationBasisTag])
 	_, repairIDIsMetricLabel := recordings[0].Tags["repair_id"]
 	require.False(t, repairIDIsMetricLabel)
 	peerEvents := authoritativeEventMatches(
@@ -69,7 +69,7 @@ func TestNamespaceRepairObserverEmitsManualAndTerminalObservability(t *testing.T
 		nsreplicationcommon.CHASMApplyOutcomeManuallyReconciled,
 	)
 	require.Len(t, peerEvents, 1)
-	require.Equal(t, nsreplicationcommon.OperatorRepairTransport, peerEvents[0]["transport"])
+	require.Equal(t, nsreplicationcommon.OperatorRepair, peerEvents[0]["transport"])
 	require.Equal(t, "repair-id", peerEvents[0]["repair_id"])
 	require.Equal(t, "peer unavailable", peerEvents[0]["last_delivery_failure"])
 	componentEvents := authoritativeEventMatches(
@@ -79,7 +79,7 @@ func TestNamespaceRepairObserverEmitsManualAndTerminalObservability(t *testing.T
 		nsreplicationcommon.CHASMApplyOutcomeCompleted,
 	)
 	require.Len(t, componentEvents, 1)
-	require.Equal(t, nsreplicationcommon.OperatorRepairTransport, componentEvents[0]["transport"])
-	require.Equal(t, nsreplicationcommon.OperatorRepairMode, componentEvents[0]["mode"])
+	require.Equal(t, nsreplicationcommon.OperatorRepair, componentEvents[0]["transport"])
+	require.Equal(t, nsreplicationcommon.OperatorRepair, componentEvents[0]["mode"])
 	require.Equal(t, "repair-id", componentEvents[0]["repair_id"])
 }

@@ -229,7 +229,7 @@ func TestTriggerNamespaceMutationRejectsInvalidReplicateOnlyModes(t *testing.T) 
 			req.Mutation.Shadow = testCase.shadow
 			req.Mutation.ReplicateOnly = true
 
-			_, err := newServiceHandler(log.NewNoopLogger()).TriggerNamespaceMutation(context.Background(), req)
+			_, err := newServiceHandler(log.NewNoopLogger(), nil).TriggerNamespaceMutation(context.Background(), req)
 			var invalidArgument *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgument)
 		})
@@ -262,7 +262,7 @@ func TestTriggerNamespaceMutationRetryUsesExistingExecution(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			response, err := newServiceHandler(logger).TriggerNamespaceMutation(ctx, req)
+			response, err := newServiceHandler(logger, nil).TriggerNamespaceMutation(ctx, req)
 			require.NoError(t, err)
 			require.NotNil(t, response)
 		})
@@ -297,7 +297,7 @@ func TestTriggerNamespaceMutationIndeterminateReturnsUnavailable(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	response, err := newServiceHandler(logger).TriggerNamespaceMutation(ctx, req)
+	response, err := newServiceHandler(logger, nil).TriggerNamespaceMutation(ctx, req)
 	require.Nil(t, response)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
@@ -386,7 +386,7 @@ func TestReconcileNamespaceMutationPreservesAttemptsAndCompletes(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			handler := newServiceHandler(logger)
+			handler := newServiceHandler(logger, nil)
 			mh := metricstest.NewCaptureHandler()
 			capture := mh.StartCapture()
 			defer mh.StopCapture(capture)
@@ -426,10 +426,10 @@ func TestReconcileNamespaceMutationPreservesAttemptsAndCompletes(t *testing.T) {
 			require.Equal(t, lastAttemptAt, configured.GetLastAttemptAt().AsTime())
 			require.Equal(t, "peer unavailable", configured.GetLastFailure().GetMessage())
 			require.Equal(t, "repair-id", configured.GetManualReconciliation().GetRepairId())
-			require.Equal(t, namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET, configured.GetManualReconciliation().GetBasis())
+			require.Equal(t, enumsspb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET, configured.GetManualReconciliation().GetBasis())
 			require.Equal(
 				t,
-				namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP,
+				enumsspb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP,
 				component.GetPeerApply()["removed-cell"].GetManualReconciliation().GetBasis(),
 			)
 			wantExisting := namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
@@ -450,7 +450,7 @@ func TestReconcileNamespaceMutationPreservesAttemptsAndCompletes(t *testing.T) {
 			require.True(t, retryResponse.GetComponentCompleted())
 			require.Len(t, retryResponse.GetPeers(), 3)
 			for _, peer := range retryResponse.GetPeers() {
-				require.Equal(t, namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL, peer.GetOutcome())
+				require.Equal(t, enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL, peer.GetOutcome())
 				require.Equal(t, component.GetPeerApply()[peer.GetTargetCell()].GetManualReconciliation().GetBasis(), peer.GetBasis())
 			}
 
@@ -479,7 +479,7 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 		verifiedPeers        []string
 		wantEligible         bool
 		wantIneligibleReason string
-		wantPeerOutcome      namespacereplicationpb.PeerReconciliation_Outcome
+		wantPeerOutcome      enumsspb.NamespaceReconciliationOutcome
 	}{
 		{name: "newer config with old history clock", configVersion: 1, cutoff: time.Unix(101, 0), verifiedPeers: []string{"cell-b"}, wantIneligibleReason: "mutation versions are newer than the verified source"},
 		{name: "newer failover with old history clock", failoverVersion: 1, cutoff: time.Unix(101, 0), verifiedPeers: []string{"cell-b"}, wantIneligibleReason: "mutation versions are newer than the verified source"},
@@ -493,7 +493,7 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 			name:            "configured peer was not verified",
 			cutoff:          time.Unix(101, 0),
 			wantEligible:    true,
-			wantPeerOutcome: namespacereplicationpb.PeerReconciliation_OUTCOME_NOT_VERIFIED,
+			wantPeerOutcome: enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED,
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -533,7 +533,7 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			response, err := newServiceHandler(logger).ReconcileNamespaceMutation(ctx, &namespacereplicationpb.ReconcileNamespaceMutationRequest{
+			response, err := newServiceHandler(logger, nil).ReconcileNamespaceMutation(ctx, &namespacereplicationpb.ReconcileNamespaceMutationRequest{
 				VerifiedConfigVersion: wrapperspb.Int64(0), VerifiedFailoverVersion: wrapperspb.Int64(0),
 				SystemNamespaceId:      primitives.SystemNamespaceID,
 				BusinessId:             key.BusinessID,
@@ -549,7 +549,7 @@ func TestReconcileNamespaceMutationHonorsCutoffAndVerification(t *testing.T) {
 			require.Equal(t, testCase.wantEligible, response.GetComponentEligible())
 			require.Equal(t, testCase.wantIneligibleReason, response.GetIneligibleReason())
 			require.False(t, response.GetComponentCompleted())
-			if testCase.wantPeerOutcome != namespacereplicationpb.PeerReconciliation_OUTCOME_UNSPECIFIED {
+			if testCase.wantPeerOutcome != enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED {
 				require.Len(t, response.GetPeers(), 1)
 				require.Equal(t, testCase.wantPeerOutcome, response.GetPeers()[0].GetOutcome())
 			}

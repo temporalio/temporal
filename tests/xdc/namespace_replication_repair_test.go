@@ -90,7 +90,7 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 		Attributes: &adminservice.GetNamespaceRequest_Namespace{Namespace: name},
 	})
 	s.Require().NoError(err)
-	s.Require().NotNil(snapshot.GetObservedAt())
+	s.Require().NotNil(snapshot.GetObservationTime())
 	task := s.decodeNamespaceTask(failed.request)
 	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
 	payload, err := nsreplication.MarshalNamespaceTask(task)
@@ -108,7 +108,7 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 		result, reconcileErr := active.AdminClient().ReconcileNamespaceMutationComponents(ctx, &adminservice.ReconcileNamespaceMutationComponentsRequest{
 			VerifiedConfigVersion: wrapperspb.Int64(snapshot.GetConfigVersion()), VerifiedFailoverVersion: wrapperspb.Int64(snapshot.GetFailoverVersion()),
 			NamespaceId: snapshot.GetInfo().GetId(), RepairId: "xdc-repair", Reason: "peer transport unavailable",
-			CutoffTime: snapshot.GetObservedAt(), AuthoritativePeerClusters: []string{standby.ClusterName()}, VerifiedPeerClusters: []string{standby.ClusterName()},
+			CutoffTime: snapshot.GetObservationTime(), AuthoritativePeerClusters: []string{standby.ClusterName()}, VerifiedPeerClusters: []string{standby.ClusterName()},
 		})
 		if reconcileErr != nil {
 			return false
@@ -116,7 +116,7 @@ func (s *namespaceReplicationCHASMTestSuite) TestOperatorRepairWithoutPeerTransp
 		for _, component := range result.GetComponents() {
 			if component.GetBusinessId() == failed.request.GetComponentBusinessId() && component.GetCompleted() {
 				for _, peer := range component.GetPeers() {
-					if peer.GetTargetCluster() == standby.ClusterName() && peer.GetOutcome() == adminservice.NamespaceMutationPeerReconciliation_OUTCOME_RECONCILED {
+					if peer.GetTargetCluster() == standby.ClusterName() && peer.GetOutcome() == enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED {
 						return true
 					}
 				}

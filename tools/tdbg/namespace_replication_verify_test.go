@@ -1149,7 +1149,7 @@ func testNamespaceResponse(
 			{FailoverTime: timestamppb.New(time.Unix(20, 0)), FailoverVersion: failoverVersion},
 		},
 		IsGlobalNamespace: true,
-		ObservedAt:        timestamppb.New(time.Unix(102, 0)),
+		ObservationTime:   timestamppb.New(time.Unix(102, 0)),
 	}
 }
 

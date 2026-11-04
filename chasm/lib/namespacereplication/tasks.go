@@ -578,17 +578,11 @@ func (h *applyLocalTaskHandler) resolveLocal(
 			if err != nil {
 				return localApplyRecord{}, err
 			}
-			if c.allPeersTerminal() {
-				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
-					return localApplyRecord{}, err
-				}
-				record := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
-				if shadow {
-					record.shadowCompletion = newShadowCompletionRecord(c, mctx.Now(c))
-				}
-				return localApplyRecord{stateUpdated: true, componentTerminal: record}, nil
+			terminal, err := completeIfAllPeersTerminal(c, mctx)
+			if err != nil {
+				return localApplyRecord{}, err
 			}
-			return localApplyRecord{stateUpdated: true}, nil
+			return localApplyRecord{stateUpdated: true, componentTerminal: terminal}, nil
 		},
 		nil,
 	)
@@ -982,12 +976,12 @@ func (h *applyPeerTaskHandler) Execute(
 	record := func(outcome namespacereplicationpb.PeerApplyOutcome, outcomeErr error) error {
 		recorded, saveErr := h.recordPeerOutcome(ctx, ref, loaded.Detail.GetInfo().GetId(), task, outcome, outcomeErr)
 		h.observePeerApply(request, recorded, outcomeErr, saveErr, time.Since(startTime))
-		if saveErr == nil {
+		if saveErr == nil && recorded.componentTerminal != nil {
 			observer := shadowCompletionObserver{
 				logger: h.logger, metricsHandler: h.metricsHandler, eventLogger: h.eventLogger,
 				emitNamespaceLifecycleEvents: h.emitNamespaceLifecycleEvents, sourceCluster: h.currentCluster,
 			}
-			observer.observe(ref, recorded.completion)
+			observer.observe(ref, recorded.componentTerminal.shadowCompletion)
 			if !loaded.Shadow {
 				emitComponentTerminal(h.logger, h.eventLogger, h.emitNamespaceLifecycleEvents, h.currentCluster, ref,
 					nsreplicationcommon.NamespaceDetailToTaskAttributes(loaded.Operation, loaded.Detail), recorded.componentTerminal, nil)
@@ -1113,17 +1107,11 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			}); err != nil {
 				return peerOutcomeRecord{}, err
 			}
-			// If every peer has reached a terminal outcome, move to COMPLETED so
-			// retention can clean up the component. (Done as a separate transition
-			// because the framework rewrites status to the transition's destination
-			// after apply returns.)
-			if c.allPeersTerminal() {
-				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
-					return peerOutcomeRecord{}, err
-				}
-				record.completion = newShadowCompletionRecord(c, now)
-				record.componentTerminal = newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
+			terminal, err := completeIfAllPeersTerminal(c, mctx)
+			if err != nil {
+				return peerOutcomeRecord{}, err
 			}
+			record.componentTerminal = terminal
 			return record, nil
 		},
 		nil,

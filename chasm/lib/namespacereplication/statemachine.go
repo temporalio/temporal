@@ -4,6 +4,7 @@ import (
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -363,7 +364,11 @@ type EventPeerManuallyReconciled struct {
 	TargetCell string
 	RepairID   string
 	Reason     string
-	Basis      namespacereplicationpb.ManualReconciliationBasis
+	Basis      enumsspb.ManualReconciliationBasis
+}
+
+func peerNeedsReconciliation(status *namespacereplicationpb.PeerApplyStatus) bool {
+	return status.GetOutcome() == namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING || status.GetOutcome() == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 }
 
 var TransitionPeerManuallyReconciled = chasm.NewTransition(
@@ -371,8 +376,7 @@ var TransitionPeerManuallyReconciled = chasm.NewTransition(
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, _ chasm.MutableContext, event EventPeerManuallyReconciled) error {
 		status := c.GetPeerApply()[event.TargetCell]
-		if status == nil || (status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING &&
-			status.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE) {
+		if !peerNeedsReconciliation(status) {
 			return nil
 		}
 		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED

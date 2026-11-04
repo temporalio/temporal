@@ -3,6 +3,7 @@ package tdbg
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -45,6 +48,24 @@ type namespaceReplicationRepairExecutionResult struct {
 	Warnings                     []string                                                   `json:"warnings,omitempty"`
 }
 
+// MarshalJSON retains the CLI's field names while rendering protobuf enum values
+// with their symbolic names instead of their numeric values.
+func (result namespaceReplicationRepairExecutionResult) MarshalJSON() ([]byte, error) {
+	type executionResultJSON namespaceReplicationRepairExecutionResult
+	var reconciliation json.RawMessage
+	if result.ComponentReconciliation != nil {
+		data, err := (protojson.MarshalOptions{UseProtoNames: true}).Marshal(result.ComponentReconciliation)
+		if err != nil {
+			return nil, err
+		}
+		reconciliation = data
+	}
+	return json.Marshal(struct {
+		*executionResultJSON
+		ComponentReconciliation json.RawMessage `json:"component_reconciliation,omitempty"`
+	}{(*executionResultJSON)(&result), reconciliation})
+}
+
 type namespaceReplicationRepairApplyResult struct {
 	Cluster  string `json:"cluster"`
 	Action   string `json:"action"`
@@ -73,7 +94,7 @@ func (r *namespaceReplicationRepairer) Execute(
 		},
 	}
 	if err := validateNamespaceReplicationRepairExecution(request); err != nil {
-		return result, errors.New("repair execution requires an executable frozen plan")
+		return result, err
 	}
 
 	sourceConnection, err := r.verifier.clients.OpenSource(request.VerifyRequest.SourceAddress)
@@ -84,7 +105,7 @@ func (r *namespaceReplicationRepairer) Execute(
 		retErr = errors.Join(retErr, sourceConnection.closer.Close())
 	}()
 
-	effectiveCutoff, err := r.effectiveRepairCutoff(request.ReconcileBefore, request.Observation.sourceSnapshot.GetObservedAt())
+	effectiveCutoff, err := effectiveRepairCutoff(request.ReconcileBefore, request.Observation.sourceSnapshot.GetObservationTime())
 	if err != nil {
 		return result, err
 	}
@@ -134,7 +155,7 @@ func namespaceReplicationRepairWarnings(response *adminservice.ReconcileNamespac
 	var removedPeers []string
 	for _, component := range response.GetComponents() {
 		for _, peer := range component.GetPeers() {
-			if peer.GetBasis() == adminservice.NamespaceMutationPeerReconciliation_BASIS_REMOVED_MEMBERSHIP {
+			if peer.GetBasis() == enumsspb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP {
 				removedPeers = append(removedPeers, peer.GetTargetCluster())
 			}
 		}
@@ -151,7 +172,7 @@ func namespaceReplicationRepairWarnings(response *adminservice.ReconcileNamespac
 
 func validateNamespaceReplicationRepairExecution(request namespaceReplicationRepairExecutionRequest) error {
 	if request.Observation == nil || request.Observation.sourceSnapshot == nil ||
-		!request.Observation.sourceStable || request.Plan == nil || request.Reason == "" ||
+		!request.Observation.sourceStable || request.Reason == "" ||
 		request.Plan.RepairID == "" ||
 		(request.Plan.Status != namespaceReplicationRepairStatusPlanned &&
 			request.Plan.Status != namespaceReplicationRepairStatusNoChanges) {
@@ -160,7 +181,7 @@ func validateNamespaceReplicationRepairExecution(request namespaceReplicationRep
 	return nil
 }
 
-func (r *namespaceReplicationRepairer) effectiveRepairCutoff(requested *time.Time, observedAt *timestamppb.Timestamp) (time.Time, error) {
+func effectiveRepairCutoff(requested *time.Time, observedAt *timestamppb.Timestamp) (time.Time, error) {
 	if observedAt == nil || observedAt.CheckValid() != nil {
 		return time.Time{}, errors.New("source must support a server-timed namespace observation for repair")
 	}
@@ -218,7 +239,6 @@ func (r *namespaceReplicationRepairer) prepareRepairSource(
 		frozen,
 		frozen,
 		r.verifier.dataKeysToIgnore,
-		namespaceRepairDataSourceExact,
 	)
 	if err != nil {
 		return nil, err
@@ -262,27 +282,23 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 	}
 	verifiedPeers := verifiedRepairPeers(finalObservation)
 	seenPageTokens := make(map[string]struct{})
-	var nextPageToken []byte
+	requestRPC := &adminservice.ReconcileNamespaceMutationComponentsRequest{
+		NamespaceId:               request.Plan.NamespaceID,
+		RepairId:                  request.Plan.RepairID,
+		Reason:                    request.Reason,
+		CutoffTime:                timestamppb.New(cutoff),
+		AuthoritativePeerClusters: authoritativeRepairPeers(request.Observation.result),
+		VerifiedPeerClusters:      verifiedPeers,
+		PageSize:                  namespaceReplicationRepairReconciliationPageSize,
+		VerifiedConfigVersion:     wrapperspb.Int64(finalObservation.sourceSnapshot.GetConfigVersion()),
+		VerifiedFailoverVersion:   wrapperspb.Int64(finalObservation.sourceSnapshot.GetFailoverVersion()),
+	}
 	for {
 		page, err := namespaceReplicationRPCCall(
 			ctx,
 			r.verifier.rpcTimeout,
 			func(rpcCtx context.Context) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
-				return client.ReconcileNamespaceMutationComponents(
-					rpcCtx,
-					&adminservice.ReconcileNamespaceMutationComponentsRequest{
-						NamespaceId:               request.Plan.NamespaceID,
-						RepairId:                  request.Plan.RepairID,
-						Reason:                    request.Reason,
-						CutoffTime:                timestamppb.New(cutoff),
-						AuthoritativePeerClusters: authoritativeRepairPeers(request.Observation.result),
-						VerifiedPeerClusters:      verifiedPeers,
-						PageSize:                  namespaceReplicationRepairReconciliationPageSize,
-						NextPageToken:             nextPageToken,
-						VerifiedConfigVersion:     wrapperspb.Int64(finalObservation.sourceSnapshot.GetConfigVersion()),
-						VerifiedFailoverVersion:   wrapperspb.Int64(finalObservation.sourceSnapshot.GetFailoverVersion()),
-					},
-				)
+				return client.ReconcileNamespaceMutationComponents(rpcCtx, requestRPC)
 			},
 		)
 		if err != nil {
@@ -292,7 +308,7 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 			return result, errors.New("component reconciliation returned no response")
 		}
 		result.Components = append(result.Components, page.GetComponents()...)
-		nextPageToken = page.GetNextPageToken()
+		nextPageToken := page.GetNextPageToken()
 		if len(nextPageToken) == 0 {
 			return result, nil
 		}
@@ -301,7 +317,7 @@ func (r *namespaceReplicationRepairer) reconcileRepairComponents(
 			return result, errors.New("component reconciliation returned a repeated next-page token")
 		}
 		seenPageTokens[tokenKey] = struct{}{}
-		nextPageToken = slices.Clone(nextPageToken)
+		requestRPC.NextPageToken = nextPageToken
 	}
 }
 
@@ -360,7 +376,7 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 		}
 	}()
 
-	failoverSource := request.Observation.targetSnapshots[clusterPlan.Cluster]
+	target := request.Observation.targetSnapshots[clusterPlan.Cluster]
 	freshTarget, err := getNamespace(ctx, r.verifier.rpcTimeout, connection.client, namespaceReplicationSelector{ID: request.Plan.NamespaceID})
 	if clusterPlan.Action == namespaceReplicationRepairActionCreate {
 		if !isNamespaceNotFound(err) {
@@ -372,28 +388,23 @@ func (r *namespaceReplicationRepairer) applyTargetRepair(
 			result.Error = "target namespace name appeared or could not be checked after planning; rerun verification"
 			return result
 		}
+		target = nil
 	} else {
 		if err != nil {
 			result.Error = fmt.Sprintf("refresh target: %v", err)
 			return result
 		}
-		equal, compareErr := namespaceReplicationSnapshotsEqual(failoverSource, freshTarget, r.verifier.dataKeysToIgnore)
+		equal, compareErr := namespaceReplicationSnapshotsEqual(target, freshTarget, r.verifier.dataKeysToIgnore)
 		if compareErr != nil || !equal {
 			result.Error = "target configuration or versions changed after planning; rerun verification"
 			return result
 		}
-		failoverSource = freshTarget
-	}
-	dataPolicy := namespaceRepairDataPreserveTargetIgnored
-	if clusterPlan.Action == namespaceReplicationRepairActionCreate {
-		failoverSource = preparedSource
-		dataPolicy = namespaceRepairDataExcludeIgnored
+		target = freshTarget
 	}
 	task, err := buildNamespaceReplicationRepairTask(
 		preparedSource,
-		failoverSource,
+		target,
 		r.verifier.dataKeysToIgnore,
-		dataPolicy,
 	)
 	if err != nil {
 		result.Error = err.Error()
@@ -531,13 +542,10 @@ func authoritativeRepairPeers(result *namespaceReplicationVerificationResult) []
 }
 
 func verifiedRepairPeers(observation *namespaceReplicationObservation) []string {
-	if observation == nil || observation.result == nil || observation.sourceSnapshot == nil || !observation.sourceStable {
-		return nil
-	}
 	sourceVersion := observation.sourceSnapshot.GetConfigVersion()
 	var peers []string
 	for _, cluster := range observation.result.Clusters {
-		if cluster.Role == "SOURCE" || cluster.Presence != namespaceReplicationPresencePresent ||
+		if cluster.Role == namespaceReplicationRoleSource || cluster.Presence != namespaceReplicationPresencePresent ||
 			cluster.ConfigVersion == nil || *cluster.ConfigVersion > sourceVersion ||
 			cluster.ConfigMatch != namespaceReplicationMatchMatch ||
 			namespaceReplicationFailoverBlocks(&cluster, observation.sourceSnapshot.GetFailoverVersion()) {

@@ -1383,7 +1383,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 	})
 	s.NoError(err)
 	s.Equal(namespaceID, resp.GetInfo().GetId())
-	s.Equal(time.Unix(100, 0).UTC(), resp.GetObservedAt().AsTime())
+	s.Equal(time.Unix(100, 0).UTC(), resp.GetObservationTime().AsTime())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {

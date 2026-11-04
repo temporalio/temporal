@@ -20,6 +20,7 @@ import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/dlq.proto";
+import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/health/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
@@ -505,7 +506,7 @@ message GetNamespaceResponse {
   bool is_global_namespace = 9;
   // Server time captured before reading this snapshot. Repair uses this as a
   // conservative reconciliation cutoff instead of the operator's clock.
-  google.protobuf.Timestamp observed_at = 10;
+  google.protobuf.Timestamp observation_time = 10;
 }
 
 message GetDLQTasksRequest {
@@ -840,7 +841,7 @@ message ReconcileNamespaceMutationComponentsRequest {
   repeated string verified_peer_clusters = 6;
   int32 page_size = 7;
   bytes next_page_token = 8;
-  // Source versions covered by the final verification. Required even when zero.
+  // Source versions covered by the final verification. Presence is significant even when zero.
   google.protobuf.Int64Value verified_config_version = 9;
   google.protobuf.Int64Value verified_failover_version = 10;
 }
@@ -861,21 +862,7 @@ message NamespaceMutationComponentReconciliation {
 }
 
 message NamespaceMutationPeerReconciliation {
-  enum Outcome {
-    OUTCOME_UNSPECIFIED = 0;
-    OUTCOME_RECONCILED = 1;
-    OUTCOME_ALREADY_TERMINAL = 2;
-    OUTCOME_NOT_VERIFIED = 3;
-  }
-  enum Basis {
-    BASIS_UNSPECIFIED = 0;
-    BASIS_VERIFIED_TARGET = 1;
-    // Delivery was abandoned because the source no longer includes this peer.
-    // The peer was not inspected or updated and may retain stale membership.
-    BASIS_REMOVED_MEMBERSHIP = 2;
-  }
-
   string target_cluster = 1;
-  Outcome outcome = 2;
-  Basis basis = 3;
+  temporal.server.api.enums.v1.NamespaceReconciliationOutcome outcome = 2;
+  temporal.server.api.enums.v1.ManualReconciliationBasis basis = 3;
 }

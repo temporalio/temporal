@@ -53,6 +53,18 @@ func newComponentTerminalObservation(
 	return observation
 }
 
+func completeIfAllPeersTerminal(c *NamespaceMutationComponent, ctx chasm.MutableContext) (*componentTerminalObservation, error) {
+	if !c.allPeersTerminal() {
+		return nil, nil
+	}
+	if err := TransitionAllPeersTerminal.Apply(c, ctx, EventAllPeersTerminal{}); err != nil {
+		return nil, err
+	}
+	terminal := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
+	terminal.shadowCompletion = newShadowCompletionRecord(c, ctx.Now(c))
+	return terminal, nil
+}
+
 func emitComponentTerminal(
 	logger log.Logger,
 	eventLogger otellog.Logger,

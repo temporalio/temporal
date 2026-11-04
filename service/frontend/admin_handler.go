@@ -2080,7 +2080,7 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
 	nsResponse := &adminservice.GetNamespaceResponse{
-		ObservedAt: timestamppb.New(observedAt),
+		ObservationTime: timestamppb.New(observedAt),
 		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			State:       info.State,

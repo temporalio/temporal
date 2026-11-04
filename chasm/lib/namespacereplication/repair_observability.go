@@ -1,9 +1,11 @@
 package namespacereplication
 
 import (
+	"maps"
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
@@ -17,7 +19,7 @@ import (
 
 const manualReconciliationBasisTag = "reconciliation_basis"
 
-type namespaceRepairHandlerOptions struct {
+type namespaceRepairObserverOptions struct {
 	fx.In
 
 	Logger          log.Logger
@@ -37,21 +39,19 @@ type namespaceRepairObserver struct {
 
 type manualPeerReconciliationObservation struct {
 	targetCell   string
-	basis        namespacereplicationpb.ManualReconciliationBasis
+	basis        enumsspb.ManualReconciliationBasis
 	attemptCount int32
 	lastFailure  string
 }
 
-func newNamespaceRepairHandler(options namespaceRepairHandlerOptions) *serviceHandler {
-	h := newServiceHandler(options.Logger)
-	h.repairObserver = &namespaceRepairObserver{
+func newNamespaceRepairObserver(options namespaceRepairObserverOptions) *namespaceRepairObserver {
+	return &namespaceRepairObserver{
 		logger:                       options.Logger,
 		eventLogger:                  options.EventLogger,
 		metricsHandler:               options.MetricsHandler,
 		currentCluster:               options.ClusterMetadata.GetCurrentClusterName(),
 		emitNamespaceLifecycleEvents: dynamicconfig.EmitNamespaceLifecycleEvents.Get(options.DynamicConfig),
 	}
-	return h
 }
 
 func (o *namespaceRepairObserver) observe(
@@ -63,9 +63,14 @@ func (o *namespaceRepairObserver) observe(
 ) {
 	var telemetryPanic error
 	defer log.CapturePanic(o.logger, &telemetryPanic)
+	emitEvents := o.emitNamespaceLifecycleEvents != nil && o.emitNamespaceLifecycleEvents()
+	var eventDetails map[string]any
+	if emitEvents {
+		eventDetails = repairEventDetails(request)
+	}
 	if terminal != nil && terminal.shadowCompletion != nil {
 		observer := shadowCompletionObserver{logger: o.logger, metricsHandler: o.metricsHandler, eventLogger: o.eventLogger,
-			emitNamespaceLifecycleEvents: o.emitNamespaceLifecycleEvents, sourceCluster: o.currentCluster}
+			emitNamespaceLifecycleEvents: func() bool { return emitEvents }, sourceCluster: o.currentCluster}
 		observer.observe(ref, terminal.shadowCompletion)
 	}
 	for _, peer := range peers {
@@ -77,17 +82,11 @@ func (o *namespaceRepairObserver) observe(
 			metrics.OutcomeTag(nsreplicationcommon.CHASMApplyOutcomeManuallyReconciled),
 			metrics.StringTag(manualReconciliationBasisTag, peer.basis.String()),
 		)
-		if o.emitNamespaceLifecycleEvents == nil || !o.emitNamespaceLifecycleEvents() {
+		if !emitEvents {
 			continue
 		}
-		details := map[string]any{
-			"verified_config_version":   request.GetVerifiedConfigVersion().GetValue(),
-			"verified_failover_version": request.GetVerifiedFailoverVersion().GetValue(),
-			"repair_id":                 request.GetRepairId(),
-			"operator_reason":           request.GetReason(),
-			"reconciliation_cutoff":     request.GetCutoff().AsTime().Format(time.RFC3339Nano),
-			"reconciliation_basis":      peer.basis.String(),
-		}
+		details := maps.Clone(eventDetails)
+		details["reconciliation_basis"] = peer.basis.String()
 		if peer.lastFailure != "" {
 			details["last_delivery_failure"] = peer.lastFailure
 		}
@@ -103,21 +102,26 @@ func (o *namespaceRepairObserver) observe(
 				ComponentRunID:      ref.RunID,
 				AttemptCount:        int(peer.attemptCount),
 				Details:             details,
-				Transport:           nsreplicationcommon.OperatorRepairTransport,
-				Mode:                nsreplicationcommon.OperatorRepairMode,
+				Transport:           nsreplicationcommon.OperatorRepair,
+				Mode:                nsreplicationcommon.OperatorRepair,
 			},
 		)
 	}
-	if terminal != nil && o.emitNamespaceLifecycleEvents != nil && o.emitNamespaceLifecycleEvents() {
+	if terminal != nil && emitEvents {
 		observation := componentTerminalApplyObservation(o.currentCluster, ref, task, terminal, nil)
-		observation.Transport = nsreplicationcommon.OperatorRepairTransport
-		observation.Mode = nsreplicationcommon.OperatorRepairMode
-		observation.Details["origin"] = "operator_repair"
-		observation.Details["repair_id"] = request.GetRepairId()
-		observation.Details["operator_reason"] = request.GetReason()
-		observation.Details["reconciliation_cutoff"] = request.GetCutoff().AsTime().Format(time.RFC3339Nano)
-		observation.Details["verified_config_version"] = request.GetVerifiedConfigVersion().GetValue()
-		observation.Details["verified_failover_version"] = request.GetVerifiedFailoverVersion().GetValue()
+		observation.Transport = nsreplicationcommon.OperatorRepair
+		observation.Mode = nsreplicationcommon.OperatorRepair
+		maps.Copy(observation.Details, eventDetails)
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(o.eventLogger, observation)
+	}
+}
+
+func repairEventDetails(request *namespacereplicationpb.ReconcileNamespaceMutationRequest) map[string]any {
+	return map[string]any{
+		"verified_config_version":   request.GetVerifiedConfigVersion().GetValue(),
+		"verified_failover_version": request.GetVerifiedFailoverVersion().GetValue(),
+		"repair_id":                 request.GetRepairId(),
+		"operator_reason":           request.GetReason(),
+		"reconciliation_cutoff":     request.GetCutoff().AsTime().Format(time.RFC3339Nano),
 	}
 }

@@ -18,8 +18,7 @@ func isOperatorRepair(ctx context.Context) bool {
 	return ctx.Value(operatorRepairContextKey{}) == true
 }
 
-// ValidatePeerSet validates peer names at both frontend and history RPC boundaries.
-func ValidatePeerSet(field string, peers []string) (map[string]struct{}, error) {
+func validatePeerSet(field string, peers []string) (map[string]struct{}, error) {
 	result := make(map[string]struct{}, len(peers))
 	for _, peer := range peers {
 		if peer == "" {
@@ -31,4 +30,22 @@ func ValidatePeerSet(field string, peers []string) (map[string]struct{}, error) 
 		result[peer] = struct{}{}
 	}
 	return result, nil
+}
+
+// ValidatePeerSets validates repair membership at frontend and history boundaries.
+func ValidatePeerSets(authoritative, verified []string) (authoritativePeers, verifiedPeers map[string]struct{}, err error) {
+	authoritativePeers, err = validatePeerSet("authoritative peers", authoritative)
+	if err != nil {
+		return nil, nil, err
+	}
+	verifiedPeers, err = validatePeerSet("verified peers", verified)
+	if err != nil {
+		return nil, nil, err
+	}
+	for peer := range verifiedPeers {
+		if _, ok := authoritativePeers[peer]; !ok {
+			return nil, nil, serviceerror.NewInvalidArgument("verified peers must be a subset of authoritative peers")
+		}
+	}
+	return authoritativePeers, verifiedPeers, nil
 }

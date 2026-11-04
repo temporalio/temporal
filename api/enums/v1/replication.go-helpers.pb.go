@@ -72,3 +72,42 @@ func ReplicationFlowControlCommandFromString(s string) (ReplicationFlowControlCo
 	}
 	return ReplicationFlowControlCommand(0), fmt.Errorf("%s is not a valid ReplicationFlowControlCommand", s)
 }
+
+var (
+	NamespaceReconciliationOutcome_shorthandValue = map[string]int32{
+		"Unspecified":     0,
+		"Reconciled":      1,
+		"AlreadyTerminal": 2,
+		"NotVerified":     3,
+	}
+)
+
+// NamespaceReconciliationOutcomeFromString parses a NamespaceReconciliationOutcome value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to NamespaceReconciliationOutcome
+func NamespaceReconciliationOutcomeFromString(s string) (NamespaceReconciliationOutcome, error) {
+	if v, ok := NamespaceReconciliationOutcome_value[s]; ok {
+		return NamespaceReconciliationOutcome(v), nil
+	} else if v, ok := NamespaceReconciliationOutcome_shorthandValue[s]; ok {
+		return NamespaceReconciliationOutcome(v), nil
+	}
+	return NamespaceReconciliationOutcome(0), fmt.Errorf("%s is not a valid NamespaceReconciliationOutcome", s)
+}
+
+var (
+	ManualReconciliationBasis_shorthandValue = map[string]int32{
+		"Unspecified":       0,
+		"VerifiedTarget":    1,
+		"RemovedMembership": 2,
+	}
+)
+
+// ManualReconciliationBasisFromString parses a ManualReconciliationBasis value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ManualReconciliationBasis
+func ManualReconciliationBasisFromString(s string) (ManualReconciliationBasis, error) {
+	if v, ok := ManualReconciliationBasis_value[s]; ok {
+		return ManualReconciliationBasis(v), nil
+	} else if v, ok := ManualReconciliationBasis_shorthandValue[s]; ok {
+		return ManualReconciliationBasis(v), nil
+	}
+	return ManualReconciliationBasis(0), fmt.Errorf("%s is not a valid ManualReconciliationBasis", s)
+}

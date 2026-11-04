@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	chasmspb "go.temporal.io/server/api/chasm/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
@@ -203,8 +204,8 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 		Peers: []*namespacereplicationpb.PeerReconciliation{
 			{
 				TargetCell: "cluster-b",
-				Outcome:    namespacereplicationpb.PeerReconciliation_OUTCOME_RECONCILED,
-				Basis:      namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET,
+				Outcome:    enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED,
+				Basis:      enumsspb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET,
 			},
 		},
 	}
@@ -232,8 +233,8 @@ func TestReconcileNamespaceMutationComponentsReturnsOnePageAndMapsResults(t *tes
 	require.Equal(t, "business-1", repairClient.requests[0].GetBusinessId())
 	require.Equal(t, "run-2", repairClient.requests[1].GetRunId())
 	require.Equal(t, "namespace-id", repairClient.requests[0].GetNamespaceId())
-	require.Equal(t, adminservice.NamespaceMutationPeerReconciliation_OUTCOME_RECONCILED, response.GetComponents()[0].GetPeers()[0].GetOutcome())
-	require.Equal(t, adminservice.NamespaceMutationPeerReconciliation_BASIS_VERIFIED_TARGET, response.GetComponents()[0].GetPeers()[0].GetBasis())
+	require.Equal(t, enumsspb.NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED, response.GetComponents()[0].GetPeers()[0].GetOutcome())
+	require.Equal(t, enumsspb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET, response.GetComponents()[0].GetPeers()[0].GetBasis())
 }
 
 func TestNamespaceRepairRejectsChangedSourceVersions(t *testing.T) {

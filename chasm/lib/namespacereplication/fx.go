@@ -22,7 +22,8 @@ var Module = fx.Module(
 	fx.Provide(newAdminClientPeerApplier),
 	fx.Provide(newApplyPeerTaskHandler),
 	fx.Provide(newApplyPeerBackoffTaskHandler),
-	fx.Provide(newNamespaceRepairHandler),
+	fx.Provide(newNamespaceRepairObserver),
+	fx.Provide(newServiceHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

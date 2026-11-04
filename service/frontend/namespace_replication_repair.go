@@ -19,7 +19,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const namespaceMutationRepairVisibilityPageSize = 100
+const (
+	namespaceMutationRepairVisibilityPageSize = 100
+	namespaceMutationRepairConcurrency        = 4
+)
 
 func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
 	ctx context.Context,
@@ -56,14 +59,14 @@ func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
 		NextPageToken: page.NextPageToken,
 		Components:    make([]*adminservice.NamespaceMutationComponentReconciliation, len(page.Executions)),
 	}
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(4)
+	var group errgroup.Group
+	group.SetLimit(namespaceMutationRepairConcurrency)
 	for i, execution := range page.Executions {
 		group.Go(func() error {
-			if err := groupCtx.Err(); err != nil {
+			if err := ctx.Err(); err != nil {
 				return err
 			}
-			response.Components[i] = adh.reconcileNamespaceMutationExecution(groupCtx, request, execution.BusinessID, execution.RunID)
+			response.Components[i] = adh.reconcileNamespaceMutationExecution(ctx, request, execution.BusinessID, execution.RunID)
 			return nil
 		})
 	}
@@ -89,28 +92,13 @@ func (adh *AdminHandler) validateNamespaceMutationRepair(
 	if request.VerifiedConfigVersion == nil || request.VerifiedFailoverVersion == nil {
 		return serviceerror.NewInvalidArgument("verified config and failover versions are required")
 	}
-	authoritativePeers, err := nsreplication.ValidatePeerSet(
-		"authoritative_peer_clusters",
-		request.GetAuthoritativePeerClusters(),
-	)
-	if err != nil {
-		return err
-	}
-	verifiedPeers, err := nsreplication.ValidatePeerSet(
-		"verified_peer_clusters",
-		request.GetVerifiedPeerClusters(),
-	)
+	authoritativePeers, _, err := nsreplication.ValidatePeerSets(request.GetAuthoritativePeerClusters(), request.GetVerifiedPeerClusters())
 	if err != nil {
 		return err
 	}
 	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
 	if _, included := authoritativePeers[currentCluster]; included {
 		return serviceerror.NewInvalidArgument("authoritative_peer_clusters must not include the source cluster")
-	}
-	for peer := range verifiedPeers {
-		if _, configured := authoritativePeers[peer]; !configured {
-			return serviceerror.NewInvalidArgument("verified_peer_clusters must be a subset of authoritative_peer_clusters")
-		}
 	}
 
 	namespaceResponse, err := adh.persistenceMetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -183,37 +171,9 @@ func (adh *AdminHandler) reconcileNamespaceMutationExecution(
 	for _, peer := range response.GetPeers() {
 		result.Peers = append(result.Peers, &adminservice.NamespaceMutationPeerReconciliation{
 			TargetCluster: peer.GetTargetCell(),
-			Outcome:       namespaceMutationPeerReconciliationOutcome(peer.GetOutcome()),
-			Basis:         namespaceMutationPeerReconciliationBasis(peer.GetBasis()),
+			Outcome:       peer.GetOutcome(),
+			Basis:         peer.GetBasis(),
 		})
 	}
 	return result
-}
-
-func namespaceMutationPeerReconciliationOutcome(
-	outcome namespacereplicationpb.PeerReconciliation_Outcome,
-) adminservice.NamespaceMutationPeerReconciliation_Outcome {
-	switch outcome {
-	case namespacereplicationpb.PeerReconciliation_OUTCOME_RECONCILED:
-		return adminservice.NamespaceMutationPeerReconciliation_OUTCOME_RECONCILED
-	case namespacereplicationpb.PeerReconciliation_OUTCOME_ALREADY_TERMINAL:
-		return adminservice.NamespaceMutationPeerReconciliation_OUTCOME_ALREADY_TERMINAL
-	case namespacereplicationpb.PeerReconciliation_OUTCOME_NOT_VERIFIED:
-		return adminservice.NamespaceMutationPeerReconciliation_OUTCOME_NOT_VERIFIED
-	default:
-		return adminservice.NamespaceMutationPeerReconciliation_OUTCOME_UNSPECIFIED
-	}
-}
-
-func namespaceMutationPeerReconciliationBasis(
-	basis namespacereplicationpb.ManualReconciliationBasis,
-) adminservice.NamespaceMutationPeerReconciliation_Basis {
-	switch basis {
-	case namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET:
-		return adminservice.NamespaceMutationPeerReconciliation_BASIS_VERIFIED_TARGET
-	case namespacereplicationpb.MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP:
-		return adminservice.NamespaceMutationPeerReconciliation_BASIS_REMOVED_MEMBERSHIP
-	default:
-		return adminservice.NamespaceMutationPeerReconciliation_BASIS_UNSPECIFIED
-	}
 }

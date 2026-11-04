@@ -43,7 +43,7 @@ func TestNamespaceRepairApplyAttribution(t *testing.T) {
 		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
 			metricContext, ok := nsreplication.TaskMetricsContextFromContext(ctx)
 			require.True(t, ok)
-			require.Equal(t, nsreplication.OperatorRepairTransport, metricContext.Transport)
+			require.Equal(t, nsreplication.OperatorRepair, metricContext.Transport)
 			eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, "repair-id", eventContext.EventData.Details["repair_id"])
@@ -59,7 +59,7 @@ func TestNamespaceRepairApplyAttribution(t *testing.T) {
 	require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
 	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
 	require.Len(t, recordings, 1)
-	require.Equal(t, nsreplication.OperatorRepairMode, recordings[0].Tags["mode"])
+	require.Equal(t, nsreplication.OperatorRepair, recordings[0].Tags["mode"])
 }
 
 func TestNamespaceMutationRejectsDisabledGlobalNamespaces(t *testing.T) {

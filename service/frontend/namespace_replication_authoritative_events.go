@@ -125,9 +125,8 @@ func applyNamespaceMutationAttribution(
 		if observation.Details == nil {
 			observation.Details = make(map[string]any)
 		}
-		observation.Transport = nsreplication.OperatorRepairTransport
-		observation.Mode = nsreplication.OperatorRepairMode
-		observation.Details["origin"] = "operator_repair"
+		observation.Transport = nsreplication.OperatorRepair
+		observation.Mode = nsreplication.OperatorRepair
 		observation.Details["repair_id"] = attribution.GetRepairId()
 		observation.Details["operator_reason"] = attribution.GetReason()
 	}
@@ -159,7 +158,7 @@ func validateNamespaceMutationAttribution(request *adminservice.ApplyNamespaceMu
 
 func namespaceMutationTransport(request *adminservice.ApplyNamespaceMutationRequest) string {
 	if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
-		return nsreplication.OperatorRepairTransport
+		return nsreplication.OperatorRepair
 	}
 	return nsreplication.CHASMReplicationTransport
 }

@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
@@ -61,20 +62,17 @@ func planNamespaceReplicationRepair(
 		NamespaceID:                 verification.NamespaceID,
 		SourceCluster:               verification.SourceCluster,
 		Status:                      namespaceReplicationRepairStatusBlocked,
-		StatusDetail:                verification.StatusDetail,
 		SourceConfigVersion:         observation.sourceSnapshot.GetConfigVersion(),
 		ProposedSourceConfigVersion: observation.sourceSnapshot.GetConfigVersion(),
 		SourceAction:                namespaceReplicationRepairActionNone,
 	}
 	if verification.Status != namespaceReplicationStatusHealthy &&
 		verification.Status != namespaceReplicationStatusRepairRequired {
+		plan.StatusDetail = verification.StatusDetail
 		if plan.StatusDetail == "" {
 			plan.StatusDetail = "verification did not produce an executable repair plan"
 		}
 		return plan, nil
-	}
-	if observation.sourceSnapshot == nil || !observation.sourceStable {
-		return nil, errors.New("repair planning requires a complete namespace replication observation")
 	}
 
 	versionPlan, err := inspectNamespaceRepairVersions(verification, plan.SourceConfigVersion)
@@ -95,7 +93,7 @@ func planNamespaceReplicationRepair(
 	}
 
 	for _, cluster := range verification.Clusters {
-		if cluster.Role == "SOURCE" {
+		if cluster.Role == namespaceReplicationRoleSource {
 			continue
 		}
 		plan.Clusters = append(plan.Clusters, namespaceReplicationClusterRepairPlan{
@@ -107,13 +105,7 @@ func planNamespaceReplicationRepair(
 		})
 	}
 	slices.SortFunc(plan.Clusters, func(left, right namespaceReplicationClusterRepairPlan) int {
-		if left.Cluster < right.Cluster {
-			return -1
-		}
-		if left.Cluster > right.Cluster {
-			return 1
-		}
-		return 0
+		return cmp.Compare(left.Cluster, right.Cluster)
 	})
 
 	plan.Status = namespaceReplicationRepairStatusNoChanges
@@ -125,7 +117,6 @@ func planNamespaceReplicationRepair(
 	) {
 		plan.Status = namespaceReplicationRepairStatusPlanned
 	}
-	plan.StatusDetail = ""
 	return plan, nil
 }
 
@@ -141,7 +132,7 @@ func inspectNamespaceRepairVersions(
 ) (namespaceRepairVersionPlan, error) {
 	result := namespaceRepairVersionPlan{maxConfigVersion: sourceConfigVersion}
 	for _, cluster := range verification.Clusters {
-		if cluster.Role == "SOURCE" || cluster.Presence != namespaceReplicationPresencePresent {
+		if cluster.Role == namespaceReplicationRoleSource || cluster.Presence != namespaceReplicationPresencePresent {
 			continue
 		}
 		if cluster.ConfigVersion == nil {
@@ -168,23 +159,18 @@ func namespaceRepairTargetAction(
 	return namespaceReplicationRepairActionApplySource
 }
 
-type namespaceRepairDataPolicy int
-
-const (
-	namespaceRepairDataSourceExact namespaceRepairDataPolicy = iota
-	namespaceRepairDataPreserveTargetIgnored
-	namespaceRepairDataExcludeIgnored
-)
-
 func buildNamespaceReplicationRepairTask(
 	source *adminservice.GetNamespaceResponse,
-	failoverSource *adminservice.GetNamespaceResponse,
+	target *adminservice.GetNamespaceResponse,
 	dataKeysToIgnore map[string]struct{},
-	dataPolicy namespaceRepairDataPolicy,
 ) (*replicationspb.NamespaceTaskAttributes, error) {
-	configProjection, _, err := namespaceReplicationProjections(source, nil)
+	configProjection, _, err := namespaceReplicationProjections(source, dataKeysToIgnore)
 	if err != nil {
 		return nil, fmt.Errorf("project repair source config: %w", err)
+	}
+	failoverSource := source
+	if target != nil {
+		failoverSource = target
 	}
 	_, failoverProjection, err := namespaceReplicationProjections(failoverSource, nil)
 	if err != nil {
@@ -199,23 +185,14 @@ func buildNamespaceReplicationRepairTask(
 	task.ReplicationConfig.State = failoverProjection.GetReplicationConfig().GetState()
 	task.FailoverHistory = failoverProjection.GetFailoverHistory()
 
-	switch dataPolicy {
-	case namespaceRepairDataSourceExact:
-		// The source projection already owns a copy of every data key.
-	case namespaceRepairDataPreserveTargetIgnored:
-		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
-		for key := range dataKeysToIgnore {
-			if value, ok := failoverSource.GetInfo().GetData()[key]; ok {
-				if task.Info.Data == nil {
-					task.Info.Data = make(map[string]string)
-				}
-				task.Info.Data[key] = value
+	for key := range dataKeysToIgnore {
+		if value, ok := target.GetInfo().GetData()[key]; ok {
+			if task.Info.Data == nil {
+				task.Info.Data = make(map[string]string)
 			}
+			task.Info.Data[key] = value
 		}
-	case namespaceRepairDataExcludeIgnored:
-		task.Info.Data = cloneNamespaceDataExcluding(source.GetInfo().GetData(), dataKeysToIgnore)
-	default:
-		return nil, errors.New("unknown namespace repair data policy")
 	}
+
 	return task, nil
 }

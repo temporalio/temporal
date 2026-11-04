@@ -236,9 +236,7 @@ func writeNamespaceReplicationRepairPlan(
 	printJSON bool,
 ) error {
 	if printJSON {
-		encoder := json.NewEncoder(writer)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(plan)
+		return writeJSON(writer, plan)
 	}
 	_, err := fmt.Fprintf(
 		writer,
@@ -274,11 +272,11 @@ func writeNamespaceReplicationRepairPlan(
 }
 
 type namespaceReplicationRepairPlanTableRow struct {
-	Warnings      string
 	Cluster       string
 	Presence      string
 	ConfigVersion string
 	Action        string
+	Warnings      string
 }
 
 func printNamespaceReplicationRepairExecution(
@@ -289,9 +287,7 @@ func printNamespaceReplicationRepairExecution(
 		return errors.New("repair execution returned no result")
 	}
 	if c.Bool(FlagPrintJSON) {
-		encoder := json.NewEncoder(c.App.Writer)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
+		return writeJSON(c.App.Writer, result)
 	}
 	_, err := fmt.Fprintf(
 		c.App.Writer,
@@ -508,9 +504,7 @@ func printNamespaceReplicationVerification(
 	result *namespaceReplicationVerificationResult,
 ) error {
 	if c.Bool(FlagPrintJSON) {
-		encoder := json.NewEncoder(c.App.Writer)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
+		return writeJSON(c.App.Writer, result)
 	}
 	_, err := fmt.Fprintf(
 		c.App.Writer,
@@ -565,4 +559,10 @@ func optionalInt64String(value *int64) string {
 		return "-"
 	}
 	return strconv.FormatInt(*value, 10)
+}
+
+func writeJSON(writer io.Writer, value any) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
 }

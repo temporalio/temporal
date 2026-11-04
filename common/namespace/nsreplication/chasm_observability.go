@@ -12,15 +12,14 @@ import (
 )
 
 const (
-	CHASMApplyOutcomeManuallyReconciled = "manually_reconciled"
-	OperatorRepairMode                  = "operator_repair"
-	OperatorRepairTransport             = "operator_repair"
-	CHASMApplyStageReceive              = "receive"
-	CHASMApplyStageLocal                = "local"
-	CHASMApplyStagePeer                 = "peer"
-	CHASMApplyStageComponent            = "component"
-	CHASMReplicationTransport           = "chasm"
+	OperatorRepair            = "operator_repair"
+	CHASMApplyStageReceive    = "receive"
+	CHASMApplyStageLocal      = "local"
+	CHASMApplyStagePeer       = "peer"
+	CHASMApplyStageComponent  = "component"
+	CHASMReplicationTransport = "chasm"
 
+	CHASMApplyOutcomeManuallyReconciled    = "manually_reconciled"
 	CHASMApplyOutcomeApplied               = "applied"
 	CHASMApplyOutcomeCreated               = "created"
 	CHASMApplyOutcomeDuplicate             = "duplicate"

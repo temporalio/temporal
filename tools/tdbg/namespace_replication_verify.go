@@ -30,6 +30,8 @@ const namespaceReplicationClusterListPageSize = 1000
 const namespaceReplicationWarningInitialHistory = "target is missing the initial failover history entry; configuration repair will not change failover history"
 
 const (
+	namespaceReplicationRoleSource                      = "SOURCE"
+	namespaceReplicationRoleTarget                      = "TARGET"
 	namespaceReplicationStatusHealthy                   = "HEALTHY"
 	namespaceReplicationStatusRepairRequired            = "REPAIR_REQUIRED"
 	namespaceReplicationStatusBlocked                   = "BLOCKED"
@@ -242,7 +244,7 @@ func (v *namespaceReplicationVerifier) observe(
 	sourceFailoverVersion := source.GetFailoverVersion()
 	result.Clusters = append(result.Clusters, namespaceReplicationClusterVerification{
 		Cluster:             result.SourceCluster,
-		Role:                "SOURCE",
+		Role:                namespaceReplicationRoleSource,
 		Presence:            namespaceReplicationPresencePresent,
 		ConfigVersion:       &sourceConfigVersion,
 		ConfigFingerprint:   result.SourceConfigFingerprint,
@@ -354,7 +356,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 ) (result namespaceReplicationClusterVerification, namespace *adminservice.GetNamespaceResponse) {
 	result = namespaceReplicationClusterVerification{
 		Cluster:       cluster,
-		Role:          "TARGET",
+		Role:          namespaceReplicationRoleTarget,
 		Presence:      namespaceReplicationPresenceUnavailable,
 		ConfigMatch:   namespaceReplicationMatchUnknown,
 		FailoverMatch: namespaceReplicationMatchUnknown,

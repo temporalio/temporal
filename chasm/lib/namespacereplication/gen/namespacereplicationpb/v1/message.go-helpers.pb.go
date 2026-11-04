@@ -333,22 +333,3 @@ func PeerApplyOutcomeFromString(s string) (PeerApplyOutcome, error) {
 	}
 	return PeerApplyOutcome(0), fmt.Errorf("%s is not a valid PeerApplyOutcome", s)
 }
-
-var (
-	ManualReconciliationBasis_shorthandValue = map[string]int32{
-		"Unspecified":       0,
-		"VerifiedTarget":    1,
-		"RemovedMembership": 2,
-	}
-)
-
-// ManualReconciliationBasisFromString parses a ManualReconciliationBasis value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ManualReconciliationBasis
-func ManualReconciliationBasisFromString(s string) (ManualReconciliationBasis, error) {
-	if v, ok := ManualReconciliationBasis_value[s]; ok {
-		return ManualReconciliationBasis(v), nil
-	} else if v, ok := ManualReconciliationBasis_shorthandValue[s]; ok {
-		return ManualReconciliationBasis(v), nil
-	}
-	return ManualReconciliationBasis(0), fmt.Errorf("%s is not a valid ManualReconciliationBasis", s)
-}
