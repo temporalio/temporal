@@ -176,10 +176,18 @@ func (t pipelinedTx) Rollback() error {
 // the rest and rolled the transaction back, so nothing was written. An error
 // after every statement succeeded comes from the commit, which may have
 // happened.
+//
+// In simple protocol the batch is one multi-statement query, and Postgres
+// reports a commit error as the last statement's result. A trailing statement
+// that cannot fail on its own keeps that error apart from the statements'.
 func (p *pipeline) send(conn *pgx.Conn) error {
 	batch := &pgx.Batch{}
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
+	}
+	simpleProtocol := conn.Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol
+	if simpleProtocol {
+		batch.Queue("SELECT 1")
 	}
 	results := conn.SendBatch(p.ctx, batch)
 	for range p.statements {
@@ -189,6 +197,12 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 			if errors.As(err, &pgErr) {
 				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, err)
 			}
+			return err
+		}
+	}
+	if simpleProtocol {
+		if _, err := results.Exec(); err != nil {
+			_ = results.Close()
 			return err
 		}
 	}
