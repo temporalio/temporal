@@ -20,6 +20,7 @@ var HistoryModule = fx.Module(
 	fx.Provide(NewValidateSpecTaskHandler),
 	fx.Provide(NewSignalVersionWorkflowTaskHandler),
 	fx.Provide(NewMigrateToWorkflowTaskHandler),
+	fx.Provide(NewForwardTaskAddsTaskHandler),
 	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
 )

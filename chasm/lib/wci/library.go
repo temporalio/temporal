@@ -26,6 +26,7 @@ type Library struct {
 	ValidateSpecTaskHandler          *ValidateSpecTaskHandler
 	SignalVersionWorkflowTaskHandler *SignalVersionWorkflowTaskHandler
 	MigrateToWorkflowTaskHandler     *MigrateToWorkflowTaskHandler
+	ForwardTaskAddsTaskHandler       *ForwardTaskAddsTaskHandler
 }
 
 // NewNilLibrary has no handlers; non-history services and offline readers (tdbg) use it to
@@ -43,6 +44,7 @@ func NewLibrary(
 	validateSpec *ValidateSpecTaskHandler,
 	signalVersionWorkflow *SignalVersionWorkflowTaskHandler,
 	migrateToWorkflow *MigrateToWorkflowTaskHandler,
+	forwardTaskAdds *ForwardTaskAddsTaskHandler,
 ) *Library {
 	return &Library{
 		handler:                          handler,
@@ -53,6 +55,7 @@ func NewLibrary(
 		ValidateSpecTaskHandler:          validateSpec,
 		SignalVersionWorkflowTaskHandler: signalVersionWorkflow,
 		MigrateToWorkflowTaskHandler:     migrateToWorkflow,
+		ForwardTaskAddsTaskHandler:       forwardTaskAdds,
 	}
 }
 
@@ -97,6 +100,8 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask("invoke", l.InvokeTaskHandler,
 			chasm.WithTaskGroup(computeTaskGroup), chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
 		chasm.NewRegistrableSideEffectTask("migrateToWorkflow", l.MigrateToWorkflowTaskHandler,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
+		chasm.NewRegistrableSideEffectTask("forwardTaskAdds", l.ForwardTaskAddsTaskHandler,
 			chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
 	}
 }

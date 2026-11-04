@@ -300,6 +300,18 @@ func (w *WorkerControllerInstance) applyQueuedTaskAdds(ctx chasm.MutableContext,
 	return nil
 }
 
+// maxMigrationTaskAdds caps the queue as the workflow caps its own.
+const maxMigrationTaskAdds = 4000
+
+// queueMigrationTaskAdd holds a task-add for the workflow while migrating to it.
+func (w *WorkerControllerInstance) queueMigrationTaskAdd(ctx chasm.MutableContext, event *wcipb.TaskAddEvent) {
+	if len(w.MigrationTaskAdds) >= maxMigrationTaskAdds {
+		recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonQueueFull)
+		return
+	}
+	w.MigrationTaskAdds = append(w.MigrationTaskAdds, event)
+}
+
 // healPollTimer re-arms an overdue poll: a standby discards a pure timer it can't run, and a failover doesn't re-queue it.
 func (w *WorkerControllerInstance) healPollTimer(ctx chasm.MutableContext) {
 	if w.Status != wcipb.WCI_STATUS_RUNNING || w.NextPollTime == nil {

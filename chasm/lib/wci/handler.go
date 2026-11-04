@@ -351,6 +351,10 @@ func (h *handler) RecordTaskAdd(ctx context.Context, req *wcipb.RecordTaskAddReq
 	defer log.CapturePanic(h.logger, &err)
 
 	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		if w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW {
+			w.queueMigrationTaskAdd(mctx, req.GetEvent())
+			return struct{}{}, nil
+		}
 		if err := w.CheckMutable(); err != nil {
 			return struct{}{}, err
 		}
