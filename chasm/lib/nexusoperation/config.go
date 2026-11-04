@@ -312,7 +312,7 @@ type Config struct {
 	MaxIDLengthLimit                           dynamicconfig.IntPropertyFn
 	MaxReasonLength                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RetryPolicy                                func() backoff.RetryPolicy
-	TaskThrottleController                     dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+	OutboundTaskThrottleController             dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
 }
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
@@ -346,6 +346,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
 		MaxReasonLength:                    MaxReasonLength.Get(dc),
 		RetryPolicy:                        RetryPolicy.Get(dc),
-		TaskThrottleController:             dynamicconfig.TaskThrottleController.Get(dc),
+		OutboundTaskThrottleController:     dynamicconfig.OutboundTaskThrottleController.Get(dc),
 	}
 }
