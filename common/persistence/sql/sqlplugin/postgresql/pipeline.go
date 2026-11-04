@@ -185,10 +185,7 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
 	}
-	simpleProtocol := conn.Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol
-	if simpleProtocol {
-		batch.Queue("SELECT 1")
-	}
+	batch.Queue("SELECT 1")
 	results := conn.SendBatch(p.ctx, batch)
 	for range p.statements {
 		if _, err := results.Exec(); err != nil {
@@ -200,11 +197,9 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 			return err
 		}
 	}
-	if simpleProtocol {
-		if _, err := results.Exec(); err != nil {
-			_ = results.Close()
-			return err
-		}
+	if _, err := results.Exec(); err != nil {
+		_ = results.Close()
+		return err
 	}
 	return results.Close()
 }
