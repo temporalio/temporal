@@ -7457,6 +7457,12 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
 	}
+	if request.GetUpdateMask() != nil &&
+		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(request.GetUpdateMask()), "asyncHandoffOptions") &&
+		!wh.config.Activity.WorkflowAsyncHandoffEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("async handoff options are not enabled for workflow activities")
+	}
+
 	if err := priorities.Validate(request.GetActivityOptions().GetPriority()); err != nil {
 		return nil, err
 	}

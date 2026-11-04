@@ -30,6 +30,7 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -1583,6 +1584,48 @@ func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
 
 func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
 	t.Parallel()
+
+	t.Run("UpdateMasks", func(t *testing.T) {
+		t.Parallel()
+
+		for _, testCase := range []struct {
+			name    string
+			options *activitypb.AsyncHandoffOptions
+			path    string
+			invalid bool
+		}{
+			{name: "remove", path: "async_handoff_options"},
+			{name: "empty replacement", path: "asyncHandoffOptions", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "duration needs source parent", path: "asyncHandoffOptions.startToHandoffTimeout", invalid: true},
+			{name: "policy needs handoff parent", path: "asyncHandoffOptions.retryPolicy", invalid: true},
+			{name: "policy leaf needs both parents", path: "asyncHandoffOptions.retryPolicy.maximumAttempts", options: &activitypb.AsyncHandoffOptions{}, invalid: true},
+			{name: "whole nil policy gets defaults", path: "asyncHandoffOptions.retryPolicy", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "duration clear", path: "asyncHandoffOptions.handoffToCloseTimeout", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "negative duration", path: "asyncHandoffOptions.startToHandoffTimeout", options: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(-time.Second)}, invalid: true},
+			{name: "unsupported retry list leaf", path: "asyncHandoffOptions.retryPolicy.nonRetryableErrorTypes", options: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}, invalid: true},
+			{name: "unselected handoff values are ignored", path: "heartbeat_timeout", options: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(-time.Second)}},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+
+				request := &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace: "namespace", ActivityId: "activity",
+					ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: common.CloneProto(testCase.options)},
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{testCase.path}},
+				}
+				err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(request, getDefaultRetrySettings, defaultMaxIDLengthLimit)
+				if testCase.invalid {
+					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+					return
+				}
+
+				require.NoError(t, err)
+				if testCase.path == "asyncHandoffOptions.retryPolicy" {
+					require.Equal(t, time.Second, request.GetActivityOptions().GetAsyncHandoffOptions().GetRetryPolicy().GetInitialInterval().AsDuration())
+				}
+			})
+		}
+	})
 
 	t.Run("StandaloneVsEmbedded", func(t *testing.T) {
 		t.Parallel()
