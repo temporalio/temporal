@@ -112,11 +112,12 @@ type (
 	}
 
 	// PipelinedTx is a transaction that queues its statements until Commit sends
-	// them in one round trip, as one implicit transaction. Its reads return no
-	// results, so the checks a caller would make on them are statements that fail
-	// the transaction instead, and its UpdateExecutionsWithCondition fails the
-	// transaction when it updates no row. Commit returns ErrPipelineNotWritten when
-	// nothing it queued was written. Any other Commit error leaves the outcome unknown.
+	// them as one implicit transaction, in one round trip once the connection has
+	// prepared them. Its reads return no results, so the checks a caller would make
+	// on them are statements that fail the transaction instead, and its
+	// UpdateExecutionsWithCondition fails the transaction when it updates no row.
+	// Commit returns ErrPipelineNotWritten when nothing it queued was written. Any
+	// other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		HistoryExecutionConditionalUpdater
