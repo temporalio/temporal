@@ -429,6 +429,8 @@ comma := ,
 # end of the variable name is set. Each temporal_with_* tag needs one.
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
+EXCLUDED_PACKAGES_temporal_with_mysql := github.com/go-sql-driver/mysql
+EXCLUDED_PACKAGES_temporal_with_postgresql := github.com/jackc/pgx/v5 github.com/lib/pq
 EXCLUDED_PACKAGES_temporal_with_s3store := github.com/aws/aws-sdk-go-v2/service/s3
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.

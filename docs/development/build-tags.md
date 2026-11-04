@@ -31,11 +31,16 @@ make unit-test-build-tags
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included.
 
-| Tag                           | Integration                   | Dependencies it brings in |
-| ----------------------------- | ----------------------------- | ------------------------- |
-| `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
-| `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
-| `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client         |
+| Tag                          | Integration                           | Dependencies it brings in |
+| ---------------------------- | ------------------------------------- | ------------------------- |
+| `temporal_with_elasticsearch` | Elasticsearch visibility              | Elasticsearch client      |
+| `temporal_with_gstorage`      | Google Cloud Storage archival         | Google Cloud Storage SDK  |
+| `temporal_with_mysql`         | MySQL persistence and visibility      | MySQL driver              |
+| `temporal_with_postgresql`    | PostgreSQL persistence and visibility | pgx and lib/pq            |
+| `temporal_with_s3store`       | S3 archival                           | AWS SDK S3 client         |
+
+The SQL tags control plugin registration in `cmd/server`; SQLite is always included.
+Programs that embed the server register SQL plugins with their own imports.
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 
