@@ -1097,6 +1097,7 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 		mainPolicy         bool
 		legacyRetry        bool
 		wholeOptions       bool
+		emptyPolicy        bool
 		preserveUnlimited  bool
 		restoreOriginal    bool
 		originalHasHandoff bool
@@ -1105,10 +1106,12 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 	}{
 		// Upcoming handoff 4 means failed handoff 3: 20s * 3^(3-1) = 180s, below the one-hour cap.
 		{name: "governing handoff policy", preserveUnlimited: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 3 * time.Minute},
-		{name: "worker override is preserved", source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE, expectedInterval: 40 * time.Second},
-		{name: "unknown interval source is preserved", expectedInterval: 40 * time.Second},
+		{name: "whole replacement preserves worker override", wholeOptions: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE, expectedInterval: 40 * time.Second},
+		{name: "whole replacement preserves unknown interval source", wholeOptions: true, expectedInterval: 40 * time.Second},
 		{name: "legacy main provenance uses upcoming count", mainPolicy: true, legacyRetry: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 20 * time.Second},
-		{name: "defaulted whole options preserve pending delay", wholeOptions: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 40 * time.Second},
+		// Default policy at failed handoff 3: 1s * 2^(3-1) = 4s, whether omitted or explicitly empty.
+		{name: "whole replacement defaults omitted policy", wholeOptions: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 4 * time.Second},
+		{name: "whole replacement defaults empty policy", wholeOptions: true, emptyPolicy: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 4 * time.Second},
 		{name: "re-added policy uses new sequence", removeAndReadd: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 20 * time.Second},
 		{name: "policy supplied while re-adding uses new sequence", removeAndReadd: true, editAtReadd: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 20 * time.Second},
 		{name: "removed handoff policy never uses edited main policy", removeOnly: true, mainPolicy: true, source: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, expectedInterval: 40 * time.Second},
@@ -1202,7 +1205,12 @@ func TestHandoffRetryOptionsUpdate(t *testing.T) {
 			case testCase.mainPolicy:
 				update(&apiactivitypb.ActivityOptions{RetryPolicy: policy}, "retry_policy.initial_interval")
 			case testCase.wholeOptions:
-				update(&apiactivitypb.ActivityOptions{AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{}}, "async_handoff_options")
+				handoff := &apiactivitypb.AsyncHandoffOptions{}
+				if testCase.emptyPolicy {
+					handoff.RetryPolicy = &commonpb.RetryPolicy{}
+				}
+
+				update(&apiactivitypb.ActivityOptions{AsyncHandoffOptions: handoff}, "async_handoff_options")
 			default:
 				update(&apiactivitypb.ActivityOptions{AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{RetryPolicy: policy}}, "async_handoff_options.retry_policy.initial_interval")
 			}

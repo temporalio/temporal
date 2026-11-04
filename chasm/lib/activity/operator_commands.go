@@ -638,8 +638,12 @@ func (a *Activity) applyActivityOptionsUpdate(
 	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
 	incoming := req.GetActivityOptions().GetAsyncHandoffOptions()
 	_, replaceHandoff := updateFields["asyncHandoffOptions"]
+
+	// Replacing existing handoff options resets an omitted retry policy to namespace defaults,
+	// so any pending policy-derived retry backoff is recalculated. Adding or re-adding options
+	// without a supplied retry policy preserves the pending retry backoff.
 	handoffPolicyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions.retryPolicy") ||
-		replaceHandoff && incoming.GetRetryPolicy() != nil
+		(replaceHandoff && incoming != nil && (hadHandoffOptions || incoming.GetRetryPolicy() != nil))
 
 	var options *apiactivitypb.ActivityOptions
 	if req.GetRestoreOriginal() {
