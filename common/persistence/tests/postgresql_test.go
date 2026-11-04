@@ -443,8 +443,8 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLPipelineSuite() {
-	if p.pluginName != "postgres12_pgx" || p.connectAttrs["default_query_exec_mode"] != "" {
-		p.T().Skip("only pgx in its default exec mode pipelines transactions")
+	if p.pluginName != "postgres12_pgx" {
+		p.T().Skip("only pgx pipelines transactions")
 	}
 	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)

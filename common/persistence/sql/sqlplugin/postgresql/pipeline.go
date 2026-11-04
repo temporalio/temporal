@@ -178,9 +178,6 @@ func (t pipelinedTx) Rollback() error {
 // after every statement succeeded comes from the commit, which may have
 // happened.
 func (p *pipeline) send(conn *pgx.Conn) error {
-	if conn.Config().DefaultQueryExecMode != pgx.QueryExecModeCacheStatement {
-		return sqlplugin.ErrPipelineUnsupported
-	}
 	batch := &pgx.Batch{}
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
