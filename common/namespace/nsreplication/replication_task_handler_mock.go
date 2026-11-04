@@ -80,16 +80,16 @@ func (m *MockMutationTaskExecutor) EXPECT() *MockMutationTaskExecutorMockRecorde
 }
 
 // ExecuteWithOutcome mocks base method.
-func (m *MockMutationTaskExecutor) ExecuteWithOutcome(ctx context.Context, task *repication.NamespaceTaskAttributes) (ApplyOutcome, error) {
+func (m *MockMutationTaskExecutor) ExecuteWithOutcome(ctx context.Context, task *repication.NamespaceTaskAttributes, options MutationApplyOptions) (ApplyOutcome, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteWithOutcome", ctx, task)
+	ret := m.ctrl.Call(m, "ExecuteWithOutcome", ctx, task, options)
 	ret0, _ := ret[0].(ApplyOutcome)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ExecuteWithOutcome indicates an expected call of ExecuteWithOutcome.
-func (mr *MockMutationTaskExecutorMockRecorder) ExecuteWithOutcome(ctx, task any) *gomock.Call {
+func (mr *MockMutationTaskExecutorMockRecorder) ExecuteWithOutcome(ctx, task, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteWithOutcome", reflect.TypeOf((*MockMutationTaskExecutor)(nil).ExecuteWithOutcome), ctx, task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteWithOutcome", reflect.TypeOf((*MockMutationTaskExecutor)(nil).ExecuteWithOutcome), ctx, task, options)
 }
