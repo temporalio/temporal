@@ -262,6 +262,8 @@ func (c *Client) ActivateMigration(ctx context.Context, args *iface.WorkerContro
 		InstanceId:      migrationInstanceID(args),
 		MigrationToken:  token,
 		PendingTaskAdds: events,
+		// The run's queue only grows during its handover, so a position is a stable sequence number.
+		FirstTaskAddSeq: 1,
 	})
 	return migrationError(err)
 }

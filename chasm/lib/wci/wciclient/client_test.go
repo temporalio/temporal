@@ -189,6 +189,7 @@ func TestActivateAndAbortMigration(t *testing.T) {
 	require.Equal(t, "run-1", svc.activate.GetMigrationToken())
 	require.Equal(t, wciclient.GenerateWorkerControllerInstanceWorkflowID(testVersion), svc.activate.GetInstanceId())
 	require.Len(t, svc.activate.GetPendingTaskAdds(), 1, "nil task-adds are dropped")
+	require.EqualValues(t, 1, svc.activate.GetFirstTaskAddSeq(), "numbered by position in the run's queue")
 
 	require.NoError(t, c.AbortMigration(t.Context(), args, "run-1"))
 	require.Equal(t, "run-1", svc.abort.GetMigrationToken())
