@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_metric_reporters
+
 package metrics
 
 import (

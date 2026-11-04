@@ -36,9 +36,16 @@ included.
 | `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client      |
 | `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK  |
 | `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client         |
+| `temporal_with_metric_reporters` | Built-in Prometheus and StatsD reporting | Prometheus HTTP handler, Tally Prometheus reporter, StatsD client |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 
 `make build-tags-check`, which runs in CI, checks the packages each `temporal_with_*` tag compiles out
 of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` variables in the
 `Makefile`. When adding an integration, add a variable for its tag.
+
+Without built-in metric reporters, metrics default to a no-op handler. Library users can still
+supply a custom metrics handler, including the Tally and OpenTelemetry handler adapters.
+Prometheus or StatsD configuration requires `temporal_with_metric_reporters`, including a CLI
+dev server configured with `--metrics-port`. The direct reporter constructors also return an error
+when the reporters are excluded.

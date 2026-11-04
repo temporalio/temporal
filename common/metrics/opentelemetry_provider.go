@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_metric_reporters
+
 package metrics
 
 import (
@@ -17,19 +19,12 @@ import (
 
 var _ OpenTelemetryProvider = (*openTelemetryProviderImpl)(nil)
 
-type (
-	OpenTelemetryProvider interface {
-		Stop(logger log.Logger)
-		GetMeter() metric.Meter
-	}
-
-	openTelemetryProviderImpl struct {
-		meter          metric.Meter
-		config         *PrometheusConfig
-		server         *http.Server
-		statsdExporter *statsdExporter
-	}
-)
+type openTelemetryProviderImpl struct {
+	meter          metric.Meter
+	config         *PrometheusConfig
+	server         *http.Server
+	statsdExporter *statsdExporter
+}
 
 // NewOpenTelemetryProviderWithStatsd creates a new OpenTelemetry provider with a StatsD exporter.
 func NewOpenTelemetryProviderWithStatsd(
