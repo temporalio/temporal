@@ -380,13 +380,14 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
-	return d.handleRegisterVersionFailures(outcome)
+	return d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome)
 }
 
-func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType ||
-		failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return newResourceExhaustedError(failure.GetMessage())
+func (d *ClientImpl) handleRegisterVersionFailures(nsName namespace.Name, outcome *updatepb.Outcome) error {
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
+		return d.newResourceExhaustedError(nsName, "task_queues", failure.GetMessage())
+	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return d.newResourceExhaustedError(nsName, "versions", failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
@@ -395,7 +396,9 @@ func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) er
 	return nil
 }
 
-func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
+func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType, message string) *serviceerror.ResourceExhausted {
+	metrics.WorkerDeploymentLimitExceeded.With(d.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()), metrics.StringTag("limit_type", limitType))
 	return &serviceerror.ResourceExhausted{
 		Message: message,
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -906,7 +909,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return &res, nil
 	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
-	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr
 	}
 
@@ -1025,7 +1028,7 @@ func (d *ClientImpl) SetRampingVersion(
 		return &res, nil
 	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
-	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr
 	}
 
@@ -1189,7 +1192,7 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
 	if count >= int64(limit) {
-		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+		return nil, d.newResourceExhaustedError(namespaceEntry.Name(), "deployments", fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
 
 	// Start the deployment workflow
@@ -1352,7 +1355,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-			return newResourceExhaustedError(failure.GetMessage())
+			return d.newResourceExhaustedError(namespaceEntry.Name(), "versions", failure.GetMessage())
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
@@ -1519,7 +1522,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+			return nil, d.newResourceExhaustedError(namespaceEntry.Name(), "deployments", fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 		}
 	}
 

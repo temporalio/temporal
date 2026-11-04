@@ -15,15 +15,19 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
@@ -736,4 +740,81 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_FailureAll
 		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
 		Times(1)
 	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
+}
+
+func TestRegisterVersionLimitMetrics(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		failureType   string
+		wantLimitType string
+		wantError     bool
+	}{
+		{name: "task queues", failureType: errMaxTaskQueuesInVersionType, wantLimitType: "task_queues", wantError: true},
+		{name: "versions", failureType: errTooManyVersions, wantLimitType: "versions", wantError: true},
+		{name: "unrelated failure", failureType: "other", wantError: true},
+		{name: "success"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			client := &ClientImpl{metricsHandler: handler}
+			outcome := &updatepb.Outcome{}
+			if tc.failureType != "" {
+				outcome.Value = &updatepb.Outcome_Failure{Failure: &failurepb.Failure{
+					Message: "rejected",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: tc.failureType},
+					},
+				}}
+			}
+
+			// Only limit failures should increment the counter, with the matching limit type.
+			err := client.handleRegisterVersionFailures("ns-limit-test", outcome)
+			require.Equal(t, tc.wantError, err != nil)
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			if tc.wantLimitType == "" {
+				require.Empty(t, recordings)
+				return
+			}
+			var exhausted *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &exhausted)
+			require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, exhausted.Cause)
+			require.Len(t, recordings, 1)
+			require.Equal(t, int64(1), recordings[0].Value)
+			require.Equal(t, map[string]string{"namespace": "ns-limit-test", "limit_type": tc.wantLimitType}, recordings[0].Tags)
+		})
+	}
+}
+
+func TestDeploymentCountLimitMetrics(t *testing.T) {
+	controller := gomock.NewController(t)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	visibility := manager.NewMockVisibilityManager(controller)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-limit-test"}, nil, "")
+	client := &ClientImpl{
+		logger: log.NewNoopLogger(), historyClient: historyClient, visibilityManager: visibility,
+		metricsHandler:   handler,
+		maxIDLengthLimit: dynamicconfig.GetIntPropertyFn(1000),
+		maxDeployments:   dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	}
+	historyClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("deployment absent"))
+	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("deployment absent"))
+	visibility.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 2}, nil).Times(2)
+
+	// Both explicit creation and automatic creation during registration enforce the namespace limit.
+	_, err := client.CreateWorkerDeployment(context.Background(), ns, "deployment", "identity", "request")
+	var exhausted *serviceerror.ResourceExhausted
+	require.ErrorAs(t, err, &exhausted)
+	_, err = client.updateWithStartWorkerDeployment(context.Background(), ns, "deployment", nil, "identity", "request", 1)
+	require.ErrorAs(t, err, &exhausted)
+	recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+	require.Len(t, recordings, 2)
+	for _, recording := range recordings {
+		require.Equal(t, int64(1), recording.Value)
+		require.Equal(t, map[string]string{"namespace": "ns-limit-test", "limit_type": "deployments"}, recording.Tags)
+	}
 }
