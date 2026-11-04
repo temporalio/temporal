@@ -3103,7 +3103,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 		s.NoError(err)
 		s.Equal("wf", task.event.Data.WorkflowId)
 		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(taskFinishResult{consumedToken: true})
+		task.finish(nil)
 		wg.Done()
 	}()
 
@@ -3212,7 +3212,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Require().NoError(err)
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(taskFinishResult{consumedToken: true})
+	task.finish(nil)
 }
 
 type mockRoutingMatchingClient struct {

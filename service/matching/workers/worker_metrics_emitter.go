@@ -23,10 +23,9 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler                   metrics.Handler
-	config                    WorkerMetricsConfig
-	eventLogger               otellog.Logger
-	enableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	handler     metrics.Handler
+	config      WorkerMetricsConfig
+	eventLogger otellog.Logger
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -38,7 +37,6 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
-	enableWorkerMetricsEvents := e.enableWorkerMetricsEvents != nil && e.enableWorkerMetricsEvents(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
 	recordedDrivers := make(map[string]bool)
@@ -62,10 +60,9 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 			}
 		}
 
-		// Poller autoscaling metrics (if enabled)
-		if enablePollerAutoscalingMetrics {
-			e.emitPollerAutoscaling(nsID, nsName, hb)
-		}
+		// Per-task-queue heartbeat metrics. The total heartbeat count is always emitted; the poller autoscaling
+		// heartbeat count is only emitted if enabled.
+		e.emitPollerHeartbeat(nsID, nsName, hb, enablePollerAutoscalingMetrics)
 
 		// Storage driver metrics (if external payloads enabled)
 		if enableStorageDriverMetrics {
@@ -79,36 +76,40 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 				}
 			}
 		}
-
-		if enableWorkerMetricsEvents {
-			e.emitWorkerMetricsEvent(nsName, hb)
-		}
 	}
 }
 
-func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+// emitPollerHeartbeat records the total heartbeat count for each task type the worker is polling. If
+// enableAutoscalingMetrics is set, it additionally records the autoscaling heartbeat count for each poller that has
+// autoscaling enabled, so the autoscaling count is a subset of the total.
+func (e *workerMetricsEmitter) emitPollerHeartbeat(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	hb *workerpb.WorkerHeartbeat,
+	enableAutoscalingMetrics bool,
+) {
 	family, err := tqid.NewTaskQueueFamily(nsID.String(), hb.GetTaskQueue())
 	if err != nil {
 		return
 	}
 
-	recordAutoscaling := func(taskType enumspb.TaskQueueType) {
+	record := func(taskType enumspb.TaskQueueType, pollerInfo *workerpb.WorkerPollerInfo) {
+		if pollerInfo == nil {
+			return // worker is not polling this task type
+		}
 		tq := family.TaskQueue(taskType)
 		breakdownByTQ := e.config.BreakdownMetricsByTaskQueue != nil &&
 			e.config.BreakdownMetricsByTaskQueue(nsName.String(), hb.GetTaskQueue(), taskType)
 		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, breakdownByTQ)
-		metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		metrics.WorkerHeartbeatCount.With(handler).Record(1)
+		if enableAutoscalingMetrics && pollerInfo.GetIsAutoscaling() {
+			metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+		}
 	}
 
-	if hb.WorkflowPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	}
-	if hb.ActivityPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	}
-	if hb.NexusPollerInfo.GetIsAutoscaling() {
-		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
-	}
+	record(enumspb.TASK_QUEUE_TYPE_WORKFLOW, hb.WorkflowPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_ACTIVITY, hb.ActivityPollerInfo)
+	record(enumspb.TASK_QUEUE_TYPE_NEXUS, hb.NexusPollerInfo)
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
