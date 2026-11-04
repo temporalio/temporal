@@ -3273,8 +3273,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 
 	for _, tc := range testCases {
 		s.Run(tc.input, func(s *NexusWorkflowTestSuite) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-			defer cancel()
+			ctx := s.Context()
 			env, callerWf := buildNexusEnvFn(ctx, s)
 			run, err := env.SdkClient().ExecuteWorkflow(
 				ctx,
