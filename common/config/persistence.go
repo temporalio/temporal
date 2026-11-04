@@ -291,7 +291,10 @@ func (c *SQL) validate() error {
 	if c.PasswordCommand != nil && c.PasswordCommand.Command == "" {
 		return errors.New("passwordCommand.command must not be empty")
 	}
-	return nil
+	if err := validateMySQL(c.PluginName); err != nil {
+		return err
+	}
+	return validatePostgreSQL(c.PluginName)
 }
 
 const (

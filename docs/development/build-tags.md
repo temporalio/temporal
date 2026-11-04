@@ -39,8 +39,9 @@ included.
 | `temporal_with_postgresql`    | PostgreSQL persistence and visibility | pgx and lib/pq            |
 | `temporal_with_s3store`       | S3 archival                           | AWS SDK S3 client         |
 
-The SQL tags control plugin registration in `cmd/server`; SQLite is always included.
-Programs that embed the server register SQL plugins with their own imports.
+The SQL tags control config validation and plugin registration in `cmd/server`. SQLite is always included.
+Programs that embed the server register SQL plugins with their own imports and also need the matching
+`temporal_with_*` tag when using `temporal_minimal`.
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 

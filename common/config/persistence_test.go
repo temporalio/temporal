@@ -9,6 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDataStoreValidateSQL(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"sqlite", "custom"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ds := &DataStore{SQL: &SQL{PluginName: name}}
+			require.NoError(t, ds.Validate())
+		})
+	}
+}
+
 func TestSQLValidate_MutualExclusivity(t *testing.T) {
 	cfg := &SQL{
 		Password: "static",
