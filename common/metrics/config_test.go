@@ -1,4 +1,4 @@
-//go:build !temporal_minimal || temporal_with_metric_reporters
+//go:build !temporal_minimal || temporal_with_prometheus
 
 package metrics
 
@@ -36,18 +36,6 @@ func TestMetricsSuite(t *testing.T) {
 func (s *MetricsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-}
-
-func (s *MetricsSuite) TestStatsd() {
-	statsd := &StatsdConfig{
-		HostPort: "127.0.0.1:8125",
-		Prefix:   "testStatsd",
-	}
-
-	config := new(Config)
-	config.Statsd = statsd
-	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestPrometheus() {

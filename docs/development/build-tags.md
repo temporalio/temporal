@@ -31,12 +31,13 @@ make unit-test-build-tags
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included.
 
-| Tag                              | Integration                              | Dependencies it brings in                                         |
-| -------------------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
-| `temporal_with_elasticsearch`    | Elasticsearch visibility                 | Elasticsearch client                                              |
-| `temporal_with_gstorage`         | Google Cloud Storage archival            | Google Cloud Storage SDK                                          |
-| `temporal_with_s3store`          | S3 archival                              | AWS SDK S3 client                                                 |
-| `temporal_with_metric_reporters` | Built-in Prometheus and StatsD reporting | Prometheus HTTP handler, Tally Prometheus reporter, StatsD client |
+| Tag                           | Integration                   | Dependencies it brings in                          |
+| ----------------------------- | ----------------------------- | -------------------------------------------------- |
+| `temporal_with_elasticsearch` | Elasticsearch visibility      | Elasticsearch client                               |
+| `temporal_with_gstorage`      | Google Cloud Storage archival | Google Cloud Storage SDK                           |
+| `temporal_with_prometheus`    | Built-in Prometheus reporting | Prometheus HTTP handler, Tally Prometheus reporter |
+| `temporal_with_s3store`       | S3 archival                   | AWS SDK S3 client                                  |
+| `temporal_with_statsd`        | Built-in StatsD reporting     | StatsD client                                      |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 
@@ -46,6 +47,7 @@ of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` var
 
 Without built-in metric reporters, metrics default to a no-op handler. Library users can still
 supply a custom metrics handler, including the Tally and OpenTelemetry handler adapters.
-Prometheus or StatsD configuration requires `temporal_with_metric_reporters`, including a CLI
-dev server configured with `--metrics-port`. The direct reporter constructors also return an error
-when the reporters are excluded.
+Prometheus configuration requires `temporal_with_prometheus`, including a CLI dev server configured
+with `--metrics-port`. StatsD configuration requires `temporal_with_statsd`. Each tag enables both
+the Tally and OpenTelemetry implementations of its reporter. The direct reporter constructors also
+return an error when their reporter is excluded.

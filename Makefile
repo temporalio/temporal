@@ -430,7 +430,8 @@ comma := ,
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage
 EXCLUDED_PACKAGES_temporal_with_elasticsearch := github.com/olivere/elastic/v7
 EXCLUDED_PACKAGES_temporal_with_s3store := github.com/aws/aws-sdk-go-v2/service/s3
-EXCLUDED_PACKAGES_temporal_with_metric_reporters := github.com/prometheus/client_golang/prometheus/promhttp github.com/cactus/go-statsd-client/v5/statsd github.com/uber-go/tally/v4/prometheus
+EXCLUDED_PACKAGES_temporal_with_prometheus := github.com/prometheus/client_golang/prometheus/promhttp github.com/uber-go/tally/v4/prometheus
+EXCLUDED_PACKAGES_temporal_with_statsd := github.com/cactus/go-statsd-client/v5/statsd
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)

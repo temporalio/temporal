@@ -192,3 +192,13 @@ func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
 	}
 	return tagsToFilter
 }
+
+func (c *Config) Validate() error {
+	if c == nil {
+		return nil
+	}
+	if err := validateStatsdConfig(c.Statsd); err != nil {
+		return err
+	}
+	return validatePrometheusConfig(c.Prometheus)
+}
