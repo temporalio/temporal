@@ -135,8 +135,7 @@ func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateAc
 //   - the activity is waiting to retry, i.e. in SCHEDULED or PAUSED state (a running attempt has no
 //     pending backoff to recalculate);
 //   - a retry is actually pending (CurrentRetryInterval is set);
-//   - the update touches the retry policy: either RestoreOriginal (which replaces the whole policy),
-//     or the update mask selects the governing activity/handoff retry policy or a subfield;
+//   - the update explicitly changes the governing retry policy, or restores the original options;
 //   - the pending interval is still policy-derived (CurrentRetryIntervalSource is RETRY_POLICY).
 //     A worker-provided NextRetryDelay override is preserved regardless of its value. An
 //     UNSPECIFIED source (attempt state persisted before this field existed) is treated the same
@@ -146,6 +145,7 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	attempt *activitypb.ActivityAttemptState,
 	restoreOriginal bool,
 	updateFields map[string]struct{},
+	handoffPolicyUpdated bool,
 ) bool {
 	status := a.GetStatus()
 	if status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
@@ -158,12 +158,12 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	}
 
 	if !restoreOriginal {
-		policyPath := "retryPolicy"
+		policyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "retryPolicy")
 		if attempt.GetPendingRetryType() == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
-			policyPath = "asyncHandoffOptions.retryPolicy"
+			policyUpdated = handoffPolicyUpdated
 		}
 
-		if !util.FieldMaskHasPathOrSubPath(updateFields, policyPath) {
+		if !policyUpdated {
 			return false
 		}
 	}
@@ -640,9 +640,6 @@ func (a *Activity) applyActivityOptionsUpdate(
 	_, replaceHandoff := updateFields["asyncHandoffOptions"]
 	handoffPolicyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions.retryPolicy") ||
 		replaceHandoff && incoming.GetRetryPolicy() != nil
-	if handoffPolicyUpdated {
-		updateFields["asyncHandoffOptions.retryPolicy"] = struct{}{}
-	}
 
 	var options *apiactivitypb.ActivityOptions
 	if req.GetRestoreOriginal() {
@@ -661,7 +658,7 @@ func (a *Activity) applyActivityOptionsUpdate(
 		return serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
 	}
 
-	if err := a.applyRetryAndHandoffStateUpdate(ctx, options, req.GetRestoreOriginal(), updateFields); err != nil {
+	if err := a.applyRetryAndHandoffStateUpdate(ctx, options, req.GetRestoreOriginal(), updateFields, handoffPolicyUpdated); err != nil {
 		return err
 	}
 
@@ -676,6 +673,7 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 	options *apiactivitypb.ActivityOptions,
 	restoreOriginal bool,
 	updateFields map[string]struct{},
+	handoffPolicyUpdated bool,
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
 	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
@@ -690,7 +688,7 @@ func (a *Activity) applyRetryAndHandoffStateUpdate(
 	// Recalculate a pending policy-derived delay only when its governing policy was updated.
 	pendingHandoffPolicyAbsent := pendingType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF && !willHaveHandoffOptions
 	var updatedRetryInterval *durationpb.Duration
-	if !pendingHandoffPolicyAbsent && a.shouldRecalculateCurrentRetryInterval(attempt, restoreOriginal, updateFields) {
+	if !pendingHandoffPolicyAbsent && a.shouldRecalculateCurrentRetryInterval(attempt, restoreOriginal, updateFields, handoffPolicyUpdated) {
 		policy, count := options.GetRetryPolicy(), attempt.GetCount()
 		if pendingType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
 			policy, count = options.GetAsyncHandoffOptions().GetRetryPolicy(), handoffAttempt

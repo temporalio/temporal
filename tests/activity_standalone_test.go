@@ -15325,6 +15325,9 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 
+		// The flag cannot enable updates until the workflow activity path persists handoff options.
+		env.OverrideDynamicConfig(activity.WorkflowAsyncHandoffEnabled, true)
+
 		// Neither workflow update API may opt an activity into the standalone-only feature.
 		for _, path := range []string{"async_handoff_options", "asyncHandoffOptions.heartbeatTimeout"} {
 			_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{

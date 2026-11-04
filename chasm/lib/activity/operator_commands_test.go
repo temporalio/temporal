@@ -648,6 +648,7 @@ func TestShouldRecalculateCurrentRetryInterval(t *testing.T) {
 				attempt,
 				tc.restoreOriginal,
 				tc.updateFields,
+				false,
 			)
 
 			require.Equal(t, tc.expectRecalculate, got)

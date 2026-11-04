@@ -573,8 +573,9 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 
 	updatesWorkflowHandoffOptions := req.GetWorkflowId() != "" && req.GetUpdateMask() != nil &&
 		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "asyncHandoffOptions")
-	if updatesWorkflowHandoffOptions && !h.config.WorkflowAsyncHandoffEnabled(req.GetNamespace()) {
-		return nil, serviceerror.NewInvalidArgument("async handoff options are not enabled for workflow activities")
+	// Workflow activity updates do not yet persist handoff options, regardless of the feature flag.
+	if updatesWorkflowHandoffOptions {
+		return nil, serviceerror.NewInvalidArgument("async handoff options are not supported for workflow activities")
 	}
 
 	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
