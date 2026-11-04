@@ -192,7 +192,7 @@ func (s *pipelineSuite) TestDuplicateInsert() {
 	s.True(s.store.IsDupEntryError(pgErr))
 	s.False(written)
 
-	// The rejected batch left its connection idle in the pool.
+	// A rejected batch does not leave a pooled connection mid-batch.
 	written, err = s.commit(shardID, func(tx sqlplugin.PipelinedTx) {
 		_, err := tx.InsertIntoTransferTasks(newExecutionContext(), task)
 		s.NoError(err)
