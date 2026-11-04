@@ -43,7 +43,7 @@ func (h *handler) GetTaskQueueUserData(
 		chasm.NewComponentRef[*TaskQueue](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}),
 		func(taskQueue *TaskQueue, chasmContext chasm.Context, _ *taskqueuepb.GetTaskQueueUserDataRequest) (*taskqueuepb.GetTaskQueueUserDataResponse, error) {
 			if taskQueue.Closed {
-				return nil, serviceerror.NewNotFound("task queue user data is terminated")
+				return nil, serviceerror.NewNotFound("task queue manager is terminated")
 			}
 			userData, ok := taskQueue.UserData.TryGet(chasmContext)
 			if !ok {
