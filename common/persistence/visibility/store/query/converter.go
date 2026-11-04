@@ -665,7 +665,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 				NotSupportedErrMessage,
 			)
 		}
-		return c.parseDatetimeValueExpr(e, saName, saFieldName, saType)
+		return c.parseDatetimeValueExpr(e)
 	case *sqlparser.BinaryExpr:
 		// Allow NOW() +/- 'duration', e.g. StartTime > NOW() - '5h'.
 		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
@@ -674,7 +674,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 				NotSupportedErrMessage,
 			)
 		}
-		return c.parseDatetimeValueExpr(e, saName, saFieldName, saType)
+		return c.parseDatetimeValueExpr(e)
 	case *sqlparser.ColName:
 		return nil, NewConverterError(
 			"%s: column name on the right side of comparison expression (did you forget to quote %q?)",
@@ -691,23 +691,23 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 }
 
 // parseDatetimeValueExpr evaluates a NOW() or NOW() +/- 'duration' expression relative to the
-// query time, and parses the result as a Datetime value.
-func (c *QueryConverter[ExprT]) parseDatetimeValueExpr(
-	expr sqlparser.Expr,
-	saName string,
-	saFieldName string,
-	saType enumspb.IndexedValueType,
-) (any, error) {
+// query time, and formats the result as a Datetime value.
+func (c *QueryConverter[ExprT]) parseDatetimeValueExpr(expr sqlparser.Expr) (any, error) {
 	t, err := evalDatetimeExpr(expr, c.getQueryTime())
 	if err != nil {
 		return nil, err
 	}
-	return c.parseSQLVal(sqlparser.NewStrVal([]byte(t.Format(time.RFC3339Nano))), saName, saFieldName, saType)
+	return t.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
 }
 
 // evalDatetimeExpr evaluates NOW() to queryTime, and NOW() +/- 'duration' to queryTime shifted
 // by the duration. Any other expression is an error.
 func evalDatetimeExpr(expr sqlparser.Expr, queryTime time.Time) (time.Time, error) {
+	unsupportedErr := NewConverterError(
+		"%s: expression %q, only NOW() and NOW() +/- 'duration' are supported",
+		NotSupportedErrMessage,
+		sqlparser.String(expr),
+	)
 	switch e := expr.(type) {
 	case *sqlparser.FuncExpr:
 		return resolveNowFunc(e, queryTime)
@@ -715,7 +715,7 @@ func evalDatetimeExpr(expr sqlparser.Expr, queryTime time.Time) (time.Time, erro
 		// Only a single offset applied directly to NOW() is supported.
 		funcExpr, ok := e.Left.(*sqlparser.FuncExpr)
 		if !ok {
-			return time.Time{}, unsupportedDatetimeExprError(expr)
+			return time.Time{}, unsupportedErr
 		}
 		now, err := resolveNowFunc(funcExpr, queryTime)
 		if err != nil {
@@ -751,16 +751,8 @@ func evalDatetimeExpr(expr sqlparser.Expr, queryTime time.Time) (time.Time, erro
 		}
 		return now.Add(duration), nil
 	default:
-		return time.Time{}, unsupportedDatetimeExprError(expr)
+		return time.Time{}, unsupportedErr
 	}
-}
-
-func unsupportedDatetimeExprError(expr sqlparser.Expr) error {
-	return NewConverterError(
-		"%s: expression %q, only NOW() and NOW() +/- 'duration' are supported",
-		NotSupportedErrMessage,
-		sqlparser.String(expr),
-	)
 }
 
 // resolveNowFunc returns queryTime if funcExpr is NOW(), and an error for any other function.

@@ -4,6 +4,7 @@ package querytest
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
@@ -19,6 +20,9 @@ const (
 	SQLite
 	Elasticsearch
 )
+
+// queryTime is the reference time used to resolve NOW() in every test case.
+var queryTime = time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
 
 type queryConverterTestCase struct {
 	name string
@@ -493,6 +497,63 @@ var queryConverterTestCases = []queryConverterTestCase{
 		postgres: "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05'",
 		sqlite:   "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05+00:00'",
 		es:       `{"bool":{"filter":{"range":{"Datetime01":{"lte":"2020-01-02T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW()",
+		in:       "StartTime > NOW()",
+		mysql:    "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gt":"2026-03-31T17:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() minus duration",
+		in:       "StartTime < NOW() - '5m'",
+		mysql:    "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"lt":"2026-03-31T16:55:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() plus compound duration",
+		in:       "CloseTime <= now() + '1h30m'",
+		mysql:    "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00'",
+		postgres: "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00'",
+		sqlite:   "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"CloseTime":{"lte":"2026-03-31T18:30:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() minus integer nanoseconds",
+		in:       "StartTime >= NOW() - 18000000000000",
+		mysql:    "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gte":"2026-03-31T12:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() custom search attribute",
+		in:       "AliasForDatetime01 = NOW() - '1d'",
+		mysql:    "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"term":{"Datetime01":"2026-03-30T17:00:00Z"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime between NOW() offsets",
+		in:       "CloseTime BETWEEN NOW() - '7d' AND NOW()",
+		mysql:    "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00' and '2026-03-31 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00' and '2026-03-31 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00+00:00' and '2026-03-31 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"CloseTime":{"gte":"2026-03-24T17:00:00Z","lte":"2026-03-31T17:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() combined with other conditions",
+		in:       "ExecutionStatus = 'Running' AND StartTime > NOW() - '24h'",
+		mysql:    "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00')",
+		postgres: "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00')",
+		sqlite:   "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00+00:00')",
+		es: `{"bool":{"filter":[{"term":{"ExecutionStatus":"Running"}},{"range":{"StartTime":{"gt":"2026-03-30T17:00:00Z"}}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Datetime invalid value",
@@ -1427,7 +1488,7 @@ func Run[T any](
 			expectedOut, expectedErr := tc.expected(dialect)
 			// The query converter is stateful (e.g. it tracks if the query filtered by
 			// namespace division), thus each test case requires a new instance.
-			queryParams, err := newQueryConverter().Convert(tc.in)
+			queryParams, err := newQueryConverter().WithQueryTime(queryTime).Convert(tc.in)
 			if expectedErr != "" {
 				r.Error(err)
 				r.EqualError(err, expectedErr)
