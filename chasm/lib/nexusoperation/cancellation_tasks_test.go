@@ -70,6 +70,7 @@ func newCancellationTaskTestEnv(
 	handler := &cancellationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
+				TaskThrottleController:    dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
 				StateAccessBuffer:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
 				MinOutboundRequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				UseNewFailureWireFormat:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
@@ -171,6 +172,12 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	failureSource := failureSourceFromContext(callCtx)
 
 	h.recordCallOutcome(endpoint, cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)
+
+	if h.config.TaskThrottleController().Enabled {
+		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
 
 	saveErr := h.saveCancellationResult(ctx, cancelRef, callErr)
 

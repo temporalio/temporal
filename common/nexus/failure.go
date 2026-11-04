@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -11,6 +12,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -22,6 +24,7 @@ import (
 )
 
 const (
+	resourceExhaustedFailureTypeString = "temporal.api.errordetails.v1.ResourceExhaustedFailure"
 	// FailureSourceHeaderName is the header used to indicate from where the Nexus failure originated.
 	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
 	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
@@ -416,10 +419,24 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "resource exhausted"
 		}
-		return &nexus.HandlerError{
+		handlerErr := &nexus.HandlerError{
 			Type:    nexus.HandlerErrorTypeResourceExhausted,
 			Message: errMessage,
 		}
+		if resourceErr, ok := serviceerror.FromStatus(st).(*serviceerror.ResourceExhausted); ok {
+			details, err := protojson.Marshal(&errordetailspb.ResourceExhaustedFailure{
+				Cause: resourceErr.Cause, Scope: resourceErr.Scope,
+			})
+			if err != nil {
+				return err
+			}
+			handlerErr.Cause = &nexus.FailureError{Failure: nexus.Failure{
+				Message:  errMessage,
+				Metadata: map[string]string{"type": resourceExhaustedFailureTypeString},
+				Details:  details,
+			}}
+		}
+		return handlerErr
 	case codes.Unimplemented:
 		if !exposeDetails {
 			errMessage = "not implemented"
@@ -447,6 +464,28 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err
+}
+
+func CallerRPSRetry(err error) error {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
+		return nil
+	}
+	handlerErr, ok := errors.AsType[*nexus.HandlerError](err)
+	if !ok || handlerErr.Type != nexus.HandlerErrorTypeResourceExhausted || !handlerErr.Retryable() {
+		return nil
+	}
+	cause, ok := errors.AsType[*nexus.FailureError](handlerErr.Cause)
+	if !ok || cause.Failure.Metadata["type"] != resourceExhaustedFailureTypeString {
+		return nil
+	}
+	var details errordetailspb.ResourceExhaustedFailure
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(cause.Failure.Details, &details); err != nil {
+		return nil
+	}
+	if details.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT || details.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
+		return nil
+	}
+	return &serviceerror.ResourceExhausted{Cause: details.Cause, Scope: details.Scope, Message: cause.Failure.Message}
 }
 
 func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {

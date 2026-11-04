@@ -925,11 +925,14 @@ func (e *executableImpl) reportThrottle(
 	if err != nil {
 		return
 	}
-	e.throttleKey = NewThrottleKey(cause, nsName)
+	key := NewThrottleKey(cause, nsName)
+	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT {
+		key.Destination = e.GetDestination()
+	}
+	e.throttleKey = key
 
 	// A metered rejection belongs to the class that issued the release, whichever budget
 	// refused it; an unmetered one is recorded against the new class but must not move it.
-	key := e.throttleKey
 	if metered {
 		key = issuer
 	}
@@ -948,6 +951,12 @@ func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
 func (e *executableImpl) backoffDuration(
 	err error,
 ) time.Duration {
+	// Preserve retry backoff at the key cap, where admission fails open.
+	if e.throttleState.Enabled() &&
+		e.throttleKey.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT &&
+		e.throttleState.getOrCreate(e.throttleKey) != nil {
+		return 0
+	}
 	// elapsedTime, the first parameter in ComputeNextDelay is not relevant here
 	// since reschedule policy has no expiration interval.
 

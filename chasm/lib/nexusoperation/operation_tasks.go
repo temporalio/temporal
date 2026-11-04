@@ -192,6 +192,12 @@ func (h *operationInvocationTaskHandler) Execute(
 
 	h.recordCallOutcome(endpoint, startCallOutcomeTag(callCtx, response, callErr), callErr, callDuration, failureSource, traceCtx)
 
+	if h.config.TaskThrottleController().Enabled {
+		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
+			return retryErr
+		}
+	}
+
 	result, err := newInvocationResult(response, callErr)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation result: %w", err)

@@ -26,6 +26,7 @@ type (
 	ThrottleKey struct {
 		Cause         enumspb.ResourceExhaustedCause
 		NamespaceName namespace.Name
+		Destination   string
 	}
 
 	ThrottleState struct {
@@ -73,7 +74,8 @@ func IsControllerInput(
 		return false
 	}
 	return cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT ||
-		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT ||
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT
 }
 
 func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespace.Name) ThrottleKey {
@@ -81,10 +83,14 @@ func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespac
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
-	return []metrics.Tag{
+	tags := []metrics.Tag{
 		metrics.ResourceExhaustedCauseTag(k.Cause),
 		metrics.NamespaceTag(k.NamespaceName.String()),
 	}
+	if k.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT {
+		tags = append(tags, metrics.DestinationTag(k.Destination))
+	}
+	return tags
 }
 
 // cappedTags omits the unbounded namespace dimension after the key cap is reached.

@@ -93,6 +93,7 @@ func overrideThrottleSetting(
 }
 
 func TestIsControllerInput(t *testing.T) {
+	t.Parallel()
 	ns := enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 	system := enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
 	unspecified := enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED
@@ -105,12 +106,14 @@ func TestIsControllerInput(t *testing.T) {
 	}{
 		{name: "aps at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: ns, want: true},
 		{name: "persistence at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: ns, want: true},
+		{name: "caller RPS at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, scope: ns, want: true},
 
 		{name: "aps at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: system},
 		{name: "persistence at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: system},
 		{name: "unspecified scope is not namespace", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: unspecified},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.want, IsControllerInput(tc.cause, tc.scope))
 		})
 	}
