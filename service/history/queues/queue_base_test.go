@@ -521,12 +521,12 @@ func (s *queueBaseSuite) TestNewQueueBase_RecordsPredicateResolutionLossOnRead()
 
 			recordings := capture.Snapshot()[metrics.QueuePredicateResolutionLoss.Name()]
 			if tc.wantLosses == 0 {
-				require.Empty(s.T(), recordings)
+				s.Require().Empty(recordings)
 				return
 			}
-			require.Len(s.T(), recordings, 1)
-			require.Equal(s.T(), tc.wantLosses, recordings[0].Value)
-			require.Equal(s.T(), string(predicateResolutionLossUnresolvedNamespaceIndex), recordings[0].Tags["reason"])
+			s.Require().Len(recordings, 1)
+			s.Require().Equal(tc.wantLosses, recordings[0].Value)
+			s.Require().Equal(string(predicateResolutionLossUnresolvedNamespaceIndex), recordings[0].Tags["reason"])
 		})
 	}
 }
@@ -582,7 +582,7 @@ func (s *queueBaseSuite) TestNewQueueBase_DeletionWatermarkIsLowestRangeAcrossPr
 
 			base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
 
-			require.Equal(s.T(), tasks.NewImmediateKey(1000), base.exclusiveDeletionHighWatermark)
+			s.Require().Equal(tasks.NewImmediateKey(1000), base.exclusiveDeletionHighWatermark)
 		})
 	}
 }

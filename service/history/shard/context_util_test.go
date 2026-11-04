@@ -45,7 +45,7 @@ func TestGetMinTaskKey(t *testing.T) {
 		return &persistencespb.QueueSliceScope{Range: rangeFrom(minTaskID, maxTaskID)}
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name  string
 		state *persistencespb.QueueState
 		want  tasks.Key
@@ -125,7 +125,7 @@ func TestGetMinTaskKey(t *testing.T) {
 			want: tasks.NewImmediateKey(500),
 		},
 	}
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := getMinTaskKey(tc.state)
 
