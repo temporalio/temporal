@@ -261,8 +261,10 @@ type WorkerControllerInstanceState struct {
 	AppliedTaskAddSeq int64 `protobuf:"varint,16,opt,name=applied_task_add_seq,json=appliedTaskAddSeq,proto3" json:"applied_task_add_seq,omitempty"`
 	// Task-adds received while MIGRATING_TO_WORKFLOW, for the workflow; replayed here on abort.
 	MigrationTaskAdds []*TaskAddEvent `protobuf:"bytes,17,rep,name=migration_task_adds,json=migrationTaskAdds,proto3" json:"migration_task_adds,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Region of the history that last changed this instance; resolves region-scoped groups.
+	HostRegion    string `protobuf:"bytes,18,opt,name=host_region,json=hostRegion,proto3" json:"host_region,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerControllerInstanceState) Reset() {
@@ -412,6 +414,13 @@ func (x *WorkerControllerInstanceState) GetMigrationTaskAdds() []*TaskAddEvent {
 		return x.MigrationTaskAdds
 	}
 	return nil
+}
+
+func (x *WorkerControllerInstanceState) GetHostRegion() string {
+	if x != nil {
+		return x.HostRegion
+	}
+	return ""
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -1151,7 +1160,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_message_proto protoreflect.FileD
 
 const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xa7\n" +
+	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xc8\n" +
 	"\n" +
 	"\x1dWorkerControllerInstanceState\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
@@ -1172,7 +1181,9 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\x10last_update_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x12I\n" +
 	"\x13in_flight_poll_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x10inFlightPollTime\x12/\n" +
 	"\x14applied_task_add_seq\x18\x10 \x01(\x03R\x11appliedTaskAddSeq\x12d\n" +
-	"\x13migration_task_adds\x18\x11 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x11migrationTaskAdds\x1a~\n" +
+	"\x13migration_task_adds\x18\x11 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x11migrationTaskAdds\x12\x1f\n" +
+	"\vhost_region\x18\x12 \x01(\tR\n" +
+	"hostRegion\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
 	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xa2\x05\n" +

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
+	wciconfig "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -162,7 +163,14 @@ type e2e struct {
 
 func newE2E(t *testing.T, script fakeAlgo) *e2e {
 	t.Helper()
+	return newE2EInRegion(t, script, "")
+}
+
+// newE2EInRegion wires the handlers with the history's host region.
+func newE2EInRegion(t *testing.T, script fakeAlgo, region string) *e2e {
+	t.Helper()
 	*fake = script
+	staticConfig := &wciconfig.StaticConfig{RegionID: region}
 
 	registry := namespace.NewMockRegistry(gomock.NewController(t))
 	registry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns"), nil).AnyTimes()
@@ -174,16 +182,17 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 		FrontendClient:    frontend,
 		NamespaceRegistry: registry,
 		Logger:            log.NewNoopLogger(),
+		StaticConfig:      staticConfig,
 	})
 	metricsHandler := metricstest.NewCaptureHandler()
-	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger(), MetricsHandler: metricsHandler}
+	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger(), MetricsHandler: metricsHandler, StaticConfig: staticConfig}
 	history := &fakeHistory{}
 	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger()}
 	lib := NewLibrary(h,
 		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
 		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts),
-		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler}),
+		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler, StaticConfig: staticConfig}),
 		NewForwardTaskAddsTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history}))
 
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
@@ -509,6 +518,68 @@ func TestE2E_SupersededFetchDoesNotApply(t *testing.T) {
 		require.Equal(t, second.AsTime(), w.InFlightPollTime.AsTime(), "the stale write-back left the newer poll in flight")
 		require.Equal(t, e.clock.Now().Add(maxPollInterval), w.NextPollTime.AsTime())
 	})
+}
+
+// moveTo points every handler at a new host region, as after a failover.
+func (e *e2e) moveTo(region string) {
+	e.handler.hostRegion = region
+	e.lib.FetchSnapshotTaskHandler.hostRegion = region
+	e.lib.DeferredDecisionTaskHandler.hostRegion = region
+	e.lib.MigrateToWorkflowTaskHandler.hostRegion = region
+}
+
+func TestE2E_RecordsHostRegion(t *testing.T) {
+	const east, west = "aws-us-east-1", "aws-us-west-2"
+	tests := []struct {
+		name string
+		call func(*testing.T, *e2e)
+	}{
+		{name: "update", call: func(t *testing.T, e *e2e) {
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+		}},
+		{name: "task_add", call: func(t *testing.T, e *e2e) { require.NoError(t, e.recordTaskAdd()) }},
+		{name: "poll", call: func(t *testing.T, e *e2e) { require.False(t, e.fetchSnapshot(t, e.firePollTimer(t))) }},
+		{name: "deferred_decision", call: func(t *testing.T, e *e2e) {
+			w, _ := e.live(t)
+			task := &wcipb.DeferredDecisionTask{ScalingGroupId: "g", TaskAdd: &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}}
+			dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.DeferredDecisionTask](e.lib.DeferredDecisionTaskHandler), chasm.TaskAttributes{}, task)
+			require.NoError(t, err)
+			require.False(t, dropped)
+		}},
+		{name: "move_back_aborted", call: func(t *testing.T, e *e2e) {
+			require.NoError(t, e.migrateToWorkflow())
+			e.history.rejectActivation = &failurepb.Failure{Message: "token mismatch"}
+			e.runMigrateTask(t)
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2EInRegion(t, fakeAlgo{}, east)
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+			w, _ := e.live(t)
+			require.Equal(t, east, w.HostRegion, "recorded at create")
+
+			e.moveTo(west)
+			tc.call(t, e)
+			w, _ = e.live(t)
+			require.Equal(t, west, w.HostRegion)
+		})
+	}
+}
+
+func TestE2E_ActivationRecordsHostRegion(t *testing.T) {
+	e := newE2EInRegion(t, fakeAlgo{}, "aws-us-west-2")
+	require.NoError(t, e.prepare(testToken, time.Minute))
+	require.NoError(t, e.activate(testToken, 0))
+	w, _ := e.live(t)
+	require.Equal(t, "aws-us-west-2", w.HostRegion)
+
+	e.moveTo("aws-us-east-1")
+	require.NoError(t, e.activateSeq(testToken, 1, 1), "a forward after activation")
+	w, _ = e.live(t)
+	require.Equal(t, "aws-us-east-1", w.HostRegion)
 }
 
 func TestE2E_DescribeReturnsTaskQueueObservations(t *testing.T) {

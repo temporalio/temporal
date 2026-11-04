@@ -5,6 +5,7 @@ import (
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciconfig "go.temporal.io/auto-scaled-workers/wci/client"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
 	"go.temporal.io/server/chasm"
@@ -22,6 +23,7 @@ type SnapshotTaskHandlerOptions struct {
 	FrontendClient workflowservice.WorkflowServiceClient
 	Logger         log.Logger
 	MetricsHandler metrics.Handler
+	StaticConfig   *wciconfig.StaticConfig `optional:"true"`
 }
 
 type versionRef struct {
@@ -54,10 +56,11 @@ type FetchSnapshotTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*wcipb.FetchSnapshotTask]
 	frontendClient workflowservice.WorkflowServiceClient
 	logger         log.Logger
+	hostRegion     string
 }
 
 func NewFetchSnapshotTaskHandler(opts SnapshotTaskHandlerOptions) *FetchSnapshotTaskHandler {
-	return &FetchSnapshotTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger}
+	return &FetchSnapshotTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger, hostRegion: hostRegionOf(opts.StaticConfig)}
 }
 
 func (h *FetchSnapshotTaskHandler) Validate(
@@ -94,6 +97,7 @@ func (h *FetchSnapshotTaskHandler) Execute(
 		if w.Status != wcipb.WCI_STATUS_RUNNING || !proto.Equal(task.GetPollTime(), w.InFlightPollTime) {
 			return struct{}{}, nil
 		}
+		w.recordHostRegion(h.hostRegion)
 		h := metricsFor(mctx, w, "")
 		if snapshot == nil {
 			recordOperation(h, wcimetrics.OperationTypePullStats, wcimetrics.ErrorTypeDescribeWorkerDeploymentVersionFailed)
@@ -112,10 +116,11 @@ type DeferredDecisionTaskHandler struct {
 	frontendClient workflowservice.WorkflowServiceClient
 	logger         log.Logger
 	metricsHandler metrics.Handler
+	hostRegion     string
 }
 
 func NewDeferredDecisionTaskHandler(opts SnapshotTaskHandlerOptions) *DeferredDecisionTaskHandler {
-	return &DeferredDecisionTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger, metricsHandler: opts.MetricsHandler}
+	return &DeferredDecisionTaskHandler{frontendClient: opts.FrontendClient, logger: opts.Logger, metricsHandler: opts.MetricsHandler, hostRegion: hostRegionOf(opts.StaticConfig)}
 }
 
 func (h *DeferredDecisionTaskHandler) Validate(
@@ -148,6 +153,7 @@ func (h *DeferredDecisionTaskHandler) Execute(
 		return nil
 	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		w.recordHostRegion(h.hostRegion)
 		provider := w.ScalingGroupSpecs[task.GetScalingGroupId()].GetCompute().GetProviderType()
 		recordOperation(metricsFor(mctx, w, provider), wcimetrics.OperationTypeDeferredScalingDecision, wcimetrics.ErrorTypeNone)
 		return struct{}{}, w.ProcessDeferredScalingDecision(mctx, task.GetScalingGroupId(), task.GetTaskAdd(), snapshotFromDescribe(resp))
