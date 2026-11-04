@@ -1856,7 +1856,7 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 		return NodesMutation{}, err
 	}
 
-	if err := n.closeTransactionHandleTimeSkipping(immutableContext); err != nil {
+	if err := n.closeTransactionHandleTimeSkipping(immutableContext, isActive); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -4194,11 +4194,9 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }
 
-func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context, isActive bool) error {
 
-	// Replication does not mark the subtree dirty. Re-stamp timers only when the
-	// replicated accumulated skip changed.
-	if !n.subtreeIsDirty {
+	if !isActive {
 		// task regeneration works both for pure chasm-based executions
 		// and workflows that is only partially on chasm
 		if n.totalTimeSkippedUpdatedInPassive {
