@@ -19,6 +19,7 @@ type (
 		CloseExecutionVisibilityTaskID int64
 		CloseTime                      time.Time
 		StartTime                      time.Time
+		CreateTime                     time.Time // zero if unknown
 		IsRetentionDelete              bool
 	}
 )

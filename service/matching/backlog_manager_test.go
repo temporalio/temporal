@@ -309,6 +309,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	updateBacklogStatsForTest(db, 2, time.Time{})
 	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
+	_, ackLevelBeforeGap := blm.subqueues[subqueueZero].getLevels()
+
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
 	// After direct-add, readLevel == old maxReadLevel == last task ID.
 	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
@@ -324,6 +326,12 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 		return rl >= maxRL
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// All three tasks are still unfinished, so only readLevel may advance.
+	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	s.Require().Equal(ackLevelBeforeGap, ackLevel)
+	s.Require().Equal(ackLevelBeforeGap, s.dbAckLevel(blm))
+	s.Require().EqualValues(5, totalApproximateBacklogCount(s.blm))
+
 	// Complete all tasks. On the last completion:
 	// - outstandingTasks is empty
 	// - readLevel >= maxReadLevel (pump already scanned)
@@ -331,10 +339,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	// - ackLevel gets set to maxReadLevel
 	// - backlog counts reset to 0
 	for _, t := range s.capturedTasks() {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 
-	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	_, ackLevel = blm.subqueues[subqueueZero].getLevels()
 	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
@@ -495,13 +503,65 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 	}
 }
 
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
+	s.testSetReadLevelAfterGapExpiredTail(2)
+}
+
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTailWithGap() {
+	s.testSetReadLevelAfterGapExpiredTail(100)
+}
+
+func (s *BacklogManagerTestSuite) testSetReadLevelAfterGapExpiredTail(maxReadLevelOffset int64) {
+	if s.fairness {
+		s.T().Skip("this test is only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	tr.signalNewTasks(s.createTasksAt(blm, start+1))
+	_, err := blm.db.CreateTasks(blm.tqCtx, []*writeTaskRequest{{
+		subqueue:  subqueueZero,
+		fairLevel: fairLevel{id: start + 2},
+		taskInfo: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+		},
+	}})
+	s.Require().NoError(err)
+	maxReadLevel := start + maxReadLevelOffset
+	blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+
+	// Complete the valid task before the reader scans the expired tail.
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 1)
+	tasks[0].finish(nil)
+	s.Require().Equal(start+1, s.dbAckLevel(blm))
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Len(batch.tasks, 1)
+	tr.processTaskBatch(batch.tasks)
+
+	batch, err = tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	tr.setReadLevelAfterGap(batch.readLevel)
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(maxReadLevel, readLevel)
+	s.Require().Equal(maxReadLevel, ackLevel)
+	s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
+	s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
+}
+
 // TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
 // race: here the in-flight read does return the newly-written rows, but they get acked before the
 // pump processes them. outstandingTasks only remembers tasks above the ack level, so its dedup
 // check can't see them and they used to be dispatched and acked a second time.
 func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
 	if s.fairness {
-		s.T().Skip("only for fairness backlog manager")
+		s.T().Skip("this test is only for priority backlog manager")
 	}
 	s.setupToCaptureTasks()
 	blm, tr, start := s.initPriReaderAtEnd()
@@ -517,7 +577,7 @@ func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks(
 	tasks := s.capturedTasks()
 	s.Require().Len(tasks, 2)
 	for _, t := range tasks {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 	_, ackLevel := tr.getLevels()
 	s.Require().Equal(start+2, ackLevel)
@@ -627,13 +687,13 @@ func (s *BacklogManagerTestSuite) TestCompleteTask_OutOfOrder() {
 	s.Require().EqualValues(3, blm.db.getTotalApproximateBacklogCount())
 
 	for _, id := range []int64{start + 2, start + 3} {
-		tasks[id].finish(taskFinishResult{consumedToken: true})
+		tasks[id].finish(nil)
 		_, ackLevel := tr.getLevels()
 		s.Equal(start, ackLevel, "ack level should not move past an outstanding task")
 		s.EqualValues(3, blm.db.getTotalApproximateBacklogCount(), "count should not change until ack level moves")
 	}
 
-	tasks[start+1].finish(taskFinishResult{consumedToken: true})
+	tasks[start+1].finish(nil)
 	_, ackLevel := tr.getLevels()
 	s.Equal(start+3, ackLevel)
 	s.Equal(start+3, s.dbAckLevel(blm))
@@ -658,7 +718,7 @@ func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
 	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 1 }, 5*time.Second, 10*time.Millisecond)
 	task1 := s.capturedTasks()[0]
 
-	task1.finish(taskFinishResult{err: errors.New("failed to start"), consumedToken: true})
+	task1.finish(errors.New("failed to start"))
 
 	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 2 }, 5*time.Second, 10*time.Millisecond)
 	task2 := s.capturedTasks()[1]
@@ -670,7 +730,7 @@ func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
 	queue := s.blm.getDB().queue
 	await.RequireTrue(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 1 }, 5*time.Second, 10*time.Millisecond)
 
-	task2.finish(taskFinishResult{consumedToken: true})
+	task2.finish(nil)
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }
 
@@ -706,13 +766,13 @@ func (s *BacklogManagerTestSuite) TestTaskGC_BatchSize() {
 
 	for batch := range 2 {
 		// The first two completions in a batch are below the batch size, so they stay.
-		tasks[3*batch].finish(taskFinishResult{consumedToken: true})
-		tasks[3*batch+1].finish(taskFinishResult{consumedToken: true})
+		tasks[3*batch].finish(nil)
+		tasks[3*batch+1].finish(nil)
 		time.Sleep(50 * time.Millisecond) //nolint:forbidigo // checking that something doesn't happen
 		s.Equal(taskCount-3*batch, dbTaskCount())
 
 		// The third one reaches the batch size.
-		tasks[3*batch+2].finish(taskFinishResult{consumedToken: true})
+		tasks[3*batch+2].finish(nil)
 		await.RequireTrue(s.T(), func() bool { return dbTaskCount() == taskCount-3*(batch+1) }, 5*time.Second, 10*time.Millisecond)
 	}
 }
@@ -738,9 +798,6 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
-	if !s.fairness {
-		s.T().Skip("this case doesn't work with priTaskReader yet")
-	}
 	s.testSkipExpiredTasks(10, expiredBlock(33))
 }
 
@@ -809,7 +866,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 
 	// Complete the delivered tasks.
 	for _, t := range s.capturedTasks() {
-		t.finish(taskFinishResult{consumedToken: true})
+		t.finish(nil)
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
@@ -1186,7 +1243,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
-				t.finish(taskFinishResult{consumedToken: true})
+				t.finish(nil)
 
 				tindex := t.event.Data.ScheduledEventId
 				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
@@ -1279,7 +1336,7 @@ func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsRead
 	finish := func(id int64) {
 		for _, t := range s.capturedTasks() {
 			if t.fairLevel() == lvl(id) {
-				t.finish(taskFinishResult{consumedToken: true})
+				t.finish(nil)
 				return
 			}
 		}

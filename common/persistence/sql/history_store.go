@@ -173,7 +173,8 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	var token *historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
 		if request.ReverseOrder {
-			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID, LastTxnID: MaxTxnID}
+			// The cursor is exclusive, so pair the node below the exclusive MaxNodeID with the largest sentinel.
+			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID - 1, LastTxnID: MaxTxnID}
 		} else {
 			token = &historyNodePaginationToken{LastNodeID: request.MinNodeID, LastTxnID: MinTxnID}
 		}

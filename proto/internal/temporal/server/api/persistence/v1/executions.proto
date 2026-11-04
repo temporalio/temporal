@@ -328,22 +328,27 @@ message WorkflowExecutionInfo {
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
 
+  // Opaque metadata that a persistence implementation can store about this record. The server
+  // never reads or sets it. The value describes the local copy of the record, so it is not
+  // replicated, and applying a replicated snapshot or mutation keeps the local value.
+  bytes persistence_metadata = 118;
+
   // Time this cluster last created or switched to a history branch for this run during conflict
   // resolution. Branches are cluster-local, so this is never synced from another cluster.
   // Surfaced in visibility as the TemporalLastBranchTime search attribute.
-  google.protobuf.Timestamp last_branch_time = 118;
+  google.protobuf.Timestamp last_branch_time = 119;
 
   // Time conflict resolution on this cluster last superseded another run of this workflow ID with
   // this run, terminating it or turning it into a zombie. Cluster-local like last_branch_time.
   // Surfaced in visibility as the TemporalLastSupersedeTime search attribute.
-  google.protobuf.Timestamp last_supersede_time = 119;
+  google.protobuf.Timestamp last_supersede_time = 120;
   // Run ID of the run last superseded by this one. Set together with last_supersede_time.
-  string last_superseded_run_id = 120;
+  string last_superseded_run_id = 121;
   // Time conflict resolution on this cluster last found operations started on a non-current branch
   // of this run that run independently of it, such as child workflows. The run will never record
   // their results. Cluster-local like last_branch_time.
   // Surfaced in visibility as the TemporalLastOrphanedOperationsTime search attribute.
-  google.protobuf.Timestamp last_orphaned_operations_time = 121;
+  google.protobuf.Timestamp last_orphaned_operations_time = 122;
 }
 
 message TimeSkippingInfo {
@@ -459,6 +464,8 @@ message TransferTaskInfo {
     // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
     // by some other task, so this task doesn't need to worry about it.
     bool can_skip_visibility_archival = 1;
+    // Only standby execution skips verification; active execution still notifies the parent.
+    bool skip_parent_verification = 2;
   }
   oneof task_details {
     CloseExecutionTaskDetails close_execution_task_details = 16;
@@ -524,6 +531,8 @@ message VisibilityTaskInfo {
   google.protobuf.Timestamp close_time = 11;
   google.protobuf.Timestamp start_time = 13;
   bool is_retention_delete = 14;
+  // start_time minus any inherited skipped time.
+  google.protobuf.Timestamp create_time = 15;
 
   oneof task_details {
     // If the task addresses a CHASM component, this field will be set.

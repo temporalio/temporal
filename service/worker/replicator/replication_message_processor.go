@@ -376,7 +376,7 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 			p.logger.Warn(
 				"Task queue user data replication task skipped because namespace is local",
 				tag.WorkflowNamespaceID(attrs.GetNamespaceId()),
-				tag.WorkflowTaskQueueName(attrs.GetTaskQueueName()),
+				tag.TaskQueueName(attrs.GetTaskQueueName()),
 				tag.SourceCluster(p.sourceCluster),
 			)
 			recordTaskQueueUserDataOutcome(

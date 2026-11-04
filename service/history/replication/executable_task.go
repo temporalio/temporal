@@ -824,6 +824,10 @@ func (e *ExecutableTaskImpl) SyncState(
 		return false, err
 	}
 	ctx = setReplicationTaskOrigin(ctx, e, wideevents.ReplApplyArtifactSourceSyncStateRefetch)
+	// SyncState triggered by a force replication task still carries the force replication flag.
+	if e.isForceReplication() {
+		resp.VersionedTransitionArtifact.IsForceReplication = true
+	}
 	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
@@ -832,6 +836,12 @@ func (e *ExecutableTaskImpl) SyncState(
 		"apply_artifact_source": wideevents.ReplApplyArtifactSourceSyncStateRefetch,
 	})
 	return false, err
+}
+
+func (e *ExecutableTaskImpl) isForceReplication() bool {
+	return e.replicationTask.GetRawTaskInfo().GetIsForceReplication() ||
+		e.replicationTask.GetSyncVersionedTransitionTaskAttributes().GetVersionedTransitionArtifact().GetIsForceReplication() ||
+		e.replicationTask.GetSyncWorkflowStateTaskAttributes().GetIsForceReplication()
 }
 
 func (e *ExecutableTaskImpl) DeleteWorkflow(

@@ -1,36 +1,28 @@
-package tests
+// Package querytest provides the query converter test cases shared by every visibility store.
+package querytest
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	vissql "go.temporal.io/server/common/persistence/visibility/store/sql"
-	"go.temporal.io/server/common/searchattribute"
 )
+
+// Dialect selects the expected results of the store under test.
+type Dialect int
 
 const (
-	testNamespaceName = namespace.Name("test-namespace")
+	MySQL Dialect = iota
+	PostgreSQL
+	SQLite
+	Elasticsearch
 )
 
-var sqlPlugins = []string{
-	mysql.PluginName,
-	postgresql.PluginName,
-	postgresql.PluginNamePGX,
-	sqlite.PluginName,
-}
+// queryTime is the reference time used to resolve NOW() in every test case.
+var queryTime = time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
 
 type queryConverterTestCase struct {
 	name string
@@ -62,21 +54,21 @@ type queryConverterTestCase struct {
 	orderBy string
 }
 
-func (tc *queryConverterTestCase) expected(store string) (out string, errMsg string) {
+func (tc *queryConverterTestCase) expected(dialect Dialect) (out string, errMsg string) {
 	if tc.err != "" {
 		return "", tc.err
 	}
-	if store == elasticsearch.PersistenceName {
+	if dialect == Elasticsearch {
 		return tc.es, tc.esErr
 	}
 
 	var outOverride, errOverride string
-	switch store {
-	case mysql.PluginName:
+	switch dialect {
+	case MySQL:
 		outOverride, errOverride = tc.mysql, tc.mysqlErr
-	case postgresql.PluginName, postgresql.PluginNamePGX:
+	case PostgreSQL:
 		outOverride, errOverride = tc.postgres, tc.postgresErr
-	case sqlite.PluginName:
+	case SQLite:
 		outOverride, errOverride = tc.sqlite, tc.sqliteErr
 	default:
 		// no-op
@@ -505,6 +497,63 @@ var queryConverterTestCases = []queryConverterTestCase{
 		postgres: "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05'",
 		sqlite:   "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05+00:00'",
 		es:       `{"bool":{"filter":{"range":{"Datetime01":{"lte":"2020-01-02T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW()",
+		in:       "StartTime > NOW()",
+		mysql:    "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time > '2026-03-31 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gt":"2026-03-31T17:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() minus duration",
+		in:       "StartTime < NOW() - '5m'",
+		mysql:    "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time < '2026-03-31 16:55:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"lt":"2026-03-31T16:55:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() plus compound duration",
+		in:       "CloseTime <= now() + '1h30m'",
+		mysql:    "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00'",
+		postgres: "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00'",
+		sqlite:   "TemporalNamespaceDivision is null and close_time <= '2026-03-31 18:30:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"CloseTime":{"lte":"2026-03-31T18:30:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() minus integer nanoseconds",
+		in:       "StartTime >= NOW() - 18000000000000",
+		mysql:    "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00'",
+		postgres: "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and start_time >= '2026-03-31 12:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gte":"2026-03-31T12:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() custom search attribute",
+		in:       "AliasForDatetime01 = NOW() - '1d'",
+		mysql:    "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and Datetime01 = '2026-03-30 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"term":{"Datetime01":"2026-03-30T17:00:00Z"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime between NOW() offsets",
+		in:       "CloseTime BETWEEN NOW() - '7d' AND NOW()",
+		mysql:    "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00' and '2026-03-31 17:00:00'",
+		postgres: "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00' and '2026-03-31 17:00:00'",
+		sqlite:   "TemporalNamespaceDivision is null and close_time between '2026-03-24 17:00:00+00:00' and '2026-03-31 17:00:00+00:00'",
+		es:       `{"bool":{"filter":{"range":{"CloseTime":{"gte":"2026-03-24T17:00:00Z","lte":"2026-03-31T17:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name:     "Datetime NOW() combined with other conditions",
+		in:       "ExecutionStatus = 'Running' AND StartTime > NOW() - '24h'",
+		mysql:    "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00')",
+		postgres: "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00')",
+		sqlite:   "TemporalNamespaceDivision is null and (status = 1 and start_time > '2026-03-30 17:00:00+00:00')",
+		es: `{"bool":{"filter":[{"term":{"ExecutionStatus":"Running"}},{"range":{"StartTime":{"gt":"2026-03-30T17:00:00Z"}}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Datetime invalid value",
@@ -1386,7 +1435,12 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "function expression on right hand side",
 		in:   "WorkflowId = length('foo')",
-		err:  "operation is not supported: nested func",
+		err:  "operation is not supported: function calls are only supported with Datetime search attributes",
+	},
+	{
+		name: "non-NOW function expression on datetime",
+		in:   "StartTime = length('foo')",
+		err:  `operation is not supported: function "length('foo')"`,
 	},
 	{
 		name: "limit clause",
@@ -1401,7 +1455,17 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "arithmetic expression",
 		in:   "HistoryLength = 1 + 1",
-		err:  "invalid expression: unexpected value type *sqlparser.BinaryExpr",
+		err:  "operation is not supported: binary operators are only supported with Datetime search attributes",
+	},
+	{
+		name: "non-NOW arithmetic expression on datetime",
+		in:   "StartTime > '2026-03-31T17:00:00Z' - '5h'",
+		err:  `operation is not supported: expression "'2026-03-31T17:00:00Z' - '5h'", only NOW() and NOW() +/- 'duration' are supported`,
+	},
+	{
+		name: "chained NOW() offsets on datetime",
+		in:   "StartTime > NOW() - '1h' + '30m'",
+		err:  `operation is not supported: expression "NOW() - '1h' + '30m'", only NOW() and NOW() +/- 'duration' are supported`,
 	},
 	{
 		name: "unsupported unary operator",
@@ -1410,19 +1474,21 @@ var queryConverterTestCases = []queryConverterTestCase{
 	},
 }
 
-func runQueryConverterTest[T any](
+// Run converts every test case with a new query converter, and checks the serialized query
+// against the expected results of dialect.
+func Run[T any](
 	t *testing.T,
-	store string,
+	dialect Dialect,
 	newQueryConverter func() *query.QueryConverter[T],
 	serialize func(T) (string, error),
 ) {
 	for _, tc := range queryConverterTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			expectedOut, expectedErr := tc.expected(store)
+			expectedOut, expectedErr := tc.expected(dialect)
 			// The query converter is stateful (e.g. it tracks if the query filtered by
 			// namespace division), thus each test case requires a new instance.
-			queryParams, err := newQueryConverter().Convert(tc.in)
+			queryParams, err := newQueryConverter().WithQueryTime(queryTime).Convert(tc.in)
 			if expectedErr != "" {
 				r.Error(err)
 				r.EqualError(err, expectedErr)
@@ -1444,72 +1510,4 @@ func runQueryConverterTest[T any](
 			r.Equal(tc.orderBy, strings.TrimSpace(sqlparser.String(queryParams.OrderBy)))
 		})
 	}
-}
-
-func serializeSQLQuery(expr sqlparser.Expr) (string, error) {
-	if expr == nil {
-		return "", nil
-	}
-	return sqlparser.String(expr), nil
-}
-
-func serializeESQuery(q elastic.Query) (string, error) {
-	if q == nil {
-		return "", nil
-	}
-	source, err := q.Source()
-	if err != nil {
-		return "", err
-	}
-	data, err := json.Marshal(source)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func TestSQLQueryConverter(t *testing.T) {
-	t.Parallel()
-	for _, plugin := range sqlPlugins {
-		t.Run(plugin, func(t *testing.T) {
-			t.Parallel()
-			pluginVisQC, err := sql.GetPluginVisibilityQueryConverter(plugin)
-			require.NoError(t, err)
-			runQueryConverterTest(
-				t,
-				plugin,
-				func() *query.QueryConverter[sqlparser.Expr] {
-					return query.NewQueryConverter(
-						&vissql.SQLQueryConverter{VisibilityQueryConverter: pluginVisQC},
-						testNamespaceName,
-						searchattribute.TestNameTypeMap(),
-						&searchattribute.TestMapper{},
-						metrics.NoopMetricsHandler,
-						log.NewNoopLogger(),
-					)
-				},
-				serializeSQLQuery,
-			)
-		})
-	}
-}
-
-func TestElasticsearchQueryConverter(t *testing.T) {
-	t.Parallel()
-	runQueryConverterTest(
-		t,
-		elasticsearch.PersistenceName,
-		newESQueryConverter,
-		serializeESQuery,
-	)
-}
-
-func newESQueryConverter() *query.QueryConverter[elastic.Query] {
-	return elasticsearch.NewQueryConverter(
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-		metrics.NoopMetricsHandler,
-		log.NewNoopLogger(),
-	)
 }

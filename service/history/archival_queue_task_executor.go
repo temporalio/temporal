@@ -236,6 +236,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 
 	taskGenerator := workflow.NewTaskGenerator(
 		e.shardContext.GetNamespaceRegistry(),
+		e.shardContext.ChasmRegistry(),
 		mutableState,
 		e.shardContext.GetConfig(),
 		e.shardContext.GetArchivalMetadata(),

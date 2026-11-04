@@ -2,9 +2,7 @@ package activity
 
 import (
 	"errors"
-	"fmt"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,11 +17,11 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -46,7 +44,7 @@ var (
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ chasm.DescribableComponent = (*Activity)(nil)
-var _ callback.CompletionSource = (*Activity)(nil)
+var _ callback.Host = (*Activity)(nil)
 
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
@@ -230,6 +228,24 @@ func NewEmbeddedActivity(
 ) {
 }
 
+// buildWorkerCommandTaskToken builds the serialized task token for a worker command.
+// The token must match what was sent to the worker in the poll response.
+func (a *Activity) buildWorkerCommandTaskToken(ctx chasm.Context, _ chasm.NoValue) ([]byte, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
+
+	token := tasktoken.NewStandaloneActivityTaskToken(
+		key.NamespaceID,
+		key.BusinessID, // activityID
+		a.GetActivityType().GetName(),
+		attempt.GetCount(),
+		attempt.GetComponentRef(),
+		attempt.GetStartedStamp(),
+	)
+
+	return token.Marshal()
+}
+
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
@@ -248,6 +264,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	a.recordLastWorker(ctx, request.GetPollRequest().GetIdentity())
 	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
 		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
 			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
@@ -304,49 +321,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
-	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
-}
-
-func (a *Activity) addCompletionCallbacks(
-	ctx chasm.MutableContext,
-	requestID string,
-	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
-) error {
-	if len(completionCallbacks) == 0 {
-		return nil
-	}
-	if a.LifecycleState(ctx).IsClosed() {
-		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
-	}
-
-	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
-	}
-
-	if a.Callbacks == nil {
-		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
-	}
-
-	registrationTime := timestamppb.New(ctx.Now(a))
-
-	for idx, cb := range completionCallbacks {
-		chasmCB, err := callback.FromAPICallback(cb)
-		if err != nil {
-			return err
-		}
-
-		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
-		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
-	}
-	return nil
+	return callback.ScheduleCompletionCallbacks(ctx, a)
 }
 
 // effectiveUserMetadata returns the activity's user metadata, preferring the
@@ -393,66 +368,6 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	return ctx.SetRequestLinks(a, requestID, links)
 }
 
-// GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
-// Implements callback.CompletionSource.
-func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
-	if !a.LifecycleState(ctx).IsClosed() {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
-	}
-
-	key := ctx.ExecutionKey()
-	backLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
-		Namespace:  ctx.NamespaceEntry().Name().String(),
-		ActivityId: key.BusinessID,
-		RunId:      key.RunID,
-	})
-
-	opts := nexusrpc.CompleteOperationOptions{
-		StartTime: a.GetScheduleTime().AsTime(),
-		CloseTime: ctx.ExecutionInfo().CloseTime,
-		Links:     []nexus.Link{backLink},
-	}
-
-	outcome := a.Outcome.Get(ctx)
-	if successful := outcome.GetSuccessful(); successful != nil {
-		// Successful completion: return the first output payload as the result as Nexus supports only a single payload
-		var p *commonpb.Payload
-		if payloads := successful.GetOutput().GetPayloads(); len(payloads) > 0 {
-			p = payloads[0]
-		}
-		opts.Result = p
-		return opts, nil
-	}
-
-	failure := a.terminalFailure(ctx)
-	if failure != nil {
-		state := nexus.OperationStateFailed
-		message := "operation failed"
-		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED {
-			state = nexus.OperationStateCanceled
-			message = "operation canceled"
-		}
-
-		nf, err := commonnexus.TemporalFailureToNexusFailure(failure)
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("failed to convert failure: %v", err)
-		}
-
-		opErr := &nexus.OperationError{
-			State:   state,
-			Message: message,
-			Cause:   &nexus.FailureError{Failure: nf},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opts.Error = opErr
-		return opts, nil
-	}
-
-	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("activity in status %v has no outcome", a.Status)
-}
-
 // HandleCompleted updates the activity on activity completion.
 func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
@@ -472,6 +387,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, event.Request.GetCompleteRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -511,6 +427,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
+		a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -523,6 +440,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -548,8 +466,27 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorker(ctx, event.Request.GetCancelRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+func (a *Activity) recordLastWorker(
+	ctx chasm.MutableContext,
+	identity string,
+) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.LastWorkerIdentity = identity
+	principalType := ctx.RequestHeader(headers.PrincipalTypeHeaderName)
+	principalName := ctx.RequestHeader(headers.PrincipalNameHeaderName)
+	if principalType != "" || principalName != "" {
+		attempt.LastWorkerPrincipal = &commonpb.Principal{
+			Type: principalType,
+			Name: principalName,
+		}
+		return
+	}
+	attempt.LastWorkerPrincipal = nil
 }
 
 // Terminate implements the chasm.RootComponent interface.
@@ -564,6 +501,9 @@ func (a *Activity) Terminate(
 	if a.isTerminal() {
 		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
+
+	// TODO: Send worker commands when an activity is terminated. See Validate in
+	// worker_command_task_handler.go for why this is not yet supported.
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
@@ -582,6 +522,23 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
 	return heartbeat
+}
+
+// addWorkerCommandDispatchTask schedules a side-effect task to dispatch a worker command via the
+// worker control queue. No-op if the worker doesn't support worker commands (i.e., has no
+// control queue).
+func (a *Activity) addWorkerCommandDispatchTask(ctx chasm.MutableContext, task *activitypb.WorkerCommandDispatchTask) {
+	controlQueue := a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue()
+	if controlQueue == "" {
+		return
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			Destination: controlQueue,
+		},
+		task,
+	)
 }
 
 // lastHeartbeatDetails returns the details recorded by the most recent heartbeat, or nil if

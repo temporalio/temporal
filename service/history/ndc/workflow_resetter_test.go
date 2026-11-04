@@ -2472,3 +2472,27 @@ func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 		})
 	}
 }
+
+func TestCanReapplyOnReset(t *testing.T) {
+	t.Parallel()
+	smReg := hsm.NewRegistry()
+	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
+
+	for eventType, expected := range map[enumspb.EventType]bool{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:         true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:  true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:             true,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:           false,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:    false,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED: false,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       false,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:  false,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:             false,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:             false,
+	} {
+		t.Run(eventType.String(), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, expected, canReapplyOnReset(smReg, &historypb.HistoryEvent{EventType: eventType}))
+		})
+	}
+}

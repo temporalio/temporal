@@ -379,6 +379,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		TaskID:            task.TaskID,
 		CloseTime:         nil, // populated below if task close time is valid
 		StartTime:         task.StartTime,
+		CreateTime:        task.CreateTime,
 		IsRetentionDelete: task.IsRetentionDelete,
 	}
 
@@ -568,6 +569,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
 		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
+		createTime       = workflow.NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).CreateTime(startTime)
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
 		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
@@ -610,6 +612,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTime:        startTime,
+		CreateTime:       createTime,
 		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    executionTime,
 		TaskID:           task.GetTaskID(),
