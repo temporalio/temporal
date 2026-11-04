@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/testing/await"
 )
 
 const (
@@ -213,11 +214,24 @@ func (s *pipelineSuite) TestCanceledContext() {
 	_, err = lockTx.WriteLockShards(newExecutionContext(), filter)
 	s.NoError(err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tx := s.beginPipelinedTx(ctx)
 	s.NoError(tx.ReadLockShardsWithRangeID(ctx, filter, shard.RangeID))
-	err = tx.Commit()
+	commitErr := make(chan error, 1)
+	go func() { commitErr <- tx.Commit() }()
+
+	// Cancel once Postgres has the batch, which waits on lockTx's shard lock.
+	await.RequireTrue(s.T(), func() bool {
+		return s.admin.Exec(`DO $$ BEGIN
+IF NOT EXISTS (SELECT FROM pg_stat_activity
+  WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%shards%') THEN
+  RAISE EXCEPTION 'no statement waits on a shard lock';
+END IF;
+END $$`) == nil
+	}, 10*time.Second, 10*time.Millisecond)
+	cancel()
+	err = <-commitErr
 	s.Error(err)
 	s.NotErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	s.NoError(lockTx.Rollback())
