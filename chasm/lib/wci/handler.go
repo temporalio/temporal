@@ -223,6 +223,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		w.applySpec(mctx, specsToCHASM(final), registrations)
 		w.LastModifierIdentity = req.GetIdentity()
 		w.recordSpecChange(mctx)
+		w.healPollTimer(mctx)
 		return &wcipb.UpdateWorkerControllerInstanceResponse{ScalingGroupSpecs: w.ScalingGroupSpecs, ConflictToken: w.ConflictToken}, nil
 	}
 
@@ -353,6 +354,7 @@ func (h *handler) RecordTaskAdd(ctx context.Context, req *wcipb.RecordTaskAddReq
 		if err := w.CheckMutable(); err != nil {
 			return struct{}{}, err
 		}
+		w.healPollTimer(mctx)
 		return struct{}{}, w.ProcessTaskAdd(mctx, req.GetEvent())
 	}, nil)
 	if err != nil {

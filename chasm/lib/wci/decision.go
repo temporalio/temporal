@@ -282,6 +282,16 @@ func (w *WorkerControllerInstance) armPollTimer(ctx chasm.MutableContext, at tim
 	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: common.CloneProto(w.NextPollTime)})
 }
 
+// healPollTimer re-arms an overdue poll: a standby discards a pure timer it can't run, and a failover doesn't re-queue it.
+func (w *WorkerControllerInstance) healPollTimer(ctx chasm.MutableContext) {
+	if w.Status != wcipb.WCI_STATUS_RUNNING || w.NextPollTime == nil {
+		return
+	}
+	if now := ctx.Now(w); now.Sub(w.NextPollTime.AsTime()) > maxPollInterval {
+		w.armPollTimer(ctx, now)
+	}
+}
+
 func (w *WorkerControllerInstance) armValidationTimer(ctx chasm.MutableContext, at time.Time) {
 	w.NextValidationTime = timestamppb.New(at)
 	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.PeriodicValidationTimerTask{ValidationTime: common.CloneProto(w.NextValidationTime)})
