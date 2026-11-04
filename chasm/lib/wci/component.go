@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -233,12 +234,16 @@ func (w *WorkerControllerInstance) CheckMutable() error {
 	}
 }
 
-// hostRegionOf is the region this history serves; empty without a StaticConfig, so region-scoped groups stay inactive.
-func hostRegionOf(sc *wciconfig.StaticConfig) string {
-	if sc == nil {
-		return ""
+// hostRegionFn is the region this history serves: the StaticConfig's when supplied, else HostRegion.
+func hostRegionFn(sc *wciconfig.StaticConfig, dc *dynamicconfig.Collection) dynamicconfig.StringPropertyFn {
+	if sc != nil {
+		region := sc.RegionID
+		return func() string { return region }
 	}
-	return sc.RegionID
+	if dc == nil {
+		return func() string { return "" }
+	}
+	return HostRegion.Get(dc)
 }
 
 // recordHostRegion notes the region of the history running this transaction.

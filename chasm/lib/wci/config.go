@@ -26,6 +26,12 @@ cloud identity. In-process providers take precedence; a type in neither list sta
 		`ComputeConcurrencyPerNamespace caps concurrent provider calls per namespace on a history host, so a
 slow provider cannot starve task processing.`,
 	)
+	HostRegion = dynamicconfig.NewGlobalStringSetting(
+		"workercontroller.chasm.host_region",
+		"",
+		`HostRegion is the region this history serves, used only when no StaticConfig is supplied (multi-cluster
+tests set it per cluster). Empty leaves region-scoped scaling groups inactive.`,
+	)
 	WorkflowTaskQueue = dynamicconfig.NewGlobalStringSetting(
 		"workercontroller.chasm.workflow_task_queue",
 		primitives.PerNSWorkerTaskQueue,

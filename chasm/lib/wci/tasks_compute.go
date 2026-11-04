@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/wci/migration"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/resource"
@@ -37,6 +38,7 @@ type ComputeTaskHandlerOptions struct {
 	HistoryClient resource.HistoryClient
 	Logger        log.Logger
 	StaticConfig  *wciconfig.StaticConfig `optional:"true"`
+	DynamicConfig *dynamicconfig.Collection
 }
 
 // groupCall is what a group task reads under the lock before calling the provider without it.
@@ -85,11 +87,11 @@ func failureOf(err error) *failurepb.Failure {
 type ResizeTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*wcipb.ResizeTask]
 	client     ComputeClient
-	hostRegion string
+	hostRegion dynamicconfig.StringPropertyFn
 }
 
 func NewResizeTaskHandler(opts ComputeTaskHandlerOptions) *ResizeTaskHandler {
-	return &ResizeTaskHandler{client: opts.ComputeClient, hostRegion: hostRegionOf(opts.StaticConfig)}
+	return &ResizeTaskHandler{client: opts.ComputeClient, hostRegion: hostRegionFn(opts.StaticConfig, opts.DynamicConfig)}
 }
 
 func (h *ResizeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm.TaskInvocation, task *wcipb.ResizeTask) (bool, error) {
@@ -97,7 +99,7 @@ func (h *ResizeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm
 }
 
 func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, _ *wcipb.ResizeTask) error {
-	call, err := readGroupCall(ctx, ref, h.hostRegion)
+	call, err := readGroupCall(ctx, ref, h.hostRegion())
 	if errors.Is(err, errSpecMissing) {
 		return nil
 	}
