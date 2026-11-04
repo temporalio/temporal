@@ -3,7 +3,7 @@ package postgresql
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
+	sqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 )
 
 type (
@@ -42,7 +43,12 @@ var (
 	_ sqlplugin.PipelinedTx = pipelinedTx{}
 )
 
+// BeginPipelinedTx returns ErrPipelineUnsupported unless the plugin uses pgx,
+// since Commit sends the batch through a pgx connection.
 func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
+	if _, ok := pdb.dbDriver.(*driver.PGXDriver); !ok {
+		return nil, sqlplugin.ErrPipelineUnsupported
+	}
 	sqlDB, err := pdb.handle.DB()
 	if err != nil {
 		return nil, err
@@ -144,18 +150,11 @@ func (t pipelinedTx) Commit() error {
 
 	var sendErr error
 	rawErr := conn.Raw(func(driverConn any) error {
-		stdlibConn, ok := driverConn.(*stdlib.Conn)
-		if !ok {
-			sendErr = sqlplugin.ErrPipelineUnsupported
-			return nil
-		}
-		sendErr = p.send(stdlibConn.Conn())
-		if sendErr != nil &&
-			!errors.Is(sendErr, sqlplugin.ErrPipelineUnsupported) &&
-			!errors.Is(sendErr, sqlplugin.ErrPipelineRejected) {
+		sendErr = p.send(driverConn.(*stdlib.Conn).Conn())
+		if sendErr != nil && !errors.Is(sendErr, sqlplugin.ErrPipelineRejected) {
 			// The connection can be left mid-batch, so database/sql must close it
 			// instead of pooling it.
-			return driver.ErrBadConn
+			return sqldriver.ErrBadConn
 		}
 		return nil
 	})

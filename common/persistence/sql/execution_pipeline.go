@@ -58,8 +58,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	switch {
 	case err == nil:
 		return true, nil
-	case errors.Is(err, sqlplugin.ErrPipelineUnsupported):
-		return false, nil
 	case errors.Is(err, sqlplugin.ErrPipelineRejected):
 		m.logger.Warn("UpdateWorkflowExecution pipeline rejected", tag.ShardID(request.ShardID), tag.Error(err))
 		return false, nil

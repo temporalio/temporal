@@ -28,7 +28,7 @@ var (
 	// ErrNoPipelinedResults is returned by PipelinedTx reads and by the results of
 	// its queued statements.
 	ErrNoPipelinedResults = errors.New("pipelined statements return no results")
-	// ErrPipelineUnsupported is returned when the plugin or its connection cannot pipeline.
+	// ErrPipelineUnsupported is returned when the plugin cannot pipeline.
 	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
 	// ErrPipelineRejected wraps the database error a PipelinedTx statement
 	// returned. Nothing the transaction queued was written.
