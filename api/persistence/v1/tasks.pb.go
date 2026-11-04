@@ -255,11 +255,11 @@ type TaskQueueInfo struct {
 	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	// Dynamic partition scaling state (root only):
 	PartitionScaleState *PartitionScaleState `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
-	// Records that a workflow sticky destination has acquired its single session.
+	// Records that an exclusive worker's sticky workflow queue has acquired a workflow.
 	// Retained after workflow completion and worker replacement to prevent reuse.
-	SingleSessionAssigned bool `protobuf:"varint,12,opt,name=single_session_assigned,json=singleSessionAssigned,proto3" json:"single_session_assigned,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	ExclusiveWorkerAssigned bool `protobuf:"varint,12,opt,name=exclusive_worker_assigned,json=exclusiveWorkerAssigned,proto3" json:"exclusive_worker_assigned,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *TaskQueueInfo) Reset() {
@@ -369,9 +369,9 @@ func (x *TaskQueueInfo) GetPartitionScaleState() *PartitionScaleState {
 	return nil
 }
 
-func (x *TaskQueueInfo) GetSingleSessionAssigned() bool {
+func (x *TaskQueueInfo) GetExclusiveWorkerAssigned() bool {
 	if x != nil {
-		return x.SingleSessionAssigned
+		return x.ExclusiveWorkerAssigned
 	}
 	return false
 }
@@ -757,7 +757,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12#\n" +
-	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\xbc\x05\n" +
+	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\xc0\x05\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -771,8 +771,8 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\x12&\n" +
 	"\x0fother_has_tasks\x18\n" +
 	" \x01(\bR\rotherHasTasks\x12k\n" +
-	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\x126\n" +
-	"\x17single_session_assigned\x18\f \x01(\bR\x15singleSessionAssigned\"\xc2\x03\n" +
+	"\x15partition_scale_state\x18\v \x01(\v27.temporal.server.api.persistence.v1.PartitionScaleStateR\x13partitionScaleState\x12:\n" +
+	"\x19exclusive_worker_assigned\x18\f \x01(\bR\x17exclusiveWorkerAssigned\"\xc2\x03\n" +
 	"\fSubqueueInfo\x12A\n" +
 	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12\x1b\n" +
 	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12Q\n" +

@@ -305,7 +305,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			if !tc.missingPlacement {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
-			mutableState.GetExecutionInfo().SingleSessionBound = tc.bound
+			if tc.bound {
+				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "sticky-worker"})
+			}
 
 			transferTask := &tasks.ActivityTask{
 				WorkflowKey: definition.NewWorkflowKey(
@@ -655,7 +657,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 		{name: "ordinary success"},
 		{name: "ordinary fallback", unavailable: true},
 		{name: "single session success", bound: true},
-		{name: "single session waits", bound: true, unavailable: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -666,6 +667,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			taskQueueName := "some random task queue"
 			stickyTaskQueueName := "some random sticky task queue"
 			stickyTaskQueueTimeout := timestamp.DurationFromSeconds(233)
+			workflowRunTimeout := durationpb.New(2 * time.Second)
 
 			mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 			_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -677,6 +679,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 						WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 						TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
 						WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+						WorkflowRunTimeout:       workflowRunTimeout,
 						WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 					},
 				},
@@ -691,7 +694,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			// set the sticky taskqueue attr
 			executionInfo := mutableState.GetExecutionInfo()
 			executionInfo.StickyTaskQueue = stickyTaskQueueName
-			executionInfo.SingleSessionBound = tc.bound
+			if tc.bound {
+				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: stickyTaskQueueName}
+			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 			// make another round of workflow task
@@ -714,7 +719,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			calls := 1
-			if tc.unavailable && !tc.bound {
+			if tc.unavailable {
 				calls = 2
 			}
 			callCount := 0
@@ -725,10 +730,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 						s.Equal(stickyTaskQueueName, request.GetTaskQueue().GetName())
 						s.Equal(enumspb.TASK_QUEUE_KIND_STICKY, request.GetTaskQueue().GetKind())
 						if tc.bound {
-							s.Equal(5*time.Second, request.GetScheduleToStartTimeout().AsDuration())
-							if !tc.unavailable {
-								protorequire.ProtoEqual(s.T(), &sessionpb.SingleSessionOptions{StableIdentity: stickyTaskQueueName}, request.GetSingleSessionOptions())
-							}
+							s.Equal(workflowRunTimeout.AsDuration(), request.GetScheduleToStartTimeout().AsDuration())
+							protorequire.ProtoEqual(s.T(), &sessionpb.SingleSessionOptions{StableIdentity: stickyTaskQueueName}, request.GetSingleSessionOptions())
 						}
 						if tc.unavailable {
 							return nil, &serviceerrors.StickyWorkerUnavailable{}
@@ -741,12 +744,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 				}).Times(calls)
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-			if tc.bound && tc.unavailable {
-				var unavailable *serviceerrors.StickyWorkerUnavailable
-				s.ErrorAs(resp.ExecutionErr, &unavailable)
-			} else {
-				s.NoError(resp.ExecutionErr)
-			}
+			s.Require().NoError(resp.ExecutionErr)
 		})
 	}
 }

@@ -207,8 +207,8 @@ func TestSingleSessionMetadataCleanup(t *testing.T) {
 	}{
 		{name: "assigned workflow sticky", assigned: true, kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, retained: true},
 		{name: "unassigned workflow sticky", kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		{name: "activity sticky", assigned: true, kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
-		{name: "normal workflow", assigned: true, kind: enumspb.TASK_QUEUE_KIND_NORMAL, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{name: "activity sticky", kind: enumspb.TASK_QUEUE_KIND_STICKY, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{name: "normal workflow", kind: enumspb.TASK_QUEUE_KIND_NORMAL, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -227,7 +227,7 @@ func TestSingleSessionMetadataCleanup(t *testing.T) {
 						RangeID: 7,
 						Data: &persistencespb.TaskQueueInfo{
 							NamespaceId: tv.NamespaceID().String(), Name: tv.StickyTaskQueue().GetName(),
-							TaskType: tc.taskType, Kind: tc.kind, SingleSessionAssigned: tc.assigned,
+							TaskType: tc.taskType, Kind: tc.kind, ExclusiveWorkerAssigned: tc.assigned,
 							LastUpdateTime: timestamppb.New(time.Now().Add(-72 * time.Hour)),
 						},
 					}

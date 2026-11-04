@@ -734,7 +734,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		ctx,
 		task.(*tasks.WorkflowTask),
 		pushwtInfo.taskqueue,
-		pushwtInfo.singleSessionBound,
+		false,
 		pushwtInfo.workflowTaskScheduleToStartTimeout,
 		pushwtInfo.versionDirective,
 		pushwtInfo.priority,

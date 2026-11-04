@@ -941,7 +941,7 @@ func (s *PriMatcherSuite) TestStickyForwardingWithSessionMetadata() {
 					sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 					}},
-					singleSessionAcquisition: true,
+					singleSessionAcquisitionInProgress: true,
 				}
 				requests := make(chan *matchingservice.PollWorkflowTaskQueueRequest, 1)
 				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
@@ -973,7 +973,7 @@ func (s *PriMatcherSuite) TestStickyForwardingWithSessionMetadata() {
 				}()
 				if !tc.noBacklog {
 					request := await.Rcv(t, requests)
-					require.Equal(t, tm.partition.RpcName(), request.GetForwardedSource())
+					require.Empty(t, request.GetForwardedSource())
 					require.Equal(t, testMatcherTaskQueue.NormalPartition(2).RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
 					require.Same(t, metadata.sessionOptions, request.GetPollRequest().GetSessionOptions())
 					require.True(t, request.GetConditions().GetNoWait())
@@ -1026,8 +1026,8 @@ func (s *PriMatcherSuite) TestSingleSessionNoWaitSkipsForwarder() {
 				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 				}},
-				singleSessionAcquisition: true,
-				conditions:               &matchingservice.PollConditions{NoWait: true},
+				singleSessionAcquisitionInProgress: true,
+				conditions:                         &matchingservice.PollConditions{NoWait: true},
 			})
 			s.Require().ErrorIs(err, errNoTasks)
 			s.Require().Nil(task)

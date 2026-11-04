@@ -18,8 +18,8 @@ type (
 		Start()
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
-		SingleSessionAssigned() bool
-		AssignSingleSession() error
+		ExclusiveWorkerAssigned() bool
+		AssignExclusiveWorker() error
 		// StartScaleManager is called by backlog manager after it's loaded metadata from the
 		// default queue. (New matcher only.)
 		StartScaleManager(*persistencespb.PartitionScaleState)

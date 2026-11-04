@@ -44,11 +44,11 @@ type (
 
 		// mutable
 		sync.Mutex
-		rangeID               int64
-		subqueues             []*dbSubqueue
-		otherHasTasks         bool
-		scaleState            *persistencespb.PartitionScaleState
-		singleSessionAssigned bool
+		rangeID                 int64
+		subqueues               []*dbSubqueue
+		otherHasTasks           bool
+		scaleState              *persistencespb.PartitionScaleState
+		exclusiveWorkerAssigned bool
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -111,19 +111,19 @@ func newTaskQueueDB(
 	}
 }
 
-func (db *taskQueueDB) SingleSessionAssigned() bool {
+func (db *taskQueueDB) ExclusiveWorkerAssigned() bool {
 	db.Lock()
 	defer db.Unlock()
-	return db.singleSessionAssigned
+	return db.exclusiveWorkerAssigned
 }
 
-func (db *taskQueueDB) assignSingleSession(ctx context.Context) (bool, error) {
+func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) (bool, error) {
 	db.Lock()
 	defer db.Unlock()
-	if db.singleSessionAssigned {
+	if db.exclusiveWorkerAssigned {
 		return false, nil
 	}
-	db.singleSessionAssigned = true
+	db.exclusiveWorkerAssigned = true
 	db.lastChange = time.Now()
 	// Fence scanner snapshots captured before this record became retained metadata.
 	return true, db.updateTaskQueueLocked(ctx, true)
@@ -210,7 +210,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
 		db.scaleState = response.TaskQueueInfo.PartitionScaleState
-		db.singleSessionAssigned = response.TaskQueueInfo.GetSingleSessionAssigned()
+		db.exclusiveWorkerAssigned = response.TaskQueueInfo.GetExclusiveWorkerAssigned()
 		err := db.updateTaskQueueLocked(ctx, true)
 		if err != nil {
 			db.rangeID = 0
@@ -832,16 +832,12 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		Subqueues:               infos,
 		OtherHasTasks:           db.otherHasTasks,
 		PartitionScaleState:     db.scaleState,
-		SingleSessionAssigned:   db.singleSessionAssigned,
+		ExclusiveWorkerAssigned: db.exclusiveWorkerAssigned,
 	}
-	// The initial POC of single session assignment does not set the expiry time for sticky task queues with the main
-	// reason being that we always want to retain the task queue metadata for sticky task queues with single session assigned.
-	// The reason for this being that agentCore Sessions have no TTL technically, and the corresponding TaskQueueInfo record should also not have
-	// an expiry time.
-	// Note: Even if the workflow assigned to a agentCore session were to be completed, we may not want to permanently remove the task queue metadata
-	// only because no other workflow should be assigned to this session anymore.
+	// Retain metadata for assigned exclusive workers so queue reloads cannot allow
+	// the same destination to acquire another workflow, even after its workflow completes.
 	// TODO (Shivam) -- more thinking and discussion required on the scavenging of this task queue metadata.
-	if !persistence.IsTaskQueueMetadataRetained(info) {
+	if !info.GetExclusiveWorkerAssigned() {
 		info.ExpiryTime = db.expiryTime()
 	}
 	return info

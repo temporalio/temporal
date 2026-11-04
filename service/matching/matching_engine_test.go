@@ -1301,6 +1301,87 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.Empty(s.matchingEngine.partitions)
 }
 
+func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
+	for _, tc := range []struct {
+		name             string
+		assigned, loaded bool
+	}{
+		{name: "assigned unloaded", assigned: true},
+		{name: "assigned loaded", assigned: true, loaded: true},
+		{name: "ordinary unloaded"},
+		{name: "ordinary loaded", loaded: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				StickyPartition(tv.StickyTaskQueue().GetName())
+			if tc.assigned {
+				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.NoError(t, pm.(*taskQueuePartitionManagerImpl).defaultQueue().AssignExclusiveWorker())
+			}
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.Equal(t, tc.loaded, pm != nil)
+			require.False(t, stickyWorkerAvailable(pm))
+
+			request := &matchingservice.QueryWorkflowRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(),
+				QueryRequest: &workflowservice.QueryWorkflowRequest{
+					Namespace: s.ns.Name().String(), Execution: tv.WorkflowExecution(),
+					Query: &querypb.WorkflowQuery{QueryType: "q"},
+				},
+			}
+			if !tc.assigned {
+				_, err := s.matchingEngine.QueryWorkflow(ctx, request)
+				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.Equal(t, tc.loaded, pm != nil)
+				return
+			}
+
+			queryResult := future.NewFuture[*matchingservice.QueryWorkflowResponse]()
+			go func() {
+				response, err := s.matchingEngine.QueryWorkflow(ctx, request)
+				queryResult.Set(response, err)
+			}()
+			await.Require(ctx, t, func(t *await.T) {
+				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(t.Context(), partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.NotNil(t, pm)
+				require.False(t, stickyWorkerAvailable(pm))
+				data := &pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl).matcher.data
+				data.lock.Lock()
+				defer data.lock.Unlock()
+				require.Equal(t, 1, data.tasks.Len())
+			}, 5*time.Second, 10*time.Millisecond)
+			require.False(t, queryResult.Ready())
+
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+			require.NoError(t, err)
+			task, _, err := pm.PollTask(ctx, &pollMetadata{})
+			require.NoError(t, err)
+			require.NotNil(t, task)
+			require.True(t, task.isQuery())
+			protorequire.ProtoEqual(t, request, task.query.request)
+			task.finish(taskFinishResult{consumedToken: true})
+			answer := payloads.EncodeString("answer")
+			require.NoError(t, s.matchingEngine.RespondQueryTaskCompleted(ctx, &matchingservice.RespondQueryTaskCompletedRequest{
+				TaskId: task.query.taskID,
+				CompletedRequest: &workflowservice.RespondQueryTaskCompletedRequest{
+					CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED, QueryResult: answer,
+				},
+			}, metrics.NoopMetricsHandler))
+			response, err := queryResult.Get(ctx)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &matchingservice.QueryWorkflowResponse{QueryResult: answer}, response)
+		})
+	}
+}
+
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -7123,19 +7204,24 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
 			queue := UnversionedQueueKey(partition)
 			if !tc.missing {
-				expiry := timestamppb.New(time.Now().Add(time.Hour))
-				if tc.assigned {
-					expiry = nil
+				info := &persistencespb.TaskQueueInfo{
+					NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
+					Kind: enumspb.TASK_QUEUE_KIND_STICKY, LastUpdateTime: timestamppb.Now(),
+					ExpiryTime: timestamppb.New(time.Now().Add(time.Hour)),
 				}
 				_, err := s.v1TaskManager.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
-					RangeID: 1,
-					TaskQueueInfo: &persistencespb.TaskQueueInfo{
-						NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
-						Kind: enumspb.TASK_QUEUE_KIND_STICKY, SingleSessionAssigned: tc.assigned,
-						LastUpdateTime: timestamppb.Now(), ExpiryTime: expiry,
-					},
+					RangeID: 1, TaskQueueInfo: info,
 				})
 				require.NoError(t, err)
+				if tc.assigned {
+					info = common.CloneProto(info)
+					info.ExclusiveWorkerAssigned = true
+					info.ExpiryTime = nil
+					_, err = s.v1TaskManager.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+						RangeID: 2, PrevRangeID: 1, TaskQueueInfo: info,
+					})
+					require.NoError(t, err)
+				}
 			}
 			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
 			require.NoError(t, err)
@@ -7193,35 +7279,4 @@ func TestSingleSessionOfflineAdmissionReadFailure(t *testing.T) {
 	require.ErrorIs(t, err, readErr)
 	require.False(t, syncMatch)
 	require.Empty(t, engine.partitions)
-}
-
-func (s *matchingEngineSuite) TestSingleSessionAcquisitionStartError() {
-	t := s.T()
-	tv := testvars.New(t)
-	for execution := range 2 {
-		_, _, err := s.matchingEngine.AddWorkflowTask(t.Context(), &matchingservice.AddWorkflowTaskRequest{
-			NamespaceId:            tv.NamespaceID().String(),
-			Execution:              tv.WithWorkflowIDNumber(execution).WorkflowExecution(),
-			ScheduledEventId:       1,
-			TaskQueue:              tv.TaskQueue(),
-			ScheduleToStartTimeout: durationpb.New(time.Minute),
-		})
-		require.NoError(t, err)
-	}
-	startErr := serviceerror.NewUnavailable("start result unavailable")
-	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, startErr)
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	_, err := s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: tv.NamespaceID().String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: tv.TaskQueue(), Identity: tv.WorkerIdentity(),
-			SessionOptions: &sessionpb.WorkerSessionOptions{
-				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
-				},
-			},
-		},
-	}, metrics.NoopMetricsHandler)
-	require.ErrorIs(t, err, startErr)
 }

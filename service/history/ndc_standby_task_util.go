@@ -200,7 +200,6 @@ type (
 		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
-		singleSessionBound                 bool
 	}
 )
 
@@ -228,7 +227,7 @@ func newActivityTaskPostActionInfo(
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
-		singleSessionBound:                 mutableState.GetExecutionInfo().GetSingleSessionBound(),
+		singleSessionBound:                 mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker(),
 	}, nil
 }
 
@@ -245,7 +244,6 @@ func newWorkflowTaskPostActionInfo(
 		taskqueue:                          taskqueue,
 		versionDirective:                   directive,
 		priority:                           priority,
-		singleSessionBound:                 mutableState.GetExecutionInfo().GetSingleSessionBound(),
 	}, nil
 }
 

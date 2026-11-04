@@ -253,6 +253,42 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWithTargetSource() {
+	tq := t.partition.TaskQueue()
+	normal := tq.NormalPartition(1)
+	sticky := tq.StickyPartition("session")
+	for _, tc := range []struct {
+		name           string
+		source         tqid.Partition
+		acquisition    bool
+		expectedSource string
+	}{
+		{name: "ordinary sticky", source: sticky, expectedSource: sticky.RpcName()},
+		{name: "sticky acquisition", source: sticky, acquisition: true},
+		{name: "ordinary normal", source: normal, expectedSource: normal.RpcName()},
+		{name: "normal acquisition", source: normal, acquisition: true, expectedSource: normal.RpcName()},
+	} {
+		t.Run(tc.name, func() {
+			var request *matchingservice.PollWorkflowTaskQueueRequest
+			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+			t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+				func(_ context.Context, req *matchingservice.PollWorkflowTaskQueueRequest, _ ...any) {
+					request = req
+				},
+			).Return(response, nil)
+			task, err := ForwardPollWithTarget(t.T().Context(), &pollMetadata{
+				singleSessionAcquisitionInProgress: tc.acquisition,
+			}, t.client, tc.source, tq.RootPartition())
+			t.Require().NoError(err)
+			t.Require().NotNil(task)
+			t.Require().NotNil(request)
+			t.Require().Equal(tc.expectedSource, request.GetForwardedSource())
+			t.Require().Equal(tq.RootPartition().RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
+			t.Require().Same(response, task.pollWorkflowTaskQueueResponse())
+		})
+	}
+}
+
 func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 

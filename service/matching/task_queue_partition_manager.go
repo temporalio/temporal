@@ -962,7 +962,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
 		pollMetadata.sessionOptions.GetSingleSession() != nil {
 		// This is a single session poller and has a slightly different overall flow of polling.
-		task, err = pm.pollSingleSession(ctx, dbq, pollMetadata)
+		task, err = pm.pollForSingleSessionWorker(ctx, dbq, pollMetadata)
 	} else {
 		task, err = dbq.PollTask(ctx, pollMetadata)
 	}
@@ -979,7 +979,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) pollSingleSession(
+func (pm *taskQueuePartitionManagerImpl) pollForSingleSessionWorker(
 	ctx context.Context,
 	queue physicalTaskQueueManager,
 	metadata *pollMetadata,
@@ -1026,7 +1026,7 @@ func (pm *taskQueuePartitionManagerImpl) beginSingleSessionAcquisition(
 	if ctx.Err() != nil {
 		return false, errNoTasks
 	}
-	if queue.SingleSessionAssigned() {
+	if queue.ExclusiveWorkerAssigned() {
 		return false, nil
 	}
 	if pm.partition.TaskQueue().Name() == "" {
@@ -1052,12 +1052,12 @@ func (pm *taskQueuePartitionManagerImpl) acquireSingleSession(
 	metadata *pollMetadata,
 ) (*internalTask, error) {
 	acquisitionMetadata := *metadata
-	acquisitionMetadata.singleSessionAcquisition = true
+	acquisitionMetadata.singleSessionAcquisitionInProgress = true
 	task, err := queue.PollTask(ctx, &acquisitionMetadata)
 	if err != nil {
 		return nil, err
 	}
-	if err := queue.AssignSingleSession(); err != nil {
+	if err := queue.AssignExclusiveWorker(); err != nil {
 		return nil, err
 	}
 	task.namespace = pm.ns.Name()
@@ -2397,6 +2397,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
+	// TODO (Shivam): Add logic to handle the case of exclusive workers with AutoUpgrade workloads
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {

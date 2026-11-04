@@ -112,16 +112,16 @@ type (
 	}
 
 	pollMetadata struct {
-		sessionOptions            *sessionpb.WorkerSessionOptions
-		singleSessionAcquisition  bool // This is set to true when a poller is *attempting to acquire* a single session for a stable identity
-		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
-		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
-		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
-		conditions                *matchingservice.PollConditions
-		forwardedFrom             string
-		localPollStartTime        time.Time
-		workerInstanceKey         string
-		workerControlTaskQueue    string
+		sessionOptions                     *sessionpb.WorkerSessionOptions
+		singleSessionAcquisitionInProgress bool // This is set to true when a poller is *attempting to acquire* a single session for an exclusive worker identity
+		taskQueueMetadata                  *taskqueuepb.TaskQueueMetadata
+		workerVersionCapabilities          *commonpb.WorkerVersionCapabilities
+		deploymentOptions                  *deploymentpb.WorkerDeploymentOptions
+		conditions                         *matchingservice.PollConditions
+		forwardedFrom                      string
+		localPollStartTime                 time.Time
+		workerInstanceKey                  string
+		workerControlTaskQueue             string
 	}
 
 	userDataUpdate struct {
@@ -213,8 +213,8 @@ type (
 	}
 )
 
-func (m *pollMetadata) isSingleSessionAcquisition() bool {
-	return m != nil && m.singleSessionAcquisition
+func (m *pollMetadata) isSingleSessionAcquisitionInProgress() bool {
+	return m != nil && m.singleSessionAcquisitionInProgress
 }
 
 // Add registers a poller for a worker instance. Thread-safe.
@@ -672,11 +672,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, err
 	}
 	if sticky && !stickyWorkerAvailable(pm) {
-		assigned, err := e.singleSessionAssigned(ctx, partition)
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
 		if err != nil {
 			return "", false, err
 		}
 		if !assigned {
+			// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
 			return "", false, serviceerrors.NewStickyWorkerUnavailable()
 		}
 		if pm == nil {
@@ -778,7 +779,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
 	queue := UnversionedQueueKey(partition)
 	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(),
@@ -791,7 +792,7 @@ func (e *matchingEngineImpl) singleSessionAssigned(ctx context.Context, partitio
 	if err != nil {
 		return false, err
 	}
-	return persistence.IsTaskQueueMetadataRetained(response.TaskQueueInfo), nil
+	return response.TaskQueueInfo.GetExclusiveWorkerAssigned(), nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(
@@ -856,7 +857,8 @@ pollLoop:
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 			sessionOptions:            request.GetSessionOptions(),
-			singleSessionAcquisition:  partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
+
+			singleSessionAcquisitionInProgress: partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -928,6 +930,9 @@ pollLoop:
 			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
+		// TODO (Shivam): Consider the edge case in the case of exclusive workers where the call to recordWorkflowTaskStarted succeeded
+		// but the response never reached matching. You could have a world in where workflow execution A has a worker address of S
+		// and so does workflow execution B.
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
@@ -1002,9 +1007,6 @@ pollLoop:
 				}
 			}
 
-			if pollMetadata.isSingleSessionAcquisition() {
-				return nil, err
-			}
 			continue pollLoop
 		}
 
@@ -1278,12 +1280,25 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Assigned sessions accept queries even without recent pollers.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return nil, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
+		if err != nil {
+			return nil, err
+		}
+		if !assigned {
+			return nil, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseQuery)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	taskID := uuid.NewString()

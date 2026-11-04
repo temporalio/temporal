@@ -18,58 +18,42 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestTaskQueueMetadataRetention(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		info     *persistencespb.TaskQueueInfo
-		retained bool
-	}{
-		{name: "nil"},
-		{name: "unassigned workflow sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
-		{name: "assigned workflow sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, SingleSessionAssigned: true}, retained: true},
-		{name: "activity sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, SingleSessionAssigned: true}},
-		{name: "normal workflow", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, SingleSessionAssigned: true}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.retained, persistence.IsTaskQueueMetadataRetained(tc.info))
-		})
-	}
-}
-
 func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"create", "update"} {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
 			for _, tc := range []struct {
-				name       string
-				assigned   bool
-				taskType   enumspb.TaskQueueType
-				expiry     bool
-				invalid    bool
-				storeError bool
+				name          string
+				assigned      bool
+				taskType      enumspb.TaskQueueType
+				expiry        bool
+				invalid       bool
+				invalidCreate bool
+				storeError    bool
 			}{
-				{name: "assigned workflow retained", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+				{name: "assigned workflow without expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, invalidCreate: true},
+				{name: "assigned workflow clears backend expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true},
 				{name: "ordinary sticky expires", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true},
+				{name: "activity expiry is preserved", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, expiry: true},
 				{name: "unassigned requires expiry", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, invalid: true},
-				{name: "activity requires expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, invalid: true},
-				{name: "store failure", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, storeError: true},
+				{name: "activity requires expiry", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, invalid: true},
+				{name: "store failure", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true, storeError: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
+					invalid := tc.invalid || (operation == "create" && tc.invalidCreate)
 					tv := testvars.New(t)
 					store := mock.NewMockTaskStore(gomock.NewController(t))
 					serializer := serialization.NewSerializer()
 					manager := persistence.NewTaskManager(store, serializer)
 					info := &persistencespb.TaskQueueInfo{
-						NamespaceId:           tv.NamespaceID().String(),
-						Name:                  tv.StickyTaskQueue().GetName(),
-						TaskType:              tc.taskType,
-						Kind:                  enumspb.TASK_QUEUE_KIND_STICKY,
-						LastUpdateTime:        timestamppb.New(time.Unix(42, 0)),
-						SingleSessionAssigned: tc.assigned,
+						NamespaceId:             tv.NamespaceID().String(),
+						Name:                    tv.StickyTaskQueue().GetName(),
+						TaskType:                tc.taskType,
+						Kind:                    enumspb.TASK_QUEUE_KIND_STICKY,
+						LastUpdateTime:          timestamppb.New(time.Unix(42, 0)),
+						ExclusiveWorkerAssigned: tc.assigned,
 					}
 					if tc.expiry {
 						info.ExpiryTime = timestamppb.New(time.Unix(3600, 0))
@@ -78,7 +62,7 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 					if tc.storeError {
 						storeErr = serviceerror.NewUnavailable("store unavailable")
 					}
-					if !tc.invalid {
+					if !invalid {
 						if operation == "create" {
 							store.EXPECT().CreateTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
 								func(_ context.Context, req *persistence.InternalCreateTaskQueueRequest) error {
@@ -94,8 +78,11 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 									restored, err := serializer.TaskQueueInfoFromBlob(req.TaskQueueInfo)
 									require.NoError(t, err)
 									protorequire.ProtoEqual(t, info, restored)
-									protorequire.ProtoEqual(t, info.GetExpiryTime(), req.ExpiryTime)
-									require.Equal(t, persistence.IsTaskQueueMetadataRetained(info), req.SingleSessionAssigned)
+									if tc.assigned {
+										require.Nil(t, req.ExpiryTime)
+									} else {
+										protorequire.ProtoEqual(t, info.GetExpiryTime(), req.ExpiryTime)
+									}
 									return &persistence.UpdateTaskQueueResponse{}, storeErr
 								})
 						}
@@ -113,7 +100,7 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 							require.NoError(t, err)
 						}
 					}
-					if tc.invalid {
+					if invalid {
 						require.Panics(t, invoke)
 					} else {
 						invoke()
