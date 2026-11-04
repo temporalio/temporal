@@ -207,6 +207,15 @@ func (s *pipelineSuite) TestCanceledContext() {
 	s.NoError(lockTx.Rollback())
 }
 
+// A Commit that cannot check out a connection sends nothing.
+func (s *pipelineSuite) TestCommitWithoutConnection() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := s.beginPipelinedTx(ctx).Commit()
+	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
+	s.ErrorIs(err, context.Canceled)
+}
+
 // An error at the implicit commit is not a rejection, since it can follow a
 // commit that happened.
 func (s *pipelineSuite) TestCommitError() {

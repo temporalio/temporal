@@ -144,7 +144,7 @@ func (t pipelinedTx) Commit() error {
 	p := t.pipe
 	conn, err := p.db.Conn(p.ctx)
 	if err != nil {
-		return t.handle.ConvertError(err)
+		return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, t.handle.ConvertError(err))
 	}
 	defer func() { _ = conn.Close() }()
 
