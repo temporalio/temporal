@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package temporal.server.chasm.lib.tquserdata.proto.v1;
+package temporal.server.chasm.lib.taskqueue.proto.v1;
 
-import "chasm/lib/tquserdata/proto/v1/request_response.proto";
+import "chasm/lib/taskqueue/proto/v1/request_response.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+option go_package = "go.temporal.io/server/chasm/lib/taskqueue/gen/taskqueuepb;taskqueuepb";
 
 service TaskQueueUserDataService {
   rpc GetTaskQueueUserData(GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {
