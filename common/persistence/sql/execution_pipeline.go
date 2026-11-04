@@ -59,7 +59,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	case err == nil:
 		return true, nil
 	case errors.Is(err, sqlplugin.ErrPipelineNotWritten):
-		m.logger.Warn("UpdateWorkflowExecution pipeline rejected", tag.ShardID(request.ShardID), tag.Error(err))
 		return false, nil
 	default:
 		return true, convertSQLError("UpdateWorkflowExecution", "failed to commit transaction", err)
