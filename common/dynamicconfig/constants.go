@@ -1739,7 +1739,14 @@ an optional feature and also requires a metrics collection system that can handl
 	MatchingEnableWorkerMetricsEvents = NewNamespaceBoolSetting(
 		"matching.enableWorkerMetricsEvents",
 		false,
-		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events on every heartbeat.`,
+		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events from worker heartbeats.`,
+	)
+	MatchingWorkerMetricsEventInterval = NewNamespaceDurationSetting(
+		"matching.workerMetricsEventInterval",
+		5*time.Minute,
+		`Minimum interval for emitting worker_metrics events for each worker instance.
+Emitting these events can be expensive. The server controls their emission frequency independently
+of the user-configured SDK heartbeat interval.`,
 	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
@@ -2216,6 +2223,15 @@ The actual count is calculated as base * (multiplier ^ level)`,
 		3.0,
 		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
+	)
+
+	TaskThrottleController = NewGlobalTypedSetting(
+		"history.taskThrottleController",
+		DefaultTaskThrottleControllerSettings,
+		`TaskThrottleController tunes host level pacing of history task retries that a namespace
+APS or persistence rate limiter refused. Unset fields keep their defaults.
+Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
+Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(

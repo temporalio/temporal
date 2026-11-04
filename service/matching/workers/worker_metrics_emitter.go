@@ -23,10 +23,9 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler                   metrics.Handler
-	config                    WorkerMetricsConfig
-	eventLogger               otellog.Logger
-	enableWorkerMetricsEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	handler     metrics.Handler
+	config      WorkerMetricsConfig
+	eventLogger otellog.Logger
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -38,7 +37,6 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
-	enableWorkerMetricsEvents := e.enableWorkerMetricsEvents != nil && e.enableWorkerMetricsEvents(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
 	recordedDrivers := make(map[string]bool)
@@ -77,10 +75,6 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 					recordedDrivers[driverType] = true
 				}
 			}
-		}
-
-		if enableWorkerMetricsEvents {
-			e.emitWorkerMetricsEvent(nsName, hb)
 		}
 	}
 }

@@ -133,8 +133,8 @@ func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
 			w.logger.Error("Persistent store operation failure",
 				tag.StoreOperationCreateTask,
 				tag.Error(err),
-				tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
-				tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
+				tag.TaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
+				tag.TaskQueueType(w.backlogMgr.queueKey().TaskType()))
 		}
 		return err
 	}

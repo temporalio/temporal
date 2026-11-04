@@ -8,6 +8,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 
 ### Build prerequisites
 
+- [Go](https://go.dev/doc/install) (version specified in [go.mod](./go.mod)), available on `PATH`.
 - [mise](https://mise.jdx.dev/) 2026.10.9 or newer:
   - Manages the required toolchain, including Go, protoc, and the protobuf plugins.
   - Install on macOS with `brew install mise`.
@@ -55,6 +56,14 @@ mise install
 ```
 
 Tools are configured in [mise.toml](./mise.toml), with the Go version read from [go.mod](./go.mod).
+
+If you install Go through mise, [activate mise](https://mise.jdx.dev/cli/activate.html) or
+[enable its shims](https://mise.jdx.dev/dev-tools/shims.html) so `go` is available on `PATH`.
+Alternatively, run Make commands through mise:
+
+```bash
+mise exec go -- make
+```
 
 ## Build
 

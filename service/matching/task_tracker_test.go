@@ -196,3 +196,31 @@ func TestTaskTrackerIncOverRemovesBatchBias(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, slices.Max(readings(false)), float32(1.2*rate))
 }
+
+func TestTaskTrackerClear(t *testing.T) {
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+	tr := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
+
+	for range 7 {
+		tr.inc(100)
+		timeSource.Advance(5 * time.Second)
+	}
+	_, full := tr.rateAndFull()
+	require.True(t, full)
+
+	tr.clear()
+	timeSource.Advance(time.Second)
+	rate, full := tr.rateAndFull()
+	require.InDelta(t, float32(0), rate, 1e-9, "tasks from before clear are dropped")
+	require.False(t, full, "interval restarts at clear")
+
+	tr.inc(30)
+	timeSource.Advance(28 * time.Second)
+	_, full = tr.rateAndFull()
+	require.False(t, full)
+	timeSource.Advance(time.Second)
+	rate, full = tr.rateAndFull()
+	require.True(t, full)
+	require.InEpsilon(t, float32(1), rate, 0.001) // 30 tasks over 30s
+}
