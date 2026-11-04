@@ -419,6 +419,16 @@ func (c *clientImpl) RebuildMutableState(
 	return c.client.RebuildMutableState(ctx, request, opts...)
 }
 
+func (c *clientImpl) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
+}
+
 func (c *clientImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *adminservice.RefreshWorkflowTasksRequest,

@@ -85,6 +85,7 @@ var (
 	FlagTarget                     = "target"
 	FlagFromVisibility             = "from-visibility"
 	FlagExecute                    = "execute"
+	FlagReconcileBefore            = "reconcile-before"
 	FlagWorkers                    = "workers"
 	FlagOutputLog                  = "output-log"
 	FlagBatchType                  = "batch-type"

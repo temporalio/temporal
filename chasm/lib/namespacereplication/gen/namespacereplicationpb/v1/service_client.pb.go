@@ -108,3 +108,46 @@ func (c *NamespaceReplicationServiceLayeredClient) TriggerNamespaceMutation(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *NamespaceReplicationServiceLayeredClient) callReconcileNamespaceMutationNoRetry(
+	ctx context.Context,
+	request *ReconcileNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*ReconcileNamespaceMutationResponse, error) {
+	var response *ReconcileNamespaceMutationResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("NamespaceReplicationService.ReconcileNamespaceMutation"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetSystemNamespaceId(), request.GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client NamespaceReplicationServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.ReconcileNamespaceMutation(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *NamespaceReplicationServiceLayeredClient) ReconcileNamespaceMutation(
+	ctx context.Context,
+	request *ReconcileNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*ReconcileNamespaceMutationResponse, error) {
+	call := func(ctx context.Context) (*ReconcileNamespaceMutationResponse, error) {
+		return c.callReconcileNamespaceMutationNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

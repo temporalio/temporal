@@ -1,0 +1,179 @@
+package frontend
+
+import (
+	"context"
+	"fmt"
+	"slices"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
+	chasmnsreplication "go.temporal.io/server/chasm/lib/namespacereplication"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+const (
+	namespaceMutationRepairVisibilityPageSize = 100
+	namespaceMutationRepairConcurrency        = 4
+)
+
+func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+) (_ *adminservice.ReconcileNamespaceMutationComponentsResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if err := adh.validateNamespaceMutationRepair(ctx, request); err != nil {
+		return nil, err
+	}
+
+	ctx = chasm.NewVisibilityManagerContext(ctx, adh.chasmVisibilityManager)
+	query := fmt.Sprintf(
+		`%s = %q AND ExecutionStatus = "Running"`,
+		chasmnsreplication.NamespaceIDSearchAttributeName,
+		request.GetNamespaceId(),
+	)
+	pageSize := int(request.GetPageSize())
+	if pageSize <= 0 || pageSize > namespaceMutationRepairVisibilityPageSize {
+		pageSize = namespaceMutationRepairVisibilityPageSize
+	}
+	page, err := chasm.ListExecutions[
+		*chasmnsreplication.NamespaceMutationComponent,
+		*emptypb.Empty,
+	](ctx, &chasm.ListExecutionsRequest{
+		NamespaceName: primitives.SystemLocalNamespace,
+		Query:         query,
+		PageSize:      pageSize,
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list namespace mutation components: %w", err)
+	}
+	response := &adminservice.ReconcileNamespaceMutationComponentsResponse{
+		NextPageToken: page.NextPageToken,
+		Components:    make([]*adminservice.NamespaceMutationComponentReconciliation, len(page.Executions)),
+	}
+	var group errgroup.Group
+	group.SetLimit(namespaceMutationRepairConcurrency)
+	for i, execution := range page.Executions {
+		group.Go(func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			response.Components[i] = adh.reconcileNamespaceMutationExecution(ctx, request, execution.BusinessID, execution.RunID)
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (adh *AdminHandler) validateNamespaceMutationRepair(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+) error {
+	if request == nil {
+		return serviceerror.NewInvalidArgument("request is required")
+	}
+	if request.GetNamespaceId() == "" || request.GetRepairId() == "" || request.GetReason() == "" {
+		return serviceerror.NewInvalidArgument("namespace_id, repair_id, and reason are required")
+	}
+	if request.GetCutoffTime() == nil || request.GetCutoffTime().CheckValid() != nil {
+		return serviceerror.NewInvalidArgument("a valid cutoff_time is required")
+	}
+	if request.VerifiedConfigVersion == nil || request.VerifiedFailoverVersion == nil {
+		return serviceerror.NewInvalidArgument("verified config and failover versions are required")
+	}
+	authoritativePeers, _, err := nsreplication.ValidatePeerSets(request.GetAuthoritativePeerClusters(), request.GetVerifiedPeerClusters())
+	if err != nil {
+		return err
+	}
+	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+	if _, included := authoritativePeers[currentCluster]; included {
+		return serviceerror.NewInvalidArgument("authoritative_peer_clusters must not include the source cluster")
+	}
+
+	namespaceResponse, err := adh.persistenceMetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		ID: request.GetNamespaceId(),
+	})
+	if err != nil {
+		return err
+	}
+	detail := namespaceResponse.Namespace
+	if detail.GetConfigVersion() != request.GetVerifiedConfigVersion().GetValue() || detail.GetFailoverVersion() != request.GetVerifiedFailoverVersion().GetValue() {
+		return serviceerror.NewFailedPrecondition("source namespace versions changed after verification")
+	}
+	if !namespaceResponse.IsGlobalNamespace || detail.GetInfo().GetId() != request.GetNamespaceId() {
+		return serviceerror.NewFailedPrecondition("repair namespace is not a matching global namespace")
+	}
+	if state := detail.GetInfo().GetState(); state != enumspb.NAMESPACE_STATE_REGISTERED && state != enumspb.NAMESPACE_STATE_DEPRECATED {
+		return serviceerror.NewFailedPrecondition("repair namespace lifecycle state is not supported")
+	}
+	replicationConfig := detail.GetReplicationConfig()
+	if replicationConfig.GetActiveClusterName() != currentCluster {
+		return serviceerror.NewFailedPrecondition("repair must run on the active namespace cluster")
+	}
+	if state := replicationConfig.GetState(); state != enumspb.REPLICATION_STATE_NORMAL && state != enumspb.REPLICATION_STATE_UNSPECIFIED {
+		return serviceerror.NewFailedPrecondition("namespace replication state must be NORMAL")
+	}
+
+	actualPeers := slices.Clone(replicationConfig.GetClusters())
+	slices.Sort(actualPeers)
+	expectedPeers := append(slices.Clone(request.GetAuthoritativePeerClusters()), currentCluster)
+	slices.Sort(expectedPeers)
+	if !slices.Equal(actualPeers, expectedPeers) {
+		return serviceerror.NewFailedPrecondition("authoritative namespace replica set changed before component reconciliation")
+	}
+	return nil
+}
+
+func (adh *AdminHandler) reconcileNamespaceMutationExecution(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	businessID string,
+	runID string,
+) *adminservice.NamespaceMutationComponentReconciliation {
+	result := &adminservice.NamespaceMutationComponentReconciliation{
+		BusinessId: businessID,
+		RunId:      runID,
+	}
+	response, err := adh.chasmNsReplClient.ReconcileNamespaceMutation(
+		ctx,
+		&namespacereplicationpb.ReconcileNamespaceMutationRequest{
+			SystemNamespaceId:       primitives.SystemNamespaceID,
+			BusinessId:              businessID,
+			RunId:                   runID,
+			NamespaceId:             request.GetNamespaceId(),
+			RepairId:                request.GetRepairId(),
+			Reason:                  request.GetReason(),
+			Cutoff:                  request.GetCutoffTime(),
+			VerifiedConfigVersion:   request.VerifiedConfigVersion,
+			VerifiedFailoverVersion: request.VerifiedFailoverVersion,
+			AuthoritativePeerCells:  request.GetAuthoritativePeerClusters(),
+			VerifiedPeerCells:       request.GetVerifiedPeerClusters(),
+		},
+	)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Eligible = response.GetComponentEligible()
+	result.IneligibleReason = response.GetIneligibleReason()
+	result.Completed = response.GetComponentCompleted()
+	for _, peer := range response.GetPeers() {
+		result.Peers = append(result.Peers, &adminservice.NamespaceMutationPeerReconciliation{
+			TargetCluster: peer.GetTargetCell(),
+			Outcome:       peer.GetOutcome(),
+			Basis:         peer.GetBasis(),
+		})
+	}
+	return result
+}

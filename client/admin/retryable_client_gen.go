@@ -626,6 +626,21 @@ func (c *retryableClient) RebuildMutableState(
 	return resp, err
 }
 
+func (c *retryableClient) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReconcileNamespaceMutationComponentsResponse, error) {
+	var resp *adminservice.ReconcileNamespaceMutationComponentsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *adminservice.RefreshWorkflowTasksRequest,

@@ -4,6 +4,7 @@ package temporal.server.api.adminservice.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
@@ -19,6 +20,7 @@ import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/dlq.proto";
+import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/health/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
@@ -236,6 +238,9 @@ message ApplyNamespaceMutationRequest {
   // The default admission policy retains this snapshot even when the namespace
   // is absent, so its config version fences delayed older additions.
   bool removed_peer = 10;
+
+  // Attribution for direct operator repair.
+  NamespaceMutationAttribution attribution = 11;
 }
 
 message ApplyNamespaceMutationResponse {
@@ -499,6 +504,9 @@ message GetNamespaceResponse {
   int64 failover_version = 7;
   repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
   bool is_global_namespace = 9;
+  // Server time captured before reading this snapshot. Repair uses this as a
+  // conservative reconciliation cutoff instead of the operator's clock.
+  google.protobuf.Timestamp observation_time = 10;
 }
 
 message GetDLQTasksRequest {
@@ -809,4 +817,52 @@ message CountExecutionsResponse {
     // Approximate count.
     int64 count = 2;
   }
+}
+
+message NamespaceMutationAttribution {
+  enum Origin {
+    ORIGIN_UNSPECIFIED = 0;
+    ORIGIN_OPERATOR_REPAIR = 1;
+  }
+
+  Origin origin = 1;
+  string repair_id = 2;
+  string reason = 3;
+}
+
+// ReconcileNamespaceMutationComponentsRequest closes only pending CHASM peer
+// fan-outs that a verified operator repair has superseded.
+message ReconcileNamespaceMutationComponentsRequest {
+  string namespace_id = 1;
+  string repair_id = 2;
+  string reason = 3;
+  google.protobuf.Timestamp cutoff_time = 4;
+  repeated string authoritative_peer_clusters = 5;
+  repeated string verified_peer_clusters = 6;
+  int32 page_size = 7;
+  bytes next_page_token = 8;
+  // Source versions covered by the final verification. Presence is significant even when zero.
+  google.protobuf.Int64Value verified_config_version = 9;
+  google.protobuf.Int64Value verified_failover_version = 10;
+}
+
+message ReconcileNamespaceMutationComponentsResponse {
+  repeated NamespaceMutationComponentReconciliation components = 1;
+  bytes next_page_token = 2;
+}
+
+message NamespaceMutationComponentReconciliation {
+  string business_id = 1;
+  string run_id = 2;
+  bool eligible = 3;
+  string ineligible_reason = 4;
+  bool completed = 5;
+  repeated NamespaceMutationPeerReconciliation peers = 6;
+  string error = 7;
+}
+
+message NamespaceMutationPeerReconciliation {
+  string target_cluster = 1;
+  temporal.server.api.enums.v1.NamespaceReconciliationOutcome outcome = 2;
+  temporal.server.api.enums.v1.ManualReconciliationBasis basis = 3;
 }

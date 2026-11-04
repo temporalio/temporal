@@ -27,7 +27,7 @@ func getCommands(
 		{
 			Name:        "namespace",
 			Usage:       "Run admin operations on namespaces",
-			Subcommands: newNamespaceReplicationCommands(clientFactory, namespaceReplicationOptions),
+			Subcommands: newNamespaceReplicationCommands(clientFactory, namespaceReplicationOptions, prompterFactory),
 		},
 		{
 			Name:        "execution",

@@ -30,6 +30,8 @@ const namespaceReplicationClusterListPageSize = 1000
 const namespaceReplicationWarningInitialHistory = "target is missing the initial failover history entry; configuration repair will not change failover history"
 
 const (
+	namespaceReplicationRoleSource                      = "SOURCE"
+	namespaceReplicationRoleTarget                      = "TARGET"
 	namespaceReplicationStatusHealthy                   = "HEALTHY"
 	namespaceReplicationStatusRepairRequired            = "REPAIR_REQUIRED"
 	namespaceReplicationStatusBlocked                   = "BLOCKED"
@@ -92,6 +94,10 @@ type namespaceReplicationObservation struct {
 	sourceSnapshot   *adminservice.GetNamespaceResponse
 	targetSnapshots  map[string]*adminservice.GetNamespaceResponse
 	clusterAddresses map[string]string
+	// sourceStable is set only after the final source read matches the source
+	// snapshot used to compare targets. Repair must not reconcile CHASM peers
+	// from a partial observation whose authority may have moved mid-scan.
+	sourceStable bool
 }
 
 type namespaceReplicationAdminClientConnection struct {
@@ -238,7 +244,7 @@ func (v *namespaceReplicationVerifier) observe(
 	sourceFailoverVersion := source.GetFailoverVersion()
 	result.Clusters = append(result.Clusters, namespaceReplicationClusterVerification{
 		Cluster:             result.SourceCluster,
-		Role:                "SOURCE",
+		Role:                namespaceReplicationRoleSource,
 		Presence:            namespaceReplicationPresencePresent,
 		ConfigVersion:       &sourceConfigVersion,
 		ConfigFingerprint:   result.SourceConfigFingerprint,
@@ -334,6 +340,7 @@ func (v *namespaceReplicationVerifier) observe(
 		return observation, nil
 	}
 	observation.sourceSnapshot = finalSource
+	observation.sourceStable = true
 
 	deriveNamespaceReplicationStatus(result)
 	return observation, nil
@@ -349,7 +356,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 ) (result namespaceReplicationClusterVerification, namespace *adminservice.GetNamespaceResponse) {
 	result = namespaceReplicationClusterVerification{
 		Cluster:       cluster,
-		Role:          "TARGET",
+		Role:          namespaceReplicationRoleTarget,
 		Presence:      namespaceReplicationPresenceUnavailable,
 		ConfigMatch:   namespaceReplicationMatchUnknown,
 		FailoverMatch: namespaceReplicationMatchUnknown,

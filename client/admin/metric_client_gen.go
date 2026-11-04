@@ -583,6 +583,20 @@ func (c *metricClient) RebuildMutableState(
 	return c.client.RebuildMutableState(ctx, request, opts...)
 }
 
+func (c *metricClient) ReconcileNamespaceMutationComponents(
+	ctx context.Context,
+	request *adminservice.ReconcileNamespaceMutationComponentsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ReconcileNamespaceMutationComponentsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientReconcileNamespaceMutationComponents")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReconcileNamespaceMutationComponents(ctx, request, opts...)
+}
+
 func (c *metricClient) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *adminservice.RefreshWorkflowTasksRequest,

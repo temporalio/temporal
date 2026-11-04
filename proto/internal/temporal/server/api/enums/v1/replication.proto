@@ -32,3 +32,25 @@ enum ReplicationFlowControlCommand {
   REPLICATION_FLOW_CONTROL_COMMAND_RESUME = 1;
   REPLICATION_FLOW_CONTROL_COMMAND_PAUSE = 2;
 }
+
+// NamespaceReconciliationOutcome reports the disposition of a peer delivery
+// during operator repair.
+enum NamespaceReconciliationOutcome {
+  NAMESPACE_RECONCILIATION_OUTCOME_UNSPECIFIED = 0;
+  // Operator repair closed the peer delivery.
+  NAMESPACE_RECONCILIATION_OUTCOME_RECONCILED = 1;
+  // The delivery had already reached a terminal outcome.
+  NAMESPACE_RECONCILIATION_OUTCOME_ALREADY_TERMINAL = 2;
+  // The current replica was not verified and its delivery remains open.
+  NAMESPACE_RECONCILIATION_OUTCOME_NOT_VERIFIED = 3;
+}
+
+// ManualReconciliationBasis records why an operator closed a peer delivery.
+enum ManualReconciliationBasis {
+  MANUAL_RECONCILIATION_BASIS_UNSPECIFIED = 0;
+  // The configured peer's namespace state was verified after repair.
+  MANUAL_RECONCILIATION_BASIS_VERIFIED_TARGET = 1;
+  // The source no longer includes this peer. Delivery was abandoned without
+  // inspecting or updating the peer, which may retain stale membership.
+  MANUAL_RECONCILIATION_BASIS_REMOVED_MEMBERSHIP = 2;
+}

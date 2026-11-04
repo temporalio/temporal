@@ -114,6 +114,19 @@ enum PeerApplyOutcome {
   // The peer processed a shadow request without writing receiver state and the
   // received payload differed from the legacy reference.
   PEER_APPLY_OUTCOME_SHADOW_MISMATCH = 8;
+  // An operator repair verified the peer's namespace state, or abandoned its
+  // delivery because the source no longer includes it in the replica set.
+  // Removed peers are not inspected or updated and may retain stale membership.
+  // This closes delivery successfully without proving a transport apply/no-op.
+  PEER_APPLY_OUTCOME_MANUALLY_RECONCILED = 9;
+}
+
+message ManualReconciliation {
+  string repair_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp reconciled_at = 3;
+  google.protobuf.Timestamp cutoff = 4;
+  temporal.server.api.enums.v1.ManualReconciliationBasis basis = 5;
 }
 
 message LocalApplyStatus {
@@ -145,4 +158,20 @@ message PeerApplyStatus {
   google.protobuf.Timestamp last_attempt_at = 4;
   // Most recent failure. Retained after a later successful attempt for diagnostics.
   temporal.api.failure.v1.Failure last_failure = 5;
+  // Set only when an operator repair superseded the pending delivery. Existing
+  // attempt counters, timestamps, and failure details remain untouched.
+  ManualReconciliation manual_reconciliation = 6;
+}
+
+message ReconcileNamespaceMutationResponse {
+  repeated PeerReconciliation peers = 1;
+  bool component_completed = 2;
+  bool component_eligible = 3;
+  string ineligible_reason = 4;
+}
+
+message PeerReconciliation {
+  string target_cell = 1;
+  temporal.server.api.enums.v1.NamespaceReconciliationOutcome outcome = 2;
+  temporal.server.api.enums.v1.ManualReconciliationBasis basis = 3;
 }

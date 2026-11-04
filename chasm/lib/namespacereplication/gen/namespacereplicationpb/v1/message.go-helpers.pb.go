@@ -81,6 +81,43 @@ func (this *NamespaceMutationState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ManualReconciliation to the protobuf v3 wire format
+func (val *ManualReconciliation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ManualReconciliation from the protobuf v3 wire format
+func (val *ManualReconciliation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ManualReconciliation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ManualReconciliation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ManualReconciliation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ManualReconciliation
+	switch t := that.(type) {
+	case *ManualReconciliation:
+		that1 = t
+	case ManualReconciliation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type LocalApplyStatus to the protobuf v3 wire format
 func (val *LocalApplyStatus) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -155,6 +192,80 @@ func (this *PeerApplyStatus) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ReconcileNamespaceMutationResponse to the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ReconcileNamespaceMutationResponse from the protobuf v3 wire format
+func (val *ReconcileNamespaceMutationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ReconcileNamespaceMutationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ReconcileNamespaceMutationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ReconcileNamespaceMutationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ReconcileNamespaceMutationResponse
+	switch t := that.(type) {
+	case *ReconcileNamespaceMutationResponse:
+		that1 = t
+	case ReconcileNamespaceMutationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PeerReconciliation to the protobuf v3 wire format
+func (val *PeerReconciliation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PeerReconciliation from the protobuf v3 wire format
+func (val *PeerReconciliation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PeerReconciliation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PeerReconciliation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PeerReconciliation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PeerReconciliation
+	switch t := that.(type) {
+	case *PeerReconciliation:
+		that1 = t
+	case PeerReconciliation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	ComponentStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,
@@ -199,15 +310,16 @@ func LocalApplyOutcomeFromString(s string) (LocalApplyOutcome, error) {
 
 var (
 	PeerApplyOutcome_shorthandValue = map[string]int32{
-		"Unspecified":     0,
-		"Pending":         1,
-		"Applied":         2,
-		"NoOpStale":       3,
-		"FailedRetriable": 4,
-		"FailedTerminal":  5,
-		"NotAdmitted":     6,
-		"ShadowMatch":     7,
-		"ShadowMismatch":  8,
+		"Unspecified":        0,
+		"Pending":            1,
+		"Applied":            2,
+		"NoOpStale":          3,
+		"FailedRetriable":    4,
+		"FailedTerminal":     5,
+		"NotAdmitted":        6,
+		"ShadowMatch":        7,
+		"ShadowMismatch":     8,
+		"ManuallyReconciled": 9,
 	}
 )
 

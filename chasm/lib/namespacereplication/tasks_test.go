@@ -2381,3 +2381,122 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 	require.Contains(t, peer.GetLastFailure().GetMessage(), "unknown peer apply result: 999")
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())
 }
+
+func TestApplyPeerTask_Execute_LateSuccessDoesNotOverwriteManualReconciliation(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.start(env.mutationUpdate("cellB", "cellC"), func(component *NamespaceMutationComponent) {
+		component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	})
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			}, nil
+		},
+	)
+
+	require.NoError(t, env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	))
+	requireAuthoritativeMetric(t, metricsCapture, nsreplicationcommon.CHASMApplyStagePeer, nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped)
+	require.Empty(t, eventLogger.records)
+	require.Equal(
+		t,
+		namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED,
+		env.read(ref).GetPeerApply()["cellB"].GetOutcome(),
+	)
+}
+
+func TestApplyPeerTask_Execute_LateRetryDoesNotOverwriteManualReconciliation(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.start(env.mutationUpdate("cellB", "cellC"), func(component *NamespaceMutationComponent) {
+		component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	})
+	beforeTasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	beforeTimers := len(beforeTasks[historytasks.CategoryTimer])
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return nil, serviceerror.NewUnavailable("peer down")
+		},
+	)
+
+	err = env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	)
+	require.Error(t, err)
+	requireAuthoritativeMetric(t, metricsCapture, nsreplicationcommon.CHASMApplyStagePeer, nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped)
+	require.Empty(t, eventLogger.records)
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingAge.Name()))
+	require.Empty(t, metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.Name()))
+	afterTasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	require.Len(t, afterTasks[historytasks.CategoryTimer], beforeTimers)
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED, env.read(ref).GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyPeerTask_Execute_LateOutcomeDoesNotOverwriteNewerAttempt(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	metricsCapture, eventLogger := env.enableObservability()
+	ref := env.startCommitted("cellB")
+
+	env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+	env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *adminservice.ApplyNamespaceMutationRequest, ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+			_, err := env.engine.UpdateComponent(
+				env.engineCtx,
+				ref,
+				func(_ chasm.MutableContext, component chasm.Component) error {
+					component.(*NamespaceMutationComponent).PeerApply["cellB"].AttemptCount = 1
+					return nil
+				},
+			)
+			require.NoError(t, err)
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			}, nil
+		},
+	)
+
+	require.NoError(t, env.peerHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{Destination: "cellB"},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	))
+	requireAuthoritativeMetric(t, metricsCapture, nsreplicationcommon.CHASMApplyStagePeer, nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped)
+	require.Empty(t, eventLogger.records)
+	peer := env.read(ref).GetPeerApply()["cellB"]
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome())
+	require.Equal(t, int32(1), peer.GetAttemptCount())
+}

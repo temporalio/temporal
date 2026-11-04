@@ -175,6 +175,7 @@ func TestNamespaceMutationTransportRouting(t *testing.T) {
 }
 
 type captureNamespaceReplicationClient struct {
+	namespacereplicationpb.NamespaceReplicationServiceClient
 	request  *namespacereplicationpb.TriggerNamespaceMutationRequest
 	requests chan *namespacereplicationpb.TriggerNamespaceMutationRequest
 }
@@ -192,6 +193,7 @@ func (c *captureNamespaceReplicationClient) TriggerNamespaceMutation(
 }
 
 type blockingNamespaceReplicationClient struct {
+	namespacereplicationpb.NamespaceReplicationServiceClient
 	started   chan context.Context
 	release   chan struct{}
 	completed chan struct{}

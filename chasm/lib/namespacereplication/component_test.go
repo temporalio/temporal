@@ -133,6 +133,7 @@ func TestAllPeersTerminal(t *testing.T) {
 				"d": namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
 				"e": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
 				"f": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
+				"g": namespacereplicationpb.PEER_APPLY_OUTCOME_MANUALLY_RECONCILED,
 			},
 			want: true,
 		},

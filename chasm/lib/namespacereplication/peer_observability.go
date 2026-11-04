@@ -24,7 +24,6 @@ type peerOutcomeRecord struct {
 	resolvedAt        time.Time
 	startedAt         time.Time
 	componentTerminal *componentTerminalObservation
-	completion        *shadowCompletionRecord
 }
 
 func (h *applyPeerTaskHandler) observePeerApply(request PeerApplyRequest, recorded peerOutcomeRecord, applyErr, saveErr error, duration time.Duration) {

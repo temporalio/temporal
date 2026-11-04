@@ -53,6 +53,18 @@ func newComponentTerminalObservation(
 	return observation
 }
 
+func completeIfAllPeersTerminal(c *NamespaceMutationComponent, ctx chasm.MutableContext) (*componentTerminalObservation, error) {
+	if !c.allPeersTerminal() {
+		return nil, nil
+	}
+	if err := TransitionAllPeersTerminal.Apply(c, ctx, EventAllPeersTerminal{}); err != nil {
+		return nil, err
+	}
+	terminal := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
+	terminal.shadowCompletion = newShadowCompletionRecord(c, ctx.Now(c))
+	return terminal, nil
+}
+
 func emitComponentTerminal(
 	logger log.Logger,
 	eventLogger otellog.Logger,
@@ -69,33 +81,7 @@ func emitComponentTerminal(
 		return
 	}
 
-	outcome := nsreplicationcommon.CHASMApplyOutcomeCompleted
-	if terminal.status == namespacereplicationpb.COMPONENT_STATUS_FAILED {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeFailed
-	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
-	}
-	nsreplicationcommon.EmitCHASMAuthoritativeApply(
-		eventLogger,
-		nsreplicationcommon.CHASMAuthoritativeApplyObservation{
-			Task:                task,
-			Stage:               nsreplicationcommon.CHASMApplyStageComponent,
-			Outcome:             outcome,
-			SourceCluster:       currentCluster,
-			ComponentBusinessID: ref.BusinessID,
-			ComponentRunID:      ref.RunID,
-			Error:               terminalErr,
-			Details: map[string]any{
-				"component_status":    terminal.status.String(),
-				"local_apply_outcome": terminal.localOutcome.String(),
-				"peer_count":          terminal.peerCount,
-				"peer_attempt_count":  terminal.peerAttemptCount,
-				"peer_outcomes":       terminal.peerOutcomes,
-				"peer_attempt_counts": terminal.peerAttemptCounts,
-				"peer_outcome_counts": terminal.peerOutcomeCounts,
-			},
-		},
-	)
+	nsreplicationcommon.EmitCHASMAuthoritativeApply(eventLogger, componentTerminalApplyObservation(currentCluster, ref, task, terminal, terminalErr))
 }
 
 func (h *applyLocalTaskHandler) observeLocalApplyResult(
@@ -217,5 +203,38 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 	if (saveErr != nil || (recorded.stateUpdated && !recorded.retryScheduled)) &&
 		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
+	}
+}
+
+func componentTerminalApplyObservation(
+	currentCluster string,
+	ref chasm.ComponentRef,
+	task *replicationspb.NamespaceTaskAttributes,
+	terminal *componentTerminalObservation,
+	terminalErr error,
+) nsreplicationcommon.CHASMAuthoritativeApplyObservation {
+	outcome := nsreplicationcommon.CHASMApplyOutcomeCompleted
+	if terminal.status == namespacereplicationpb.COMPONENT_STATUS_FAILED {
+		outcome = nsreplicationcommon.CHASMApplyOutcomeFailed
+	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
+		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
+	}
+	return nsreplicationcommon.CHASMAuthoritativeApplyObservation{
+		Task:                task,
+		Stage:               nsreplicationcommon.CHASMApplyStageComponent,
+		Outcome:             outcome,
+		SourceCluster:       currentCluster,
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		Error:               terminalErr,
+		Details: map[string]any{
+			"component_status":    terminal.status.String(),
+			"local_apply_outcome": terminal.localOutcome.String(),
+			"peer_count":          terminal.peerCount,
+			"peer_attempt_count":  terminal.peerAttemptCount,
+			"peer_outcomes":       terminal.peerOutcomes,
+			"peer_attempt_counts": terminal.peerAttemptCounts,
+			"peer_outcome_counts": terminal.peerOutcomeCounts,
+		},
 	}
 }

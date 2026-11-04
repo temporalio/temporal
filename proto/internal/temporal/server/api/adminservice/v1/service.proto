@@ -242,6 +242,11 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // Reconcile covered pending fan-outs after an operator repair.
+  rpc ReconcileNamespaceMutationComponents(ReconcileNamespaceMutationComponentsRequest) returns (ReconcileNamespaceMutationComponentsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
