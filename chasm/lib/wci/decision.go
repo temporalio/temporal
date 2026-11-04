@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 	"slices"
-
-	enumspb "go.temporal.io/api/enums/v1"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"

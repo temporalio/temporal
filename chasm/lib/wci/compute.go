@@ -37,7 +37,7 @@ const (
 	maxInvokeAttempts = 2
 	// Resizes for groups that serve nothing in the host region get the workflow's UpdateWorkerSetSize attempts.
 	maxInactiveResizeAttempts = 2
-	computeTaskGroup  = "wci-compute"
+	computeTaskGroup          = "wci-compute"
 )
 
 var resizeBackoff = backoff.NewExponentialRetryPolicy(time.Second).WithMaximumInterval(time.Minute)

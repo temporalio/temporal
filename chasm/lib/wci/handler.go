@@ -17,6 +17,7 @@ import (
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/wci/migration"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
@@ -30,6 +31,7 @@ type HandlerOptions struct {
 	NamespaceRegistry namespace.Registry
 	Logger            log.Logger
 	StaticConfig      *wciconfig.StaticConfig `optional:"true"`
+	DynamicConfig     *dynamicconfig.Collection
 }
 
 type handler struct {
@@ -38,7 +40,7 @@ type handler struct {
 	compute    ComputeClient
 	frontend   workflowservice.WorkflowServiceClient
 	namespaces namespace.Registry
-	hostRegion string
+	hostRegion dynamicconfig.StringPropertyFn
 	logger     log.Logger
 }
 
@@ -48,7 +50,7 @@ func newHandler(opts HandlerOptions) *handler {
 		frontend:   opts.FrontendClient,
 		namespaces: opts.NamespaceRegistry,
 		logger:     opts.Logger,
-		hostRegion: hostRegionOf(opts.StaticConfig),
+		hostRegion: hostRegionFn(opts.StaticConfig, opts.DynamicConfig),
 	}
 }
 
@@ -205,7 +207,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	if err := h.validate(ctx, rc, updated, unchangedGroups); err != nil {
 		return nil, err
 	}
-	registrations, err := registerTaskQueues(ctx, h.algorithmContext(ctx), h.frontend, h.compute, h.logger, rc, updated, cur.statuses, h.hostRegion)
+	registrations, err := registerTaskQueues(ctx, h.algorithmContext(ctx), h.frontend, h.compute, h.logger, rc, updated, cur.statuses, h.hostRegion())
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +227,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		if err := final.ValidateWorkerSetTargets(); err != nil {
 			return nil, err
 		}
-		w.recordHostRegion(h.hostRegion)
+		w.recordHostRegion(h.hostRegion())
 		w.applySpec(mctx, specsToCHASM(final), registrations)
 		w.LastModifierIdentity = req.GetIdentity()
 		w.recordSpecChange(mctx)
@@ -365,7 +367,7 @@ func (h *handler) RecordTaskAdd(ctx context.Context, req *wcipb.RecordTaskAddReq
 		if err := w.CheckMutable(); err != nil {
 			return struct{}{}, err
 		}
-		w.recordHostRegion(h.hostRegion)
+		w.recordHostRegion(h.hostRegion())
 		w.healPollTimer(mctx)
 		return struct{}{}, w.ProcessTaskAdd(mctx, req.GetEvent())
 	}, nil)
@@ -458,7 +460,7 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 			// the token onto a re-created instance, so nothing applies twice.
 			live := w.Status == wcipb.WCI_STATUS_RUNNING || w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW
 			if req.GetFirstTaskAddSeq() > 0 && live {
-				w.recordHostRegion(h.hostRegion)
+				w.recordHostRegion(h.hostRegion())
 				return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 			}
 			return struct{}{}, nil
@@ -469,7 +471,7 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 		if err := TransitionMigrationActivated.Apply(w, mctx, EventMigrationActivated{}); err != nil {
 			return struct{}{}, err
 		}
-		w.recordHostRegion(h.hostRegion)
+		w.recordHostRegion(h.hostRegion())
 		return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 	}, nil)
 	if err != nil {

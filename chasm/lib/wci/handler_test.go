@@ -661,11 +661,12 @@ func TestE2E_SupersededFetchDoesNotApply(t *testing.T) {
 
 // moveTo points every handler at a new host region, as after a failover.
 func (e *e2e) moveTo(region string) {
-	e.handler.hostRegion = region
-	e.lib.FetchSnapshotTaskHandler.hostRegion = region
-	e.lib.DeferredDecisionTaskHandler.hostRegion = region
-	e.lib.MigrateToWorkflowTaskHandler.hostRegion = region
-	e.lib.ResizeTaskHandler.hostRegion = region
+	at := func() string { return region }
+	e.handler.hostRegion = at
+	e.lib.FetchSnapshotTaskHandler.hostRegion = at
+	e.lib.DeferredDecisionTaskHandler.hostRegion = at
+	e.lib.MigrateToWorkflowTaskHandler.hostRegion = at
+	e.lib.ResizeTaskHandler.hostRegion = at
 }
 
 func TestE2E_RecordsHostRegion(t *testing.T) {
