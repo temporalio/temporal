@@ -1120,14 +1120,10 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	WorkflowBufferedInput                         = NewCounterDef(
-		"workflow_buffered_input",
-		WithDescription("Number of buffered inputs behind a started Workflow Task, tagged by namespace and input_type."),
-	)
-	WorkflowFirstBufferedInput = NewCounterDef(
-		"workflow_first_buffered_input",
-		WithDescription("Number of buffered inputs behind a started Workflow Task when no input is already buffered, tagged by namespace and input_type."),
-	)
+
+	WorkflowHeartbeatNotificationBufferedInput      = NewCounterDef("workflow_heartbeat_notification_buffered_input")
+	WorkflowHeartbeatNotificationFirstBufferedInput = NewCounterDef("workflow_heartbeat_notification_first_buffered_input")
+
 	SignalWithStartWorkflowStartDeduped       = NewCounterDef("signal_with_start_workflow_start_deduped")
 	SignalWithStartWorkflowTaskBackoffCounter = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter         = NewCounterDef("duplicate_replication_events")

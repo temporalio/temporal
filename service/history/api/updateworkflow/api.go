@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -56,6 +57,8 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
+	bufferedInput          bool
+	firstBufferedInput     bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -105,6 +108,16 @@ func (u *Updater) Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+	if u.bufferedInput {
+		handler := u.shardCtx.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(u.req.Request.Namespace),
+			metrics.StringTag("input_type", string(api.WHNInputTypeUpdate)),
+		)
+		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
+		if u.firstBufferedInput {
+			metrics.WorkflowHeartbeatNotificationFirstBufferedInput.With(handler).Record(1)
+		}
 	}
 
 	return u.OnSuccess(ctx)
@@ -182,6 +195,11 @@ func (u *Updater) applyRequest(
 	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
 		return nil, err
 	}
+	startedWorkflowTask := ms.HasStartedWorkflowTask()
+	hadBufferedInput := false
+	if startedWorkflowTask {
+		hadBufferedInput = api.HasBufferedWHNInputEvent(ms) || updateReg.HasOutgoingMessages(false)
+	}
 
 	var (
 		alreadyExisted bool
@@ -198,6 +216,10 @@ func (u *Updater) applyRequest(
 	if err != nil {
 		return nil, err
 	}
+	if startedWorkflowTask && !alreadyExisted {
+		u.bufferedInput = true
+		u.firstBufferedInput = !hadBufferedInput
+	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
@@ -208,6 +230,7 @@ func (u *Updater) applyRequest(
 			// otherwise would convert a speculative workflow task to a normal one.
 			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
+			InputType:          api.WHNInputTypeUpdate,
 		}, nil
 	}
 
@@ -246,6 +269,7 @@ func (u *Updater) applyRequest(
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
 		CreateWorkflowTask: false,
+		InputType:          api.WHNInputTypeUpdate,
 	}, nil
 }
 

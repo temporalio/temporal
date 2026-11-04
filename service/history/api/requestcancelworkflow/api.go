@@ -83,7 +83,10 @@ func Invoke(
 				return nil, err
 			}
 
-			return api.UpdateWorkflowWithNewWorkflowTask, nil
+			return &api.UpdateWorkflowAction{
+				CreateWorkflowTask: true,
+				InputType:          api.WHNInputTypeCancellationRequest,
+			}, nil
 		},
 		nil,
 		shard,

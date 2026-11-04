@@ -118,6 +118,7 @@ func Invoke(
 					return nil, err
 				}
 				postActions.CreateWorkflowTask = true
+				postActions.InputType = api.WHNInputTypeActivityResult
 				closed = true
 			} else {
 				closed = false
