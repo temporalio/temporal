@@ -40,9 +40,8 @@ included.
 | `temporal_with_statsd`        | Built-in StatsD reporting     | StatsD client                                      |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
+Without built-in metric reporters, metrics default to a no-op handler.
 
 `make build-tags-check`, which runs in CI, checks the packages each `temporal_with_*` tag compiles out
 of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` variables in the
 `Makefile`. When adding an integration, add a variable for its tag.
-
-Without built-in metric reporters, metrics default to a no-op handler.
