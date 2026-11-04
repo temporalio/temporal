@@ -155,6 +155,22 @@ func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
 	s.NoError(err)
 	s.Equal(changed.State, stored.State)
 	s.Equal(changed.Status, stored.Status)
+
+	// A row that would not change is not updated at all.
+	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_fail_update() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test update'; END $$`))
+	defer func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_fail_update()`)) }()
+	s.NoError(s.admin.Exec(fmt.Sprintf(`CREATE TRIGGER pipeline_test_fail_update
+AFTER UPDATE ON current_executions
+FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update()`, current.ShardID)))
+	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_update ON current_executions`)) }()
+
+	written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), &changed)
+		s.NoError(err)
+	})
+	s.NoError(err)
+	s.True(written)
 }
 
 func (s *pipelineSuite) TestDuplicateInsert() {
