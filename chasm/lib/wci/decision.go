@@ -23,9 +23,12 @@ import (
 // Same cadence as the workflow (ASW wci/workflow).
 const (
 	minPollInterval    = 30 * time.Second
-	maxPollInterval    = 5 * time.Minute
 	validationInterval = 6 * time.Hour
 )
+
+// maxPollInterval is also the first-poll delay and the overdue margin; a var only so multi-cluster tests can
+// shorten it (SetMaxPollIntervalForTest).
+var maxPollInterval = 5 * time.Minute
 
 // spec returns the root spec as the iface type the scaling algorithms use.
 func (w *WorkerControllerInstance) spec() *iface.WorkerControllerInstanceSpec {
