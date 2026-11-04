@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MetricsPollTimerTaskHandler fires at next_poll_time and hands the I/O to FetchSnapshotTask.
+// MetricsPollTimerTaskHandler fires at next_poll_time, arms a fallback poll, and hands the I/O to FetchSnapshotTask.
 type MetricsPollTimerTaskHandler struct {
 	chasm.PureTaskHandlerBase
 }
@@ -27,6 +27,9 @@ func (h *MetricsPollTimerTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	task *wcipb.MetricsPollTimerTask,
 ) error {
+	w.InFlightPollTime = common.CloneProto(task.GetPollTime())
+	// Re-arm first: invalidates this timer and retries if the fetch is lost.
+	w.armPollTimer(ctx, ctx.Now(w).Add(maxPollInterval))
 	ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: task.GetPollTime()})
 	return nil
 }

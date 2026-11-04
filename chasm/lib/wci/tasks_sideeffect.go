@@ -66,14 +66,14 @@ func (h *FetchSnapshotTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	task *wcipb.FetchSnapshotTask,
 ) (bool, error) {
-	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetPollTime(), w.NextPollTime), nil
+	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetPollTime(), w.InFlightPollTime), nil
 }
 
 func (h *FetchSnapshotTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ *wcipb.FetchSnapshotTask,
+	task *wcipb.FetchSnapshotTask,
 ) error {
 	v, err := readVersion(ctx, ref)
 	if err != nil {
@@ -90,6 +90,10 @@ func (h *FetchSnapshotTaskHandler) Execute(
 		observed = observedTaskQueuesFromDescribe(resp)
 	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		// A newer poll fired while this one fetched; its own fetch applies instead.
+		if w.Status != wcipb.WCI_STATUS_RUNNING || !proto.Equal(task.GetPollTime(), w.InFlightPollTime) {
+			return struct{}{}, nil
+		}
 		h := metricsFor(mctx, w, "")
 		if snapshot == nil {
 			recordOperation(h, wcimetrics.OperationTypePullStats, wcimetrics.ErrorTypeDescribeWorkerDeploymentVersionFailed)

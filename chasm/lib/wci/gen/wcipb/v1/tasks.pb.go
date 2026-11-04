@@ -23,7 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Pure. Fires at next_poll_time; schedules FetchSnapshotTask.
+// Pure. Fires at next_poll_time; marks the poll in flight, arms a fallback, schedules FetchSnapshotTask.
 type MetricsPollTimerTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PollTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=poll_time,json=pollTime,proto3" json:"poll_time,omitempty"`
@@ -158,7 +158,7 @@ func (x *PeriodicValidationTimerTask) GetValidationTime() *timestamppb.Timestamp
 	return nil
 }
 
-// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm.
+// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm; stale unless poll_time is in_flight_poll_time.
 type FetchSnapshotTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PollTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=poll_time,json=pollTime,proto3" json:"poll_time,omitempty"`

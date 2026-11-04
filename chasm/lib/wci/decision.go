@@ -177,6 +177,7 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			}
 		}
 	}
+	w.InFlightPollTime = nil
 	w.armPollTimer(ctx, ctx.Now(w).Add(nextPoll))
 	return nil
 }
