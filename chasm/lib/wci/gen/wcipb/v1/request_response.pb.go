@@ -770,6 +770,8 @@ type ActivateMigrationRequest struct {
 	MigrationToken string                 `protobuf:"bytes,3,opt,name=migration_token,json=migrationToken,proto3" json:"migration_token,omitempty"`
 	// Replayed through ProcessTaskAdd in the activating transaction.
 	PendingTaskAdds []*TaskAddEvent `protobuf:"bytes,4,rep,name=pending_task_adds,json=pendingTaskAdds,proto3" json:"pending_task_adds,omitempty"`
+	// Sequence number of pending_task_adds[0]; the rest follow. 0: unnumbered, applied on first activation only.
+	FirstTaskAddSeq int64 `protobuf:"varint,5,opt,name=first_task_add_seq,json=firstTaskAddSeq,proto3" json:"first_task_add_seq,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -830,6 +832,13 @@ func (x *ActivateMigrationRequest) GetPendingTaskAdds() []*TaskAddEvent {
 		return x.PendingTaskAdds
 	}
 	return nil
+}
+
+func (x *ActivateMigrationRequest) GetFirstTaskAddSeq() int64 {
+	if x != nil {
+		return x.FirstTaskAddSeq
+	}
+	return 0
 }
 
 type ActivateMigrationResponse struct {
@@ -1132,13 +1141,14 @@ const file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc
 	"\x12ScalingGroupsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupStateR\x05value:\x028\x01\"\"\n" +
-	" CreateFromMigrationStateResponse\"\xe9\x01\n" +
+	" CreateFromMigrationStateResponse\"\x96\x02\n" +
 	"\x18ActivateMigrationRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
 	"instanceId\x12'\n" +
 	"\x0fmigration_token\x18\x03 \x01(\tR\x0emigrationToken\x12`\n" +
-	"\x11pending_task_adds\x18\x04 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x0fpendingTaskAdds\"\x1b\n" +
+	"\x11pending_task_adds\x18\x04 \x03(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\x0fpendingTaskAdds\x12+\n" +
+	"\x12first_task_add_seq\x18\x05 \x01(\x03R\x0ffirstTaskAddSeq\"\x1b\n" +
 	"\x19ActivateMigrationResponse\"\x84\x01\n" +
 	"\x15AbortMigrationRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +

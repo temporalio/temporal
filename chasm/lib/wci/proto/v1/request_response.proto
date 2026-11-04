@@ -90,6 +90,8 @@ message ActivateMigrationRequest {
   string migration_token = 3;
   // Replayed through ProcessTaskAdd in the activating transaction.
   repeated TaskAddEvent pending_task_adds = 4;
+  // Sequence number of pending_task_adds[0]; the rest follow. 0: unnumbered, applied on first activation only.
+  int64 first_task_add_seq = 5;
 }
 
 message ActivateMigrationResponse {}

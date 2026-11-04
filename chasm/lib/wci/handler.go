@@ -442,6 +442,10 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
 		// A retried activation; the instance may since have been deleted or migrated back.
 		if w.ActivatedMigrationToken != "" && w.ActivatedMigrationToken == req.GetMigrationToken() {
+			// Still the instance this token activated: apply what the source queued since.
+			if req.GetFirstTaskAddSeq() > 0 && w.Status == wcipb.WCI_STATUS_RUNNING && w.MigrationToken == req.GetMigrationToken() {
+				return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
+			}
 			return struct{}{}, nil
 		}
 		if w.MigrationToken != req.GetMigrationToken() || w.Status != wcipb.WCI_STATUS_PENDING_ACTIVATION {
@@ -450,12 +454,7 @@ func (h *handler) ActivateMigration(ctx context.Context, req *wcipb.ActivateMigr
 		if err := TransitionMigrationActivated.Apply(w, mctx, EventMigrationActivated{}); err != nil {
 			return struct{}{}, err
 		}
-		for _, event := range req.GetPendingTaskAdds() {
-			if err := w.ProcessTaskAdd(mctx, event); err != nil {
-				return struct{}{}, err
-			}
-		}
-		return struct{}{}, nil
+		return struct{}{}, w.applyQueuedTaskAdds(mctx, req.GetFirstTaskAddSeq(), req.GetPendingTaskAdds())
 	}, nil)
 	if err != nil {
 		return nil, err

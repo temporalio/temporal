@@ -257,8 +257,10 @@ type WorkerControllerInstanceState struct {
 	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
 	// Poll time of the FetchSnapshotTask whose write-back is accepted; unset when none is in flight.
 	InFlightPollTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=in_flight_poll_time,json=inFlightPollTime,proto3" json:"in_flight_poll_time,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Highest numbered task-add applied from the activating workflow's queue.
+	AppliedTaskAddSeq int64 `protobuf:"varint,16,opt,name=applied_task_add_seq,json=appliedTaskAddSeq,proto3" json:"applied_task_add_seq,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WorkerControllerInstanceState) Reset() {
@@ -394,6 +396,13 @@ func (x *WorkerControllerInstanceState) GetInFlightPollTime() *timestamppb.Times
 		return x.InFlightPollTime
 	}
 	return nil
+}
+
+func (x *WorkerControllerInstanceState) GetAppliedTaskAddSeq() int64 {
+	if x != nil {
+		return x.AppliedTaskAddSeq
+	}
+	return 0
 }
 
 // Per-group runtime state; the spec lives on the root.
@@ -1133,7 +1142,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_message_proto protoreflect.FileD
 
 const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\x90\t\n" +
+	"4temporal/server/chasm/lib/wci/proto/v1/message.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/failure/v1/message.proto\"\xc1\t\n" +
 	"\x1dWorkerControllerInstanceState\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12I\n" +
@@ -1151,7 +1160,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\x13pending_expire_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x11pendingExpireTime\x12:\n" +
 	"\x19activated_migration_token\x18\r \x01(\tR\x17activatedMigrationToken\x12D\n" +
 	"\x10last_update_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x12I\n" +
-	"\x13in_flight_poll_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x10inFlightPollTime\x1a~\n" +
+	"\x13in_flight_poll_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x10inFlightPollTime\x12/\n" +
+	"\x14applied_task_add_seq\x18\x10 \x01(\x03R\x11appliedTaskAddSeq\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
 	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xa2\x05\n" +
