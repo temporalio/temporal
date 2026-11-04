@@ -45,9 +45,4 @@ A server built without an integration refuses to start if its configuration sets
 of the `temporal_minimal` server, as listed in the `EXCLUDED_PACKAGES_<tag>` variables in the
 `Makefile`. When adding an integration, add a variable for its tag.
 
-Without built-in metric reporters, metrics default to a no-op handler. Library users can still
-supply a custom metrics handler, including the Tally and OpenTelemetry handler adapters.
-Prometheus configuration requires `temporal_with_prometheus`, including a CLI dev server configured
-with `--metrics-port`. StatsD configuration requires `temporal_with_statsd`. Each tag enables both
-the Tally and OpenTelemetry implementations of its reporter. The direct reporter constructors also
-return an error when their reporter is excluded.
+Without built-in metric reporters, metrics default to a no-op handler.
