@@ -589,6 +589,21 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
+	// One task for each task table, so a table the pipeline cannot insert into
+	// fails the BeginTxCount check below.
+	workflowKey := definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID)
+	now := time.Now().UTC()
+	currentMutation.Tasks = map[tasks.Category][]tasks.Task{
+		tasks.CategoryTransfer:    {&tasks.ActivityTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryVisibility:  {&tasks.StartExecutionVisibilityTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryOutbound: {&tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now},
+			Destination:      "destination",
+		}},
+		tasks.CategoryTimer:    {&tasks.UserTimerTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+		tasks.CategoryArchival: {&tasks.ArchiveExecutionTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
+	}
 	var beginTxCount int64
 	if s.BeginTxCount != nil {
 		beginTxCount = s.BeginTxCount()
