@@ -738,12 +738,18 @@ func (e *e2e) prepareSpecs(token string, expireIn time.Duration, specs map[strin
 }
 
 func (e *e2e) activate(token string, taskAdds int) error {
+	return e.activateSeq(token, 0, taskAdds)
+}
+
+// activateSeq sends taskAdds queued task-adds numbered from first; 0 leaves them unnumbered.
+func (e *e2e) activateSeq(token string, first int64, taskAdds int) error {
 	events := make([]*wcipb.TaskAddEvent, taskAdds)
 	for i := range events {
 		events[i] = &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}
 	}
 	_, err := e.handler.ActivateMigration(e.ctx, &wcipb.ActivateMigrationRequest{
 		NamespaceId: testNamespaceID, InstanceId: testInstanceID, MigrationToken: token, PendingTaskAdds: events,
+		FirstTaskAddSeq: first,
 	})
 	return err
 }
@@ -784,6 +790,23 @@ func TestE2E_ActivateCommitsAndReplaysOnce(t *testing.T) {
 	require.NoError(t, e.activate(testToken, 2), "a retried activation is a no-op")
 	require.Equal(t, 2, fake.taskAddCalls)
 	require.ErrorIs(t, e.abort(testToken), ErrMigrationNotPending, "an activated target cannot be aborted")
+}
+
+func TestE2E_ActivationAppliesEachTaskAddOnce(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	require.NoError(t, e.prepare(testToken, time.Minute))
+
+	require.NoError(t, e.activateSeq(testToken, 1, 2))
+	require.Equal(t, 2, fake.taskAddCalls)
+	require.NoError(t, e.activateSeq(testToken, 1, 3), "a retry carries the grown queue")
+	require.Equal(t, 3, fake.taskAddCalls, "only the new entry applies")
+	require.NoError(t, e.activateSeq(testToken, 1, 3))
+	require.Equal(t, 3, fake.taskAddCalls, "a repeated retry applies nothing")
+	require.NoError(t, e.activateSeq(testToken, 3, 2), "a forward after activation")
+	require.Equal(t, 4, fake.taskAddCalls)
+
+	w, _ := e.live(t)
+	require.EqualValues(t, 4, w.AppliedTaskAddSeq)
 }
 
 func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
@@ -843,13 +866,14 @@ func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newE2E(t, fakeAlgo{})
 			require.NoError(t, e.prepare(testToken, time.Minute))
-			require.NoError(t, e.activate(testToken, 1))
+			require.NoError(t, e.activateSeq(testToken, 1, 1))
 			tc.moveOn(t, e)
 			w, _ := e.live(t)
 			require.Equal(t, tc.status, w.Status)
 
 			require.NoError(t, e.activate(testToken, 1))
-			require.Equal(t, 1, fake.taskAddCalls, "the retry replays nothing")
+			require.NoError(t, e.activateSeq(testToken, 1, 2))
+			require.Equal(t, 1, fake.taskAddCalls, "the retry replays nothing onto an instance that moved on")
 			require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
 		})
 	}

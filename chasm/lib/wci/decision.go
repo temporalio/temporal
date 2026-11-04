@@ -283,6 +283,23 @@ func (w *WorkerControllerInstance) armPollTimer(ctx chasm.MutableContext, at tim
 	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: common.CloneProto(w.NextPollTime)})
 }
 
+// applyQueuedTaskAdds replays the source's queued task-adds numbered from first, skipping those already applied.
+func (w *WorkerControllerInstance) applyQueuedTaskAdds(ctx chasm.MutableContext, first int64, events []*wcipb.TaskAddEvent) error {
+	for i, event := range events {
+		if first > 0 {
+			seq := first + int64(i)
+			if seq <= w.AppliedTaskAddSeq {
+				continue
+			}
+			w.AppliedTaskAddSeq = seq
+		}
+		if err := w.ProcessTaskAdd(ctx, event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // healPollTimer re-arms an overdue poll: a standby discards a pure timer it can't run, and a failover doesn't re-queue it.
 func (w *WorkerControllerInstance) healPollTimer(ctx chasm.MutableContext) {
 	if w.Status != wcipb.WCI_STATUS_RUNNING || w.NextPollTime == nil {
