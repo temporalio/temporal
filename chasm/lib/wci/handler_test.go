@@ -477,6 +477,57 @@ func TestE2E_ResizeOutsideHostRegionGivesUp(t *testing.T) {
 	}
 }
 
+// After a failover the first poll hands scaling to the new region's group, and the old region's group is
+// scaled down and starts fresh, as the workflow's PullStats does; failing back mirrors it.
+func TestE2E_FailoverSwapsTheActiveRegionsGroup(t *testing.T) {
+	const east, west = "aws-us-east-1", "aws-us-west-2"
+	e := newE2EInRegion(t, fakeAlgo{}, east)
+	_, err := e.update(map[string]*wcipb.ScalingGroupSpecUpdate{
+		"east": {Spec: &wcipb.ScalingGroupSpec{TaskTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}, Compute: &wcipb.ComputeProviderSpec{ProviderType: "test-invoke"}}},
+		"west": {Spec: &wcipb.ScalingGroupSpec{TaskTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}, Compute: &wcipb.ComputeProviderSpec{ProviderType: "test-invoke"}}},
+	})
+	require.NoError(t, err)
+	// The handler rejects regional specs until 8d.2f; scope both groups to WORKFLOW in their own region directly.
+	_, _, err = chasm.UpdateComponent(e.ctx, refFor(testNamespaceID, testInstanceID), func(w *WorkerControllerInstance, _ chasm.MutableContext, _ any) (struct{}, error) {
+		for id, region := range map[string]string{"east": east, "west": west} {
+			w.ScalingGroupSpecs[id].RegionIds = []string{region}
+			w.ScalingGroupSpecs[id].TaskTypes = []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}
+		}
+		return struct{}{}, nil
+	}, nil)
+	require.NoError(t, err)
+	fake.status = iface.ScalingAlgorithmStatus{"active": true}
+	fake.inactive = &scalingalgorithm.MetricsPollResponse{Actions: []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(0)}}}
+
+	groups := func() map[string]*ScalingGroup {
+		out := map[string]*ScalingGroup{}
+		for _, id := range []string{"east", "west"} {
+			g, err := chasm.ReadComponent(e.ctx, refFor(testNamespaceID, testInstanceID), func(w *WorkerControllerInstance, cctx chasm.Context, _ any) (*ScalingGroup, error) {
+				g, _ := w.ScalingGroups[id].TryGet(cctx)
+				return g, nil
+			}, nil)
+			require.NoError(t, err)
+			out[id] = g
+		}
+		return out
+	}
+	poll := func(active, inactive string) {
+		t.Helper()
+		require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
+		g := groups()
+		require.NotNil(t, g[active].AlgorithmStatus, "%s scales here", active)
+		require.Nil(t, g[inactive].AlgorithmStatus, "%s starts fresh", inactive)
+		require.Equal(t, wcipb.SCALING_GROUP_STATUS_SCALING, g[inactive].Status, "%s is scaled down", inactive)
+		require.EqualValues(t, 0, g[inactive].DesiredSize)
+	}
+
+	poll("east", "west")
+	e.moveTo(west)
+	poll("west", "east")
+	e.moveTo(east)
+	poll("east", "west")
+}
+
 func TestE2E_EmitsWorkflowMetricsTaggedCHASM(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	capture := e.metrics.StartCapture()
