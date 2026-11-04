@@ -358,7 +358,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.Status)
 }
 
-func TestHasOrphanedChildren(t *testing.T) {
+func TestHasOrphanedOperations(t *testing.T) {
 	t.Parallel()
 
 	// The branch being switched to shares events up to 5@1, then continues at version 2.
@@ -381,7 +381,7 @@ func TestHasOrphanedChildren(t *testing.T) {
 			t.Parallel()
 			mutableState := historyi.NewMockMutableState(gomock.NewController(t))
 			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(tc.children)
-			require.Equal(t, tc.expected, hasOrphanedChildren(mutableState, branch))
+			require.Equal(t, tc.expected, hasOrphanedOperations(mutableState, branch))
 		})
 	}
 }

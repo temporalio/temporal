@@ -1464,9 +1464,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				return newBranchToken, err
 			}
 		}
-		// Pending children are still those of the branch being moved off.
-		if index != originalIndex && hasOrphanedChildren(localMutableState, sourceVersionHistory) {
-			if err := localMutableState.RecordOrphanedChildren(); err != nil {
+		// Pending operations are still those of the branch being moved off.
+		if index != originalIndex && hasOrphanedOperations(localMutableState, sourceVersionHistory) {
+			if err := localMutableState.RecordOrphanedOperations(); err != nil {
 				return newBranchToken, err
 			}
 		}

@@ -26,7 +26,7 @@ if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${es_endpoint}/${ES_V
     exit 1
 fi
 
-echo "=== Step 1. Add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedChildrenTime builtin search attributes ==="
+echo "=== Step 1. Add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedOperationsTime builtin search attributes ==="
 
 new_mapping='
 {
@@ -37,7 +37,7 @@ new_mapping='
     "TemporalLastSupersedeTime": {
       "type": "date_nanos"
     },
-    "TemporalLastOrphanedChildrenTime": {
+    "TemporalLastOrphanedOperationsTime": {
       "type": "date_nanos"
     }
   }
@@ -45,7 +45,7 @@ new_mapping='
 '
 
 if [ -z "${AUTO_CONFIRM}" ]; then
-    read -p "Add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedChildrenTime builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+    read -p "Add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedOperationsTime builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
     echo
 else
     REPLY="y"

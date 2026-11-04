@@ -848,18 +848,18 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
-// TestOrphanedChildrenTagged covers both clusters' view of a parent that started a child on the
-// losing side of a conflict: the one that switches away from the losing branch, and the one that
-// receives the losing branch after the winning one.
-func (s *NDCFunctionalTestSuite) TestOrphanedChildrenTagged() {
+// TestOrphanedOperationsTagged covers both clusters' view of a parent that started a child, the
+// only orphanable operation so far, on the losing side of a conflict: the one that switches away
+// from the losing branch, and the one that receives the losing branch after the winning one.
+func (s *NDCFunctionalTestSuite) TestOrphanedOperationsTagged() {
 	for _, losingBranchFirst := range []bool{true, false} {
 		s.Run(fmt.Sprintf("losingBranchFirst=%v", losingBranchFirst), func() {
-			s.testOrphanedChildrenTagged(losingBranchFirst)
+			s.testOrphanedOperationsTagged(losingBranchFirst)
 		})
 	}
 }
 
-func (s *NDCFunctionalTestSuite) testOrphanedChildrenTagged(losingBranchFirst bool) {
+func (s *NDCFunctionalTestSuite) testOrphanedOperationsTagged(losingBranchFirst bool) {
 	parentID := "ndc-orphaned-child-parent-" + uuid.NewString()
 	parentRunID := uuid.NewString()
 	childID := "ndc-orphaned-child-" + uuid.NewString()
@@ -1004,7 +1004,7 @@ func (s *NDCFunctionalTestSuite) testOrphanedChildrenTagged(losingBranchFirst bo
 		s.applyEvents(parentID, parentRunID, workflowType, taskqueue, losingHistory, losing, historyClient)
 	}
 
-	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalLastOrphanedChildrenTime >= '%s'",
+	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalLastOrphanedOperationsTime >= '%s'",
 		parentID, time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano))
 	await.Require(testcontext.For(s.T()), s.T(), func(t *await.T) {
 		resp, err := s.cluster.FrontendClient().ListWorkflowExecutions(

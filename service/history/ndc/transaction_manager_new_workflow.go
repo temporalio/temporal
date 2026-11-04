@@ -228,7 +228,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
-	if targetSuperseded {
+	// Only workflows record supersedes, so skip the write for other archetypes.
+	if targetSuperseded && currentWorkflow.GetMutableState().IsWorkflow() {
 		if err := recordSupersede(currentWorkflow, targetWorkflow, targetSuperseded); err != nil {
 			return err
 		}

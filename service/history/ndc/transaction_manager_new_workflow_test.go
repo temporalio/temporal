@@ -552,6 +552,83 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	s.True(currentReleaseCalled)
 }
 
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_NonWorkflowRecordsNoSupersede() {
+	// Other archetypes are not stamped: workflow visibility tasks would overwrite their CHASM record.
+	archetypeID := chasm.ArchetypeID(1234)
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	currentRunID := "other random runID"
+
+	targetReleaseCalled := false
+	currentReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMockWorkflow(s.controller)
+	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+		},
+	}
+	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
+		Events: []*historypb.HistoryEvent{{
+			EventId: common.FirstEventID + rand.Int63(),
+		}},
+	}}
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
+		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
+	)
+	targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, archetypeID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, archetypeID).Return(currentWorkflow, nil)
+
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	currentMutableState := historyi.NewMockMutableState(s.controller)
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().IsWorkflow().Return(false).AnyTimes()
+
+	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		persistence.CreateWorkflowModeBypassCurrent,
+		"",
+		int64(0),
+		targetMutableState,
+		targetWorkflowSnapshot,
+		targetWorkflowEventsSeq,
+		gomock.Any(),
+	).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, archetypeID, targetWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(currentReleaseCalled)
+}
+
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_ReapplyCandidates() {
 	ctx := context.Background()
 
@@ -841,6 +918,7 @@ func (s *transactionMgrForNewWorkflowSuite) expectCurrentSupersedes(currentWorkf
 	currentMutableState := historyi.NewMockMutableState(s.controller)
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "current run ID"}).AnyTimes()
 	currentMutableState.EXPECT().RecordRunSuperseded(targetRunID).Return(nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)

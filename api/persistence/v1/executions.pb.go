@@ -382,12 +382,13 @@ type WorkflowExecutionInfo struct {
 	LastSupersedeTime *timestamppb.Timestamp `protobuf:"bytes,119,opt,name=last_supersede_time,json=lastSupersedeTime,proto3" json:"last_supersede_time,omitempty"`
 	// Run ID of the run last superseded by this one. Set together with last_supersede_time.
 	LastSupersededRunId string `protobuf:"bytes,120,opt,name=last_superseded_run_id,json=lastSupersededRunId,proto3" json:"last_superseded_run_id,omitempty"`
-	// Time conflict resolution on this cluster last found children initiated on a non-current branch
-	// of this run. The run will never record their results. Cluster-local like last_branch_time.
-	// Surfaced in visibility as the TemporalLastOrphanedChildrenTime search attribute.
-	LastOrphanedChildrenTime *timestamppb.Timestamp `protobuf:"bytes,121,opt,name=last_orphaned_children_time,json=lastOrphanedChildrenTime,proto3" json:"last_orphaned_children_time,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Time conflict resolution on this cluster last found operations started on a non-current branch
+	// of this run that run independently of it, such as child workflows. The run will never record
+	// their results. Cluster-local like last_branch_time.
+	// Surfaced in visibility as the TemporalLastOrphanedOperationsTime search attribute.
+	LastOrphanedOperationsTime *timestamppb.Timestamp `protobuf:"bytes,121,opt,name=last_orphaned_operations_time,json=lastOrphanedOperationsTime,proto3" json:"last_orphaned_operations_time,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1194,9 +1195,9 @@ func (x *WorkflowExecutionInfo) GetLastSupersededRunId() string {
 	return ""
 }
 
-func (x *WorkflowExecutionInfo) GetLastOrphanedChildrenTime() *timestamppb.Timestamp {
+func (x *WorkflowExecutionInfo) GetLastOrphanedOperationsTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastOrphanedChildrenTime
+		return x.LastOrphanedOperationsTime
 	}
 	return nil
 }
@@ -5037,7 +5038,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xdbF\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xdfF\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5154,8 +5155,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&propagated_nexus_serialization_context\x18u \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\x12D\n" +
 	"\x10last_branch_time\x18v \x01(\v2\x1a.google.protobuf.TimestampR\x0elastBranchTime\x12J\n" +
 	"\x13last_supersede_time\x18w \x01(\v2\x1a.google.protobuf.TimestampR\x11lastSupersedeTime\x123\n" +
-	"\x16last_superseded_run_id\x18x \x01(\tR\x13lastSupersededRunId\x12Y\n" +
-	"\x1blast_orphaned_children_time\x18y \x01(\v2\x1a.google.protobuf.TimestampR\x18lastOrphanedChildrenTime\x1ad\n" +
+	"\x16last_superseded_run_id\x18x \x01(\tR\x13lastSupersededRunId\x12]\n" +
+	"\x1dlast_orphaned_operations_time\x18y \x01(\v2\x1a.google.protobuf.TimestampR\x1alastOrphanedOperationsTime\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +
@@ -5688,7 +5689,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	64,  // 49: temporal.server.api.persistence.v1.WorkflowExecutionInfo.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
 	47,  // 50: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_branch_time:type_name -> google.protobuf.Timestamp
 	47,  // 51: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_supersede_time:type_name -> google.protobuf.Timestamp
-	47,  // 52: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_orphaned_children_time:type_name -> google.protobuf.Timestamp
+	47,  // 52: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_orphaned_operations_time:type_name -> google.protobuf.Timestamp
 	65,  // 53: temporal.server.api.persistence.v1.TimeSkippingInfo.config:type_name -> temporal.api.common.v1.TimeSkippingConfig
 	48,  // 54: temporal.server.api.persistence.v1.TimeSkippingInfo.accumulated_skipped_duration:type_name -> google.protobuf.Duration
 	3,   // 55: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info:type_name -> temporal.server.api.persistence.v1.FastForwardInfo

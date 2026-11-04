@@ -1,10 +1,10 @@
 {
   "CurrVersion": "1.16",
   "MinCompatibleVersion": "0.1",
-  "Description": "add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedChildrenTime builtin search attributes",
+  "Description": "add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedOperationsTime builtin search attributes",
   "SchemaUpdateCqlFiles": [
     "add_temporal_last_branch_time_search_attribute.sql",
     "add_temporal_last_supersede_time_search_attribute.sql",
-    "add_temporal_last_orphaned_children_time_search_attribute.sql"
+    "add_temporal_last_orphaned_operations_time_search_attribute.sql"
   ]
 }

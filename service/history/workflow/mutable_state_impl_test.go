@@ -2521,7 +2521,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	mutableState.executionInfo.LastBranchTime = timestamppb.Now()
 	mutableState.executionInfo.LastSupersedeTime = timestamppb.Now()
 	mutableState.executionInfo.LastSupersededRunId = "superseded-run"
-	mutableState.executionInfo.LastOrphanedChildrenTime = timestamppb.Now()
+	mutableState.executionInfo.LastOrphanedOperationsTime = timestamppb.Now()
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2542,7 +2542,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	s.Nil(sanitizedMutableState.executionInfo.LastBranchTime)
 	s.Nil(sanitizedMutableState.executionInfo.LastSupersedeTime)
 	s.Empty(sanitizedMutableState.executionInfo.LastSupersededRunId)
-	s.Nil(sanitizedMutableState.executionInfo.LastOrphanedChildrenTime)
+	s.Nil(sanitizedMutableState.executionInfo.LastOrphanedOperationsTime)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -10269,18 +10269,18 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 	localSupersedeTime := timestamppb.New(time.Unix(1700000001, 0))
 	localOrphanedTime := timestamppb.New(time.Unix(1700000002, 0))
 	current := &persistencespb.WorkflowExecutionInfo{
-		LastBranchTime:           localBranchTime,
-		LastSupersedeTime:        localSupersedeTime,
-		LastSupersededRunId:      "local-superseded-run",
-		LastOrphanedChildrenTime: localOrphanedTime,
+		LastBranchTime:             localBranchTime,
+		LastSupersedeTime:          localSupersedeTime,
+		LastSupersededRunId:        "local-superseded-run",
+		LastOrphanedOperationsTime: localOrphanedTime,
 	}
 	// The source's conflict resolution is its own, so its values must never replace the local ones.
 	incoming := &persistencespb.WorkflowExecutionInfo{
-		LastBranchTime:           timestamppb.New(time.Unix(1800000000, 0)),
-		LastSupersedeTime:        timestamppb.New(time.Unix(1800000001, 0)),
-		LastSupersededRunId:      "source-superseded-run",
-		LastOrphanedChildrenTime: timestamppb.New(time.Unix(1800000002, 0)),
-		WorkflowTypeName:         "synced",
+		LastBranchTime:             timestamppb.New(time.Unix(1800000000, 0)),
+		LastSupersedeTime:          timestamppb.New(time.Unix(1800000001, 0)),
+		LastSupersededRunId:        "source-superseded-run",
+		LastOrphanedOperationsTime: timestamppb.New(time.Unix(1800000002, 0)),
+		WorkflowTypeName:           "synced",
 	}
 
 	for _, includeFinal := range []bool{false, true} {
@@ -10289,7 +10289,7 @@ func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
 		s.Equal(localBranchTime, current.LastBranchTime)
 		s.Equal(localSupersedeTime, current.LastSupersedeTime)
 		s.Equal("local-superseded-run", current.LastSupersededRunId)
-		s.Equal(localOrphanedTime, current.LastOrphanedChildrenTime)
+		s.Equal(localOrphanedTime, current.LastOrphanedOperationsTime)
 	}
 }
 
@@ -10307,14 +10307,32 @@ func (s *mutableStateSuite) TestRecordRunSuperseded() {
 	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
 }
 
-func (s *mutableStateSuite) TestRecordOrphanedChildren() {
+func (s *mutableStateSuite) TestRecordConflictResolution_NonWorkflowIsNoop() {
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	// Workflow visibility tasks would overwrite another archetype's CHASM record.
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+	ms.chasmTree = mockChasmTree
+
+	s.NoError(ms.RecordHistoryBranch())
+	s.NoError(ms.RecordRunSuperseded("superseded-run"))
+	s.NoError(ms.RecordOrphanedOperations())
+	s.Nil(ms.GetExecutionInfo().GetLastBranchTime())
+	s.Nil(ms.GetExecutionInfo().GetLastSupersedeTime())
+	s.Empty(ms.GetExecutionInfo().GetLastSupersededRunId())
+	s.Nil(ms.GetExecutionInfo().GetLastOrphanedOperationsTime())
+	s.Empty(ms.InsertTasks[tasks.CategoryVisibility])
+}
+
+func (s *mutableStateSuite) TestRecordOrphanedOperations() {
 	dbState := s.buildWorkflowMutableState()
 	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 	s.NoError(err)
 
 	before := s.mockShard.GetTimeSource().Now()
-	s.NoError(ms.RecordOrphanedChildren())
-	s.WithinRange(ms.GetExecutionInfo().GetLastOrphanedChildrenTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+	s.NoError(ms.RecordOrphanedOperations())
+	s.WithinRange(ms.GetExecutionInfo().GetLastOrphanedOperationsTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
 	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
 	s.Len(visibilityTasks, 1)
 	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])

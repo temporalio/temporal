@@ -152,7 +152,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
 		4: {Version: version, InitiatedEventId: 4},
 	}).AnyTimes()
-	mockRebuildMutableState.EXPECT().RecordOrphanedChildren().Return(nil)
+	mockRebuildMutableState.EXPECT().RecordOrphanedOperations().Return(nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,

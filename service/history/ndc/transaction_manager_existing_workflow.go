@@ -411,7 +411,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) recordCurrentSupersede(
 	newWorkflow Workflow,
 	newWasRunning bool,
 ) error {
-	if !targetWasRunning && !newWasRunning {
+	// Only workflows record supersedes, so skip the write for other archetypes.
+	if (!targetWasRunning && !newWasRunning) || !currentWorkflow.GetMutableState().IsWorkflow() {
 		return nil
 	}
 	if err := recordSupersede(currentWorkflow, targetWorkflow, targetWasRunning); err != nil {

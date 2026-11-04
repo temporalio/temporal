@@ -211,8 +211,13 @@ func persistLocalState(ctx context.Context, shardContext historyi.ShardContext, 
 	return wf.GetContext().SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
 }
 
-// hasOrphanedChildren reports whether a pending child was initiated off the given branch, so making
-// it current leaves the child without a parent to record its result.
+// hasOrphanedOperations reports whether a pending operation that runs independently of the
+// workflow was started off the given branch, so making it current leaves the operation without a
+// caller to record its result. Each kind of such operation adds its check here.
+func hasOrphanedOperations(mutableState historyi.MutableState, branch *historyspb.VersionHistory) bool {
+	return hasOrphanedChildren(mutableState, branch)
+}
+
 func hasOrphanedChildren(mutableState historyi.MutableState, branch *historyspb.VersionHistory) bool {
 	for initiatedID, child := range mutableState.GetPendingChildExecutionInfos() {
 		if !versionhistory.ContainsVersionHistoryItem(

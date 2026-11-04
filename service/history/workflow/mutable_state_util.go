@@ -72,7 +72,7 @@ func sanitizeExecutionInfo(
 	executionInfo.LastBranchTime = nil
 	executionInfo.LastSupersedeTime = nil
 	executionInfo.LastSupersededRunId = ""
-	executionInfo.LastOrphanedChildrenTime = nil
+	executionInfo.LastOrphanedOperationsTime = nil
 }
 
 func sanitizeChildExecutionInfo(

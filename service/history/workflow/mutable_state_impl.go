@@ -7177,23 +7177,34 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 }
 
 func (ms *MutableStateImpl) RecordHistoryBranch() error {
+	if !ms.IsWorkflow() {
+		return nil
+	}
 	ms.executionInfo.LastBranchTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	return ms.generateLocalStateVisibilityTask()
 }
 
-func (ms *MutableStateImpl) RecordOrphanedChildren() error {
-	ms.executionInfo.LastOrphanedChildrenTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+func (ms *MutableStateImpl) RecordOrphanedOperations() error {
+	if !ms.IsWorkflow() {
+		return nil
+	}
+	ms.executionInfo.LastOrphanedOperationsTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	return ms.generateLocalStateVisibilityTask()
 }
 
 func (ms *MutableStateImpl) RecordRunSuperseded(supersededRunID string) error {
+	if !ms.IsWorkflow() {
+		return nil
+	}
 	ms.executionInfo.LastSupersedeTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.LastSupersededRunId = supersededRunID
 	return ms.generateLocalStateVisibilityTask()
 }
 
 // generateLocalStateVisibilityTask re-records visibility for conflict-resolution state, which is
-// cluster-local and so only indexed by the cluster that set it.
+// cluster-local and so only indexed by the cluster that set it. The Record methods only apply to
+// workflows: these workflow visibility tasks would overwrite another archetype's CHASM record, which
+// needs a CHASM visibility re-record that leaves replicated state unchanged.
 func (ms *MutableStateImpl) generateLocalStateVisibilityTask() error {
 	switch ms.executionState.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
@@ -9817,7 +9828,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.LastBranchTime,
 			&info.LastSupersedeTime,
 			&info.LastSupersededRunId,
-			&info.LastOrphanedChildrenTime,
+			&info.LastOrphanedOperationsTime,
 			&info.WorkflowExecutionTimerTaskStatus,
 			&info.SubStateMachinesByType,
 			&info.StateMachineTimers,

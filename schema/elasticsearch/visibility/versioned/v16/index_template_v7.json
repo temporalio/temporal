@@ -129,7 +129,7 @@
       "TemporalLastSupersedeTime": {
         "type": "date_nanos"
       },
-      "TemporalLastOrphanedChildrenTime": {
+      "TemporalLastOrphanedOperationsTime": {
         "type": "date_nanos"
       },
       "TemporalBool01": {
