@@ -35,6 +35,8 @@ var ErrRegionsNotSupportedOnCHASM = serviceerror.NewFailedPrecondition(ErrProvid
 const (
 	// Today's workflow uses MaximumAttempts: 2 for InvokeWorker.
 	maxInvokeAttempts = 2
+	// Resizes for groups that serve nothing in the host region get the workflow's UpdateWorkerSetSize attempts.
+	maxInactiveResizeAttempts = 2
 	computeTaskGroup  = "wci-compute"
 )
 

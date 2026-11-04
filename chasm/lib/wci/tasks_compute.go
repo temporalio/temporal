@@ -11,6 +11,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	wciconfig "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
@@ -35,6 +36,7 @@ type ComputeTaskHandlerOptions struct {
 	ComputeClient ComputeClient
 	HistoryClient resource.HistoryClient
 	Logger        log.Logger
+	StaticConfig  *wciconfig.StaticConfig `optional:"true"`
 }
 
 // groupCall is what a group task reads under the lock before calling the provider without it.
@@ -44,9 +46,11 @@ type groupCall struct {
 	providerType string
 	destination  string
 	size         int32
+	// Resize only: the group serves task types in the region this history runs in.
+	servesHere bool
 }
 
-func readGroupCall(ctx context.Context, ref chasm.ComponentRef) (groupCall, error) {
+func readGroupCall(ctx context.Context, ref chasm.ComponentRef, hostRegion string) (groupCall, error) {
 	return chasm.ReadComponent(ctx, ref, func(g *ScalingGroup, cctx chasm.Context, _ any) (groupCall, error) {
 		root := g.Root.Get(cctx)
 		spec, ok := root.ScalingGroupSpecs[g.Id]
@@ -54,7 +58,14 @@ func readGroupCall(ctx context.Context, ref chasm.ComponentRef) (groupCall, erro
 			return groupCall{}, errSpecMissing
 		}
 		cfg := migration.SpecToWorkflow(spec).Compute
-		return groupCall{rc: requestContext(cctx, root), cfg: &cfg, providerType: string(cfg.ProviderType), destination: taskDestination(spec), size: g.DesiredSize}, nil
+		return groupCall{
+			rc:           requestContext(cctx, root),
+			cfg:          &cfg,
+			providerType: string(cfg.ProviderType),
+			destination:  taskDestination(spec),
+			size:         g.DesiredSize,
+			servesHere:   len(root.spec().EffectiveTaskTypesForGroup(g.Id, hostRegion)) > 0,
+		}, nil
 	}, nil)
 }
 
@@ -73,11 +84,12 @@ func failureOf(err error) *failurepb.Failure {
 // ResizeTaskHandler drives UpdateWorkerSetSize; retries go through BACKING_OFF, not task retry.
 type ResizeTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*wcipb.ResizeTask]
-	client ComputeClient
+	client     ComputeClient
+	hostRegion string
 }
 
 func NewResizeTaskHandler(opts ComputeTaskHandlerOptions) *ResizeTaskHandler {
-	return &ResizeTaskHandler{client: opts.ComputeClient}
+	return &ResizeTaskHandler{client: opts.ComputeClient, hostRegion: hostRegionOf(opts.StaticConfig)}
 }
 
 func (h *ResizeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm.TaskInvocation, task *wcipb.ResizeTask) (bool, error) {
@@ -85,7 +97,7 @@ func (h *ResizeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm
 }
 
 func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, _ *wcipb.ResizeTask) error {
-	call, err := readGroupCall(ctx, ref)
+	call, err := readGroupCall(ctx, ref, h.hostRegion)
 	if errors.Is(err, errSpecMissing) {
 		return nil
 	}
@@ -100,9 +112,14 @@ func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, wcimetrics.ErrorTypeNone)
 			wcimetrics.TargetWorkerCount.With(h).Record(float64(call.size))
 			return struct{}{}, g.CompleteResize(mctx, call.size, call.destination)
-		case retryable(callErr):
+		case retryable(callErr) && (call.servesHere || g.Attempt < maxInactiveResizeAttempts):
 			next := mctx.Now(g).Add(resizeBackoff.ComputeNextDelay(0, int(g.Attempt), callErr))
 			return struct{}{}, TransitionResizeRetryable.Apply(g, mctx, EventResizeRetryable{Failure: failureOf(callErr), NextAttemptTime: next})
+		case retryable(callErr):
+			// Another region's group, e.g. carried over a failover: give up as the workflow does, without failing
+			// validation, since that region may be the one that is down.
+			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, computeErrorType(callErr))
+			return struct{}{}, TransitionResizeFailed.Apply(g, mctx, EventResizeFailed{Failure: failureOf(callErr)})
 		default:
 			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, computeErrorType(callErr))
 			if err := TransitionResizeFailed.Apply(g, mctx, EventResizeFailed{Failure: failureOf(callErr)}); err != nil {
@@ -143,7 +160,7 @@ func (h *InvokeTaskHandler) Validate(ctx chasm.Context, g *ScalingGroup, _ chasm
 }
 
 func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, _ chasm.TaskAttributes, task *wcipb.InvokeTask) error {
-	call, err := readGroupCall(ctx, ref)
+	call, err := readGroupCall(ctx, ref, "")
 	if errors.Is(err, errSpecMissing) {
 		return nil
 	}

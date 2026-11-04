@@ -187,7 +187,7 @@ func newE2EInRegion(t *testing.T, script fakeAlgo, region string) *e2e {
 	metricsHandler := metricstest.NewCaptureHandler()
 	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger(), MetricsHandler: metricsHandler, StaticConfig: staticConfig}
 	history := &fakeHistory{}
-	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger()}
+	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger(), StaticConfig: staticConfig}
 	lib := NewLibrary(h,
 		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
@@ -429,6 +429,54 @@ func TestE2E_RegionalDestinationsSurviveRetries(t *testing.T) {
 	})
 }
 
+// A resize for a group that serves nothing in the host region gets the workflow's two attempts, e.g. one
+// carried over a failover whose old region is down; a group serving here keeps retrying.
+func TestE2E_ResizeOutsideHostRegionGivesUp(t *testing.T) {
+	const east, west = "aws-us-east-1", "aws-us-west-2"
+	for _, tc := range []struct {
+		name     string
+		failover bool
+		want     wcipb.ScalingGroupStatus
+	}{
+		{name: "carried_over", failover: true, want: wcipb.SCALING_GROUP_STATUS_IDLE},
+		{name: "serves_here", want: wcipb.SCALING_GROUP_STATUS_BACKING_OFF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2EInRegion(t, fakeAlgo{}, east)
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+			_, _, err = chasm.UpdateComponent(e.ctx, refFor(testNamespaceID, testInstanceID), func(w *WorkerControllerInstance, _ chasm.MutableContext, _ any) (struct{}, error) {
+				w.ScalingGroupSpecs["g"].RegionIds = []string{east}
+				return struct{}{}, nil
+			}, nil)
+			require.NoError(t, err)
+			fake.actions = []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(4)}}
+			require.NoError(t, e.recordTaskAdd())
+			if tc.failover {
+				e.moveTo(west)
+			}
+			e.compute.callErr = compute.NewProviderError(compute.FailureUnavailable, errors.New("down"))
+
+			runResize := func() {
+				_, g := e.live(t)
+				_, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ResizeTask](e.lib.ResizeTaskHandler), chasm.TaskAttributes{}, &wcipb.ResizeTask{Attempt: g.Attempt})
+				require.NoError(t, err)
+			}
+			runResize()
+			_, g := e.live(t)
+			require.Equal(t, wcipb.SCALING_GROUP_STATUS_BACKING_OFF, g.Status, "the first failure backs off either way")
+			_, err = chasmtest.ExecutePureTask(e.ctx, e.engine, g, chasm.PureTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
+			require.NoError(t, err)
+			runResize()
+
+			w, g := e.live(t)
+			require.Equal(t, tc.want, g.Status)
+			require.NotEqual(t, wcipb.VALIDATION_RESULT_FAILED, w.GetValidationStatus().GetResult(), "a region that may be down isn't the customer's error")
+			require.Len(t, e.compute.sizes, 2)
+		})
+	}
+}
+
 func TestE2E_EmitsWorkflowMetricsTaggedCHASM(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	capture := e.metrics.StartCapture()
@@ -566,6 +614,7 @@ func (e *e2e) moveTo(region string) {
 	e.lib.FetchSnapshotTaskHandler.hostRegion = region
 	e.lib.DeferredDecisionTaskHandler.hostRegion = region
 	e.lib.MigrateToWorkflowTaskHandler.hostRegion = region
+	e.lib.ResizeTaskHandler.hostRegion = region
 }
 
 func TestE2E_RecordsHostRegion(t *testing.T) {
