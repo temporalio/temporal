@@ -126,6 +126,124 @@ func (s *NexusStateReplicationSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *NexusStateReplicationSuite) TestTimeoutCleanupReplicatesAcrossFailover() {
+	if s.chasmEnabled {
+		s.T().Skip("legacy HSM cleanup")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	ns := s.createGlobalNamespace()
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(s.T(), nexusoperations.MaxConcurrentOperations, 1)
+	}
+	endpoint := s.createBufferedNexusEndpoint(ctx, nexustest.Handler{OnStartOperation: func(context.Context, string, string, *nexus.LazyValue, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "retry")
+	}})
+	c, err := sdkclient.Dial(sdkclient.Options{HostPort: s.clusters[0].Host().FrontendGRPCAddress(), Namespace: ns})
+	s.Require().NoError(err)
+	defer c.Close()
+	run, err := c.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: "tq"}, "workflow")
+	s.Require().NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	command := func(timeout time.Duration) *commandpb.Command {
+		return &commandpb.Command{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{Endpoint: endpoint, Service: "service", Operation: "operation", ScheduleToCloseTimeout: durationpb.New(timeout)}}}
+	}
+	task := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{command(2 * time.Second)}})
+	s.Require().NoError(err)
+	timedout := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
+	var oldID int64
+	for _, event := range timedout.History.Events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			oldID = event.GetEventId()
+		}
+	}
+	s.Require().Positive(oldID)
+	s.Require().NotNil(s.RequireHistoryEvent(timedout.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT))
+	desc, err := s.clusters[0].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: ns, Execution: execution, Archetype: chasm.WorkflowArchetype})
+	s.Require().NoError(err)
+	s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: timedout.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.Require().NoError(err)
+	// Wait for both the deletion and the replacement operation to be replicated.
+	for i := range 2 {
+		cluster := s.clusters[i]
+		await.Require(ctx, s.T(), func(t *await.T) {
+			desc, e := cluster.AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{Namespace: ns, Execution: execution, Archetype: chasm.WorkflowArchetype})
+			require.NoError(t, e)
+			nodes := desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById()
+			require.NotContains(t, nodes, strconv.FormatInt(oldID, 10))
+			require.Len(t, nodes, 1)
+		}, replicationWaitTime, replicationCheckInterval)
+	}
+	s.failoverToNewActiveCluster(ctx, ns)
+	_, err = s.clusters[1].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: ns, WorkflowExecution: execution, SignalName: "after-failover"})
+	s.Require().NoError(err)
+	task, err = s.clusters[1].FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: ns, TaskQueue: &taskqueuepb.TaskQueue{Name: "tq"}, Identity: "test"})
+	s.Require().NoError(err)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{command(time.Minute)}})
+	s.Require().ErrorContains(err, "PendingNexusOperationsLimitExceeded")
+	task, err = s.clusters[1].FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{Namespace: ns, TaskQueue: &taskqueuepb.TaskQueue{Name: "tq"}, Identity: "test"})
+	s.Require().NoError(err)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken})
+	s.Require().NoError(err)
+}
+
+func (s *NexusStateReplicationSuite) TestTimeoutCleanupConflictReappliesTimeout() {
+	if s.chasmEnabled || !s.enableTransitionHistory {
+		s.T().Skip("legacy HSM conflict reapplication requires transition history")
+	}
+	s.runWithEventBatchSizes(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		namespace := s.createBufferedEventsNamespace(ctx)
+		// Prevent the new active cluster from timing out the operation itself, either
+		// through the timer queue or an outbound attempt, before reapplication.
+		s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.TimerProcessorSchedulerWorkerCount, 0)
+		s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.OutboundQueueGroupLimiterConcurrency, 0)
+		for _, cluster := range s.clusters {
+			cluster.OverrideDynamicConfig(s.T(), nexusoperations.MaxConcurrentOperations, 1)
+		}
+		endpoint := s.createBufferedNexusEndpoint(ctx, nexustest.Handler{OnStartOperation: func(context.Context, string, string, *nexus.LazyValue, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "retry")
+		}})
+		workflowID := "nexus-cleanup-conflict-" + uuid.NewString()
+		taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{Namespace: namespace.Name, WorkflowID: workflowID, TaskQueue: taskQueue})
+		first := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.completeWorkflowTask(ctx, workflowTaskCompletion{Task: first, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "old", 15*time.Second)}})
+		await.Require(ctx, s.T(), func(t *await.T) {
+			history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, namespace.Name, execution)
+			require.Positive(t, findNexusScheduledEventID(history, "old"))
+		}, replicationWaitTime, replicationCheckInterval)
+		oldHistory := s.getWorkflowHistory(ctx, s.T(), 0, namespace.Name, execution)
+		oldID := findNexusScheduledEventID(oldHistory, "old")
+		s.Require().Positive(oldID)
+		replicationToOld := s.blockReplicationForWorkflow(0, workflowID)
+		replicationToNew := s.blockReplicationForWorkflow(1, workflowID)
+		timeoutTask := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.Require().True(hasNexusEventForScheduledID(timeoutTask.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		s.completeWorkflowTask(ctx, workflowTaskCompletion{Task: timeoutTask, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "replacement", time.Minute)}})
+		desc, err := s.clusters[0].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: namespace.Name, Execution: execution, Archetype: chasm.WorkflowArchetype})
+		s.Require().NoError(err)
+		s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+		s.signalWorkflow(ctx, workflowSignal{Namespace: namespace.Name, Execution: execution, SignalName: "hold-after-cleanup"})
+		held := s.pollBufferedEventsWorkflowTask(ctx, 0, namespace.Name, taskQueue)
+		s.Require().NotEmpty(held.TaskToken)
+		losing := s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{Namespace: namespace, Execution: execution, ReplicationToOldActive: replicationToOld, ReplicationToNewActive: replicationToNew, ExpectedEventTypes: []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT}, WinnerSignal: "cleanup-conflict-winner"})
+		s.Require().True(hasNexusEventForScheduledID(losing, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		winning := s.getWorkflowHistory(ctx, s.T(), 1, namespace.Name, execution)
+		s.Require().True(hasNexusEventForScheduledID(winning, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, oldID))
+		s.Require().False(hasNexusEventForScheduledID(winning, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, findNexusScheduledEventID(losing, "replacement")))
+		desc, err = s.clusters[1].AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{Namespace: namespace.Name, Execution: execution, Archetype: chasm.WorkflowArchetype})
+		s.Require().NoError(err)
+		s.Require().NotContains(desc.GetDatabaseMutableState().GetExecutionInfo().GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById(), strconv.FormatInt(oldID, 10))
+		task := s.pollBufferedEventsWorkflowTask(ctx, 1, namespace.Name, taskQueue)
+		_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: task.TaskToken, Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommandWithTimeout(endpoint, "after-conflict", time.Minute)}})
+		s.Require().NoError(err)
+	})
+}
+
 // TestNexusOperationEventsReplicated tests that nexus related operation events and state updates are replicated
 // across clusters and that the operation machinary functions as expected when failover happens.
 // General outline:
