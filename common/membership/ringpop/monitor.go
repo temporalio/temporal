@@ -46,10 +46,6 @@ const (
 	// allows join/leave times to be. 15 seconds is enough to allow aligning to 10 seconds plus
 	// 3 seconds of propagation time buffer.
 	maxScheduledEventTimeSeconds = 15
-
-	// An expired host snapshot is refreshed on the next partition-healing attempt.
-	// A failed refresh leaves the snapshot expired so the next attempt retries.
-	snapshotExpiry = time.Minute * 5
 )
 
 type monitor struct {
@@ -67,6 +63,7 @@ type monitor struct {
 	services                  config.ServicePortMap
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
+	snapshotExpiry            time.Duration
 	propagationTime           time.Duration
 	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
@@ -89,6 +86,7 @@ func newMonitor(
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
 	maxJoinDuration time.Duration,
+	snapshotExpiry time.Duration,
 	propagationTime time.Duration,
 	joinTime time.Time,
 	replicaPoints int,
@@ -118,6 +116,7 @@ func newMonitor(
 		hostID:                    hostID,
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
+		snapshotExpiry:            snapshotExpiry,
 		propagationTime:           propagationTime,
 		joinTime:                  joinTime,
 	}
@@ -236,7 +235,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  snapshothosts.New(rpo.logger, rpo.refreshCurrentHostports, snapshotExpiry, hostPorts...),
+			DiscoverProvider:  snapshothosts.New(rpo.logger, rpo.refreshCurrentHostports, rpo.snapshotExpiry, hostPorts...),
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
