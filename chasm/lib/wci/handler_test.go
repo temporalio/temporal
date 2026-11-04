@@ -577,6 +577,36 @@ func TestE2E_ConflictTokenRotates(t *testing.T) {
 	require.ErrorIs(t, err, errConflictTokenMismatch)
 }
 
+// A poll overdue past the margin (its timer discarded on a standby before failover) is re-armed by the next task-add or update.
+func TestE2E_OverduePollReArmed(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*e2e) error
+	}{
+		{name: "task_add", call: func(e *e2e) error { return e.recordTaskAdd() }},
+		{name: "update", call: func(e *e2e) error { _, err := e.update(groupUpsert("test-invoke")); return err }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newE2E(t, fakeAlgo{})
+			_, err := e.update(groupUpsert("test-invoke"))
+			require.NoError(t, err)
+			w, _ := e.live(t)
+			nextPoll := w.NextPollTime.AsTime()
+
+			e.clock.Update(nextPoll.Add(maxPollInterval))
+			require.NoError(t, tc.call(e))
+			w, _ = e.live(t)
+			require.Equal(t, nextPoll, w.NextPollTime.AsTime(), "within the margin the timer may just be late")
+
+			e.clock.Advance(time.Second)
+			require.NoError(t, tc.call(e))
+			w, _ = e.live(t)
+			require.Equal(t, e.clock.Now(), w.NextPollTime.AsTime())
+		})
+	}
+}
+
 // Spec changes stamp LastUpdateTime (state and memo); other transactions don't.
 func TestE2E_LastUpdateTime(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
