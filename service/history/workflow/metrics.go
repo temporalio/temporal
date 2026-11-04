@@ -30,7 +30,6 @@ func emitWorkflowHistoryStats(
 	metrics.HistorySize.With(executionScope).Record(int64(historySize))
 	metrics.HistoryCount.With(executionScope).Record(int64(historyCount))
 
-	// Closed runs are saved again without events; only the closing transaction records completion stats.
 	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && wroteEventsInTransaction {
 		completionScope := handler.WithTags(metrics.OperationTag(metrics.WorkflowCompletionStatsScope))
 		metrics.HistorySize.With(completionScope).Record(int64(historySize))
