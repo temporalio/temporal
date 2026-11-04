@@ -112,7 +112,8 @@ func (h *handler) algorithmContext(ctx context.Context) context.Context {
 // checkSupported rejects specs CHASM cannot run, so the caller keeps the WCI a workflow.
 func (h *handler) checkSupported(namespaceName string, spec *iface.WorkerControllerInstanceSpec) error {
 	for _, group := range spec.ScalingGroupSpecs {
-		if len(group.RegionIds) > 0 {
+		// Without its region this history could never match region IDs; the workflow then applies its own check.
+		if len(group.RegionIds) > 0 && h.hostRegion() == "" {
 			return ErrRegionsNotSupportedOnCHASM
 		}
 		if !h.compute.Supports(namespaceName, string(group.Compute.ProviderType)) {

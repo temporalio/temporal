@@ -159,25 +159,22 @@ func TestCreateFromWorkflowState(t *testing.T) {
 }
 
 // A history that predates the rejection would drop region IDs; the client must not send them.
-func TestRegionScopedSpecsNeverReachCHASM(t *testing.T) {
+// History decides whether it can serve region IDs (it needs its host region); the client passes them through.
+func TestRegionScopedSpecsReachCHASM(t *testing.T) {
 	svc := &fakeService{}
 	c := New(Params{Service: svc})
 	regional := iface.ScalingGroupSpec{RegionIds: []string{"us-east-1"}, Compute: iface.ComputeProviderSpec{ProviderType: "test-invoke"}}
 	upserts := map[string]iface.ScalingGroupSpecUpdate{"g": {Spec: regional}}
 
 	_, err := c.UpdateWorkerControllerInstance(t.Context(), testNS, testVersion, nil, "me", upserts, nil)
-	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the router creates a workflow instead")
-	require.Nil(t, svc.update)
+	require.NoError(t, err)
+	require.Equal(t, []string{"us-east-1"}, svc.update.GetUpsertScalingGroups()["g"].GetSpec().GetRegionIds())
 
-	// fakeService doesn't implement Validate, so reaching the service would panic.
-	require.ErrorIs(t, c.ValidateWorkerControllerInstanceSpec(t.Context(), testNS, testVersion, "me", upserts, nil), wciclient.ErrProviderNotSupportedOnCHASM)
-
-	err = c.CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{
+	require.NoError(t, c.CreateFromWorkflowState(t.Context(), &iface.WorkerControllerInstanceWorkflowArgs{
 		NamespaceId: "ns-id", DeploymentName: "dep", BuildId: "build",
 		State: &iface.WorkerControllerInstanceLocalState{Spec: &iface.WorkerControllerInstanceSpec{ScalingGroupSpecs: map[string]iface.ScalingGroupSpec{"g": regional}}},
-	}, "run-1", time.Unix(1_000, 0))
-	require.ErrorIs(t, err, wciclient.ErrProviderNotSupportedOnCHASM, "the handover is declined")
-	require.Nil(t, svc.migration)
+	}, "run-1", time.Unix(1_000, 0)))
+	require.Equal(t, []string{"us-east-1"}, svc.migration.GetState().GetScalingGroupSpecs()["g"].GetRegionIds())
 }
 
 func TestActivateAndAbortMigration(t *testing.T) {

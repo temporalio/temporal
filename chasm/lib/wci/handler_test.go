@@ -290,7 +290,8 @@ func TestE2E_UnsupportedProviderStaysWorkflow(t *testing.T) {
 	require.ErrorIs(t, err, ErrProviderNotSupportedOnCHASM)
 }
 
-func TestE2E_RegionScopedSpecsStayWorkflows(t *testing.T) {
+// Without a host region, region IDs could never match here, so the WCI stays a workflow.
+func TestE2E_RegionScopedSpecsStayWorkflowsWithoutHostRegion(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	regional := groupUpsert("test-invoke")
 	regional["g"].Spec.RegionIds = []string{"us-east-1"}
@@ -303,6 +304,46 @@ func TestE2E_RegionScopedSpecsStayWorkflows(t *testing.T) {
 	var notFound *serviceerror.NotFound
 	_, err = e.describe()
 	require.ErrorAs(t, err, &notFound, "nothing was created")
+}
+
+func regionalUpserts(east, west string) map[string]*wcipb.ScalingGroupSpecUpdate {
+	out := map[string]*wcipb.ScalingGroupSpecUpdate{}
+	for id, region := range map[string]string{"east": east, "west": west} {
+		out[id] = &wcipb.ScalingGroupSpecUpdate{Spec: &wcipb.ScalingGroupSpec{
+			TaskTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			RegionIds: []string{region},
+			Compute:   &wcipb.ComputeProviderSpec{ProviderType: "test-invoke"},
+		}}
+	}
+	return out
+}
+
+func TestE2E_RegionScopedSpecsOnCHASM(t *testing.T) {
+	const east, west = "aws-us-east-1", "aws-us-west-2"
+	t.Run("create", func(t *testing.T) {
+		e := newE2EInRegion(t, fakeAlgo{}, east)
+		_, err := e.update(regionalUpserts(east, west))
+		require.NoError(t, err)
+		resp, err := e.describe()
+		require.NoError(t, err)
+		require.Equal(t, []string{east}, resp.GetScalingGroupSpecs()["east"].GetRegionIds())
+
+		fake.actions = []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(3)}}
+		require.NoError(t, e.recordTaskAdd())
+		require.Equal(t, []string{"test-invoke/" + east}, e.destinations(t, "resize"), "only the host region's group scales")
+	})
+	t.Run("migrate", func(t *testing.T) {
+		e := newE2EInRegion(t, fakeAlgo{}, east)
+		specs := map[string]*wcipb.ScalingGroupSpec{}
+		for id, u := range regionalUpserts(east, west) {
+			specs[id] = u.GetSpec()
+		}
+		require.NoError(t, e.prepareSpecs(testToken, time.Minute, specs))
+		require.NoError(t, e.activate(testToken, 0))
+		resp, err := e.describe()
+		require.NoError(t, err)
+		require.Equal(t, []string{west}, resp.GetScalingGroupSpecs()["west"].GetRegionIds(), "region IDs survive the handover")
+	})
 }
 
 func TestE2E_CreateFromMigrationStateValidatesSpec(t *testing.T) {

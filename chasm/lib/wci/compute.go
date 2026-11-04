@@ -29,8 +29,9 @@ type ComputeClient interface {
 // ErrProviderNotSupportedOnCHASM means there is no CHASM compute path for this provider type yet.
 var ErrProviderNotSupportedOnCHASM = serviceerror.NewFailedPrecondition("compute provider not supported on CHASM")
 
-// ErrRegionsNotSupportedOnCHASM carries the sentinel's message, so callers keep the WCI a workflow.
-var ErrRegionsNotSupportedOnCHASM = serviceerror.NewFailedPrecondition(ErrProviderNotSupportedOnCHASM.Error() + ": scaling groups with region IDs")
+// ErrRegionsNotSupportedOnCHASM: region IDs on a history with no host region. It carries the sentinel's message,
+// so callers keep the WCI a workflow.
+var ErrRegionsNotSupportedOnCHASM = serviceerror.NewFailedPrecondition(ErrProviderNotSupportedOnCHASM.Error() + ": scaling groups with region IDs need the history's region")
 
 const (
 	// Today's workflow uses MaximumAttempts: 2 for InvokeWorker.

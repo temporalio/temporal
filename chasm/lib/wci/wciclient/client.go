@@ -69,18 +69,6 @@ func mapError(err error) error {
 	return err
 }
 
-// errRegions keeps region-scoped specs off CHASM even on a history that doesn't reject them yet.
-var errRegions = fmt.Errorf("%w: scaling groups with region IDs", wciclient.ErrProviderNotSupportedOnCHASM)
-
-func upsertsHaveRegions(upserts map[string]*wcipb.ScalingGroupSpecUpdate) bool {
-	for _, u := range upserts {
-		if len(u.GetSpec().GetRegionIds()) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func instanceID(version *deploymentpb.WorkerDeploymentVersion) string {
 	return wciclient.GenerateWorkerControllerInstanceWorkflowID(version)
 }
@@ -171,9 +159,6 @@ func (c *Client) UpdateWorkerControllerInstance(
 	removeScalingGroups []string,
 ) (*iface.UpdateWorkerControllerInstanceResponse, error) {
 	upserts := upsertsToCHASM(upsertScalingGroups)
-	if upsertsHaveRegions(upserts) {
-		return nil, errRegions
-	}
 	resp, err := c.service.UpdateWorkerControllerInstance(ctx, &wcipb.UpdateWorkerControllerInstanceRequest{
 		NamespaceId:         ns.ID().String(),
 		InstanceId:          instanceID(version),
@@ -199,9 +184,6 @@ func (c *Client) ValidateWorkerControllerInstanceSpec(
 	removeScalingGroups []string,
 ) error {
 	upserts := upsertsToCHASM(upsertScalingGroups)
-	if upsertsHaveRegions(upserts) {
-		return errRegions
-	}
 	_, err := c.service.ValidateWorkerControllerInstanceSpec(ctx, &wcipb.ValidateWorkerControllerInstanceSpecRequest{
 		NamespaceId:         ns.ID().String(),
 		InstanceId:          instanceID(version),
@@ -238,11 +220,6 @@ func (c *Client) CreateFromWorkflowState(ctx context.Context, args *iface.Worker
 	req, err := migration.WorkflowStateToCHASM(migrationInstanceID(args), args)
 	if err != nil {
 		return err
-	}
-	for _, group := range req.GetState().GetScalingGroupSpecs() {
-		if len(group.GetRegionIds()) > 0 {
-			return errRegions
-		}
 	}
 	req.MigrationToken = token
 	req.ExpireTime = timestamppb.New(expireTime)
