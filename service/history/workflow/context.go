@@ -1100,6 +1100,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
 		c.MutableState.GetExecutionState().State,
+		wroteEvents(payload.ExecutionEvents),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
