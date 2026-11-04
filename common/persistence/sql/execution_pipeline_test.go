@@ -25,9 +25,10 @@ type (
 	// and counts the history nodes appended outside a transaction.
 	fakePipelineDB struct {
 		sqlplugin.DB
-		pipelined    *fakeUpdateTx
-		sequential   *fakeUpdateTx
-		historyNodes int
+		pipelined         *fakeUpdateTx
+		sequential        *fakeUpdateTx
+		beginPipelinedErr error
+		historyNodes      int
 	}
 
 	// fakeUpdateTx answers the calls of a minimal UpdateCurrent update the way a
@@ -46,7 +47,7 @@ type (
 )
 
 func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
-	request := newPipelineTestRequest(false)
+	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 
 	require.NoError(t, updateWithFakes(db, request))
@@ -56,18 +57,68 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 	require.False(t, db.sequential.begun)
 }
 
-func TestUpdateWorkflowExecutionPipelined_RejectedRunsSequential(t *testing.T) {
-	request := newPipelineTestRequest(false)
-	db := newFakePipelineDB(request)
-	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, errors.New("division by zero"))
+func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
+	testCases := []struct {
+		name           string
+		setup          func(request *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB)
+		pipelinedBegun bool
+	}{
+		{
+			name: "rejected",
+			setup: func(_ *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB) {
+				db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, errors.New("division by zero"))
+			},
+			pipelinedBegun: true,
+		},
+		{
+			name: "record error",
+			setup: func(_ *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB) {
+				db.pipelined.updateExecutionsErr = errors.New("record failed")
+			},
+			pipelinedBegun: true,
+		},
+		{
+			name: "new branch",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest, _ *fakePipelineDB) {
+				request.UpdateWorkflowNewEvents[0].IsNewBranch = true
+			},
+		},
+		{
+			name: "not update current",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest, _ *fakePipelineDB) {
+				request.Mode = p.UpdateWorkflowModeIgnoreCurrent
+			},
+		},
+		{
+			name: "new workflow",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest, _ *fakePipelineDB) {
+				request.NewWorkflowSnapshot = &p.InternalWorkflowSnapshot{
+					NamespaceID:        request.UpdateWorkflowMutation.NamespaceID,
+					WorkflowID:         request.UpdateWorkflowMutation.WorkflowID,
+					ExecutionState:     &persistencespb.WorkflowExecutionState{RunId: primitives.NewUUID().String()},
+					ExecutionStateBlob: &commonpb.DataBlob{},
+					ExecutionInfoBlob:  &commonpb.DataBlob{},
+				}
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPipelineTestRequest()
+			db := newFakePipelineDB(request)
+			tc.setup(request, db)
 
-	require.NoError(t, updateWithFakes(db, request))
-	require.Equal(t, 1, db.historyNodes)
-	require.True(t, db.sequential.committed)
+			require.NoError(t, updateWithFakes(db, request))
+			require.Equal(t, tc.pipelinedBegun, db.pipelined.begun)
+			require.False(t, db.pipelined.committed)
+			require.Equal(t, 1, db.historyNodes+db.sequential.historyNodes)
+			require.True(t, db.sequential.committed)
+		})
+	}
 }
 
 func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing.T) {
-	request := newPipelineTestRequest(false)
+	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	db.pipelined.commitErr = errors.New("connection reset")
 
@@ -79,28 +130,20 @@ func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing
 	require.False(t, db.sequential.begun)
 }
 
-func TestUpdateWorkflowExecutionPipelined_NewBranchRunsSequential(t *testing.T) {
-	request := newPipelineTestRequest(true)
+func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) {
+	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
+	db.beginPipelinedErr = errors.New("connection refused")
 
-	require.NoError(t, updateWithFakes(db, request))
-	require.False(t, db.pipelined.begun)
-	require.Equal(t, 1, db.sequential.historyNodes)
-	require.True(t, db.sequential.committed)
+	err := updateWithFakes(db, request)
+	var unavailable *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailable)
+	require.Equal(t, "UpdateWorkflowExecution failed. Failed to start transaction. Error: connection refused", unavailable.Message)
+	require.Zero(t, db.historyNodes)
+	require.False(t, db.sequential.begun)
 }
 
-func TestUpdateWorkflowExecutionPipelined_RecordErrorRunsSequential(t *testing.T) {
-	request := newPipelineTestRequest(false)
-	db := newFakePipelineDB(request)
-	db.pipelined.updateExecutionsErr = errors.New("record failed")
-
-	require.NoError(t, updateWithFakes(db, request))
-	require.False(t, db.pipelined.committed)
-	require.Equal(t, 1, db.historyNodes)
-	require.True(t, db.sequential.committed)
-}
-
-func newPipelineTestRequest(isNewBranch bool) *p.InternalUpdateWorkflowExecutionRequest {
+func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
 	return &p.InternalUpdateWorkflowExecutionRequest{
 		ShardID:     1,
 		RangeID:     5,
@@ -117,7 +160,6 @@ func newPipelineTestRequest(isNewBranch bool) *p.InternalUpdateWorkflowExecution
 			Condition:          10,
 		},
 		UpdateWorkflowNewEvents: []*p.InternalAppendHistoryNodesRequest{{
-			IsNewBranch: isNewBranch,
 			BranchInfo: &persistencespb.HistoryBranch{
 				TreeId:   primitives.NewUUID().String(),
 				BranchId: primitives.NewUUID().String(),
@@ -147,6 +189,9 @@ func updateWithFakes(db *fakePipelineDB, request *p.InternalUpdateWorkflowExecut
 }
 
 func (d *fakePipelineDB) BeginPipelinedTx(context.Context) (sqlplugin.PipelinedTx, error) {
+	if d.beginPipelinedErr != nil {
+		return nil, d.beginPipelinedErr
+	}
 	d.pipelined.begun = true
 	return d.pipelined, nil
 }
@@ -189,6 +234,10 @@ func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(context.Context, sqlplugin
 }
 
 func (t *fakeUpdateTx) UpdateCurrentExecutions(context.Context, *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
+	return driver.RowsAffected(1), nil
+}
+
+func (t *fakeUpdateTx) InsertIntoExecutions(context.Context, *sqlplugin.ExecutionsRow) (sql.Result, error) {
 	return driver.RowsAffected(1), nil
 }
 
