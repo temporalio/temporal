@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"context"
 	"math"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -59,6 +61,15 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() { _ = db.Close() }()
+	var beginTxCount func() int64
+	if p.pluginName == "postgres12_pgx" {
+		counter := &beginTxCounter{DB: db}
+		executionStore, err = sql.NewSQLExecutionStore(&sql.DbConn{DB: counter}, testData.Logger, serialization.NewSerializer())
+		if err != nil {
+			p.T().Fatalf("unable to create PostgreSQL execution store: %v", err)
+		}
+		beginTxCount = counter.count.Load
+	}
 
 	s := NewExecutionMutableStateSuite(
 		p.T(),
@@ -68,7 +79,24 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 		testData.Logger,
 	)
 	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
+	s.BeginTxCount = beginTxCount
 	suite.Run(p.T(), s)
+}
+
+// beginTxCounter counts the transactions begun on a DB, which it otherwise
+// passes through, pipelined transactions included.
+type beginTxCounter struct {
+	sqlplugin.DB
+	count atomic.Int64
+}
+
+func (c *beginTxCounter) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
+	c.count.Add(1)
+	return c.DB.BeginTx(ctx)
+}
+
+func (c *beginTxCounter) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
+	return c.DB.(sqlplugin.TxPipeliner).BeginPipelinedTx(ctx)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateTaskStoreSuite() {

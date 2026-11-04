@@ -55,6 +55,9 @@ type (
 		// mutable-state sub-collections. Wired from the raw DB by SQL entrypoints;
 		// nil on Cassandra, where these live as columns on the executions row.
 		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
+		// BeginTxCount reports how many transactions the execution store began.
+		// Wired by plugins that pipeline UpdateWorkflowExecution, which begins none.
+		BeginTxCount func() int64
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -586,6 +589,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
+	var beginTxCount int64
+	if s.BeginTxCount != nil {
+		beginTxCount = s.BeginTxCount()
+	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -600,6 +607,9 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		NewWorkflowEvents:   nil,
 	})
 	s.NoError(err)
+	if s.BeginTxCount != nil {
+		s.Equal(beginTxCount, s.BeginTxCount(), "the update ran sequentially instead of pipelined")
+	}
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
