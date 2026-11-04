@@ -150,7 +150,13 @@ func (t pipelinedTx) Commit() error {
 
 	var sendErr error
 	rawErr := conn.Raw(func(driverConn any) error {
-		sendErr = p.send(driverConn.(*stdlib.Conn).Conn())
+		c, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			// A custom SQL.Connect can return another driver's connections.
+			sendErr = fmt.Errorf("%w: %T is not a pgx connection", sqlplugin.ErrPipelineNotWritten, driverConn)
+			return nil
+		}
+		sendErr = p.send(c.Conn())
 		if sendErr != nil && !errors.Is(sendErr, sqlplugin.ErrPipelineNotWritten) {
 			// The connection can be left mid-batch, so database/sql must close it
 			// instead of pooling it.
