@@ -146,7 +146,7 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			if singleSession == nil && currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
+			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
 				pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 				// A poll from a sticky queue while the workflow's task queue is not yet sticky
 				// should be rejected. This means the task was a stale task on the matching queue.
@@ -191,11 +191,10 @@ func Invoke(
 			newSingleSessionBinding := singleSession != nil && !sessionState.GetExclusiveWorker()
 			if newSingleSessionBinding {
 				// Bind after the task start is accepted so both changes commit in the same transaction.
-				executionInfo.SessionState = &persistencespb.SessionState{
+				mutableState.SetSessionState(&persistencespb.SessionState{
 					ExclusiveWorker: true,
 					WorkerAddress:   stableIdentity,
-				}
-				mutableState.SetStickyTaskQueue(stableIdentity, nil)
+				})
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

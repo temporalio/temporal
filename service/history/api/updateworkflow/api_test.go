@@ -205,46 +205,33 @@ func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutio
 	}
 }
 
-func TestSingleSessionSpeculativeDispatchDoesNotFallback(t *testing.T) {
+func TestSpeculativeDispatchFallsBackWhenStickyWorkerUnavailable(t *testing.T) {
 	t.Parallel()
-	for _, bound := range []bool{false, true} {
-		name := "ordinary"
-		if bound {
-			name = "single session"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			ctrl := gomock.NewController(t)
-			client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-			shard := historyi.NewMockShardContext(ctrl)
-			registry := namespace.NewMockRegistry(ctrl)
-			namespaceErr := serviceerror.NewNamespaceNotFound("namespace")
-			registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, namespaceErr)
-			shard.EXPECT().GetNamespaceRegistry().Return(registry)
-			shard.EXPECT().NewVectorClock().Return(&clockspb.VectorClock{}, nil).AnyTimes()
-			shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
-			calls := 2
-			if bound {
-				calls = 1
+	ctrl := gomock.NewController(t)
+	client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	shard := historyi.NewMockShardContext(ctrl)
+	registry := namespace.NewMockRegistry(ctrl)
+	namespaceErr := serviceerror.NewNamespaceNotFound("namespace")
+	registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, namespaceErr)
+	shard.EXPECT().GetNamespaceRegistry().Return(registry)
+	shard.EXPECT().NewVectorClock().Return(&clockspb.VectorClock{}, nil).AnyTimes()
+	shard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	count := 0
+	client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+			count++
+			if count == 1 {
+				require.Equal(t, "S", req.GetTaskQueue().GetName())
+				return nil, &serviceerrors.StickyWorkerUnavailable{}
 			}
-			count := 0
-			client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, req *matchingservice.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
-					count++
-					if count == 1 {
-						require.Equal(t, "S", req.GetTaskQueue().GetName())
-						return nil, &serviceerrors.StickyWorkerUnavailable{}
-					}
-					require.Equal(t, "foo", req.GetTaskQueue().GetName())
-					return &matchingservice.AddWorkflowTaskResponse{}, nil
-				}).Times(calls)
-			u := &Updater{
-				req: createUpdateRequest("update"), shardCtx: shard, matchingClient: client,
-				scheduledEventID: 5, taskQueue: &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
-				normalTaskQueueName: "foo", exclusiveWorker: bound,
-			}
-			_, err := u.OnSuccess(context.Background())
-			require.ErrorIs(t, err, namespaceErr)
-		})
+			require.Equal(t, "foo", req.GetTaskQueue().GetName())
+			return &matchingservice.AddWorkflowTaskResponse{}, nil
+		}).Times(2)
+	u := &Updater{
+		req: createUpdateRequest("update"), shardCtx: shard, matchingClient: client,
+		scheduledEventID: 5, taskQueue: &taskqueuepb.TaskQueue{Name: "S", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		normalTaskQueueName: "foo",
 	}
+	_, err := u.OnSuccess(context.Background())
+	require.ErrorIs(t, err, namespaceErr)
 }

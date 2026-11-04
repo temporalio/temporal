@@ -837,7 +837,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	// Retain metadata for assigned exclusive workers so queue reloads cannot allow
 	// the same destination to acquire another workflow, even after its workflow completes.
 	// TODO (Shivam) -- more thinking and discussion required on the scavenging of this task queue metadata.
-	if !persistence.IsExclusiveWorkerAssigned(info) {
+	if !info.GetExclusiveWorkerAssigned() {
 		info.ExpiryTime = db.expiryTime()
 	}
 	return info

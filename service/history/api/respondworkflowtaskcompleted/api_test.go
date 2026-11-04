@@ -1490,8 +1490,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			_, _, token := s.createSentUpdate(tv, wfContext)
 			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
 			s.Require().NoError(err)
-			ms.SetStickyTaskQueue("S", nil)
-			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+			ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"})
 			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
 			if destination == "other" {
 				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)

@@ -1467,26 +1467,20 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	}
 }
 
-func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
-	sessionState := ms.executionInfo.GetSessionState()
-	if sessionState.GetExclusiveWorker() && name != sessionState.GetWorkerAddress() {
-		softassert.Fail(ms.logger, "attempted to change sticky task queue for a workflow bound to a single session",
-			tag.WorkflowTaskQueueName(sessionState.GetWorkerAddress()),
-			tag.NewStringTag("requested-task-queue", name),
-		)
-		// This check is already done in workflow task completion, which is why
-		// we do not need to return an error here.
-		return
-	}
-	ms.executionInfo.StickyTaskQueue = name
-	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
-	if sessionState != nil {
-		sessionState.WorkerAddress = name
-	}
+func (ms *MutableStateImpl) SetSessionState(state *persistencespb.SessionState) {
+	ms.executionInfo.SessionState = state
+	// Note: executionInfo.StickyTaskQueue and SessionState.WorkerAddress are mirror values of each other
+	ms.SetStickyTaskQueue(state.GetWorkerAddress(), nil)
 }
 
+func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
+	ms.executionInfo.StickyTaskQueue = name
+	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
+}
+
+// ClearStickyTaskQueue does not clear the sticky task queue if the workflow is bound to an exclusive worker.
+// Currently, executionInfo.StickyTaskQueue and SessionState.WorkerAddress are mirrors of each other.
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
-	// If the sticky task queue is already bound to a single sesssion, then clearing it is not allowed.
 	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
 		return
 	}

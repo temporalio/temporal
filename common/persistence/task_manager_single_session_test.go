@@ -18,26 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestTaskQueueMetadataRetention(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		info     *persistencespb.TaskQueueInfo
-		retained bool
-	}{
-		{name: "nil"},
-		{name: "unassigned workflow sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
-		{name: "assigned workflow sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, ExclusiveWorkerAssigned: true}, retained: true},
-		{name: "activity sticky", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_STICKY, TaskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, ExclusiveWorkerAssigned: true}},
-		{name: "normal workflow", info: &persistencespb.TaskQueueInfo{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, ExclusiveWorkerAssigned: true}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.retained, persistence.IsExclusiveWorkerAssigned(tc.info))
-		})
-	}
-}
-
 func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"create", "update"} {
@@ -55,9 +35,9 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 				{name: "assigned workflow without expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, invalidCreate: true},
 				{name: "assigned workflow clears backend expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true},
 				{name: "ordinary sticky expires", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true},
-				{name: "activity expiry is preserved", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, expiry: true},
+				{name: "activity expiry is preserved", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, expiry: true},
 				{name: "unassigned requires expiry", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, invalid: true},
-				{name: "activity requires expiry", assigned: true, taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, invalid: true},
+				{name: "activity requires expiry", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, invalid: true},
 				{name: "store failure", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, expiry: true, storeError: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +78,7 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 									restored, err := serializer.TaskQueueInfoFromBlob(req.TaskQueueInfo)
 									require.NoError(t, err)
 									protorequire.ProtoEqual(t, info, restored)
-									if tc.assigned && tc.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+									if tc.assigned {
 										require.Nil(t, req.ExpiryTime)
 									} else {
 										protorequire.ProtoEqual(t, info.GetExpiryTime(), req.ExpiryTime)

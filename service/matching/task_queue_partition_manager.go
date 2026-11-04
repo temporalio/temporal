@@ -2385,6 +2385,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
+	// TODO (Shivam): Add logic to handle the case of exclusive workers with AutoUpgrade workloads
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {

@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -58,7 +57,6 @@ import (
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -10218,8 +10216,7 @@ func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
 			},
 		})
 	s.Require().NoError(err)
-	ms.SetStickyTaskQueue("S", durationpb.New(time.Second))
-	ms.executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+	ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"})
 	ms.executionInfo.DefaultWorkflowTaskTimeout = durationpb.New(time.Second)
 	ms.executionInfo.WorkflowTaskAttempt = 1
 	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -10277,38 +10274,26 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name        string
-		session     bool
 		bound       bool
 		stickyQueue string
 	}{
 		{name: "ordinary", stickyQueue: "S"},
-		{name: "exclusive session", session: true, bound: true, stickyQueue: "S"},
-		{name: "session address tracks sticky queue", session: true, stickyQueue: "S"},
-		{name: "session address defines binding", session: true, bound: true, stickyQueue: "other"},
+		{name: "exclusive session", bound: true, stickyQueue: "S"},
+		{name: "session initializes sticky destination", bound: true, stickyQueue: "other"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-			var rejectedDestination *testlogger.Expectation
-			if tc.bound {
-				rejectedDestination = logger.Expect(testlogger.Error,
-					"attempted to change sticky task queue for a workflow bound to a single session",
-					tag.WorkflowTaskQueueName("S"), tag.NewStringTag("requested-task-queue", "other"),
-				)
-			}
-			ms := &MutableStateImpl{logger: logger, executionInfo: &persistencespb.WorkflowExecutionInfo{
+			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{
 				TaskQueue: "foo", StickyTaskQueue: tc.stickyQueue,
 				StickyScheduleToStartTimeout: durationpb.New(time.Second),
 				WorkflowRunTimeout:           durationpb.New(time.Hour),
 			}}
-			if tc.session {
-				ms.executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: tc.bound, WorkerAddress: "S"}
-			}
-			ms.SetStickyTaskQueue("other", durationpb.New(2*time.Second))
 			if tc.bound {
-				require.Equal(t, tc.stickyQueue, ms.executionInfo.GetStickyTaskQueue())
-				require.Equal(t, "S", ms.executionInfo.GetSessionState().GetWorkerAddress())
-				require.Equal(t, time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+				state := &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				ms.SetSessionState(state)
+				protorequire.ProtoEqual(t, state, ms.executionInfo.GetSessionState())
+				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
+				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
 				ms.SetStickyTaskQueue("S", durationpb.New(3*time.Second))
 				require.Equal(t, 3*time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
 				for _, queueName := range []string{"foo", "S"} {
@@ -10319,9 +10304,10 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 					require.Equal(t, time.Hour, timeout.AsDuration())
 				}
 			} else {
+				ms.SetStickyTaskQueue("other", durationpb.New(2*time.Second))
 				require.Equal(t, "other", ms.executionInfo.GetStickyTaskQueue())
 			}
-			if tc.session {
+			if tc.bound {
 				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetWorkerAddress())
 			} else {
 				require.Nil(t, ms.executionInfo.GetSessionState())
@@ -10333,15 +10319,12 @@ func TestSingleSessionStickyPolicy(t *testing.T) {
 				require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
 				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
 			}
-			if tc.session {
+			if tc.bound {
 				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetWorkerAddress())
 			} else {
 				require.Nil(t, ms.executionInfo.GetSessionState())
 			}
 			require.Equal(t, "foo", ms.executionInfo.GetTaskQueue())
-			if tc.bound {
-				require.Equal(t, int64(1), rejectedDestination.MatchCount())
-			}
 		})
 	}
 }

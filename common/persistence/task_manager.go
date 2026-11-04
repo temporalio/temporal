@@ -41,13 +41,6 @@ func (m *taskManagerImpl) GetName() string {
 	return m.taskStore.GetName()
 }
 
-// IsExclusiveWorkerAssigned reports whether an exclusive worker's sticky queue has acquired a workflow.
-func IsExclusiveWorkerAssigned(info *persistencespb.TaskQueueInfo) bool {
-	return info.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY &&
-		info.GetTaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
-		info.GetExclusiveWorkerAssigned()
-}
-
 func (m *taskManagerImpl) CreateTaskQueue(
 	ctx context.Context,
 	request *CreateTaskQueueRequest,
@@ -90,7 +83,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
 	expiryTime := taskQueueInfo.GetExpiryTime()
-	if IsExclusiveWorkerAssigned(taskQueueInfo) {
+	if taskQueueInfo.GetExclusiveWorkerAssigned() {
 		expiryTime = nil
 	} else if expiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")

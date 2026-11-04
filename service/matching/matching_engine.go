@@ -790,7 +790,7 @@ func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partit
 	if err != nil {
 		return false, err
 	}
-	return persistence.IsExclusiveWorkerAssigned(response.TaskQueueInfo), nil
+	return response.TaskQueueInfo.GetExclusiveWorkerAssigned(), nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(

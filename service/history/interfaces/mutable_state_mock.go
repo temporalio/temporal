@@ -3629,6 +3629,18 @@ func (mr *MockMutableStateMockRecorder) SetReplayEventBatchID(batchID any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReplayEventBatchID", reflect.TypeOf((*MockMutableState)(nil).SetReplayEventBatchID), batchID)
 }
 
+// SetSessionState mocks base method.
+func (m *MockMutableState) SetSessionState(state *persistence.SessionState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSessionState", state)
+}
+
+// SetSessionState indicates an expected call of SetSessionState.
+func (mr *MockMutableStateMockRecorder) SetSessionState(state any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSessionState", reflect.TypeOf((*MockMutableState)(nil).SetSessionState), state)
+}
+
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
 func (m *MockMutableState) SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
 	m.ctrl.T.Helper()

@@ -292,8 +292,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 			var expectedSessionState *persistencespb.SessionState
 			if exclusiveWorker {
 				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
-				ms.SetStickyTaskQueue("S", nil)
-				ms.GetExecutionInfo().SessionState = common.CloneProto(expectedSessionState)
+				ms.SetSessionState(common.CloneProto(expectedSessionState))
 			}
 			wfMs := workflow.TestCloneToProto(ctx, ms)
 			gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}

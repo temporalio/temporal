@@ -876,8 +876,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
-				ms.SetStickyTaskQueue("S", nil)
-				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"})
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
