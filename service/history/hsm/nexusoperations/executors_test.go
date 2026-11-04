@@ -661,13 +661,13 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					OutboundTaskThrottleController: dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
-					RequestTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MaxOperationTokenLength:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-					MinRequestTimeout:              dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-					PayloadSizeLimit:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-					CallbackURLTemplate:            dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
-					UseNewFailureWireFormat:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+					EnableOutboundTaskThrottling: dynamicconfig.GetBoolPropertyFn(false),
+					RequestTimeout:               dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MaxOperationTokenLength:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+					MinRequestTimeout:            dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					PayloadSizeLimit:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+					CallbackURLTemplate:          dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseNewFailureWireFormat:      dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -1232,7 +1232,7 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					OutboundTaskThrottleController:      dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
+					EnableOutboundTaskThrottling:        dynamicconfig.GetBoolPropertyFn(false),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
@@ -1519,7 +1519,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					OutboundTaskThrottleController:      dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
+					EnableOutboundTaskThrottling:        dynamicconfig.GetBoolPropertyFn(false),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
@@ -1942,14 +1942,14 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					OutboundTaskThrottleController: dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
-					RequestTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
-					MinRequestTimeout:              dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-					PayloadSizeLimit:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-					MaxOperationTokenLength:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000),
-					CallbackURLTemplate:            dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
-					UseNewFailureWireFormat:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-					NumHistoryShards:               4,
+					EnableOutboundTaskThrottling: dynamicconfig.GetBoolPropertyFn(false),
+					RequestTimeout:               dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+					MinRequestTimeout:            dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					PayloadSizeLimit:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+					MaxOperationTokenLength:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000),
+					CallbackURLTemplate:          dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseNewFailureWireFormat:      dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+					NumHistoryShards:             4,
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -2002,9 +2002,18 @@ func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
 func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{"start", "cancel"} {
-		for _, enabled := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s controller %v", method, enabled), func(t *testing.T) {
+		for _, tc := range []struct {
+			name              string
+			outboundEnabled   bool
+			controllerEnabled bool
+		}{
+			{"outbound disabled", false, true},
+			{"controller disabled", true, false},
+			{"enabled", true, true},
+		} {
+			t.Run(fmt.Sprintf("%s %s", method, tc.name), func(t *testing.T) {
 				t.Parallel()
+				enabled := tc.outboundEnabled && tc.controllerEnabled
 				resourceErr := &serviceerror.ResourceExhausted{
 					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -2043,7 +2052,8 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 				)
 				require.NoError(t, nexusoperations.RegisterExecutor(registry, nexusoperations.TaskExecutorOptions{
 					Config: &nexusoperations.Config{
-						OutboundTaskThrottleController:      dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: enabled}),
+						EnableOutboundTaskThrottling:        dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled),
+						TaskThrottleControllerSettings:      dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled}),
 						CallbackURLTemplate:                 dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 						RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 						MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),

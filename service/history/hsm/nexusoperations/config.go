@@ -171,7 +171,8 @@ type Config struct {
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	MetricTagConfig                     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	RetryPolicy                         func() backoff.RetryPolicy
-	OutboundTaskThrottleController      dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+	EnableOutboundTaskThrottling        dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerSettings      dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
@@ -202,7 +203,8 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 			)
 		},
 		NumHistoryShards:               cfg.NumHistoryShards,
-		OutboundTaskThrottleController: dynamicconfig.OutboundTaskThrottleController.Get(dc),
+		EnableOutboundTaskThrottling:   dynamicconfig.EnableOutboundTaskThrottling.Get(dc),
+		TaskThrottleControllerSettings: dynamicconfig.TaskThrottleController.Get(dc),
 	}
 }
 

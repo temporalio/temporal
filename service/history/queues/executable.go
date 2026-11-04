@@ -951,12 +951,6 @@ func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
 func (e *executableImpl) backoffDuration(
 	err error,
 ) time.Duration {
-	// Preserve retry backoff at the key cap, where admission fails open.
-	if e.throttleState.Enabled() &&
-		e.throttleKey.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT &&
-		e.throttleState.getOrCreate(e.throttleKey) != nil {
-		return 0
-	}
 	// elapsedTime, the first parameter in ComputeNextDelay is not relevant here
 	// since reschedule policy has no expiration interval.
 

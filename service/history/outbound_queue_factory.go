@@ -85,11 +85,6 @@ type outboundQueueFactory struct {
 
 func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 	metricsHandler := getOutbountQueueProcessorMetricsHandler(params.MetricsHandler)
-	params.ThrottleState = queues.NewThrottleState(
-		params.Config.OutboundTaskThrottleController,
-		params.TimeSource,
-		metricsHandler,
-	)
 
 	rateLimiterPool := collection.NewOnceMap(
 		func(key tasks.TaskGroupNamespaceIDAndDestination) quotas.RateLimiter {

@@ -83,13 +83,13 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				OutboundTaskThrottleController: dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{}),
-				StateAccessBuffer:              dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
-				MaxOperationTokenLength:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-				MinOutboundRequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				PayloadSizeLimit:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-				CallbackURLTemplate:            dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseNewFailureWireFormat:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				EnableOutboundTaskThrottling: dynamicconfig.GetBoolPropertyFn(false),
+				StateAccessBuffer:            dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
+				MaxOperationTokenLength:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+				MinOutboundRequestTimeout:    dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+				PayloadSizeLimit:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+				CallbackURLTemplate:          dynamicconfig.GetTypedPropertyFn(callbackTmpl),
+				UseNewFailureWireFormat:      dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
@@ -1372,9 +1372,18 @@ func TestTaskGroupTaggedAsCallerOutbound(t *testing.T) {
 func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{"start", "cancel"} {
-		for _, enabled := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s controller %v", method, enabled), func(t *testing.T) {
+		for _, tc := range []struct {
+			name              string
+			outboundEnabled   bool
+			controllerEnabled bool
+		}{
+			{"outbound disabled", false, true},
+			{"controller disabled", true, false},
+			{"enabled", true, true},
+		} {
+			t.Run(fmt.Sprintf("%s %s", method, tc.name), func(t *testing.T) {
 				t.Parallel()
+				enabled := tc.outboundEnabled && tc.controllerEnabled
 				resourceErr := &serviceerror.ResourceExhausted{
 					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -1409,7 +1418,8 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 				var err error
 				if method == "start" {
 					env := newInvocationTaskTestEnv(t, op, InvocationData{Input: mustToPayload(t, "input")}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
-					env.handler.config.OutboundTaskThrottleController = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: enabled})
+					env.handler.config.EnableOutboundTaskThrottling = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
 					env.setupReadComponent()
 					if !enabled {
 						env.setupUpdateComponent()
@@ -1428,7 +1438,8 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 					cancellation := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, Attempt: 1})
 					env := newCancellationTaskTestEnv(t, op, cancellation, InvocationData{}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
-					env.handler.config.OutboundTaskThrottleController = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: enabled})
+					env.handler.config.EnableOutboundTaskThrottling = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
 					env.setupReadComponent()
 					if !enabled {
 						env.setupUpdateComponent()

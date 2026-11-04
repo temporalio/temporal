@@ -336,7 +336,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
-	if e.Config.OutboundTaskThrottleController().Enabled {
+	if e.Config.EnableOutboundTaskThrottling() && e.Config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
 			return retryErr
 		}
@@ -804,7 +804,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
-	if e.Config.OutboundTaskThrottleController().Enabled {
+	if e.Config.EnableOutboundTaskThrottling() && e.Config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
 			return retryErr
 		}

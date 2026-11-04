@@ -134,8 +134,7 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
-	TaskThrottleController         dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
-	OutboundTaskThrottleController dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
+	TaskThrottleController dynamicconfig.TypedPropertyFn[dynamicconfig.TaskThrottleControllerSettings]
 
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
@@ -616,7 +615,6 @@ func NewConfig(
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
 		TaskThrottleController:                               dynamicconfig.TaskThrottleController.Get(dc),
-		OutboundTaskThrottleController:                       dynamicconfig.OutboundTaskThrottleController.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),

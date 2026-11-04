@@ -132,13 +132,6 @@ func TestExecutable_UnresolvedNamespaceStaysUngoverned(t *testing.T) {
 	require.Zero(t, throttleLen(state))
 }
 
-func callerLimitError() error {
-	return &serviceerror.ResourceExhausted{
-		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
-		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-	}
-}
-
 func newOutboundTestExecutable(t *testing.T, timeSource clock.TimeSource, source, destination, group string) (*executableImpl, *MockExecutor) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
@@ -178,8 +171,14 @@ func TestOutboundCallerRPSRetainsTaskAndPacesRetries(t *testing.T) {
 	executable, executor := newOutboundTestExecutable(t, timeSource, "caller", "endpoint", "invocation")
 	executable.throttleState = state
 	executable.scheduler, executable.rescheduler = scheduler, rescheduler
-	executor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{ExecutionErr: callerLimitError()}).Times(2)
+	executor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionErr: &serviceerror.ResourceExhausted{
+			Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+			Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		},
+	}).Times(2)
 
+	var retryTime time.Time
 	for attempt := range 2 {
 		err := executable.Execute()
 		require.Error(t, err)
@@ -188,9 +187,13 @@ func TestOutboundCallerRPSRetainsTaskAndPacesRetries(t *testing.T) {
 		require.Equal(t, ctasks.TaskStatePending, executable.State())
 		require.Equal(t, 1, rescheduler.Len())
 		for _, pq := range rescheduler.pqMap {
-			require.Equal(t, timeSource.Now(), pq.Peek().rescheduleTime)
+			retryTime = pq.Peek().rescheduleTime
+			require.True(t, retryTime.After(timeSource.Now()))
 		}
+		rescheduler.reschedule()
+		require.Equal(t, 1, rescheduler.Len())
 		if attempt == 0 {
+			timeSource.Update(retryTime)
 			scheduler.EXPECT().TrySubmit(executable).Return(true)
 			rescheduler.reschedule()
 			require.Zero(t, rescheduler.Len())
@@ -204,22 +207,12 @@ func TestOutboundCallerRPSRetainsTaskAndPacesRetries(t *testing.T) {
 	releases, rejections := throttleCounters(state, key)
 	require.Equal(t, int64(1), releases)
 	require.Equal(t, int64(1), rejections)
+	timeSource.Update(retryTime)
+	require.True(t, admitOK(state, key))
 	rescheduler.reschedule()
 	require.Equal(t, 1, rescheduler.Len())
 	timeSource.Advance(time.Second)
 	scheduler.EXPECT().TrySubmit(executable).Return(true)
 	rescheduler.reschedule()
 	require.Zero(t, rescheduler.Len())
-}
-
-func TestOutboundCallerRPSKeyCapRetainsRetryBackoff(t *testing.T) {
-	t.Parallel()
-	options := defaultThrottleOverrides()
-	options.maxKeys = 1
-	state, timeSource := newTestThrottleState(options)
-	state.getOrCreate(NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "another-caller"))
-	executable, _ := newOutboundTestExecutable(t, timeSource, "caller", "endpoint", "invocation")
-	executable.throttleState = state
-	executable.reportThrottle(enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE)
-	require.Positive(t, executable.backoffDuration(callerLimitError()))
 }

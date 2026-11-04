@@ -2228,18 +2228,18 @@ The actual count is calculated as base * (multiplier ^ level)`,
 	TaskThrottleController = NewGlobalTypedSetting(
 		"history.taskThrottleController",
 		DefaultTaskThrottleControllerSettings,
-		`TaskThrottleController tunes host level pacing of history task retries that a namespace
-APS or persistence rate limiter refused. Unset fields keep their defaults.
+		`TaskThrottleController tunes host level pacing of history task retries refused by namespace
+APS, persistence, or remote Nexus caller RPS limits. Outbound caller RPS retries also require
+history.enableOutboundTaskThrottling. Unset fields keep their defaults.
 Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
 Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
 	)
 
-	OutboundTaskThrottleController = NewGlobalTypedSetting(
-		"history.outboundTaskThrottleController",
-		DefaultTaskThrottleControllerSettings,
-		`OutboundTaskThrottleController tunes host level pacing of outbound task retries refused by
-namespace APS, persistence, or remote Nexus caller RPS limits, independently of TaskThrottleController.
-Unset fields keep their defaults. See TaskThrottleControllerSettings comments for details.`,
+	EnableOutboundTaskThrottling = NewGlobalBoolSetting(
+		"history.enableOutboundTaskThrottling",
+		false,
+		`EnableOutboundTaskThrottling retries namespace-scoped Nexus caller RPS rejections in memory
+through the shared TaskThrottleController. Both this flag and TaskThrottleController.Enabled must be true.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
