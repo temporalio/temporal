@@ -818,6 +818,24 @@ func TestE2E_ActivationAppliesEachTaskAddOnce(t *testing.T) {
 	require.EqualValues(t, 4, w.AppliedTaskAddSeq)
 }
 
+// The workflow's forward can land after CHASM started migrating back; its new entries join the queue for the workflow.
+func TestE2E_ForwardWhileMigratingBackIsQueued(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	require.NoError(t, e.prepare(testToken, time.Minute))
+	require.NoError(t, e.activateSeq(testToken, 1, 1))
+	require.NoError(t, e.migrateToWorkflow())
+
+	require.NoError(t, e.activateSeq(testToken, 1, 3))
+	require.NoError(t, e.activateSeq(testToken, 1, 3), "a repeated forward queues nothing more")
+	require.Equal(t, 1, fake.taskAddCalls, "nothing applies on CHASM while it hands over")
+	w, _ := e.live(t)
+	require.Len(t, w.MigrationTaskAdds, 2)
+	require.EqualValues(t, 3, w.AppliedTaskAddSeq)
+
+	e.runMigrateTask(t)
+	require.Len(t, migrationTokenRequest(t, e.history.updates[0]).TaskAdds, 2, "sent to the workflow with the activation")
+}
+
 func TestE2E_AbortAndExpiryCloseThePendingTarget(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	require.NoError(t, e.prepare(testToken, time.Minute))
@@ -842,6 +860,8 @@ func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
 		name   string
 		moveOn func(*testing.T, *e2e)
 		status wcipb.WciStatus
+		// Task-adds applied on CHASM after the numbered retry; the first activation applied 1.
+		applied int
 	}{
 		{name: "deleted", status: wcipb.WCI_STATUS_DELETED, moveOn: func(t *testing.T, e *e2e) {
 			_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
@@ -864,7 +884,13 @@ func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, e.prepare("run-0", time.Minute))
 		}},
-		{name: "deleted_then_recreated", status: wcipb.WCI_STATUS_RUNNING, moveOn: func(t *testing.T, e *e2e) {
+		{name: "migration_back_aborted", status: wcipb.WCI_STATUS_RUNNING, applied: 2, moveOn: func(t *testing.T, e *e2e) {
+			require.NoError(t, e.migrateToWorkflow())
+			e.history.rejectActivation = &failurepb.Failure{Message: "token mismatch"}
+			e.runMigrateTask(t)
+		}},
+		// The applied mark is carried with the token, so only the new entry applies.
+		{name: "deleted_then_recreated", status: wcipb.WCI_STATUS_RUNNING, applied: 2, moveOn: func(t *testing.T, e *e2e) {
 			_, err := e.handler.DeleteWorkerControllerInstance(e.ctx, &wcipb.DeleteWorkerControllerInstanceRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
 			require.NoError(t, err)
 			_, err = e.update(groupUpsert("test-invoke"))
@@ -882,7 +908,7 @@ func TestE2E_RetriedActivationAfterTargetMovesOn(t *testing.T) {
 
 			require.NoError(t, e.activate(testToken, 1))
 			require.NoError(t, e.activateSeq(testToken, 1, 2))
-			require.Equal(t, 1, fake.taskAddCalls, "the retry replays nothing onto an instance that moved on")
+			require.Equal(t, max(1, tc.applied), fake.taskAddCalls, "a running instance takes only the new entry; one that moved on takes none")
 			require.ErrorIs(t, e.activate("run-2", 0), ErrMigrationNotPending)
 		})
 	}

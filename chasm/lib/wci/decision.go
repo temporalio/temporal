@@ -283,7 +283,8 @@ func (w *WorkerControllerInstance) armPollTimer(ctx chasm.MutableContext, at tim
 	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: common.CloneProto(w.NextPollTime)})
 }
 
-// applyQueuedTaskAdds replays the source's queued task-adds numbered from first, skipping those already applied.
+// applyQueuedTaskAdds replays the source's queued task-adds numbered from first, skipping those already applied;
+// while migrating to the workflow they join the queue for it instead.
 func (w *WorkerControllerInstance) applyQueuedTaskAdds(ctx chasm.MutableContext, first int64, events []*wcipb.TaskAddEvent) error {
 	for i, event := range events {
 		if first > 0 {
@@ -292,6 +293,10 @@ func (w *WorkerControllerInstance) applyQueuedTaskAdds(ctx chasm.MutableContext,
 				continue
 			}
 			w.AppliedTaskAddSeq = seq
+		}
+		if w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW {
+			w.queueMigrationTaskAdd(ctx, event)
+			continue
 		}
 		if err := w.ProcessTaskAdd(ctx, event); err != nil {
 			return err
