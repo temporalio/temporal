@@ -173,9 +173,9 @@ func (t pipelinedTx) Rollback() error {
 // send runs the queued statements as one batch. pgx runs a batch without
 // transaction control statements as one implicit transaction, which Postgres
 // commits after the last statement. A statement error means Postgres skipped
-// the rest and rolled the transaction back, so nothing was written. An error
-// after every statement succeeded comes from the commit, which may have
-// happened.
+// the rest and rolled the transaction back, so nothing was written, as with an
+// error pgx reports before it sent anything. An error after every statement
+// succeeded comes from the commit, which may have happened.
 //
 // In simple protocol the batch is one multi-statement query, and Postgres
 // reports a commit error as the last statement's result. A trailing statement
@@ -190,8 +190,7 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 	for range p.statements {
 		if _, err := results.Exec(); err != nil {
 			_ = results.Close()
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) {
+			if _, ok := errors.AsType[*pgconn.PgError](err); ok || pgconn.SafeToRetry(err) {
 				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, err)
 			}
 			return err
