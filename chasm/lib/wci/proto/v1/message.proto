@@ -36,6 +36,8 @@ message WorkerControllerInstanceState {
   google.protobuf.Timestamp in_flight_poll_time = 15;
   // Highest numbered task-add applied from the activating workflow's queue.
   int64 applied_task_add_seq = 16;
+  // Task-adds received while MIGRATING_TO_WORKFLOW, for the workflow; replayed here on abort.
+  repeated TaskAddEvent migration_task_adds = 17;
 }
 
 // Per-group runtime state; the spec lives on the root.

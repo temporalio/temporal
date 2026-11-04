@@ -48,6 +48,9 @@ message SignalVersionWorkflowTask {
 // Side-effect. Starts the workflow from converted state.
 message MigrateToWorkflowTask {}
 
+// Side-effect, on a MIGRATED instance. Sends the workflow the task-adds queued after its activation.
+message ForwardTaskAddsTask {}
+
 // Pure. BACKING_OFF -> SCALING.
 message ScalingGroupBackoffTask {
   int32 attempt = 1;

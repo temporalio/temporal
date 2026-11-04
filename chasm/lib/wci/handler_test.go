@@ -1,6 +1,7 @@
 package wci
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"maps"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -117,10 +119,15 @@ type fakeHistory struct {
 	rejectActivation *failurepb.Failure
 	updateErr        error
 	updates          []*updatepb.Request
+	// onUpdate runs while the migrate task waits on the update, outside the lock.
+	onUpdate func()
 }
 
 func (f *fakeHistory) UpdateWorkflowExecution(_ context.Context, req *historyservice.UpdateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	f.updates = append(f.updates, req.GetRequest().GetRequest())
+	if f.onUpdate != nil {
+		f.onUpdate()
+	}
 	if f.updateErr != nil {
 		return nil, f.updateErr
 	}
@@ -150,6 +157,7 @@ type e2e struct {
 	history  *fakeHistory
 	metrics  *metricstest.CaptureHandler
 	clock    *clock.EventTimeSource
+	registry *chasm.Registry
 }
 
 func newE2E(t *testing.T, script fakeAlgo) *e2e {
@@ -175,7 +183,8 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
 		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts),
-		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler}))
+		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler}),
+		NewForwardTaskAddsTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history}))
 
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, chasmRegistry.Register(&chasm.CoreLibrary{}))
@@ -183,7 +192,7 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 	ts := clock.NewEventTimeSource()
 	ts.Update(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 	engine := chasmtest.NewEngine(t, chasmRegistry, chasmtest.WithMetricsHandler(metricsHandler), chasmtest.WithTimeSource(ts))
-	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history, metrics: metricsHandler, clock: ts}
+	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history, metrics: metricsHandler, clock: ts, registry: chasmRegistry}
 }
 
 func groupUpsert(provider string) map[string]*wcipb.ScalingGroupSpecUpdate {
@@ -903,8 +912,6 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 
 	require.NoError(t, e.migrateToWorkflow())
 	require.NoError(t, e.migrateToWorkflow(), "repeating while migrating is a no-op")
-	require.ErrorIs(t, e.recordTaskAdd(), ErrMigrationPending, "mutations wait for the hand-off")
-
 	e.runMigrateTask(t)
 
 	require.Len(t, e.history.starts, 1)
@@ -926,9 +933,108 @@ func TestE2E_MigrateToWorkflow(t *testing.T) {
 
 	w, _ := e.live(t)
 	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
+	require.Zero(t, e.scheduled(t, "forwardTaskAdds"), "nothing queued after the activation's read")
 	require.ErrorIs(t, e.recordTaskAdd(), ErrClosed, "the router falls back to the workflow")
 	_, err = e.describe()
 	require.ErrorIs(t, err, ErrClosed)
+}
+
+func migrationTokenRequest(t *testing.T, u *updatepb.Request) *iface.MigrationTokenRequest {
+	t.Helper()
+	var req iface.MigrationTokenRequest
+	require.NoError(t, sdk.PreferProtoDataConverter.FromPayloads(u.GetInput().GetArgs(), &req))
+	return &req
+}
+
+// scheduled counts the physical side-effect tasks of the named type generated so far.
+func (e *e2e) scheduled(t *testing.T, name string) int {
+	t.Helper()
+	byCategory, err := e.engine.Tasks(refFor(testNamespaceID, testInstanceID))
+	require.NoError(t, err)
+	n := 0
+	for _, list := range byCategory {
+		for _, task := range list {
+			if ct, ok := task.(*historytasks.ChasmTask); ok {
+				if fqn, ok := e.registry.TaskFqnByID(ct.Info.GetTypeId()); ok && strings.HasSuffix(fqn, "."+name) {
+					n++
+				}
+			}
+		}
+	}
+	return n
+}
+
+func (e *e2e) runForwardTask(t *testing.T) bool {
+	t.Helper()
+	w, _ := e.live(t)
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.ForwardTaskAddsTask](e.lib.ForwardTaskAddsTaskHandler), chasm.TaskAttributes{}, &wcipb.ForwardTaskAddsTask{})
+	require.NoError(t, err)
+	return dropped
+}
+
+// Task-adds reaching CHASM while it migrates are queued, sent with the activation, and the tail after it forwarded.
+func TestE2E_MigrateToWorkflowQueuesTaskAdds(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NoError(t, e.migrateToWorkflow())
+	frozen, _ := e.live(t)
+	token := frozen.MigrationToken
+	require.NoError(t, e.recordTaskAdd(), "queued, not rejected")
+	require.NoError(t, e.recordTaskAdd())
+	e.history.onUpdate = func() {
+		e.history.onUpdate = nil
+		require.NoError(t, e.recordTaskAdd(), "arrives while the activation is in flight")
+	}
+
+	e.runMigrateTask(t)
+	require.Zero(t, fake.taskAddCalls, "the workflow applies them, not CHASM")
+	require.Len(t, e.history.updates, 1)
+	activate := e.history.updates[0]
+	require.Equal(t, iface.UpdateActivateMigration+":"+token+":2", activate.GetMeta().GetUpdateId())
+	req := migrationTokenRequest(t, activate)
+	require.Len(t, req.TaskAdds, 2)
+	require.EqualValues(t, 1, req.FirstTaskAddSeq)
+
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
+	require.ErrorIs(t, e.recordTaskAdd(), ErrClosed, "once closed, task-adds fall through to the workflow")
+	require.Equal(t, 1, e.scheduled(t, "forwardTaskAdds"), "the tail queued during activation is forwarded")
+
+	require.False(t, e.runForwardTask(t))
+	require.Len(t, e.history.updates, 2)
+	forward := migrationTokenRequest(t, e.history.updates[1])
+	require.Len(t, forward.TaskAdds, 3, "the whole queue; the workflow skips what it has")
+	require.EqualValues(t, 1, forward.FirstTaskAddSeq)
+	require.Equal(t, iface.UpdateActivateMigration+":"+token+":3", e.history.updates[1].GetMeta().GetUpdateId())
+}
+
+func TestE2E_MigrateToWorkflowSendsQueueWithActivation(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NoError(t, e.migrateToWorkflow())
+	require.NoError(t, e.recordTaskAdd())
+
+	e.runMigrateTask(t)
+	require.Len(t, migrationTokenRequest(t, e.history.updates[0]).TaskAdds, 1)
+	require.Zero(t, e.scheduled(t, "forwardTaskAdds"), "the activation carried the whole queue")
+}
+
+func TestE2E_MigrateToWorkflowAbortReplaysQueuedTaskAdds(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	require.NoError(t, e.migrateToWorkflow())
+	require.NoError(t, e.recordTaskAdd())
+	require.NoError(t, e.recordTaskAdd())
+	e.history.rejectActivation = &failurepb.Failure{Message: "token mismatch"}
+
+	e.runMigrateTask(t)
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_RUNNING, w.Status)
+	require.Equal(t, 2, fake.taskAddCalls, "CHASM processes what it queued")
+	require.Empty(t, w.MigrationTaskAdds)
 }
 
 func TestE2E_MigrateToWorkflowAborts(t *testing.T) {
