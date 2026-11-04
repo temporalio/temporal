@@ -94,9 +94,14 @@ func (f *fakeCompute) UpdateWorkerSetSize(_ context.Context, _ compute.RequestCo
 type fakeFrontend struct {
 	workflowservice.WorkflowServiceClient
 	resp *workflowservice.DescribeWorkerDeploymentVersionResponse
+	// onDescribe runs while the fetch is outside the lock, before its write-back.
+	onDescribe func()
 }
 
 func (f *fakeFrontend) DescribeWorkerDeploymentVersion(context.Context, *workflowservice.DescribeWorkerDeploymentVersionRequest, ...grpc.CallOption) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	if f.onDescribe != nil {
+		f.onDescribe()
+	}
 	if f.resp == nil {
 		return &workflowservice.DescribeWorkerDeploymentVersionResponse{}, nil
 	}
@@ -428,15 +433,73 @@ func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {
 		},
 	}
 
-	w, _ := e.live(t)
-	before := w.NextPollTime.AsTime()
-	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.FetchSnapshotTask](e.lib.FetchSnapshotTaskHandler), chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: w.NextPollTime})
-	require.NoError(t, err)
-	require.False(t, dropped)
+	require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
 
 	require.EqualValues(t, 5, fake.seen.Workflow.LastBacklogCount)
+	w, _ := e.live(t)
+	require.Equal(t, e.clock.Now().Add(next), w.NextPollTime.AsTime(), "the poll re-armed the timer")
+}
+
+func (e *e2e) firePollTimer(t *testing.T) *timestamppb.Timestamp {
+	t.Helper()
+	w, _ := e.live(t)
+	pollTime := w.NextPollTime
+	// The queue fires a timer at or after its scheduled time.
+	e.clock.Update(pollTime.AsTime())
+	dropped, err := chasmtest.ExecutePureTask(e.ctx, e.engine, w, chasm.PureTaskHandler[*WorkerControllerInstance, *wcipb.MetricsPollTimerTask](&MetricsPollTimerTaskHandler{}), chasm.TaskAttributes{ScheduledTime: pollTime.AsTime()}, &wcipb.MetricsPollTimerTask{PollTime: pollTime})
+	require.NoError(t, err, "the poll timer invalidates itself")
+	require.False(t, dropped)
+	return pollTime
+}
+
+func (e *e2e) fetchSnapshot(t *testing.T, pollTime *timestamppb.Timestamp) bool {
+	t.Helper()
+	w, _ := e.live(t)
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.FetchSnapshotTask](e.lib.FetchSnapshotTaskHandler), chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: pollTime})
+	require.NoError(t, err)
+	return dropped
+}
+
+func TestE2E_PollTimerArmsFallbackUntilFetchWritesBack(t *testing.T) {
+	next := 2 * minPollInterval
+	e := newE2E(t, fakeAlgo{nextPoll: &next})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+
+	pollTime := e.firePollTimer(t)
+	w, _ := e.live(t)
+	require.Equal(t, pollTime.AsTime(), w.InFlightPollTime.AsTime())
+	require.Equal(t, e.clock.Now().Add(maxPollInterval), w.NextPollTime.AsTime(), "a fallback poll covers a lost fetch")
+
+	require.False(t, e.fetchSnapshot(t, pollTime))
 	w, _ = e.live(t)
-	require.NotEqual(t, before, w.NextPollTime.AsTime(), "the poll re-armed the timer")
+	require.Nil(t, w.InFlightPollTime)
+	require.Equal(t, e.clock.Now().Add(next), w.NextPollTime.AsTime(), "the fetch re-arms at the algorithm's interval")
+}
+
+func TestE2E_SupersededFetchDoesNotApply(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+
+	t.Run("at_validation", func(t *testing.T) {
+		first := e.firePollTimer(t)
+		second := e.firePollTimer(t)
+		require.True(t, e.fetchSnapshot(t, first), "the fallback's poll replaced it")
+		require.False(t, e.fetchSnapshot(t, second))
+	})
+	t.Run("at_write_back", func(t *testing.T) {
+		first := e.firePollTimer(t)
+		var second *timestamppb.Timestamp
+		e.frontend.onDescribe = func() {
+			e.frontend.onDescribe = nil
+			second = e.firePollTimer(t)
+		}
+		require.False(t, e.fetchSnapshot(t, first))
+		w, _ := e.live(t)
+		require.Equal(t, second.AsTime(), w.InFlightPollTime.AsTime(), "the stale write-back left the newer poll in flight")
+		require.Equal(t, e.clock.Now().Add(maxPollInterval), w.NextPollTime.AsTime())
+	})
 }
 
 func TestE2E_DescribeReturnsTaskQueueObservations(t *testing.T) {
@@ -448,9 +511,7 @@ func TestE2E_DescribeReturnsTaskQueueObservations(t *testing.T) {
 			{Name: "orders", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW, Stats: &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 5}},
 		},
 	}
-	w, _ := e.live(t)
-	_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.FetchSnapshotTask](e.lib.FetchSnapshotTaskHandler), chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: w.NextPollTime})
-	require.NoError(t, err)
+	require.False(t, e.fetchSnapshot(t, e.firePollTimer(t)))
 	require.NoError(t, e.recordTaskAdd())
 
 	resp, err := e.describe()

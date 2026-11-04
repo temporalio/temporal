@@ -32,6 +32,8 @@ message WorkerControllerInstanceState {
   string activated_migration_token = 13;
   // Last spec change: create, update, delete, or migration activation.
   google.protobuf.Timestamp last_update_time = 14;
+  // Poll time of the FetchSnapshotTask whose write-back is accepted; unset when none is in flight.
+  google.protobuf.Timestamp in_flight_poll_time = 15;
 }
 
 // Per-group runtime state; the spec lives on the root.

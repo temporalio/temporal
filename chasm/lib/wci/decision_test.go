@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -194,6 +195,7 @@ func TestTimerAndFetchValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := rootAt(tc.status)
 			w.NextPollTime = current
+			w.InFlightPollTime = current
 			w.NextValidationTime = current
 
 			ok, err := (&MetricsPollTimerTaskHandler{}).Validate(nil, w, chasm.TaskInvocation{}, &wcipb.MetricsPollTimerTask{PollTime: tc.time})
@@ -223,7 +225,13 @@ func TestPollTimerSchedulesFetch(t *testing.T) {
 	w, _, ctx := newDecisionTest(t, fakeAlgo{})
 	pollTime := timestamppb.New(testNow)
 	require.NoError(t, (&MetricsPollTimerTaskHandler{}).Execute(ctx, w, chasm.TaskAttributes{}, &wcipb.MetricsPollTimerTask{PollTime: pollTime}))
-	require.Equal(t, []any{&wcipb.FetchSnapshotTask{PollTime: pollTime}}, taskTypes(ctx))
+	fallback := timestamppb.New(testNow.Add(maxPollInterval))
+	tasks := taskTypes(ctx)
+	require.Len(t, tasks, 2)
+	require.True(t, proto.Equal(&wcipb.MetricsPollTimerTask{PollTime: fallback}, tasks[0].(proto.Message)), "a fallback poll is armed first")
+	require.True(t, proto.Equal(&wcipb.FetchSnapshotTask{PollTime: pollTime}, tasks[1].(proto.Message)))
+	require.True(t, proto.Equal(pollTime, w.InFlightPollTime))
+	require.True(t, proto.Equal(fallback, w.NextPollTime))
 }
 
 func TestValidationTimerRearmsBeforeValidating(t *testing.T) {

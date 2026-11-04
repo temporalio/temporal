@@ -9,7 +9,7 @@ option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
 
 // Each task snapshots the state field that makes it stale; Validate compares it.
 
-// Pure. Fires at next_poll_time; schedules FetchSnapshotTask.
+// Pure. Fires at next_poll_time; marks the poll in flight, arms a fallback, schedules FetchSnapshotTask.
 message MetricsPollTimerTask {
   google.protobuf.Timestamp poll_time = 1;
 }
@@ -24,7 +24,7 @@ message PeriodicValidationTimerTask {
   google.protobuf.Timestamp validation_time = 1;
 }
 
-// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm.
+// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm; stale unless poll_time is in_flight_poll_time.
 message FetchSnapshotTask {
   google.protobuf.Timestamp poll_time = 1;
 }
