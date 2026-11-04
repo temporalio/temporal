@@ -789,7 +789,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ShardOwnershipLost() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.ShardOwnershipLostError{}, err)
+	s.ErrorAs(err, new(*p.ShardOwnershipLostError))
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
@@ -841,7 +841,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_ExecutionMissing() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	s.ErrorAs(err, new(*p.ConditionFailedError))
 
 	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
 }
@@ -917,7 +917,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_DuplicateTask() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&serviceerror.Unavailable{}, err)
+	s.ErrorAs(err, new(*serviceerror.Unavailable))
 	s.True(strings.HasPrefix(err.Error(), "createTransferTasks failed. Error:"), err.Error())
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, firstMutation)

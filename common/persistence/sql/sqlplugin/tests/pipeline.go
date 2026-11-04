@@ -69,7 +69,7 @@ func (s *pipelineSuite) TestReadLockShardsWithRangeID() {
 	written, err = s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
 		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID+1))
 	})
-	s.requireRejected(err, divisionByZeroCode)
+	_ = s.requireRejected(err, divisionByZeroCode)
 	s.False(written)
 }
 
@@ -94,7 +94,7 @@ func (s *pipelineSuite) TestLockCurrentExecutionsWithRunID() {
 		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
 		})
-		s.requireRejected(err, divisionByZeroCode)
+		_ = s.requireRejected(err, divisionByZeroCode)
 		s.False(written)
 	}
 }
@@ -114,7 +114,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
 		s.NoError(err)
 	})
-	s.requireRejected(err, divisionByZeroCode)
+	_ = s.requireRejected(err, divisionByZeroCode)
 	s.False(written)
 	stored, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
