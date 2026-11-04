@@ -173,7 +173,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	h.recordCallOutcome(endpoint, cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)
 
-	if h.config.EnableOutboundTaskThrottling() && h.config.TaskThrottleControllerSettings().Enabled {
+	if h.config.EnableOutboundTaskThrottleController() && h.config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
 			return retryErr
 		}

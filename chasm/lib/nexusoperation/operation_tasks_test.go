@@ -83,16 +83,16 @@ func newInvocationTaskTestEnv(
 	handler := &operationInvocationTaskHandler{
 		nexusTaskHandlerBase: nexusTaskHandlerBase{
 			config: &Config{
-				EnableOutboundTaskThrottling: dynamicconfig.GetBoolPropertyFn(false),
-				StateAccessBuffer:            dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
-				MaxOperationTokenLength:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-				MinOutboundRequestTimeout:    dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				PayloadSizeLimit:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-				CallbackURLTemplate:          dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseNewFailureWireFormat:      dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				StateAccessBuffer:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(0),
+				MaxOperationTokenLength:   dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+				MinOutboundRequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+				PayloadSizeLimit:          dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+				CallbackURLTemplate:       dynamicconfig.GetTypedPropertyFn(callbackTmpl),
+				UseNewFailureWireFormat:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
 				),
+				EnableOutboundTaskThrottleController: dynamicconfig.GetBoolPropertyFn(false),
 			},
 			namespaceRegistry: nsRegistry,
 			metricsHandler:    metricsHandler,
@@ -1418,7 +1418,7 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 				var err error
 				if method == "start" {
 					env := newInvocationTaskTestEnv(t, op, InvocationData{Input: mustToPayload(t, "input")}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
-					env.handler.config.EnableOutboundTaskThrottling = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
 					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
 					env.setupReadComponent()
 					if !enabled {
@@ -1438,7 +1438,7 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 					cancellation := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, Attempt: 1})
 					env := newCancellationTaskTestEnv(t, op, cancellation, InvocationData{}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
-					env.handler.config.EnableOutboundTaskThrottling = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
+					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
 					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
 					env.setupReadComponent()
 					if !enabled {

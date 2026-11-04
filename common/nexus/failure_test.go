@@ -426,11 +426,18 @@ func TestCallerRPSLimitClassification(t *testing.T) {
 		{"caller", enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, true},
 		{"system caller", enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, false},
 		{"aps", enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, false},
+		{"rps", enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := ConvertGRPCError(&serviceerror.ResourceExhausted{Cause: tc.cause, Scope: tc.scope}, false)
 			require.Equal(t, tc.want, CallerRPSRetry(err) != nil)
+			if !tc.want {
+				require.Equal(t, &nexus.HandlerError{
+					Type:    nexus.HandlerErrorTypeResourceExhausted,
+					Message: "resource exhausted",
+				}, err)
+			}
 		})
 	}
 	require.NoError(t, CallerRPSRetry(nexus.NewHandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, "caller rate limit exceeded")))

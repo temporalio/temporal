@@ -87,7 +87,7 @@ func (k ThrottleKey) metricsTags() []metrics.Tag {
 		metrics.ResourceExhaustedCauseTag(k.Cause),
 		metrics.NamespaceTag(k.NamespaceName.String()),
 	}
-	if k.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT {
+	if k.Destination != "" {
 		tags = append(tags, metrics.DestinationTag(k.Destination))
 	}
 	return tags

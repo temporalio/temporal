@@ -24,7 +24,6 @@ import (
 )
 
 const (
-	resourceExhaustedFailureTypeString = "temporal.api.errordetails.v1.ResourceExhaustedFailure"
 	// FailureSourceHeaderName is the header used to indicate from where the Nexus failure originated.
 	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
 	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
@@ -55,7 +54,10 @@ func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
 	}
 }
 
-var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
+var (
+	failureTypeString                  = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
+	resourceExhaustedFailureTypeString = string((&errordetailspb.ResourceExhaustedFailure{}).ProtoReflect().Descriptor().FullName())
+)
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
 func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
@@ -423,7 +425,9 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 			Type:    nexus.HandlerErrorTypeResourceExhausted,
 			Message: errMessage,
 		}
-		if resourceErr, ok := serviceerror.FromStatus(st).(*serviceerror.ResourceExhausted); ok {
+		if resourceErr, ok := serviceerror.FromStatus(st).(*serviceerror.ResourceExhausted); ok &&
+			resourceErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT &&
+			resourceErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
 			details, err := protojson.Marshal(&errordetailspb.ResourceExhaustedFailure{
 				Cause: resourceErr.Cause, Scope: resourceErr.Scope,
 			})
@@ -466,6 +470,8 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	return err
 }
 
+// CallerRPSRetry returns a ResourceExhausted error for a retryable namespace-scoped
+// Nexus caller RPS rejection, or nil for other errors.
 func CallerRPSRetry(err error) error {
 	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return nil
