@@ -103,6 +103,11 @@ func (t *expectingTx) UpdateExecutionsWithCondition(ctx context.Context, update 
 	return queuedRows(err, 1)
 }
 
+func (t *expectingTx) UpdateCurrentExecutions(ctx context.Context, row *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
+	_, err := t.PipelinedTx.UpdateCurrentExecutions(ctx, row)
+	return queuedRows(err, 1)
+}
+
 func (t *expectingTx) InsertIntoHistoryImmediateTasks(ctx context.Context, rows []sqlplugin.HistoryImmediateTasksRow) (sql.Result, error) {
 	_, err := t.PipelinedTx.InsertIntoHistoryImmediateTasks(ctx, rows)
 	return queuedRows(err, len(rows))

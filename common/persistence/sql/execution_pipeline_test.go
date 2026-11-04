@@ -188,7 +188,7 @@ func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(context.Context, sqlplugin
 	return nil
 }
 
-func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(context.Context, *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
+func (t *fakeUpdateTx) UpdateCurrentExecutions(context.Context, *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
 	return driver.RowsAffected(1), nil
 }
 

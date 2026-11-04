@@ -114,10 +114,10 @@ func (t pipelinedTx) UpdateExecutionsWithCondition(
 	)
 }
 
-// UpdateCurrentExecutionsIfChanged updates a current execution row only when it
-// differs. A sequential transaction decides that from the row it locked, which a
+// UpdateCurrentExecutions updates a current execution row only when it differs.
+// A sequential transaction decides that from the row it locked, which a
 // pipeline cannot read.
-func (t pipelinedTx) UpdateCurrentExecutionsIfChanged(
+func (t pipelinedTx) UpdateCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {

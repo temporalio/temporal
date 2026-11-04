@@ -120,7 +120,6 @@ type (
 	PipelinedTx interface {
 		Tx
 		HistoryExecutionConditionalUpdater
-		HistoryCurrentExecutionConditionalUpdater
 		// ReadLockShardsWithRangeID fails the transaction unless the shard has rangeID.
 		ReadLockShardsWithRangeID(ctx context.Context, filter ShardsFilter, rangeID int64) error
 		// LockCurrentExecutionsWithRunID fails the transaction unless the current

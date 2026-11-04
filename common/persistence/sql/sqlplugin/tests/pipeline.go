@@ -131,7 +131,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	s.Equal(update.DBRecordVersion, stored.DBRecordVersion)
 }
 
-func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
+func (s *pipelineSuite) TestUpdateCurrentExecutions() {
 	current, _ := s.insertExecution(chasm.WorkflowArchetypeID)
 	changed := current
 	changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
@@ -139,7 +139,7 @@ func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
 
 	written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
 		for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
-			_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row)
+			_, err := tx.UpdateCurrentExecutions(newExecutionContext(), row)
 			s.NoError(err)
 		}
 	})
@@ -166,7 +166,7 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update
 	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_update ON current_executions`)) }()
 
 	written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
-		_, err := tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), &changed)
+		_, err := tx.UpdateCurrentExecutions(newExecutionContext(), &changed)
 		s.NoError(err)
 	})
 	s.NoError(err)

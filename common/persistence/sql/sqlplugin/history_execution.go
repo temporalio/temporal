@@ -106,10 +106,4 @@ type (
 	HistoryExecutionConditionalUpdater interface {
 		UpdateExecutionsWithCondition(ctx context.Context, update *ExecutionsUpdate) (sql.Result, error)
 	}
-
-	// HistoryCurrentExecutionConditionalUpdater lets SQL plugins leave a current
-	// execution row alone when the update would not change it.
-	HistoryCurrentExecutionConditionalUpdater interface {
-		UpdateCurrentExecutionsIfChanged(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error)
-	}
 )

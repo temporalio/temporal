@@ -7000,21 +7000,6 @@ func (mr *MockPipelinedTxMockRecorder) UpdateCurrentExecutions(ctx, row any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCurrentExecutions", reflect.TypeOf((*MockPipelinedTx)(nil).UpdateCurrentExecutions), ctx, row)
 }
 
-// UpdateCurrentExecutionsIfChanged mocks base method.
-func (m *MockPipelinedTx) UpdateCurrentExecutionsIfChanged(ctx context.Context, row *CurrentExecutionsRow) (sql.Result, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateCurrentExecutionsIfChanged", ctx, row)
-	ret0, _ := ret[0].(sql.Result)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateCurrentExecutionsIfChanged indicates an expected call of UpdateCurrentExecutionsIfChanged.
-func (mr *MockPipelinedTxMockRecorder) UpdateCurrentExecutionsIfChanged(ctx, row any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCurrentExecutionsIfChanged", reflect.TypeOf((*MockPipelinedTx)(nil).UpdateCurrentExecutionsIfChanged), ctx, row)
-}
-
 // UpdateExecutions mocks base method.
 func (m *MockPipelinedTx) UpdateExecutions(ctx context.Context, row *ExecutionsRow) (sql.Result, error) {
 	m.ctrl.T.Helper()
