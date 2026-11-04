@@ -112,16 +112,16 @@ type (
 	}
 
 	pollMetadata struct {
-		sessionOptions            *sessionpb.WorkerSessionOptions
-		singleSessionAcquisition  bool // This is set to true when a poller is *attempting to acquire* a single session for a stable identity
-		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
-		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
-		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
-		conditions                *matchingservice.PollConditions
-		forwardedFrom             string
-		localPollStartTime        time.Time
-		workerInstanceKey         string
-		workerControlTaskQueue    string
+		sessionOptions                     *sessionpb.WorkerSessionOptions
+		singleSessionAcquisitionInProgress bool // This is set to true when a poller is *attempting to acquire* a single session for an exclusive worker identity
+		taskQueueMetadata                  *taskqueuepb.TaskQueueMetadata
+		workerVersionCapabilities          *commonpb.WorkerVersionCapabilities
+		deploymentOptions                  *deploymentpb.WorkerDeploymentOptions
+		conditions                         *matchingservice.PollConditions
+		forwardedFrom                      string
+		localPollStartTime                 time.Time
+		workerInstanceKey                  string
+		workerControlTaskQueue             string
 	}
 
 	userDataUpdate struct {
@@ -213,8 +213,8 @@ type (
 	}
 )
 
-func (m *pollMetadata) isSingleSessionAcquisition() bool {
-	return m != nil && m.singleSessionAcquisition
+func (m *pollMetadata) isSingleSessionAcquisitionInProgress() bool {
+	return m != nil && m.singleSessionAcquisitionInProgress
 }
 
 // Add registers a poller for a worker instance. Thread-safe.
@@ -667,7 +667,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
-	// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
@@ -678,6 +677,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 			return "", false, err
 		}
 		if !assigned {
+			// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
 			return "", false, serviceerrors.NewStickyWorkerUnavailable()
 		}
 		if pm == nil {
@@ -855,7 +855,8 @@ pollLoop:
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 			sessionOptions:            request.GetSessionOptions(),
-			singleSessionAcquisition:  partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
+
+			singleSessionAcquisitionInProgress: partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1004,9 +1005,6 @@ pollLoop:
 				}
 			}
 
-			if pollMetadata.isSingleSessionAcquisition() {
-				return nil, err
-			}
 			continue pollLoop
 		}
 
@@ -1280,12 +1278,25 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Assigned sessions accept queries even without recent pollers.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return nil, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
+		if err != nil {
+			return nil, err
+		}
+		if !assigned {
+			return nil, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseQuery)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	taskID := uuid.NewString()

@@ -950,7 +950,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
 		pollMetadata.sessionOptions.GetSingleSession() != nil {
 		// This is a single session poller and has a slightly different overall flow of polling.
-		task, err = pm.pollSingleSession(ctx, dbq, pollMetadata)
+		task, err = pm.pollForSingleSessionWorker(ctx, dbq, pollMetadata)
 	} else {
 		task, err = dbq.PollTask(ctx, pollMetadata)
 	}
@@ -967,7 +967,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) pollSingleSession(
+func (pm *taskQueuePartitionManagerImpl) pollForSingleSessionWorker(
 	ctx context.Context,
 	queue physicalTaskQueueManager,
 	metadata *pollMetadata,
@@ -1040,7 +1040,7 @@ func (pm *taskQueuePartitionManagerImpl) acquireSingleSession(
 	metadata *pollMetadata,
 ) (*internalTask, error) {
 	acquisitionMetadata := *metadata
-	acquisitionMetadata.singleSessionAcquisition = true
+	acquisitionMetadata.singleSessionAcquisitionInProgress = true
 	task, err := queue.PollTask(ctx, &acquisitionMetadata)
 	if err != nil {
 		return nil, err

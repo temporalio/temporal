@@ -210,7 +210,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		return nil, err
 	}
 
-	return ForwardPollWithTarget(ctx, pollMetadata, f.client, f.partition.RpcName(), target)
+	return ForwardPollWithTarget(ctx, pollMetadata, f.client, f.partition, target)
 }
 
 // ForwardPollWithTarget forwards a poll request to another partition
@@ -218,11 +218,18 @@ func ForwardPollWithTarget(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 	client matchingservice.MatchingServiceClient,
-	forwardedSource string,
+	source tqid.Partition,
 	target *tqid.NormalPartition,
 ) (*internalTask, error) {
 	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
 	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
+	forwardedSource := source.RpcName()
+	if source.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.isSingleSessionAcquisitionInProgress() {
+		// Initial session acquisition from a sticky queue partition needs an empty source to enable load balanced normal read-partition selection.
+		// Non-session based sticky pollers do not need this since they are forwarded to those task queue partitions that have advertised a backlog
+		// of tasks.
+		forwardedSource = ""
+	}
 
 	// nolint:exhaustive // there's a default clause
 	switch target.TaskType() {

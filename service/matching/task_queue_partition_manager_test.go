@@ -3018,7 +3018,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 				}
 				pollErr := expectedErr
 				forwarded := queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool {
-					return m.isSingleSessionAcquisition()
+					return m.isSingleSessionAcquisitionInProgress()
 				})).DoAndReturn(func(_ context.Context, m *pollMetadata) (*internalTask, error) {
 					require.NotSame(t, metadata, m)
 					require.Same(t, metadata.sessionOptions, m.sessionOptions)
@@ -3086,7 +3086,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 					}
 				}
 				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
-				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).DoAndReturn(
+				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).DoAndReturn(
 					func(context.Context, *pollMetadata) (*internalTask, error) {
 						if !tc.persistBlocked {
 							if err := block(); err != nil {
@@ -3144,7 +3144,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
 				otherQueue.EXPECT().ExclusiveWorkerAssigned().Return(false)
 				otherQueue.EXPECT().AssignExclusiveWorker().Return(nil)
 				otherQueue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
+				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
 				task, _, err = other.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
 					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: other.partition.RpcName()},
@@ -3208,7 +3208,7 @@ func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
 				}}
 				entered := make(chan struct{})
 				release := make(chan struct{})
-				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisition() })).DoAndReturn(
+				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).DoAndReturn(
 					func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
 						close(entered)
 						select {

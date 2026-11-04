@@ -280,7 +280,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 			queue.matchingClient = client
 			metadata := &pollMetadata{
-				singleSessionAcquisition: true,
+				singleSessionAcquisitionInProgress: true,
 				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
 				}},
@@ -365,7 +365,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCanc
 				})
 			done := make(chan error, 1)
 			go func() {
-				_, err := queue.PollTask(ctx, &pollMetadata{singleSessionAcquisition: true})
+				_, err := queue.PollTask(ctx, &pollMetadata{singleSessionAcquisitionInProgress: true})
 				done <- err
 			}()
 			await.Rcv(t, entered)

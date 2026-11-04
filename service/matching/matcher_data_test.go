@@ -1171,7 +1171,7 @@ func (s *MatcherDataSuite) TestSingleSessionAcquisitionSkipsQuery() {
 		sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"},
 		}},
-		singleSessionAcquisition: true,
+		singleSessionAcquisitionInProgress: true,
 	}
 	s.Require().Nil(s.pollImmediately(metadata))
 	workflow := s.newBacklogTask(1, 0, nil)
@@ -1179,7 +1179,7 @@ func (s *MatcherDataSuite) TestSingleSessionAcquisitionSkipsQuery() {
 	result := s.pollImmediately(metadata)
 	s.Require().NotNil(result)
 	s.Require().Same(workflow, result.task)
-	metadata.singleSessionAcquisition = false
+	metadata.singleSessionAcquisitionInProgress = false
 	result = s.pollImmediately(metadata)
 	s.Require().NotNil(result)
 	s.Require().Same(query, result.task)

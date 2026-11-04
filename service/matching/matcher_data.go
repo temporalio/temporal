@@ -458,7 +458,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 			// Standalone queries do not call RecordWorkflowTaskStarted to bind the workflow to the session.
 			// Accepting one would mark the destination assigned in Matching without establishing History's
 			// destination binding, so subsequent workflow tasks would not be routed to this session.
-			if task.isQuery() && poller.pollMetadata.isSingleSessionAcquisition() {
+			if task.isQuery() && poller.pollMetadata.isSingleSessionAcquisitionInProgress() {
 				continue
 			}
 			// can't match cases:

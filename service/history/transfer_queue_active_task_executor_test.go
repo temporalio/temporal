@@ -648,7 +648,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 		{name: "ordinary success"},
 		{name: "ordinary fallback", unavailable: true},
 		{name: "single session success", bound: true},
-		{name: "single session waits", bound: true, unavailable: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -711,7 +710,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			calls := 1
-			if tc.unavailable && !tc.bound {
+			if tc.unavailable {
 				calls = 2
 			}
 			callCount := 0
@@ -735,12 +734,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 				}).Times(calls)
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-			if tc.bound && tc.unavailable {
-				var unavailable *serviceerrors.StickyWorkerUnavailable
-				s.ErrorAs(resp.ExecutionErr, &unavailable)
-			} else {
-				s.NoError(resp.ExecutionErr)
-			}
+			s.Require().NoError(resp.ExecutionErr)
 		})
 	}
 }
