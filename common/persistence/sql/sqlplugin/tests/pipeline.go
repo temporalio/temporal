@@ -203,7 +203,7 @@ func (s *pipelineSuite) TestCanceledContext() {
 	s.NoError(tx.ReadLockShardsWithRangeID(ctx, filter, shard.RangeID))
 	err = tx.Commit()
 	s.Error(err)
-	s.NotErrorIs(err, sqlplugin.ErrPipelineRejected)
+	s.NotErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	s.NoError(lockTx.Rollback())
 }
 
@@ -221,7 +221,7 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit
 
 	written, err := s.commit(shardID, func(sqlplugin.PipelinedTx) {})
 	s.Error(err)
-	s.NotErrorIs(err, sqlplugin.ErrPipelineRejected)
+	s.NotErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	s.False(written)
 }
 
@@ -261,7 +261,7 @@ func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedT
 // requireRejected requires a rejection by the Postgres error with code, and
 // returns that error.
 func (s *pipelineSuite) requireRejected(err error, code string) *pgconn.PgError {
-	s.ErrorIs(err, sqlplugin.ErrPipelineRejected)
+	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	var pgErr *pgconn.PgError
 	s.ErrorAs(err, &pgErr)
 	s.Equal(code, pgErr.Code)

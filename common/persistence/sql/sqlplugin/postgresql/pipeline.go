@@ -151,7 +151,7 @@ func (t pipelinedTx) Commit() error {
 	var sendErr error
 	rawErr := conn.Raw(func(driverConn any) error {
 		sendErr = p.send(driverConn.(*stdlib.Conn).Conn())
-		if sendErr != nil && !errors.Is(sendErr, sqlplugin.ErrPipelineRejected) {
+		if sendErr != nil && !errors.Is(sendErr, sqlplugin.ErrPipelineNotWritten) {
 			// The connection can be left mid-batch, so database/sql must close it
 			// instead of pooling it.
 			return sqldriver.ErrBadConn
@@ -187,7 +187,7 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 			_ = results.Close()
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
-				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineRejected, err)
+				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, err)
 			}
 			return err
 		}

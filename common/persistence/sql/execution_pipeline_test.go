@@ -59,7 +59,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 func TestUpdateWorkflowExecutionPipelined_RejectedRunsSequential(t *testing.T) {
 	request := newPipelineTestRequest(false)
 	db := newFakePipelineDB(request)
-	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineRejected, errors.New("division by zero"))
+	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, errors.New("division by zero"))
 
 	require.NoError(t, updateWithFakes(db, request))
 	require.Equal(t, 1, db.historyNodes)

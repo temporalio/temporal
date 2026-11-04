@@ -30,9 +30,9 @@ var (
 	ErrNoPipelinedResults = errors.New("pipelined statements return no results")
 	// ErrPipelineUnsupported is returned when the plugin cannot pipeline.
 	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
-	// ErrPipelineRejected wraps the database error a PipelinedTx statement
-	// returned. Nothing the transaction queued was written.
-	ErrPipelineRejected = errors.New("pipelined transaction rejected")
+	// ErrPipelineNotWritten wraps the error that stopped a PipelinedTx's Commit
+	// before anything the transaction queued was written.
+	ErrPipelineNotWritten = errors.New("pipelined transaction not written")
 )
 
 type VersionedBlob struct {
@@ -115,8 +115,8 @@ type (
 	// them in one round trip, as one implicit transaction. Its reads return no
 	// results, so the checks a caller would make on them are statements that fail
 	// the transaction instead, and its UpdateExecutionsWithCondition fails the
-	// transaction when it updates no row. Commit returns ErrPipelineRejected when a
-	// statement failed. Any other Commit error leaves the outcome unknown.
+	// transaction when it updates no row. Commit returns ErrPipelineNotWritten when
+	// nothing it queued was written. Any other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		HistoryExecutionConditionalUpdater
