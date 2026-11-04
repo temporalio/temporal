@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/api/enums/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -208,8 +209,10 @@ type DeferredDecisionTask struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ScalingGroupId string                 `protobuf:"bytes,1,opt,name=scaling_group_id,json=scalingGroupId,proto3" json:"scaling_group_id,omitempty"`
 	TaskAdd        *TaskAddEvent          `protobuf:"bytes,2,opt,name=task_add,json=taskAdd,proto3" json:"task_add,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The group's task types in the host region when the decision was deferred.
+	EffectiveTaskTypes []v1.TaskQueueType `protobuf:"varint,3,rep,packed,name=effective_task_types,json=effectiveTaskTypes,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"effective_task_types,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DeferredDecisionTask) Reset() {
@@ -252,6 +255,13 @@ func (x *DeferredDecisionTask) GetScalingGroupId() string {
 func (x *DeferredDecisionTask) GetTaskAdd() *TaskAddEvent {
 	if x != nil {
 		return x.TaskAdd
+	}
+	return nil
+}
+
+func (x *DeferredDecisionTask) GetEffectiveTaskTypes() []v1.TaskQueueType {
+	if x != nil {
+		return x.EffectiveTaskTypes
 	}
 	return nil
 }
@@ -568,7 +578,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_tasks_proto protoreflect.FileDes
 
 const file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"2temporal/server/chasm/lib/wci/proto/v1/tasks.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a4temporal/server/chasm/lib/wci/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"O\n" +
+	"2temporal/server/chasm/lib/wci/proto/v1/tasks.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a4temporal/server/chasm/lib/wci/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/enums/v1/task_queue.proto\"O\n" +
 	"\x14MetricsPollTimerTask\x127\n" +
 	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"P\n" +
 	"\x11PendingExpiryTask\x12;\n" +
@@ -577,10 +587,11 @@ const file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_rawDesc = "" +
 	"\x1bPeriodicValidationTimerTask\x12C\n" +
 	"\x0fvalidation_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0evalidationTime\"L\n" +
 	"\x11FetchSnapshotTask\x127\n" +
-	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"\x91\x01\n" +
+	"\tpoll_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bpollTime\"\xe9\x01\n" +
 	"\x14DeferredDecisionTask\x12(\n" +
 	"\x10scaling_group_id\x18\x01 \x01(\tR\x0escalingGroupId\x12O\n" +
-	"\btask_add\x18\x02 \x01(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\ataskAdd\"W\n" +
+	"\btask_add\x18\x02 \x01(\v24.temporal.server.chasm.lib.wci.proto.v1.TaskAddEventR\ataskAdd\x12V\n" +
+	"\x14effective_task_types\x18\x03 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\x12effectiveTaskTypes\"W\n" +
 	"\x10ValidateSpecTask\x12C\n" +
 	"\x0fvalidation_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0evalidationTime\"i\n" +
 	"\x19SignalVersionWorkflowTask\x12L\n" +
@@ -626,6 +637,7 @@ var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_goTypes = []any{
 	(*InvokeTask)(nil),                  // 11: temporal.server.chasm.lib.wci.proto.v1.InvokeTask
 	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
 	(*TaskAddEvent)(nil),                // 13: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	(v1.TaskQueueType)(0),               // 14: temporal.api.enums.v1.TaskQueueType
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_depIdxs = []int32{
 	12, // 0: temporal.server.chasm.lib.wci.proto.v1.MetricsPollTimerTask.poll_time:type_name -> google.protobuf.Timestamp
@@ -633,13 +645,14 @@ var file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_depIdxs = []int32{
 	12, // 2: temporal.server.chasm.lib.wci.proto.v1.PeriodicValidationTimerTask.validation_time:type_name -> google.protobuf.Timestamp
 	12, // 3: temporal.server.chasm.lib.wci.proto.v1.FetchSnapshotTask.poll_time:type_name -> google.protobuf.Timestamp
 	13, // 4: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.task_add:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	12, // 5: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask.validation_time:type_name -> google.protobuf.Timestamp
-	12, // 6: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask.last_validation_time:type_name -> google.protobuf.Timestamp
-	7,  // [7:7] is the sub-list for method output_type
-	7,  // [7:7] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	14, // 5: temporal.server.chasm.lib.wci.proto.v1.DeferredDecisionTask.effective_task_types:type_name -> temporal.api.enums.v1.TaskQueueType
+	12, // 6: temporal.server.chasm.lib.wci.proto.v1.ValidateSpecTask.validation_time:type_name -> google.protobuf.Timestamp
+	12, // 7: temporal.server.chasm.lib.wci.proto.v1.SignalVersionWorkflowTask.last_validation_time:type_name -> google.protobuf.Timestamp
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_wci_proto_v1_tasks_proto_init() }

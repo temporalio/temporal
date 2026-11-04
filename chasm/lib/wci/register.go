@@ -32,6 +32,7 @@ func registerTaskQueues(
 	rc compute.RequestContext,
 	spec *iface.WorkerControllerInstanceSpec,
 	statuses map[string]iface.ScalingAlgorithmStatus,
+	region string,
 ) (map[string]registration, error) {
 	registered, err := registeredTaskQueueTypes(ctx, frontend, rc)
 	if err != nil {
@@ -44,7 +45,8 @@ func registerTaskQueues(
 
 	out := map[string]registration{}
 	for id, group := range spec.ScalingGroupSpecs {
-		if allRegistered(spec.EffectiveTaskTypesForGroup(id, noRegion), registered) {
+		// A group that serves nothing in this region has no task types, so nothing to register.
+		if allRegistered(spec.EffectiveTaskTypesForGroup(id, region), registered) {
 			continue
 		}
 		algo, config, err := algorithmFor(algoCtx, group)

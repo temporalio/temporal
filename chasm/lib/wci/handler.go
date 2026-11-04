@@ -205,7 +205,7 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 	if err := h.validate(ctx, rc, updated, unchangedGroups); err != nil {
 		return nil, err
 	}
-	registrations, err := registerTaskQueues(ctx, h.algorithmContext(ctx), h.frontend, h.compute, h.logger, rc, updated, cur.statuses)
+	registrations, err := registerTaskQueues(ctx, h.algorithmContext(ctx), h.frontend, h.compute, h.logger, rc, updated, cur.statuses, h.hostRegion)
 	if err != nil {
 		return nil, err
 	}

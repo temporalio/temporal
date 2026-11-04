@@ -156,7 +156,7 @@ func (h *DeferredDecisionTaskHandler) Execute(
 		w.recordHostRegion(h.hostRegion)
 		provider := w.ScalingGroupSpecs[task.GetScalingGroupId()].GetCompute().GetProviderType()
 		recordOperation(metricsFor(mctx, w, provider), wcimetrics.OperationTypeDeferredScalingDecision, wcimetrics.ErrorTypeNone)
-		return struct{}{}, w.ProcessDeferredScalingDecision(mctx, task.GetScalingGroupId(), task.GetTaskAdd(), snapshotFromDescribe(resp))
+		return struct{}{}, w.ProcessDeferredScalingDecision(mctx, task.GetScalingGroupId(), task.GetTaskAdd(), task.GetEffectiveTaskTypes(), snapshotFromDescribe(resp))
 	}, nil)
 	return err
 }
