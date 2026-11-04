@@ -75,7 +75,7 @@ func TestInvoke_OneInFlightAndHandOff(t *testing.T) {
 	require.Equal(t, "test-invoke", ctx.Tasks[0].Attributes.Destination)
 
 	ctx = next()
-	w.finishInvoke(ctx, g, "test-invoke", nil)
+	w.finishInvoke(ctx, g, "test-invoke", "test-invoke", nil)
 	second := invokeTasks(ctx)
 	require.Len(t, second, 1)
 	require.NotEqual(t, first[0].GetRequestId(), second[0].GetRequestId())
@@ -83,7 +83,7 @@ func TestInvoke_OneInFlightAndHandOff(t *testing.T) {
 	require.True(t, validInvoke(g, second[0]))
 
 	ctx = next()
-	w.finishInvoke(ctx, g, "test-invoke", nil)
+	w.finishInvoke(ctx, g, "test-invoke", "test-invoke", nil)
 	require.Empty(t, invokeTasks(ctx))
 	require.Zero(t, g.InflightInvokeId)
 }
@@ -98,7 +98,7 @@ func TestInvoke_RetryKeepsIDThenFails(t *testing.T) {
 	first := invokeTasks(ctx)[0]
 
 	ctx = next()
-	w.finishInvoke(ctx, g, "p", transient)
+	w.finishInvoke(ctx, g, "p", "p", transient)
 	retry := invokeTasks(ctx)
 	require.Len(t, retry, 1)
 	require.Equal(t, first.GetRequestId(), retry[0].GetRequestId(), "a retry keeps the request ID")
@@ -106,7 +106,7 @@ func TestInvoke_RetryKeepsIDThenFails(t *testing.T) {
 	require.False(t, validInvoke(g, first))
 
 	ctx = next()
-	w.finishInvoke(ctx, g, "p", transient)
+	w.finishInvoke(ctx, g, "p", "p", transient)
 	require.Empty(t, invokeTasks(ctx), "retries exhausted")
 	require.Zero(t, g.InflightInvokeId)
 	require.Zero(t, g.PendingInvokes)
@@ -120,7 +120,7 @@ func TestInvoke_NonRetryableFailsImmediately(t *testing.T) {
 	w.requestInvoke(ctx, g, "p")
 
 	ctx = next()
-	w.finishInvoke(ctx, g, "p", compute.NewProviderError(compute.FailureAccessDenied, errors.New("denied")))
+	w.finishInvoke(ctx, g, "p", "p", compute.NewProviderError(compute.FailureAccessDenied, errors.New("denied")))
 	require.Empty(t, invokeTasks(ctx))
 	require.Equal(t, wcipb.VALIDATION_RESULT_FAILED, w.ValidationStatus.GetResult())
 	require.Equal(t, "denied", w.ValidationStatus.GetErrMessage())

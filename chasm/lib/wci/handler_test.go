@@ -389,6 +389,46 @@ func TestE2E_TaskAddThenResizeEndToEnd(t *testing.T) {
 	require.Equal(t, []int32{4}, e.compute.sizes)
 }
 
+// A regional group's retried invokes and resizes keep their region's breaker key.
+func TestE2E_RegionalDestinationsSurviveRetries(t *testing.T) {
+	const east = "aws-us-east-1"
+	want := "test-invoke/" + east
+	transient := compute.NewProviderError(compute.FailureUnavailable, errors.New("down"))
+	setup := func(t *testing.T, action scalingalgorithm.ScalingAction) (*e2e, *ScalingGroup) {
+		e := newE2EInRegion(t, fakeAlgo{}, east)
+		_, err := e.update(groupUpsert("test-invoke"))
+		require.NoError(t, err)
+		// The handler rejects regional specs until 8d.2f; scope the group directly.
+		_, _, err = chasm.UpdateComponent(e.ctx, refFor(testNamespaceID, testInstanceID), func(w *WorkerControllerInstance, _ chasm.MutableContext, _ any) (struct{}, error) {
+			w.ScalingGroupSpecs["g"].RegionIds = []string{east}
+			return struct{}{}, nil
+		}, nil)
+		require.NoError(t, err)
+		fake.actions = []scalingalgorithm.ScalingAction{action}
+		require.NoError(t, e.recordTaskAdd())
+		e.compute.callErr = transient
+		_, g := e.live(t)
+		return e, g
+	}
+
+	t.Run("invoke", func(t *testing.T) {
+		e, g := setup(t, scalingalgorithm.ScalingAction{Action: scalingalgorithm.ActionTypeInvokeWorker})
+		_, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.InvokeTask](e.lib.InvokeTaskHandler), chasm.TaskAttributes{}, &wcipb.InvokeTask{RequestId: g.InflightInvokeId, Attempt: g.InflightInvokeAttempt})
+		require.NoError(t, err)
+		require.Equal(t, []string{want, want}, e.destinations(t, "invoke"), "first attempt and its retry")
+	})
+	t.Run("resize_after_backoff", func(t *testing.T) {
+		e, g := setup(t, scalingalgorithm.ScalingAction{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(4)})
+		_, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ResizeTask](e.lib.ResizeTaskHandler), chasm.TaskAttributes{}, &wcipb.ResizeTask{Attempt: g.Attempt})
+		require.NoError(t, err)
+		_, g = e.live(t)
+		require.Equal(t, wcipb.SCALING_GROUP_STATUS_BACKING_OFF, g.Status)
+		_, err = chasmtest.ExecutePureTask(e.ctx, e.engine, g, chasm.PureTaskHandler[*ScalingGroup, *wcipb.ScalingGroupBackoffTask](&ScalingGroupBackoffTaskHandler{}), chasm.TaskAttributes{ScheduledTime: g.NextAttemptTime.AsTime()}, &wcipb.ScalingGroupBackoffTask{Attempt: g.Attempt})
+		require.NoError(t, err)
+		require.Equal(t, []string{want, want}, e.destinations(t, "resize"), "first attempt and the one after backoff")
+	})
+}
+
 func TestE2E_EmitsWorkflowMetricsTaggedCHASM(t *testing.T) {
 	e := newE2E(t, fakeAlgo{})
 	capture := e.metrics.StartCapture()
@@ -1059,6 +1099,24 @@ func (e *e2e) scheduled(t *testing.T, name string) int {
 		}
 	}
 	return n
+}
+
+// destinations lists the outbound destinations of the named task type generated so far, in order.
+func (e *e2e) destinations(t *testing.T, name string) []string {
+	t.Helper()
+	byCategory, err := e.engine.Tasks(refFor(testNamespaceID, testInstanceID))
+	require.NoError(t, err)
+	var out []string
+	for _, list := range byCategory {
+		for _, task := range list {
+			if ct, ok := task.(*historytasks.ChasmTask); ok {
+				if fqn, ok := e.registry.TaskFqnByID(ct.Info.GetTypeId()); ok && strings.HasSuffix(fqn, "."+name) {
+					out = append(out, ct.Destination)
+				}
+			}
+		}
+	}
+	return out
 }
 
 func (e *e2e) runForwardTask(t *testing.T) bool {

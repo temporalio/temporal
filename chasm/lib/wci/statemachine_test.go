@@ -131,7 +131,7 @@ func TestScalingGroupTransitions(t *testing.T) {
 		{
 			name: "scale_decided", sources: []wcipb.ScalingGroupStatus{idle}, dest: scaling, wantTasks: []string{"*wcipb.ResizeTask"},
 			apply: run(func(g *ScalingGroup, ctx chasm.MutableContext) error {
-				return TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: 3, ProviderType: "aws-lambda"})
+				return TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: 3, Destination: "aws-lambda"})
 			}),
 		},
 		{
@@ -172,9 +172,9 @@ func TestResizeAttemptsAndDestination(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	g := NewScalingGroup("g")
 
-	require.NoError(t, TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: 3, ProviderType: "aws-lambda"}))
+	require.NoError(t, TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: 3, Destination: "aws-lambda"}))
 	require.NoError(t, TransitionResizeRetryable.Apply(g, ctx, EventResizeRetryable{NextAttemptTime: time.Now()}))
-	require.NoError(t, TransitionBackoffElapsed.Apply(g, ctx, EventBackoffElapsed{ProviderType: "aws-lambda"}))
+	require.NoError(t, TransitionBackoffElapsed.Apply(g, ctx, EventBackoffElapsed{Destination: "aws-lambda"}))
 
 	require.Len(t, ctx.Tasks, 3)
 	require.Equal(t, "aws-lambda", ctx.Tasks[0].Attributes.Destination)

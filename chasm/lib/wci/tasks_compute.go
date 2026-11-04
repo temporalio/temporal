@@ -42,6 +42,7 @@ type groupCall struct {
 	rc           compute.RequestContext
 	cfg          *iface.ComputeProviderSpec
 	providerType string
+	destination  string
 	size         int32
 }
 
@@ -53,16 +54,16 @@ func readGroupCall(ctx context.Context, ref chasm.ComponentRef) (groupCall, erro
 			return groupCall{}, errSpecMissing
 		}
 		cfg := migration.SpecToWorkflow(spec).Compute
-		return groupCall{rc: requestContext(cctx, root), cfg: &cfg, providerType: string(cfg.ProviderType), size: g.DesiredSize}, nil
+		return groupCall{rc: requestContext(cctx, root), cfg: &cfg, providerType: string(cfg.ProviderType), destination: taskDestination(spec), size: g.DesiredSize}, nil
 	}, nil)
 }
 
-func providerTypeOf(ctx chasm.Context, g *ScalingGroup) string {
+func destinationOf(ctx chasm.Context, g *ScalingGroup) string {
 	root, ok := g.Root.TryGet(ctx)
 	if !ok {
 		return ""
 	}
-	return root.ScalingGroupSpecs[g.Id].GetCompute().GetProviderType()
+	return taskDestination(root.ScalingGroupSpecs[g.Id])
 }
 
 func failureOf(err error) *failurepb.Failure {
@@ -98,7 +99,7 @@ func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 		case callErr == nil:
 			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, wcimetrics.ErrorTypeNone)
 			wcimetrics.TargetWorkerCount.With(h).Record(float64(call.size))
-			return struct{}{}, g.CompleteResize(mctx, call.size, call.providerType)
+			return struct{}{}, g.CompleteResize(mctx, call.size, call.destination)
 		case retryable(callErr):
 			next := mctx.Now(g).Add(resizeBackoff.ComputeNextDelay(0, int(g.Attempt), callErr))
 			return struct{}{}, TransitionResizeRetryable.Apply(g, mctx, EventResizeRetryable{Failure: failureOf(callErr), NextAttemptTime: next})
@@ -124,7 +125,7 @@ func (h *ScalingGroupBackoffTaskHandler) Validate(ctx chasm.Context, g *ScalingG
 }
 
 func (h *ScalingGroupBackoffTaskHandler) Execute(ctx chasm.MutableContext, g *ScalingGroup, _ chasm.TaskAttributes, _ *wcipb.ScalingGroupBackoffTask) error {
-	return TransitionBackoffElapsed.Apply(g, ctx, EventBackoffElapsed{ProviderType: providerTypeOf(ctx, g)})
+	return TransitionBackoffElapsed.Apply(g, ctx, EventBackoffElapsed{Destination: destinationOf(ctx, g)})
 }
 
 // InvokeTaskHandler drives InvokeWorker; see finishInvoke for the hand-off.
@@ -151,7 +152,7 @@ func (h *InvokeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 	}
 	callErr := h.client.InvokeWorker(ctx, call.rc, call.cfg, strconv.FormatInt(task.GetRequestId(), 10))
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(g *ScalingGroup, mctx chasm.MutableContext, _ any) (struct{}, error) {
-		g.Root.Get(mctx).finishInvoke(mctx, g, call.providerType, callErr)
+		g.Root.Get(mctx).finishInvoke(mctx, g, call.providerType, call.destination, callErr)
 		return struct{}{}, nil
 	}, nil)
 	return err
