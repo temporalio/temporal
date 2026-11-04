@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+
+	enumspb "go.temporal.io/api/enums/v1"
 	"time"
 
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
@@ -85,53 +87,50 @@ func (g *ScalingGroup) setAlgorithmStatus(status iface.ScalingAlgorithmStatus) e
 	return nil
 }
 
-// noRegion resolves groups that have no region IDs, the only kind CHASM accepts.
-const noRegion = ""
-
-// ProcessTaskAdd runs the matching group's algorithm on a task-add, inline in the RecordTaskAdd transaction.
+// ProcessTaskAdd runs the algorithm of the group serving the task's type in the host region, inline in the
+// RecordTaskAdd transaction.
 func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, event *wcipb.TaskAddEvent) error {
 	spec := w.spec()
 	request := *migration.TaskAddToWorkflow(event)
-	for id, groupSpec := range spec.ScalingGroupSpecs {
-		if !slices.Contains(spec.EffectiveTaskTypesForGroup(id, noRegion), request.TaskQueueType) {
-			continue
-		}
-		group, ok := w.ScalingGroups[id].TryGet(ctx)
-		if !ok {
-			recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonSpecMissing)
-			return nil
-		}
-		group.observeTaskAdd(ctx.Now(w), event)
-		h := metricsFor(ctx, w, string(groupSpec.Compute.ProviderType))
-		algoCtx := w.algorithmContext(ctx)
-		algo, config, err := algorithmFor(algoCtx, groupSpec)
-		if err != nil {
-			ctx.Logger().Warn("Scaling algorithm unavailable for task add", tag.Error(err))
-			recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmUnavailable)
-			return nil
-		}
-		status, err := group.algorithmStatus()
-		if err != nil {
-			return err
-		}
-		resp, err := algo.ProcessTaskAdd(algoCtx, config, status, request)
-		if err != nil || resp == nil {
-			ctx.Logger().Warn("Scaling algorithm failed on task add", tag.Error(err))
-			recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmFailed)
-			return nil
-		}
-		if resp.ThrottledCount > 0 {
-			wcimetrics.ScaleUpThrottledCount.With(h).Record(int64(resp.ThrottledCount))
-		}
-		recordTaskAddSignal(h, wcimetrics.SkippedReasonNone)
-		// Status is written with the actions it emits: it is intent, not confirmation.
-		if err := group.setAlgorithmStatus(resp.Status); err != nil {
-			return err
-		}
-		return w.applyActions(ctx, id, groupSpec, group, resp.Actions, event)
+	id := spec.ScalingGroupKeyForTaskQueueType(request.TaskQueueType, w.HostRegion)
+	groupSpec, ok := spec.ScalingGroupSpecs[id]
+	if id == "" || !ok {
+		recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonNoMatchingScalingGroup)
+		return nil
 	}
-	recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonNoMatchingScalingGroup)
-	return nil
+	group, ok := w.ScalingGroups[id].TryGet(ctx)
+	if !ok {
+		recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonSpecMissing)
+		return nil
+	}
+	group.observeTaskAdd(ctx.Now(w), event)
+	h := metricsFor(ctx, w, string(groupSpec.Compute.ProviderType))
+	algoCtx := w.algorithmContext(ctx)
+	algo, config, err := algorithmFor(algoCtx, groupSpec)
+	if err != nil {
+		ctx.Logger().Warn("Scaling algorithm unavailable for task add", tag.Error(err))
+		recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmUnavailable)
+		return nil
+	}
+	status, err := group.algorithmStatus()
+	if err != nil {
+		return err
+	}
+	resp, err := algo.ProcessTaskAdd(algoCtx, config, status, request)
+	if err != nil || resp == nil {
+		ctx.Logger().Warn("Scaling algorithm failed on task add", tag.Error(err))
+		recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmFailed)
+		return nil
+	}
+	if resp.ThrottledCount > 0 {
+		wcimetrics.ScaleUpThrottledCount.With(h).Record(int64(resp.ThrottledCount))
+	}
+	recordTaskAddSignal(h, wcimetrics.SkippedReasonNone)
+	// Status is written with the actions it emits: it is intent, not confirmation.
+	if err := group.setAlgorithmStatus(resp.Status); err != nil {
+		return err
+	}
+	return w.applyActions(ctx, id, groupSpec, group, resp.Actions, event)
 }
 
 // ProcessMetricsPoll runs every group's algorithm on a snapshot and re-arms the poll timer at
@@ -151,7 +150,14 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			if !ok {
 				continue
 			}
-			group.observePoll(ctx.Now(w), observed, spec.EffectiveTaskTypesForGroup(id, noRegion))
+			taskTypes := spec.EffectiveTaskTypesForGroup(id, w.HostRegion)
+			group.observePoll(ctx.Now(w), observed, taskTypes)
+			if len(taskTypes) == 0 {
+				if err := w.processInactiveGroup(ctx, algoCtx, id, groupSpec, group); err != nil {
+					return err
+				}
+				continue
+			}
 			algo, config, err := algorithmFor(algoCtx, groupSpec)
 			if err != nil {
 				ctx.Logger().Warn("Scaling algorithm unavailable for metrics poll", tag.Error(err))
@@ -161,7 +167,7 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 			if err != nil {
 				return err
 			}
-			resp, err := algo.ProcessMetricsPoll(algoCtx, config, status, *filterSnapshot(snapshot, spec.EffectiveTaskTypesForGroup(id, noRegion)))
+			resp, err := algo.ProcessMetricsPoll(algoCtx, config, status, *filterSnapshot(snapshot, taskTypes))
 			if err != nil || resp == nil {
 				ctx.Logger().Warn("Scaling algorithm failed on metrics poll", tag.Error(err))
 				continue
@@ -182,11 +188,44 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(
 	return nil
 }
 
-// ProcessDeferredScalingDecision completes a deferred task-add decision with a pre-fetched snapshot.
+// processInactiveGroup lets the algorithm of a group that serves nothing in the host region release what it
+// left behind, e.g. scale its worker set to 0 after a failover. A nil status starts it fresh if it serves again.
+func (w *WorkerControllerInstance) processInactiveGroup(
+	ctx chasm.MutableContext,
+	algoCtx context.Context,
+	id string,
+	groupSpec iface.ScalingGroupSpec,
+	group *ScalingGroup,
+) error {
+	algo, config, err := algorithmFor(algoCtx, groupSpec)
+	if err != nil {
+		ctx.Logger().Warn("Scaling algorithm unavailable for inactive group", tag.Error(err))
+		return nil
+	}
+	status, err := group.algorithmStatus()
+	if err != nil {
+		return err
+	}
+	resp, err := algo.InactiveGroupActions(algoCtx, config, status)
+	if err != nil || resp == nil {
+		ctx.Logger().Warn("Scaling algorithm failed on inactive group", tag.Error(err))
+		return nil
+	}
+	if resp.Status == nil {
+		group.AlgorithmStatus = nil
+	} else if err := group.setAlgorithmStatus(resp.Status); err != nil {
+		return err
+	}
+	return w.applyActions(ctx, id, groupSpec, group, withoutDeferred(ctx, resp.Actions), nil)
+}
+
+// ProcessDeferredScalingDecision completes a deferred task-add decision with a pre-fetched snapshot, for the
+// task types the group served when the decision was deferred.
 func (w *WorkerControllerInstance) ProcessDeferredScalingDecision(
 	ctx chasm.MutableContext,
 	groupID string,
 	event *wcipb.TaskAddEvent,
+	effectiveTaskTypes []enumspb.TaskQueueType,
 	snapshot *scalingalgorithm.ScalingMetricsSnapshot,
 ) error {
 	spec := w.spec()
@@ -198,7 +237,11 @@ func (w *WorkerControllerInstance) ProcessDeferredScalingDecision(
 	if !ok {
 		return nil
 	}
-	taskTypes := spec.EffectiveTaskTypesForGroup(groupID, noRegion)
+	taskTypes := effectiveTaskTypes
+	if len(taskTypes) == 0 {
+		// Deferred before the types were carried; resolve them region-agnostically, as the workflow does.
+		taskTypes = spec.EffectiveTaskTypesForGroup(groupID, "")
+	}
 	request := *migration.TaskAddToWorkflow(event)
 	if !slices.Contains(taskTypes, request.TaskQueueType) {
 		return nil
@@ -255,7 +298,11 @@ func (w *WorkerControllerInstance) applyActions(
 				continue
 			}
 			wcimetrics.DeferredScalingDecisionCount.With(metricsFor(ctx, w, providerType)).Record(1)
-			ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.DeferredDecisionTask{ScalingGroupId: groupID, TaskAdd: event})
+			ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.DeferredDecisionTask{
+				ScalingGroupId:     groupID,
+				TaskAdd:            event,
+				EffectiveTaskTypes: w.spec().EffectiveTaskTypesForGroup(groupID, w.HostRegion),
+			})
 		case scalingalgorithm.ActionTypeInvokeWorker:
 			wcimetrics.ScaleUpCount.With(metricsFor(ctx, w, providerType)).Record(1)
 			w.requestInvoke(ctx, group, providerType)

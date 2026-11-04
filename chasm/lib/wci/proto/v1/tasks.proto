@@ -4,6 +4,7 @@ package temporal.server.chasm.lib.wci.proto.v1;
 
 import "chasm/lib/wci/proto/v1/message.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/enums/v1/task_queue.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
 
@@ -33,6 +34,8 @@ message FetchSnapshotTask {
 message DeferredDecisionTask {
   string scaling_group_id = 1;
   TaskAddEvent task_add = 2;
+  // The group's task types in the host region when the decision was deferred.
+  repeated temporal.api.enums.v1.TaskQueueType effective_task_types = 3;
 }
 
 // Side-effect. Validates the whole spec.

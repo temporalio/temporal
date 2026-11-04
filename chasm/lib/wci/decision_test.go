@@ -15,8 +15,9 @@ import (
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
+	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,6 +32,9 @@ type fakeAlgo struct {
 	seen         *scalingalgorithm.ScalingMetricsSnapshot
 	validateErr  error
 	regActions   []scalingalgorithm.ScalingAction
+	// Returned for a group that serves nothing in the host region.
+	inactive      *scalingalgorithm.MetricsPollResponse
+	inactiveCalls int
 }
 
 var fake = &fakeAlgo{}
@@ -62,7 +66,11 @@ func (f *fakeAlgo) TaskQueueRegistrationActions(context.Context, iface.ScalingAl
 }
 
 func (f *fakeAlgo) InactiveGroupActions(context.Context, iface.ScalingAlgorithmConfig, iface.ScalingAlgorithmStatus) (*scalingalgorithm.MetricsPollResponse, error) {
-	return nil, nil
+	f.inactiveCalls++
+	if f.inactive == nil {
+		return &scalingalgorithm.MetricsPollResponse{}, nil
+	}
+	return f.inactive, nil
 }
 
 var testNow = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -170,7 +178,7 @@ func TestProcessDeferredScalingDecision_UsesPrefetchedSnapshot(t *testing.T) {
 		Activity: &iface.QueueTypeScalingMetrics{LastBacklogCount: 9},
 	}
 
-	require.NoError(t, w.ProcessDeferredScalingDecision(ctx, "g", &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}, snapshot))
+	require.NoError(t, w.ProcessDeferredScalingDecision(ctx, "g", &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}, nil, snapshot))
 
 	require.EqualValues(t, 7, fake.seen.Workflow.LastBacklogCount)
 	require.Nil(t, fake.seen.Activity, "filtered to the group's task types")
@@ -342,4 +350,88 @@ func TestObservePoll_Caps(t *testing.T) {
 	g := NewScalingGroup("g")
 	g.observePoll(testNow, observed, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW})
 	require.Len(t, g.GetObservations().GetTaskQueues(), maxObservedTaskQueues)
+}
+
+const testEast, testWest = "aws-us-east-1", "aws-us-west-2"
+
+// newRegionalTest has groups "east" and "west", each serving WORKFLOW only in its region.
+func newRegionalTest(t *testing.T, script fakeAlgo, host string) (*WorkerControllerInstance, map[string]*ScalingGroup, *chasm.MockMutableContext) {
+	t.Helper()
+	w, _, ctx := newDecisionTest(t, script)
+	groups := map[string]*ScalingGroup{}
+	w.ScalingGroupSpecs = map[string]*wcipb.ScalingGroupSpec{}
+	w.ScalingGroups = chasm.Map[string, *ScalingGroup]{}
+	for id, region := range map[string]string{"east": testEast, "west": testWest} {
+		w.ScalingGroupSpecs[id] = &wcipb.ScalingGroupSpec{
+			TaskTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			RegionIds: []string{region},
+			Compute:   &wcipb.ComputeProviderSpec{ProviderType: "test-invoke"},
+			Scaling:   &wcipb.ScalingAlgorithmSpec{ScalingAlgorithm: string(fakeAlgorithm)},
+		}
+		groups[id] = NewScalingGroup(id)
+		w.ScalingGroups[id] = chasm.NewComponentField(ctx, groups[id])
+	}
+	w.HostRegion = host
+	return w, groups, ctx
+}
+
+func TestProcessTaskAdd_PicksHostRegionGroup(t *testing.T) {
+	for _, tc := range []struct{ host, want string }{{testEast, "east"}, {testWest, "west"}, {"", ""}} {
+		t.Run(tc.want, func(t *testing.T) {
+			w, groups, ctx := newRegionalTest(t, fakeAlgo{status: iface.ScalingAlgorithmStatus{"seen": true}}, tc.host)
+			require.NoError(t, w.ProcessTaskAdd(ctx, &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}))
+			for id, g := range groups {
+				require.Equal(t, id == tc.want, g.AlgorithmStatus != nil, "only the host region's group decides: %s", id)
+			}
+		})
+	}
+}
+
+func TestProcessMetricsPoll_InactiveGroupScalesDown(t *testing.T) {
+	w, groups, ctx := newRegionalTest(t, fakeAlgo{
+		status:   iface.ScalingAlgorithmStatus{"active": true},
+		inactive: &scalingalgorithm.MetricsPollResponse{Actions: []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(0)}}},
+	}, testEast)
+	require.NoError(t, groups["west"].setAlgorithmStatus(iface.ScalingAlgorithmStatus{"stale": true}))
+
+	require.NoError(t, w.ProcessMetricsPoll(ctx, &scalingalgorithm.ScalingMetricsSnapshot{}, nil))
+	require.Equal(t, 1, fake.inactiveCalls, "only west serves nothing here")
+	require.Nil(t, groups["west"].AlgorithmStatus, "a nil status starts the group fresh when it serves again")
+	require.Equal(t, wcipb.SCALING_GROUP_STATUS_SCALING, groups["west"].Status, "its worker set scales to 0")
+	require.EqualValues(t, 0, groups["west"].DesiredSize)
+	status, err := groups["east"].algorithmStatus()
+	require.NoError(t, err)
+	require.Equal(t, iface.ScalingAlgorithmStatus{"active": true}, status)
+}
+
+func TestDeferredDecisionCarriesEffectiveTaskTypes(t *testing.T) {
+	w, _, ctx := newRegionalTest(t, fakeAlgo{actions: []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeDeferredScalingDecision}}}, testEast)
+	require.NoError(t, w.ProcessTaskAdd(ctx, &wcipb.TaskAddEvent{TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}))
+	var task *wcipb.DeferredDecisionTask
+	for _, t := range ctx.Tasks {
+		if d, ok := t.Payload.(*wcipb.DeferredDecisionTask); ok {
+			task = d
+		}
+	}
+	require.NotNil(t, task)
+	require.Equal(t, "east", task.GetScalingGroupId())
+	require.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}, task.GetEffectiveTaskTypes())
+
+	// The decision uses the carried types, even if the host region has changed since.
+	w.HostRegion = testWest
+	fake.actions = nil
+	snapshot := &scalingalgorithm.ScalingMetricsSnapshot{Workflow: &iface.QueueTypeScalingMetrics{LastBacklogCount: 7}}
+	require.NoError(t, w.ProcessDeferredScalingDecision(ctx, "east", task.GetTaskAdd(), task.GetEffectiveTaskTypes(), snapshot))
+	require.EqualValues(t, 7, fake.seen.Workflow.LastBacklogCount)
+}
+
+func TestRegistrationSkipsGroupsInactiveHere(t *testing.T) {
+	w, _, _ := newRegionalTest(t, fakeAlgo{regActions: []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeInvokeWorker}}}, "")
+	provider := &fakeCompute{}
+	regs, err := registerTaskQueues(context.Background(), context.Background(), &fakeFrontend{}, provider, log.NewNoopLogger(),
+		compute.RequestContext{}, w.spec(), nil, testEast)
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1, "only the group serving here registers")
+	require.Contains(t, regs, "east")
+	require.NotContains(t, regs, "west")
 }
