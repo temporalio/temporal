@@ -685,7 +685,7 @@ func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) e
 			}
 		}
 
-		a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
+		a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType)
 
 		return nil
 	})

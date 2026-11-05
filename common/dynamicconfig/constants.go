@@ -4000,6 +4000,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`CHASMSchedulerTimeSkippingEnabled allows time skipping for CHASM schedules.`,
 	)
+	StandaloneActivityTimeSkippingEnabled = NewNamespaceBoolSetting(
+		"activity.timeSkippingEnabled",
+		false,
+		`Automatically enables time skipping for new standalone activities in the namespace.`,
+	)
 	TimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
 		"system.timeSkippingMaxSkipPerSession",
 		200,

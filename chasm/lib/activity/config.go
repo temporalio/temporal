@@ -80,6 +80,8 @@ type Config struct {
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	StartDelayEnabled                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingEnabled                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxSkipPerSession             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
@@ -100,6 +102,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
+		TimeSkippingEnabled:                       dynamicconfig.StandaloneActivityTimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxSkipPerSession:             dynamicconfig.TimeSkippingMaxSkipPerSession.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),

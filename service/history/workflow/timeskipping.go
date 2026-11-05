@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
@@ -34,6 +35,8 @@ func (ms *MutableStateImpl) IsTimeSkippingFeatureEnabled(archetypeID chasm.Arche
 		return ms.config.WorkflowTimeSkippingEnabled(namespace)
 	case chasm.SchedulerArchetypeID:
 		return ms.config.CHASMSchedulerTimeSkippingEnabled(namespace)
+	case activity.ArchetypeID:
+		return ms.config.StandaloneActivityTimeSkippingEnabled(namespace)
 	default:
 		return false
 	}
@@ -87,7 +90,7 @@ func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingC
 		ms.updateTimeSkippingInfo(config)
 	}
 	// TODO: Find a generic way to get the archetype before SetRootComponent.
-	// Scheduler is the only caller today.
+	// Components initialize the config before their root is assigned.
 	metrics.ExecutionTimeSkippingConfigUpdatedCounter.With(ms.metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),

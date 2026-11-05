@@ -2,6 +2,7 @@ package activity
 
 import (
 	"errors"
+	"time"
 
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,6 +46,7 @@ var (
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ chasm.DescribableComponent = (*Activity)(nil)
 var _ callback.Host = (*Activity)(nil)
+var _ chasm.TimeSkippingRuntimeGate = (*Activity)(nil)
 
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
@@ -142,6 +144,18 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+// IsExecutionSkippable permits skipping start delay and retry backoff. Once dispatch is due,
+// skipping stops so Matching and workers can process the attempt before its timeouts expire.
+func (a *Activity) IsExecutionSkippable(ctx chasm.Context) bool {
+	return a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
+		a.nextAttemptDispatchTime(ctx, a.LastAttempt.Get(ctx)) != nil
+}
+
+func timeSkippingOffset(ctx chasm.Context) time.Duration {
+	_, state := ctx.GetTimeSkippingPropagateState()
+	return state.GetInitialSkippedDuration().AsDuration()
 }
 
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
@@ -284,8 +298,21 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	attempt := a.LastAttempt.Get(ctx)
 	links := ctx.Links(a)
 
+	startedTime := attempt.GetStartedTime()
+	scheduledTime := a.GetScheduleTime()
+	currentAttemptScheduledTime := a.dispatchTimeForAttempt(attempt)
+	if offset := timeSkippingOffset(ctx); offset > 0 {
+		// SDK workers use these timestamps with their wall clock. Include start delay in
+		// the schedule-to-close origin so the worker and server enforce the same deadline.
+		startedTime = timestamppb.New(startedTime.AsTime().Add(-offset))
+		scheduledTime = timestamppb.New(a.firstDispatchTime().Add(-offset))
+		if currentAttemptScheduledTime != nil {
+			currentAttemptScheduledTime = timestamppb.New(currentAttemptScheduledTime.AsTime().Add(-offset))
+		}
+	}
+
 	return &historyservice.RecordActivityTaskStartedResponse{
-		StartedTime:                 attempt.GetStartedTime(),
+		StartedTime:                 startedTime,
 		Attempt:                     attempt.GetCount(),
 		Priority:                    a.GetPriority(),
 		RetryPolicy:                 a.GetRetryPolicy(),
@@ -293,10 +320,10 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
 		NexusSerializationContext:   requestData.GetPropagatedNexusSerializationContext(),
-		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
+		CurrentAttemptScheduledTime: currentAttemptScheduledTime,
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-			EventTime: a.GetScheduleTime(),
+			EventTime: scheduledTime,
 			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					ActivityId:             key.BusinessID,

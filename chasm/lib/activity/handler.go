@@ -217,6 +217,15 @@ func (h *handler) newActivityForStartExecution(
 		return nil, nil, err
 	}
 
+	// The prototype opts in new executions through namespace config until the public SAA API
+	// supports per-execution time-skipping configuration.
+	if h.config.TimeSkippingEnabled(request.GetNamespace()) {
+		mutableContext.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+			Enabled:             true,
+			MaxSessionSkipCount: max(1, int32(h.config.TimeSkippingMaxSkipPerSession(request.GetNamespace()))),
+		})
+	}
+
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
 		regTime := timestamppb.New(mutableContext.Now(newActivity))
 		err := callback.ValidateAndAttach(mutableContext, newActivity, request.GetRequestId(), regTime, cbs, request.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())

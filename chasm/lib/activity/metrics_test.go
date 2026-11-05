@@ -50,6 +50,7 @@ func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
 	activity.emitOnFailedMetrics(ctx, baseHandler, completionHandler, &failurepb.Failure{})
 	activity.emitOnCanceledMetrics(ctx, completionHandler, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
 	activity.emitOnTimedOutMetrics(
+		ctx,
 		completionHandler,
 		enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 	)

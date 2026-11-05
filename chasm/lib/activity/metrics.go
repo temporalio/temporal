@@ -93,8 +93,10 @@ func (a *Activity) emitOnAttemptFailedMetrics(ctx chasm.Context, metricsHandler 
 	attempt := a.LastAttempt.Get(ctx)
 	startedTime := attempt.GetStartedTime().AsTime()
 
-	latency := time.Since(startedTime)
-	metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
+	if timeSkippingOffset(ctx) == 0 {
+		latency := time.Since(startedTime)
+		metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
+	}
 
 	metrics.ActivityTaskFail.With(metricsHandler).Record(1)
 }
@@ -127,13 +129,15 @@ func (a *Activity) emitOnCompletedMetrics(
 	attempt := a.LastAttempt.Get(ctx)
 	startedTime := attempt.GetStartedTime().AsTime()
 
-	if attemptWasStarted {
-		startToCloseLatency := time.Since(startedTime)
-		metrics.ActivityStartToCloseLatency.With(enrichedHandler).Record(startToCloseLatency)
-	}
+	if timeSkippingOffset(ctx) == 0 {
+		if attemptWasStarted {
+			startToCloseLatency := time.Since(startedTime)
+			metrics.ActivityStartToCloseLatency.With(enrichedHandler).Record(startToCloseLatency)
+		}
 
-	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(enrichedHandler).Record(scheduleToCloseLatency)
+		scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
+		metrics.ActivityScheduleToCloseLatency.With(enrichedHandler).Record(scheduleToCloseLatency)
+	}
 
 	metrics.ActivitySuccess.With(enrichedHandler).Record(1)
 	emitPayloadSizeMetric(baseHandler, result.Size())
@@ -148,11 +152,13 @@ func (a *Activity) emitOnFailedMetrics(
 	attempt := a.LastAttempt.Get(ctx)
 	startedTime := attempt.GetStartedTime().AsTime()
 
-	startToCloseLatency := time.Since(startedTime)
-	metrics.ActivityStartToCloseLatency.With(enrichedHandler).Record(startToCloseLatency)
+	if timeSkippingOffset(ctx) == 0 {
+		startToCloseLatency := time.Since(startedTime)
+		metrics.ActivityStartToCloseLatency.With(enrichedHandler).Record(startToCloseLatency)
 
-	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(enrichedHandler).Record(scheduleToCloseLatency)
+		scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
+		metrics.ActivityScheduleToCloseLatency.With(enrichedHandler).Record(scheduleToCloseLatency)
+	}
 
 	metrics.ActivityTaskFail.With(enrichedHandler).Record(1)
 	metrics.ActivityFail.With(enrichedHandler).Record(1)
@@ -176,24 +182,29 @@ func (a *Activity) emitOnCanceledMetrics(
 	// backoff) and PAUSED have no running attempt and a possibly-stale StartedTime.
 	attemptRunning := fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
 		fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-	if attemptRunning {
-		if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
-			metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(time.Since(startedTime.AsTime()))
+	if timeSkippingOffset(ctx) == 0 {
+		if attemptRunning {
+			if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
+				metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(time.Since(startedTime.AsTime()))
+			}
 		}
-	}
 
-	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+		scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
+		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+	}
 
 	metrics.ActivityCancel.With(metricsHandler).Record(1)
 }
 
 func (a *Activity) emitOnTimedOutMetrics(
+	ctx chasm.Context,
 	metricsHandler metrics.Handler,
 	timeoutType enumspb.TimeoutType,
 ) {
-	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+	if timeSkippingOffset(ctx) == 0 {
+		scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
+		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+	}
 
 	timeoutTag := metrics.StringTag("timeout_type", timeoutType.String())
 	metrics.ActivityTaskTimeout.With(metricsHandler).Record(1, timeoutTag)
