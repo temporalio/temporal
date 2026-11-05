@@ -200,7 +200,7 @@ func (u *Updater) applyRequest(
 	hadBufferedInput := false
 	if startedWorkflowTask {
 		hadBufferedInput = ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-			return workflow.BufferedWHNInputType(event.GetEventType()) != ""
+			return workflow.IsBufferedWHNInputEvent(event.GetEventType())
 		}) || updateReg.HasOutgoingMessages(false)
 	}
 

@@ -83,9 +83,7 @@ func Invoke(
 				return nil, err
 			}
 
-			return &api.UpdateWorkflowAction{
-				CreateWorkflowTask: true,
-			}, nil
+			return api.UpdateWorkflowWithNewWorkflowTask, nil
 		},
 		nil,
 		shard,

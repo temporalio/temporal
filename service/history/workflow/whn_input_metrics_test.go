@@ -26,25 +26,25 @@ func (r bufferedWHNUpdateRegistry) HasOutgoingMessages(bool) bool {
 	return r.hasOutgoing
 }
 
-func TestBufferedWHNInputType(t *testing.T) {
+func TestIsBufferedWHNInputEvent(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		name      string
 		eventType enumspb.EventType
-		inputType string
+		eligible  bool
 	}{
-		{"signal", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, "signal"},
-		{"cancellation", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, "cancellation_request"},
-		{"timer", enumspb.EVENT_TYPE_TIMER_FIRED, "timer"},
-		{"activity result", enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, "activity_result"},
-		{"child workflow result", enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED, "child_workflow_result"},
-		{"nexus result", enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, "nexus_operation_result"},
-		{"unrelated event", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, ""},
+		{"signal", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, true},
+		{"cancellation", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, true},
+		{"timer", enumspb.EVENT_TYPE_TIMER_FIRED, true},
+		{"activity result", enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, true},
+		{"child workflow result", enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED, true},
+		{"nexus result", enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, true},
+		{"unrelated event", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.inputType, BufferedWHNInputType(tc.eventType))
+			require.Equal(t, tc.eligible, IsBufferedWHNInputEvent(tc.eventType))
 		})
 	}
 }
@@ -64,37 +64,37 @@ func TestEmitBufferedWHNInputMetrics(t *testing.T) {
 			name:          "first timer result",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
-			bufferedTypes: []string{"timer"},
-			firstType:     "timer",
+			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
+			firstType:     "EVENT_TYPE_TIMER_FIRED",
 		},
 		{
 			name:          "previous signal",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
-			bufferedTypes: []string{"timer"},
+			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
 		},
 		{
 			name:          "previous update",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 			pendingUpdate: true,
-			bufferedTypes: []string{"timer"},
+			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
 		},
 		{
 			name:          "multiple inputs in one transaction",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED},
-			bufferedTypes: []string{"timer", "activity_result"},
-			firstType:     "timer",
+			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED", "EVENT_TYPE_ACTIVITY_TASK_COMPLETED"},
+			firstType:     "EVENT_TYPE_TIMER_FIRED",
 		},
 		{
 			name:          "unrelated buffered event",
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED},
-			bufferedTypes: []string{"nexus_operation_result"},
-			firstType:     "nexus_operation_result",
+			bufferedTypes: []string{"EVENT_TYPE_NEXUS_OPERATION_COMPLETED"},
+			firstType:     "EVENT_TYPE_NEXUS_OPERATION_COMPLETED",
 		},
 		{
 			name:      "workflow task not started",
