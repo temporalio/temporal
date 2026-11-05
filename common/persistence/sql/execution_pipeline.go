@@ -35,7 +35,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if !ok || request.NewWorkflowSnapshot != nil {
 		return false, nil
 	}
-	// BypassCurrent checks that the run is not current, which the recorder has no
+	// BypassCurrent checks that the run is not current, which PipelinedTx has no
 	// statement for.
 	if request.Mode != p.UpdateWorkflowModeUpdateCurrent && request.Mode != p.UpdateWorkflowModeIgnoreCurrent {
 		return false, nil
