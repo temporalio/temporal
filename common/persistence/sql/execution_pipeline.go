@@ -56,6 +56,15 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	case err != nil:
 		return true, convertSQLError("UpdateWorkflowExecution", "failed to start transaction", err)
 	}
+	// Only Commit and Rollback return the connection Begin took to the pool.
+	defer func() {
+		if rec := recover(); rec != nil {
+			if rollBackErr := tx.Rollback(); rollBackErr != nil {
+				m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			}
+			panic(rec) //nolint:forbidigo
+		}
+	}()
 	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
 		if rollBackErr := tx.Rollback(); rollBackErr != nil {
 			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))

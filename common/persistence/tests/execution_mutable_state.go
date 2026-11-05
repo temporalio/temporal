@@ -589,8 +589,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
-	// One task for each task table, so a table the pipeline cannot insert into
-	// fails the BeginTxCount check below.
+	// One task for each task table, so the batch inserts into every one.
 	workflowKey := definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID)
 	now := time.Now().UTC()
 	currentMutation.Tasks = map[tasks.Category][]tasks.Task{
@@ -604,8 +603,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		tasks.CategoryTimer:    {&tasks.UserTimerTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
 		tasks.CategoryArchival: {&tasks.ArchiveExecutionTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
 	}
-	// A buffered event on every run, so the buffered-event insert reaches the
-	// BeginTxCount check below.
+	// A buffered event, so the batch inserts one.
 	currentMutation.ClearBufferedEvents = false
 	currentMutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent(newSnapshot.NextEventID, rand.Int63())}
 	err := s.updatePipelined(&p.UpdateWorkflowExecutionRequest{

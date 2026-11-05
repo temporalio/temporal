@@ -819,3 +819,21 @@ func TestPGXSP(t *testing.T) {
 	}
 	suite.Run(t, s)
 }
+
+// TestPGXExecModes runs the pipelined update in the other pgx exec modes that
+// pipeline, as pgx sends a batch through a different function in each mode.
+func TestPGXExecModes(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"cache_describe", "describe_exec", "exec"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			s := &PostgreSQLSuite{
+				pluginName:   "postgres12_pgx",
+				connectAttrs: map[string]string{"default_query_exec_mode": mode},
+			}
+			s.SetT(t)
+			s.TestPostgreSQLPipelineSuite()
+			s.TestPostgreSQLExecutionMutableStateStoreSuite()
+		})
+	}
+}

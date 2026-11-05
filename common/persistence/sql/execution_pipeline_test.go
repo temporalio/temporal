@@ -65,6 +65,7 @@ type (
 var pipelineTestStartTime = time.Unix(1700000000, 0).UTC()
 
 func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		setup          func(request *p.InternalUpdateWorkflowExecutionRequest)
@@ -96,6 +97,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			request := newPipelineTestRequest()
 			db := newFakePipelineDB(request)
 			tc.setup(request)
@@ -139,6 +141,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 }
 
 func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		setup          func(request *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB)
@@ -185,6 +188,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			request := newPipelineTestRequest()
 			db := newFakePipelineDB(request)
 			tc.setup(request, db)
@@ -199,6 +203,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 }
 
 func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing.T) {
+	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	db.pipelined.commitErr = errors.New("connection reset")
@@ -212,6 +217,7 @@ func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing
 }
 
 func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) {
+	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	db.beginPipelinedErr = errors.New("connection refused")
@@ -225,6 +231,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 }
 
 func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name      string
 		setup     func(request *p.InternalUpdateWorkflowExecutionRequest)
@@ -255,6 +262,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			request := newPipelineTestRequest()
 			db := newFakePipelineDB(request)
 			tc.setup(request)
@@ -276,6 +284,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
 // A failed check returns the error type the sequential transaction returns for
 // the same check.
 func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		check   error
 		wantErr error
@@ -303,6 +312,7 @@ func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.check.Error(), func(t *testing.T) {
+			t.Parallel()
 			request := newPipelineTestRequest()
 			db := newFakePipelineDB(request)
 			db.pipelined.commitErr = fmt.Errorf("%w: %w", tc.check, errors.New("division by zero"))
@@ -316,6 +326,7 @@ func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
 
 // A recording error writes nothing, so it returns the connection and the error.
 func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
+	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	db.pipelined.updateExecutionsErr = errors.New("record failed")
@@ -332,6 +343,7 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
 
 // A recording error is converted as the sequential transaction converts it.
 func TestUpdateWorkflowExecutionPipelined_RecordErrorConverted(t *testing.T) {
+	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	db.pipelined.lockCurrentErr = serviceerror.NewInternal("ArchetypeID not specified")
@@ -343,9 +355,23 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorConverted(t *testing.T) {
 	require.False(t, db.sequential.begun)
 }
 
+// A panic while recording returns the connection before it continues.
+func TestUpdateWorkflowExecutionPipelined_PanicRollsBack(t *testing.T) {
+	t.Parallel()
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	request.UpdateWorkflowMutation.NamespaceID = "not-a-uuid"
+
+	require.Panics(t, func() { _ = updateWithFakes(db, request) })
+	require.True(t, db.pipelined.rolledBack)
+	require.False(t, db.pipelined.committed)
+	require.False(t, db.sequential.begun)
+}
+
 // A context that ends during recording returns what Begin returns for it, and
 // sends nothing.
 func TestUpdateWorkflowExecutionPipelined_ContextEndsDuringRecording(t *testing.T) {
+	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
 	ctx, cancel := context.WithCancel(context.Background())
