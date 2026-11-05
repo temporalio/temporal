@@ -195,7 +195,8 @@ func recordSupersede(winner Workflow, loser Workflow, loserWasRunning bool) erro
 		return nil
 	}
 	loserRunID := loser.GetMutableState().GetExecutionState().GetRunId()
-	// The successor can already be the winner, e.g. when a resend created it first.
+	// Defensive: a run never supersedes itself. Callers already skip successors that existed before
+	// this transaction, the one way the two could match.
 	if loserRunID == winner.GetMutableState().GetExecutionState().GetRunId() {
 		return nil
 	}

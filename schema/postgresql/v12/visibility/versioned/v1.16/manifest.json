@@ -3,8 +3,6 @@
   "MinCompatibleVersion": "0.1",
   "Description": "add TemporalLastBranchTime, TemporalLastSupersedeTime and TemporalLastOrphanedOperationsTime builtin search attributes",
   "SchemaUpdateCqlFiles": [
-    "add_temporal_last_branch_time_search_attribute.sql",
-    "add_temporal_last_supersede_time_search_attribute.sql",
-    "add_temporal_last_orphaned_operations_time_search_attribute.sql"
+    "add_conflict_resolution_search_attributes.sql"
   ]
 }

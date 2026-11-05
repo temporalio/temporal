@@ -10269,7 +10269,7 @@ func (s *mutableStateSuite) TestRecordHistoryBranch() {
 	}
 }
 
-func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalLastBranchTime() {
+func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalConflictResolutionState() {
 	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
 	s.NoError(err)
 	localBranchTime := timestamppb.New(time.Unix(1700000000, 0))

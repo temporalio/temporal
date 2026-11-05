@@ -318,16 +318,16 @@ type (
 		// generated when the transaction closes, from the final execution state; see
 		// generateLocalStateVisibilityTask.
 
-		// RecordHistoryBranch stamps LastBranchTime and schedules a visibility update for it. Called
-		// when conflict resolution creates or switches to a history branch.
+		// RecordHistoryBranch stamps LastBranchTime and marks a visibility update for transaction
+		// close. Called when conflict resolution creates or switches to a history branch.
 		RecordHistoryBranch() error
-		// RecordRunSuperseded stamps LastSupersedeTime and LastSupersededRunId and schedules a
-		// visibility update for them. Called when conflict resolution supersedes another run of
+		// RecordRunSuperseded stamps LastSupersedeTime and LastSupersededRunId and marks a visibility
+		// update for transaction close. Called when conflict resolution supersedes another run of
 		// this workflow ID with this one.
 		RecordRunSuperseded(supersededRunID string) error
-		// RecordOrphanedOperations stamps LastOrphanedOperationsTime and schedules a visibility update
-		// for it. Called when conflict resolution leaves operations, such as child workflows, started on
-		// a non-current branch.
+		// RecordOrphanedOperations stamps LastOrphanedOperationsTime and marks a visibility update for
+		// transaction close. Called when conflict resolution leaves operations, such as child
+		// workflows, started on a non-current branch.
 		RecordOrphanedOperations() error
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
