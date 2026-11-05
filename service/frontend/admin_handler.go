@@ -1048,7 +1048,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 ) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
-	startTime := time.Now() // nolint:forbidigo // Wall-clock time measures only receiver latency.
+	startTime := time.Now()
 	defer log.CapturePanic(adh.logger, &retError)
 	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
 	var comparisonPanic error

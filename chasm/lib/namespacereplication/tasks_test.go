@@ -1526,14 +1526,13 @@ func TestApplyLocalTask_RecordLocalFailureIgnoresResolvedLocalApply(t *testing.T
 		}
 	})
 
-	_, err := env.localHandler.recordLocalFailure(
+	require.NoError(t, env.localHandler.recordLocalFailure(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		&namespacereplicationpb.ApplyLocalTask{},
 		serviceerror.NewUnavailable("stale task result"),
-	)
-	require.NoError(t, err)
+	).saveErr)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
@@ -1549,22 +1548,20 @@ func TestApplyLocalTask_StateUpdatesIgnoreStaleAttempt(t *testing.T) {
 
 	_, err := env.localHandler.resolveLocal(env.engineCtx, ref, staleTask, false)
 	require.NoError(t, err)
-	_, err = env.localHandler.recordLocalFailure(
+	require.NoError(t, env.localHandler.recordLocalFailure(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		staleTask,
 		serviceerror.NewUnavailable("stale failure"),
-	)
-	require.NoError(t, err)
-	_, err = env.localHandler.recordLocalRetry(
+	).saveErr)
+	require.NoError(t, env.localHandler.recordLocalRetry(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		staleTask,
 		serviceerror.NewUnavailable("stale unresolved result"),
-	)
-	require.NoError(t, err)
+	).saveErr)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
