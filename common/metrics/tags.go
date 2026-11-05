@@ -41,6 +41,7 @@ const (
 	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
+	workerVersioningVersion = "worker_versioning_version"
 	workerDeploymentName    = "worker_deployment_name"
 	workerDeploymentBuildID = "worker_build_id"
 	destination             = "destination"
@@ -224,6 +225,10 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 	return Tag{Key: workerVersion, Value: version}
 }
 
+func WorkerVersioningVersionTag(featureVersion string) Tag {
+	return Tag{Key: workerVersioningVersion, Value: featureVersion}
+}
+
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
 	if !versionBreakdown {
 		deploymentName = ""
@@ -368,6 +373,14 @@ const (
 	PollerScaleReasonRatio                ReasonString = "ratio"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
+)
+
+// Reasons for WorkflowTaskCompletionBufferLost.
+const (
+	BufferLostReasonNewPaginationLimit ReasonString = "new_pagination_limit"
+	BufferLostReasonMemoryLimit        ReasonString = "memory_limit"
+	BufferLostReasonMissingBuffer      ReasonString = "missing_buffer"
+	BufferLostReasonMissingPage        ReasonString = "missing_page"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale

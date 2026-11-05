@@ -17,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -35,8 +37,6 @@ import (
 )
 
 const (
-	PersistenceName = "elasticsearch"
-
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
@@ -51,6 +51,7 @@ type (
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespaceRegistry              namespace.Registry
 		chasmRegistry                  *chasm.Registry
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
@@ -62,6 +63,9 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []any
+		// QueryTime is the reference time used to resolve NOW() in the query. It is set on the
+		// first page so that all pages of the same query use the same time.
+		QueryTime *time.Time
 	}
 
 	esQueryParams struct {
@@ -86,6 +90,7 @@ type (
 )
 
 var _ store.VisibilityStore = (*VisibilityStore)(nil)
+var _ store.AdminVisibilityStore = (*VisibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
@@ -126,10 +131,11 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	cfg *client.Config,
-	processorConfig *ProcessorConfig,
+	cfg *esconfig.Config,
+	processorConfig *esconfig.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -155,6 +161,7 @@ func NewVisibilityStore(
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespaceRegistry:              namespaceRegistry,
 		chasmRegistry:                  chasmRegistry,
 		processor:                      processor,
 		processorAckTimeout:            processorAckTimeout,
@@ -172,7 +179,7 @@ func (s *VisibilityStore) Close() {
 }
 
 func (s *VisibilityStore) GetName() string {
-	return PersistenceName
+	return esconfig.PersistenceName
 }
 
 func (s *VisibilityStore) GetIndexName() string {
@@ -400,7 +407,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil, p.QueryTime)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -445,7 +452,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper, p.QueryTime)
 }
 
 func (s *VisibilityStore) CountChasmExecutions(
@@ -634,15 +641,26 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
 	queryConverter *query.QueryConverter[elastic.Query],
 ) (*client.SearchParameters, error) {
+	pageToken, err := s.deserializePageToken(params.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+	queryConverter.WithQueryTime(queryTime)
+
 	queryParams, err := s.convertQuery(params.NamespaceID, queryConverter, params.Query)
 	if err != nil {
 		return nil, err
 	}
 
 	searchParams := &client.SearchParameters{
-		Index:    s.index,
-		PageSize: params.PageSize,
-		Query:    queryParams.Query,
+		Index:     s.index,
+		PageSize:  params.PageSize,
+		Query:     queryParams.Query,
+		QueryTime: queryTime,
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -669,10 +687,6 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 		return nil, err
 	}
 
-	pageToken, err := s.deserializePageToken(params.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
 	err = s.processPageToken(searchParams, pageToken, params.NamespaceName)
 	if err != nil {
 		return nil, err
@@ -704,11 +718,15 @@ func (s *VisibilityStore) processPageToken(
 		return nil
 	}
 
-	boolQuery, ok := params.Query.(*elastic.BoolQuery)
+	if params.Query == nil {
+		params.Query = newBoolQuery()
+	}
+
+	bq, ok := params.Query.(*boolQuery)
 	if !ok {
 		return serviceerror.NewInternalf(
 			"unexpected query type: expected %T, got %T",
-			&elastic.BoolQuery{},
+			&boolQuery{},
 			params.Query,
 		)
 	}
@@ -726,8 +744,11 @@ func (s *VisibilityStore) processPageToken(
 		return err
 	}
 
-	boolQuery.Should(shouldQueries...)
-	boolQuery.MinimumNumberShouldMatch(1)
+	if len(bq.shouldClauses) > 0 {
+		params.Query = newBoolQuery().Filter(params.Query).Should(shouldQueries...)
+	} else {
+		bq.Should(shouldQueries...)
+	}
 	return nil
 }
 
@@ -749,17 +770,23 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
-	// with no other filter, which suppresses the default namespace division
-	// filter). Avoid adding a nil clause to the bool query, which would panic on
-	// serialization.
-	namespaceFilter := elastic.NewBoolQuery().Filter(
-		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
-	)
-	if queryParams.QueryExpr != nil {
-		namespaceFilter.Filter(queryParams.QueryExpr)
+	if namespaceID != namespace.EmptyID {
+		// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
+		// with no other filter, which suppresses the default namespace division
+		// filter). Avoid adding a nil clause to the bool query, which would panic on
+		// serialization.
+		namespaceFilter := newBoolQuery().Filter(
+			elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
+		)
+		if queryParams.QueryExpr != nil {
+			namespaceFilter.Filter(queryParams.QueryExpr)
+		}
+		queryParams.QueryExpr = namespaceFilter
 	}
-	queryParams.QueryExpr = namespaceFilter
+
+	if _, ok := queryParams.QueryExpr.(*boolQuery); !ok && queryParams.QueryExpr != nil {
+		queryParams.QueryExpr = newBoolQuery().Filter(queryParams.QueryExpr)
+	}
 
 	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
 	for _, orderByExpr := range queryParams.OrderBy {
@@ -801,9 +828,12 @@ func (s *VisibilityStore) newQueryConverter(
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
-	if err != nil {
-		return nil, err
+	var saMapper searchattribute.Mapper
+	if namespaceName != namespace.EmptyName {
+		saMapper, err = s.searchAttributesMapperProvider.GetMapper(namespaceName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	queryConverter := NewQueryConverter(
@@ -834,6 +864,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	pageSize int,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	queryTime time.Time,
 ) (*store.InternalListExecutionsResponse, error) {
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
 		return &store.InternalListExecutionsResponse{}, nil
@@ -860,6 +891,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
+			QueryTime:   &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -1012,11 +1044,15 @@ func (s *VisibilityStore) ParseESDoc(
 	)
 	record := &store.InternalExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
+		var fieldType enumspb.IndexedValueType
 		switch fieldName {
-		case sadefs.NamespaceID,
-			sadefs.VisibilityTaskKey:
+		case sadefs.VisibilityTaskKey:
 			// Ignore these fields.
 			continue
+		case sadefs.NamespaceID:
+			// NamespaceId is a reserved field name, so it is not in the search attribute
+			// type map and field type must be set as Keyword to be parsed.
+			fieldType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 		case sadefs.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
@@ -1032,16 +1068,17 @@ func (s *VisibilityStore) ParseESDoc(
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
 			continue
-		}
-
-		fieldType, err := combinedTypeMap.GetType(fieldName)
-		if err != nil {
-			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
-			if errors.Is(err, sadefs.ErrInvalidName) {
-				continue
+		default:
+			var err error
+			fieldType, err = combinedTypeMap.GetType(fieldName)
+			if err != nil {
+				// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
+				if errors.Is(err, sadefs.ErrInvalidName) {
+					continue
+				}
+				metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
+				return nil, serviceerror.NewInternalf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err)
 			}
-			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-			return nil, serviceerror.NewInternalf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err)
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
@@ -1050,6 +1087,8 @@ func (s *VisibilityStore) ParseESDoc(
 		}
 
 		switch fieldName {
+		case sadefs.NamespaceID:
+			record.NamespaceID = fieldValueParsed.(string)
 		case sadefs.WorkflowID:
 			record.WorkflowID = fieldValueParsed.(string)
 		case sadefs.RunID:
@@ -1503,4 +1542,106 @@ func (s *VisibilityStore) AddSearchAttributes(
 	}
 	_, err = s.esClient.WaitForYellowStatus(ctx, s.GetIndexName())
 	return err
+}
+
+// AdminListExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (*store.InternalListExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
+	namespaceID := namespace.EmptyID
+	if nsName != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		nsName,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	p, err := s.buildSearchParametersInternal(
+		&searchParametersInternal{
+			NamespaceName: nsName,
+			NamespaceID:   namespaceID,
+			Query:         request.GetQuery(),
+			PageSize:      int(request.GetPageSize()),
+			NextPageToken: request.GetNextPageToken(),
+		},
+		queryConverter,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	searchResult, err := s.esClient.Search(ctx, p)
+	if err != nil {
+		return nil, ConvertElasticsearchClientError(
+			metrics.VisibilityPersistenceListExecutionsScope,
+			err,
+			s.logger,
+		)
+	}
+
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.GetPageSize()), nil, p.QueryTime)
+}
+
+// AdminCountExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminCountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (*store.InternalCountExecutionsResponse, error) {
+	nsName := namespace.Name(request.GetNamespace())
+	namespaceID := namespace.EmptyID
+	if nsName != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(nsName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		nsName,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.GetQuery())
+	if err != nil {
+		return nil, err
+	}
+
+	if len(queryParams.GroupBy) > 0 {
+		return s.countGroupByExecutions(
+			ctx,
+			queryParams,
+			nil,
+			metrics.VisibilityPersistenceCountExecutionsScope,
+		)
+	}
+
+	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
+	if err != nil {
+		return nil, ConvertElasticsearchClientError(
+			metrics.VisibilityPersistenceCountExecutionsScope,
+			err,
+			s.logger,
+		)
+	}
+
+	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }

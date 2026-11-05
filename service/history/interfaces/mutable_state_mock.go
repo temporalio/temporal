@@ -20,6 +20,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
+	nexus "go.temporal.io/api/nexus/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
 	worker "go.temporal.io/api/worker/v1"
@@ -2000,6 +2001,20 @@ func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
 }
 
+// GenerateActivityTask mocks base method.
+func (m *MockMutableState) GenerateActivityTask(scheduledEventID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityTask", scheduledEventID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityTask indicates an expected call of GenerateActivityTask.
+func (mr *MockMutableStateMockRecorder) GenerateActivityTask(scheduledEventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTask", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityTask), scheduledEventID)
+}
+
 // GenerateEventLoadToken mocks base method.
 func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -2823,6 +2838,20 @@ func (m *MockMutableState) GetUpdateCondition() (int64, int64) {
 func (mr *MockMutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).GetUpdateCondition))
+}
+
+// GetUpdateNexusSerializationContext mocks base method.
+func (m *MockMutableState) GetUpdateNexusSerializationContext(updateID string) *nexus.PropagatedSerializationContext {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpdateNexusSerializationContext", updateID)
+	ret0, _ := ret[0].(*nexus.PropagatedSerializationContext)
+	return ret0
+}
+
+// GetUpdateNexusSerializationContext indicates an expected call of GetUpdateNexusSerializationContext.
+func (mr *MockMutableStateMockRecorder) GetUpdateNexusSerializationContext(updateID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateNexusSerializationContext", reflect.TypeOf((*MockMutableState)(nil).GetUpdateNexusSerializationContext), updateID)
 }
 
 // GetUpdateOutcome mocks base method.
@@ -3744,18 +3773,18 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
-// ToRealTime mocks base method.
-func (m *MockMutableState) ToRealTime(virtualTime time.Time) time.Time {
+// ToRealTimeWithCurrentOffset mocks base method.
+func (m *MockMutableState) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ToRealTime", virtualTime)
+	ret := m.ctrl.Call(m, "ToRealTimeWithCurrentOffset", virtualTime)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// ToRealTime indicates an expected call of ToRealTime.
-func (mr *MockMutableStateMockRecorder) ToRealTime(virtualTime any) *gomock.Call {
+// ToRealTimeWithCurrentOffset indicates an expected call of ToRealTimeWithCurrentOffset.
+func (mr *MockMutableStateMockRecorder) ToRealTimeWithCurrentOffset(virtualTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTime", reflect.TypeOf((*MockMutableState)(nil).ToRealTime), virtualTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTimeWithCurrentOffset", reflect.TypeOf((*MockMutableState)(nil).ToRealTimeWithCurrentOffset), virtualTime)
 }
 
 // UpdateActivity mocks base method.
@@ -3921,6 +3950,20 @@ func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecut
 func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateWorkflowStateStatus), state, status)
+}
+
+// ValidateCallbackAddition mocks base method.
+func (m *MockMutableState) ValidateCallbackAddition(inFlight []workflow1.CallbackAddition, addition workflow1.CallbackAddition) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateCallbackAddition", inFlight, addition)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateCallbackAddition indicates an expected call of ValidateCallbackAddition.
+func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(inFlight, addition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), inFlight, addition)
 }
 
 // VisitUpdates mocks base method.

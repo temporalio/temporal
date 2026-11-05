@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -101,6 +103,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
+		expectDeleted              bool
 		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
 		// performing a real request.
 		httpCallerErr error
@@ -477,6 +480,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 		{
 			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
+			expectDeleted:         true,
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
@@ -488,6 +492,12 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetTimeoutFailureInfo())
 				require.Equal(t, "operation timed out", failure.Message)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				recordings := snapshot[chasmnexus.NexusOperationTimeoutCount.Name()]
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(), recordings[0].Tags["timeout_type"])
 			},
 		},
 		{
@@ -707,6 +717,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.expectDeleted {
+				_, err = node.Parent.Child([]hsm.Key{node.Key})
+				require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+			}
 			if tc.checkCallerMetrics != nil {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
@@ -770,6 +784,8 @@ func TestProcessTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -795,6 +811,25 @@ func TestProcessTimeoutTask(t *testing.T) {
 			},
 		},
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
+}
+
+func TestProcessTimeoutTaskDoesNotEmitMetricWhenDeletionFails(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), nil))
+	// A parent without the operation makes deletion fail after the timeout transition.
+	node.Parent = newRoot(t, backend)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		MetricsHandler: captureHandler,
+		Config:         &nexusoperations.Config{},
+	}))
+
+	err := reg.ExecuteTimerTask(fakeEnv{node}, node, nexusoperations.ScheduleToCloseTimeoutTask{})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+	require.Empty(t, capture.Snapshot()[chasmnexus.NexusOperationTimeoutCount.Name()])
 }
 
 func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
@@ -920,6 +955,8 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
@@ -979,6 +1016,8 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	_, err = node.Parent.Child([]hsm.Key{node.Key})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	// Should have TIMED_OUT event (STARTED event is not added by the transition)
 	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
@@ -1976,5 +2015,19 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				tc.checkCallerMetrics(t, capture.Snapshot())
 			}
 		})
+	}
+}
+
+// tasks.Tags can't import this package, so it matches these task types by their "nexusoperations." prefix.
+// This test fails if they are renamed without updating tasks.Tags.
+func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
+	for _, taskType := range []string{
+		nexusoperations.TaskTypeInvocation,
+		nexusoperations.TaskTypeCancelation,
+	} {
+		task := &tasks.StateMachineOutboundTask{
+			StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: taskType}},
+		}
+		require.Contains(t, tasks.Tags(task), tag.NexusStageCallerOutbound, taskType)
 	}
 }

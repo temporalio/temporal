@@ -57,3 +57,14 @@ message HeartbeatTimeoutTask {
   // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
   int32 stamp = 1;
 }
+
+// WorkerCommandDispatchTask is a side-effect task that dispatches a worker command
+// (e.g. cancel, pause, resume) via the worker control queue.
+message WorkerCommandDispatchTask {
+  oneof command {
+    CancelCommand cancel = 1;
+  }
+}
+
+// CancelCommand requests the worker to cancel the running activity.
+message CancelCommand {}

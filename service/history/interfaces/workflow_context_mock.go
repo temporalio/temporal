@@ -62,6 +62,20 @@ func (mr *MockWorkflowContextMockRecorder) AppendTaskCompletionPage(schedID, att
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendTaskCompletionPage", reflect.TypeOf((*MockWorkflowContext)(nil).AppendTaskCompletionPage), schedID, attempt, request)
 }
 
+// CheckRunAlreadyExists mocks base method.
+func (m *MockWorkflowContext) CheckRunAlreadyExists() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckRunAlreadyExists")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// CheckRunAlreadyExists indicates an expected call of CheckRunAlreadyExists.
+func (mr *MockWorkflowContextMockRecorder) CheckRunAlreadyExists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckRunAlreadyExists", reflect.TypeOf((*MockWorkflowContext)(nil).CheckRunAlreadyExists))
+}
+
 // Clear mocks base method.
 func (m *MockWorkflowContext) Clear() {
 	m.ctrl.T.Helper()
@@ -117,12 +131,13 @@ func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
 }
 
 // GetMergedTaskCompletionPages mocks base method.
-func (m *MockWorkflowContext) GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*command.Command, error) {
+func (m *MockWorkflowContext) GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*command.Command, func(), error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMergedTaskCompletionPages", schedID, attempt, request)
 	ret0, _ := ret[0].([]*command.Command)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(func())
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetMergedTaskCompletionPages indicates an expected call of GetMergedTaskCompletionPages.
@@ -251,6 +266,18 @@ func (mr *MockWorkflowContextMockRecorder) RefreshTasks(ctx, shardContext any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockWorkflowContext)(nil).RefreshTasks), ctx, shardContext)
 }
 
+// SetCheckRunAlreadyExists mocks base method.
+func (m *MockWorkflowContext) SetCheckRunAlreadyExists(verify bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCheckRunAlreadyExists", verify)
+}
+
+// SetCheckRunAlreadyExists indicates an expected call of SetCheckRunAlreadyExists.
+func (mr *MockWorkflowContextMockRecorder) SetCheckRunAlreadyExists(verify any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCheckRunAlreadyExists", reflect.TypeOf((*MockWorkflowContext)(nil).SetCheckRunAlreadyExists), verify)
+}
+
 // SetWorkflowExecution mocks base method.
 func (m *MockWorkflowContext) SetWorkflowExecution(ctx context.Context, shardContext ShardContext) error {
 	m.ctrl.T.Helper()
@@ -277,6 +304,20 @@ func (m *MockWorkflowContext) SubmitClosedWorkflowSnapshot(ctx context.Context, 
 func (mr *MockWorkflowContextMockRecorder) SubmitClosedWorkflowSnapshot(ctx, shardContext, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitClosedWorkflowSnapshot", reflect.TypeOf((*MockWorkflowContext)(nil).SubmitClosedWorkflowSnapshot), ctx, shardContext, transactionPolicy)
+}
+
+// TryLock mocks base method.
+func (m *MockWorkflowContext) TryLock(lockPriority locks.Priority) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TryLock", lockPriority)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// TryLock indicates an expected call of TryLock.
+func (mr *MockWorkflowContextMockRecorder) TryLock(lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryLock", reflect.TypeOf((*MockWorkflowContext)(nil).TryLock), lockPriority)
 }
 
 // Unlock mocks base method.

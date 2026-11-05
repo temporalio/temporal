@@ -116,7 +116,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			// applied and SeenNamespaceDivision() is expected to be true.
 			name:                  "success group by TemporalNamespaceDivision suppresses default filter",
 			in:                    "group by TemporalNamespaceDivision",
-			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndExpr: false,
 			mockBuildFinalAndRes:  nil,
 		},
 
@@ -158,19 +158,17 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e2, nil)
 				storeQCMock.EXPECT().BuildAndExpr(e1, e2).Return(e1e2, nil)
 			},
-			mockBuildFinalAndExpr: true,
-			mockBuildFinalAndRes: &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{
-					Left: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     keywordCol,
-						Right:    NewUnsafeSQLString("foo"),
-					},
-					Right: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     NamespaceDivisionSAColumn(),
-						Right:    NewUnsafeSQLString("bar"),
-					},
+			mockBuildFinalAndExpr: false,
+			mockBuildFinalAndRes: &sqlparser.AndExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    NewUnsafeSQLString("foo"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     NamespaceDivisionSAColumn(),
+					Right:    NewUnsafeSQLString("bar"),
 				},
 			},
 		},
@@ -272,6 +270,88 @@ func TestQueryConverter_Convert(t *testing.T) {
 					r.True(queryConverter.SeenNamespaceDivision())
 				}
 			}
+		})
+	}
+}
+
+// TestQueryConverter_Convert_DisableDefaultNamespaceDivision covers
+// WithDisableDefaultNamespaceDivision, used by queries that span all namespaces (admin
+// visibility APIs) and must not be narrowed to the default namespace division. The store
+// converter mocks have no expectation for ConvertIsExpr/BuildAndExpr, so gomock fails the
+// test if the default filter is built or applied.
+func TestQueryConverter_Convert_DisableDefaultNamespaceDivision(t *testing.T) {
+	t.Parallel()
+
+	keywordCol := NewSAColumn(
+		"AliasForKeyword01",
+		"Keyword01",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	keywordExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     keywordCol,
+		Right:    NewUnsafeSQLString("foo"),
+	}
+	nsDivisionExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     NamespaceDivisionSAColumn(),
+		Right:    NewUnsafeSQLString("bar"),
+	}
+
+	testCases := []struct {
+		name                  string
+		in                    string
+		setupMocks            func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
+		out                   sqlparser.Expr
+		seenNamespaceDivision bool
+	}{
+		{
+			name: "success empty",
+			in:   "",
+			out:  nil,
+		},
+
+		{
+			name: "success query is not wrapped",
+			in:   "AliasForKeyword01 = 'foo'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
+					Return(keywordExpr, nil)
+			},
+			out: keywordExpr,
+		},
+
+		{
+			// An explicit namespace division filter is still honored.
+			name: "success explicit namespace division",
+			in:   "TemporalNamespaceDivision = 'bar'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, NamespaceDivisionSAColumn(), "bar").
+					Return(nsDivisionExpr, nil)
+			},
+			out:                   nsDivisionExpr,
+			seenNamespaceDivision: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctrl := gomock.NewController(t)
+			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+			queryConverter := newTestQueryConverter(storeQCMock).
+				WithDisableDefaultNamespaceDivision()
+
+			if tc.setupMocks != nil {
+				tc.setupMocks(storeQCMock)
+			}
+
+			out, err := queryConverter.Convert(tc.in)
+			r.NoError(err)
+			r.Equal(tc.out, out.QueryExpr)
+			r.Equal(tc.seenNamespaceDivision, queryConverter.SeenNamespaceDivision())
 		})
 	}
 }
@@ -1715,13 +1795,14 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name   string
-		expr   sqlparser.Expr
-		alias  string
-		field  string
-		saType enumspb.IndexedValueType
-		out    any
-		err    string
+		name      string
+		expr      sqlparser.Expr
+		alias     string
+		field     string
+		saType    enumspb.IndexedValueType
+		mockSetup func(m *MockStoreQueryConverter[sqlparser.Expr])
+		out       any
+		err       string
 	}{
 		{
 			name:   "success SQLVal",
@@ -1821,6 +1902,57 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 				InvalidExpressionErrMessage,
 			),
 		},
+
+		{
+			name: "success NOW() for DateTime",
+			expr: &sqlparser.FuncExpr{
+				Name: sqlparser.NewColIdent("NOW"),
+			},
+			alias:  sadefs.StartTime,
+			field:  sadefs.StartTime,
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			mockSetup: func(m *MockStoreQueryConverter[sqlparser.Expr]) {
+				m.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
+			},
+			// out is a time.Time formatted string; we only check no error in the test loop below
+		},
+
+		{
+			name: "fail NOW() for non-DateTime",
+			expr: &sqlparser.FuncExpr{
+				Name: sqlparser.NewColIdent("NOW"),
+			},
+			alias:  "AliasForKeyword01",
+			field:  "Keyword01",
+			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			err:    NotSupportedErrMessage,
+		},
+
+		{
+			name: "fail NOW() binary expr for non-DateTime",
+			expr: &sqlparser.BinaryExpr{
+				Operator: sqlparser.MinusStr,
+				Left: &sqlparser.FuncExpr{
+					Name: sqlparser.NewColIdent("NOW"),
+				},
+				Right: sqlparser.NewStrVal([]byte("5h")),
+			},
+			alias:  sadefs.ExecutionDuration,
+			field:  sadefs.ExecutionDuration,
+			saType: enumspb.INDEXED_VALUE_TYPE_INT,
+			err:    NotSupportedErrMessage,
+		},
+
+		{
+			name: "fail non-NOW() function for DateTime",
+			expr: &sqlparser.FuncExpr{
+				Name: sqlparser.NewColIdent("FUNC"),
+			},
+			alias:  sadefs.StartTime,
+			field:  sadefs.StartTime,
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			err:    NotSupportedErrMessage,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1830,6 +1962,10 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
 			queryConverter := newTestQueryConverter(storeQCMock)
 
+			if tc.mockSetup != nil {
+				tc.mockSetup(storeQCMock)
+			}
+
 			out, err := queryConverter.parseValueExpr(tc.expr, tc.alias, tc.field, tc.saType)
 			if tc.err != "" {
 				r.Error(err)
@@ -1838,7 +1974,11 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 				r.ErrorAs(err, &expectedErr)
 			} else {
 				r.NoError(err)
-				r.Equal(tc.out, out)
+				if tc.out != nil {
+					r.Equal(tc.out, out)
+				} else {
+					r.NotNil(out)
+				}
 			}
 		})
 	}
@@ -2445,6 +2585,8 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 		customSAs map[string]enumspb.IndexedValueType
 		// saMapper overrides the search attribute mapper. Defaults to searchattribute.TestMapper.
 		saMapper searchattribute.Mapper
+		// nilSAMapper installs a nil search attribute mapper, overriding saMapper.
+		nilSAMapper bool
 		// count is the expected number of times the field name counter was recorded. It's
 		// recorded at most once per query, and only if the query is converted successfully.
 		count int
@@ -2636,6 +2778,49 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			count:    0,
 		},
 
+		// Without a search attribute mapper, custom search attributes can only be referenced by
+		// their field names, and a preallocated field name is always counted.
+		{
+			name:        "field name of custom search attribute without mapper",
+			query:       "Keyword01 = 'foo'",
+			nilSAMapper: true,
+			count:       1,
+		},
+		{
+			name:        "multiple field names without mapper",
+			query:       "Keyword01 = 'foo' and Int01 > 1 order by Double01",
+			nilSAMapper: true,
+			count:       1,
+		},
+		{
+			// Aliases can't be resolved without a mapper, so the query is rejected.
+			name:        "alias of custom search attribute without mapper",
+			query:       "AliasForKeyword01 = 'foo'",
+			nilSAMapper: true,
+			count:       0,
+			err:         InvalidSearchAttribute,
+		},
+		{
+			name:        "system search attribute without mapper",
+			query:       "WorkflowId = 'foo'",
+			nilSAMapper: true,
+			count:       0,
+		},
+		{
+			name:        "self-mapped custom search attribute without mapper",
+			query:       "CustomKeywordField = 'foo'",
+			customSAs:   map[string]enumspb.IndexedValueType{"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			nilSAMapper: true,
+			count:       0,
+		},
+		{
+			name:        "preallocated shape with mismatched type without mapper",
+			query:       "Keyword01 = 'foo'",
+			customSAs:   map[string]enumspb.IndexedValueType{"Keyword01": enumspb.INDEXED_VALUE_TYPE_TEXT},
+			nilSAMapper: true,
+			count:       0,
+		},
+
 		// A raw CHASM field name resolves by stripping the Temporal prefix, so alias != field
 		// name; it is recognised via the CHASM mapper's type map instead.
 		{
@@ -2701,6 +2886,9 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			var saMapper searchattribute.Mapper = &searchattribute.TestMapper{}
 			if tc.saMapper != nil {
 				saMapper = tc.saMapper
+			}
+			if tc.nilSAMapper {
+				saMapper = nil
 			}
 			queryConverter := NewNilQueryConverter(
 				testNamespaceName,
@@ -2825,4 +3013,132 @@ func newTestQueryConverter(
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
+}
+
+func TestEvalDatetimeExpr(t *testing.T) {
+	t.Parallel()
+
+	queryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name  string
+		value string
+		out   time.Time
+		err   string
+	}{
+		{
+			name:  "now",
+			value: "NOW()",
+			out:   queryTime,
+		},
+		{
+			name:  "lowercase now",
+			value: "now()",
+			out:   queryTime,
+		},
+		{
+			name:  "now minus duration",
+			value: "NOW() - '5h'",
+			out:   queryTime.Add(-5 * time.Hour),
+		},
+		{
+			name:  "now plus compound duration",
+			value: "Now() + '1h30m'",
+			out:   queryTime.Add(90 * time.Minute),
+		},
+		{
+			name:  "days",
+			value: "NOW() - '9d'",
+			out:   queryTime.Add(-9 * 24 * time.Hour),
+		},
+		{
+			name:  "fractional hours",
+			value: "NOW() - '1.5h'",
+			out:   queryTime.Add(-90 * time.Minute),
+		},
+		{
+			name:  "microseconds",
+			value: "NOW() - '500us'",
+			out:   queryTime.Add(-500 * time.Microsecond),
+		},
+		{
+			name:  "integer nanoseconds",
+			value: "NOW() - 18000000000000",
+			out:   queryTime.Add(-5 * time.Hour),
+		},
+		{
+			name:  "invalid duration",
+			value: "NOW() - 'h'",
+			err:   "invalid duration in \"NOW() - 'h'\"",
+		},
+		{
+			name:  "uppercase unit",
+			value: "NOW() - '5H'",
+			err:   "invalid duration",
+		},
+		{
+			name:  "unsupported operator",
+			value: "NOW() * '5h'",
+			err:   "operator \"*\" in \"NOW() * '5h'\", only + and - are supported",
+		},
+		{
+			name:  "non-literal offset",
+			value: "NOW() - NOW()",
+			err:   "duration offset in \"NOW() - NOW()\" must be",
+		},
+		{
+			name:  "unsupported function",
+			value: "FUNC()",
+			err:   "function \"FUNC()\"",
+		},
+		{
+			name:  "now with arguments",
+			value: "NOW(1)",
+			err:   "function \"NOW(1)\"",
+		},
+		{
+			name:  "qualified now",
+			value: "foo.NOW()",
+			err:   "function \"foo.NOW()\"",
+		},
+		{
+			name:  "non-function left operand",
+			value: "'2026-03-31T17:00:00Z' - '5h'",
+			err:   "expression \"'2026-03-31T17:00:00Z' - '5h'\", only NOW() and NOW() +/- 'duration' are supported",
+		},
+		{
+			name:  "chained offsets",
+			value: "NOW() - '1h' + '30m'",
+			err:   "expression \"NOW() - '1h' + '30m'\", only NOW() and NOW() +/- 'duration' are supported",
+		},
+		{
+			name:  "parenthesized now",
+			value: "(NOW()) - '1h'",
+			err:   "expression \"(NOW()) - '1h'\", only NOW() and NOW() +/- 'duration' are supported",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			stmt, err := sqlparser.Parse("select * from t where StartTime > " + tc.value)
+			r.NoError(err)
+			//nolint:revive // type cast is guaranteed to be a *sqlparser.Select
+			sel, _ := stmt.(*sqlparser.Select)
+			//nolint:revive // type cast is guaranteed to be a *sqlparser.ComparisonExpr
+			cmp, _ := sel.Where.Expr.(*sqlparser.ComparisonExpr)
+
+			out, err := evalDatetimeExpr(cmp.Right, queryTime)
+			if tc.err != "" {
+				r.ErrorContains(err, tc.err)
+				var converterErr *ConverterError
+				r.ErrorAs(err, &converterErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.out, out)
+		})
+	}
 }

@@ -20,8 +20,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
-	chasmactivity "go.temporal.io/server/chasm/lib/activity"
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -133,7 +131,6 @@ type (
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
-		chasmRegistry                    *chasm.Registry
 	}
 
 	shardStatus struct {
@@ -563,18 +560,12 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
-		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-		if err != nil {
-			return err
-		}
-
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
 			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: execution.BusinessID,
 				RunId:      execution.RunID,
 			},
-			Archetype:      archetype,
 			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
@@ -690,7 +681,9 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
 			// which does not have ArchetypeId field.
 			//
-			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			// TODO: Switch to chasm.WorkflowArchetypeID and remove the workflow exception below.
+			// ExecutionInfo decoders in OSS v1.30 and later accept nonzero archetype IDs.
+			// Remove this workaround once compatibility with older workflow workers is no longer required.
 			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
@@ -959,20 +952,12 @@ func (a *activities) verifySingleReplicationTask(
 	s := time.Now()
 	// Check if execution exists on remote cluster
 
-	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-	if err != nil {
-		return verifyResult{
-			status: notVerified,
-		}, err
-	}
-
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: execution.BusinessID,
 			RunId:      execution.RunID,
 		},
-		Archetype:       archetype,
 		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
@@ -1278,39 +1263,4 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	}
 
 	return isReady, nil
-}
-
-func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.ArchetypeID) (chasm.Archetype, error) {
-	if archetypeID == chasm.UnspecifiedArchetypeID {
-		// For backward compatibility reason, the archetypeID is set to 0 in MigrationExecutionInfo
-		// for workflows. But 0 is not a valid archetypeID in chasm.Registry, so explicitly return
-		//  WorkflowArchetype here.
-		return chasm.WorkflowArchetype, nil
-	}
-
-	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
-	// the mapping here for now.
-	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
-	// chasm registry.
-	if archetypeID == chasmactivity.ArchetypeID {
-		return chasmactivity.Archetype, nil
-	}
-	if archetypeID == chasmnexus.ArchetypeID {
-		return chasmnexus.Archetype, nil
-	}
-
-	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
-	if !ok {
-		activityInfo := activity.GetInfo(ctx)
-		err := fmt.Errorf("unknown archetypeID: %v", archetypeID)
-		a.Logger.Error("force-replication failed to translate archetypeID to name",
-			tag.Error(err),
-			tag.ArchetypeID(archetypeID),
-			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
-			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-		)
-		return "", err
-	}
-	return archetype, nil
 }

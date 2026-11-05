@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -18,6 +19,7 @@ type (
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
+		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool
 	}

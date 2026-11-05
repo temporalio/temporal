@@ -115,11 +115,14 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
 
-	// lastAction is used to set the high water mark for future ProcessTimeRange
-	// invocations. The code below will set a "last action" even when none is taken,
-	// simply to indicate that processing can permanently skip that period of time
-	// (e.g., it was prior to an update or past a catchup).
-	lastAction := end
+	// Preserve the high water mark until an action is processed. NextTime searches
+	// nominal times, so advancing to end could skip an action whose nominal time
+	// has passed but whose jittered fire time is still in the future. The loop also
+	// advances past actions intentionally skipped or dropped.
+	lastAction := start
+	if !manual && !tweakables.EnableGeneratorJitterFix {
+		lastAction = end
+	}
 
 	var next legacyscheduler.GetNextTimeResult
 	var err error

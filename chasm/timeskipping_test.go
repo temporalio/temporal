@@ -153,10 +153,11 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.Equal(t, base.Add(time.Hour), tr.GetTargetTime())
 		})
 
-		t.Run("accepts a candidate equal to the current time", func(t *testing.T) {
+		t.Run("ignores a candidate equal to the current time", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base)
-			require.Equal(t, base, tr.GetTargetTime())
+			require.True(t, tr.GetTargetTime().IsZero())
+			require.False(t, tr.IsValid())
 		})
 	})
 
