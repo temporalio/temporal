@@ -429,14 +429,13 @@ func (e *executableImpl) Execute() (retErr error) {
 func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 
 	currentClusterName := e.clusterMetadata.GetCurrentClusterName()
-	numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
 
 	start := e.timeSource.Now()
 	err := e.dlqWriter.WriteTaskToDLQ(
 		ctx,
 		currentClusterName,
 		currentClusterName,
-		tasks.GetShardIDForTask(e.Task, int(numShards)),
+		int(e.shardID()),
 		e.GetTask(),
 		e.lastActiveness,
 	)
@@ -925,21 +924,24 @@ func (e *executableImpl) reportThrottle(
 	if err != nil {
 		return
 	}
-	var shardID int32
+	key := NewThrottleKey(cause, nsName)
 	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT {
-		currentClusterName := e.clusterMetadata.GetCurrentClusterName()
-		numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
-		shardID = int32(tasks.GetShardIDForTask(e.Task, int(numShards)))
+		key.ShardID = e.shardID()
 	}
-	e.throttleKey = NewThrottleKey(cause, nsName, shardID)
+	e.throttleKey = key
 
 	// A metered rejection belongs to the class that issued the release, whichever budget
 	// refused it; an unmetered one is recorded against the new class but must not move it.
-	key := e.throttleKey
 	if metered {
 		key = issuer
 	}
 	e.throttleState.ReportThrottled(key, metered)
+}
+
+func (e *executableImpl) shardID() int32 {
+	currentClusterName := e.clusterMetadata.GetCurrentClusterName()
+	numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
+	return int32(tasks.GetShardIDForTask(e.Task, int(numShards)))
 }
 
 func (e *executableImpl) clearThrottle() {

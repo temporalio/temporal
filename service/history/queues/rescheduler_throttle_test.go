@@ -83,7 +83,7 @@ func addThrottled(r *reschedulerImpl, e *throttledExecutable, at time.Time) {
 }
 
 func apsKey(namespaceName namespace.Name) ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceName, 0)
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceName)
 }
 
 func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {

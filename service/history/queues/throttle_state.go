@@ -80,16 +80,8 @@ func IsControllerInput(
 		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT
 }
 
-// NewThrottleKey drops shardID for causes whose budget is not per shard.
-func NewThrottleKey(
-	cause enumspb.ResourceExhaustedCause,
-	namespaceName namespace.Name,
-	shardID int32,
-) ThrottleKey {
-	if cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT {
-		shardID = 0
-	}
-	return ThrottleKey{Cause: cause, NamespaceName: namespaceName, ShardID: shardID}
+func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespace.Name) ThrottleKey {
+	return ThrottleKey{Cause: cause, NamespaceName: namespaceName}
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {

@@ -117,23 +117,8 @@ func TestIsControllerInput(t *testing.T) {
 	}
 }
 
-func TestNewThrottleKey_ShardIDOnlyForPerShardBudgets(t *testing.T) {
-	require.Equal(t,
-		ThrottleKey{Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, NamespaceName: "ns-1", ShardID: 7},
-		NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, "ns-1", 7),
-	)
-	require.Equal(t,
-		ThrottleKey{Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, NamespaceName: "ns-1"},
-		NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", 7),
-	)
-	require.Equal(t,
-		ThrottleKey{Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, NamespaceName: "ns-1"},
-		NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", 7),
-	)
-}
-
 func testKey() ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", 0)
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 }
 
 func admitOK(c *ThrottleState, key ThrottleKey) bool {
@@ -389,7 +374,7 @@ func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
 	namespaceKey := testKey()
-	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", 0)
+	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
 
 	reportThrottle(state, namespaceKey, true)
 	closeWindow(state, timeSource, namespaceKey)
@@ -402,8 +387,10 @@ func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 func TestThrottleState_ShardsAreIndependent(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
-	shard1 := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, "ns-1", 1)
-	shard2 := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, "ns-1", 2)
+	shard1 := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, "ns-1")
+	shard1.ShardID = 1
+	shard2 := shard1
+	shard2.ShardID = 2
 
 	reportThrottle(state, shard1, true)
 	closeWindow(state, timeSource, shard1)

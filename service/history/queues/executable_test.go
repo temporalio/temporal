@@ -1800,7 +1800,7 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Error(executable.HandleErr(throttleErr))
 	key := queues.ThrottleKeyOf(executable)
 	s.NotEqual(queues.ThrottleKey{}, key)
-	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, 0), key)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace), key)
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
 	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
@@ -1819,9 +1819,10 @@ func (s *executableSuite) TestHandleErr_ShardThrottleKeyCarriesShardID() {
 	}
 
 	s.Error(executable.HandleErr(throttleErr))
-	shardID := int32(tasks.GetShardIDForTask(executable.GetTask(), 1))
-	s.NotZero(shardID)
-	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, shardID), queues.ThrottleKeyOf(executable))
+	expected := queues.NewThrottleKey(throttleErr.Cause, tests.Namespace)
+	expected.ShardID = int32(tasks.GetShardIDForTask(executable.GetTask(), 1))
+	s.NotZero(expected.ShardID)
+	s.Equal(expected, queues.ThrottleKeyOf(executable))
 }
 
 func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
@@ -1865,7 +1866,7 @@ func (s *executableSuite) TestNack_ParksInTheClassItFailedUnder() {
 	executable.Nack(throttleErr)
 
 	s.Equal(
-		queues.NewThrottleKey(throttleErr.Cause, tests.Namespace, 0),
+		queues.NewThrottleKey(throttleErr.Cause, tests.Namespace),
 		parked,
 		"the task must be parked on the budget that refused it, not ungoverned",
 	)
