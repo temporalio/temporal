@@ -4506,6 +4506,27 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.ErrorIs(err, errWorkflowIDNotSet)
 	})
 
+	for _, tc := range []struct {
+		name  string
+		runID string
+	}{
+		{name: "valid run id", runID: "deadbeef-c001-4567-890a-bcdef0123456"},
+		{name: "malformed run id", runID: "invalid-run-id"},
+	} {
+		s.Run(tc.name+" is rejected as unsupported", func() {
+			req := newReq("ff-id")
+			req.WorkflowExecution = &commonpb.WorkflowExecution{
+				WorkflowId: "wf-id",
+				RunId:      tc.runID,
+			}
+			resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+			s.Require().Nil(resp)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, "polling workflow execution time skipping for a specific run ID is not supported")
+		})
+	}
+
 	s.Run("disabled dynamic config is rejected", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 		_, err := handler(false).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
