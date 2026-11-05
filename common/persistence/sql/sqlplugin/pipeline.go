@@ -26,11 +26,10 @@ var (
 
 type (
 	// PipelinedTx is a transaction that queues its statements until Commit sends
-	// them as one implicit transaction, in one round trip once the connection has
-	// prepared them. Its reads return no results, so the checks a caller would make
-	// on them are statements that fail the transaction instead. Commit returns the
-	// error of the check that failed, or ErrPipelineNotSent when it sent nothing.
-	// Any other Commit error leaves the outcome unknown.
+	// them as one implicit transaction. Its reads return no results, so the checks
+	// a caller would make on them are statements that fail the transaction instead.
+	// Commit returns the error of the check that failed, or ErrPipelineNotSent when
+	// it sent nothing. Any other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		// UpdateExecutionsWithCondition fails the transaction with

@@ -207,10 +207,9 @@ func (t pipelinedTx) Commit() error {
 	return t.handle.ConvertError(t.pipe.sendOnConn())
 }
 
-// Rollback drops the queued statements, which were never sent, and returns the
-// connection to the pool.
+// Rollback returns the connection to the pool without sending the queued
+// statements.
 func (t pipelinedTx) Rollback() error {
-	t.pipe.statements = nil
 	return t.pipe.conn.Close()
 }
 

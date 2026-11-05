@@ -492,7 +492,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLPipelineSuite() {
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
 	if p.connectAttrs["default_query_exec_mode"] == "simple_protocol" {
-		_, err := store.(sqlplugin.TxPipeliner).BeginPipelinedTx(context.Background())
+		_, err := store.(sqlplugin.TxPipeliner).BeginPipelinedTx(p.T().Context())
 		p.Require().ErrorIs(err, sqlplugin.ErrPipelineUnsupported)
 		return
 	}
