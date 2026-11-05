@@ -242,6 +242,7 @@ func (c *customServerStatsHandler) workerTaskID(payload any) string {
 		}
 	case *workflowservice.PollActivityTaskQueueResponse,
 		*workflowservice.RecordActivityTaskHeartbeatRequest,
+		*workflowservice.RespondActivityTaskHandoffRequest,
 		*workflowservice.RespondActivityTaskCompletedRequest,
 		*workflowservice.RespondActivityTaskFailedRequest,
 		*workflowservice.RespondActivityTaskCanceledRequest:
