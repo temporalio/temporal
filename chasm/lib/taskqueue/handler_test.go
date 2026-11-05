@@ -29,6 +29,7 @@ func newTestHandler(t *testing.T, engineOptions ...chasmtest.EngineOption) (*han
 	t.Helper()
 	h := newHandler(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
 	registry := chasm.NewRegistry(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(newLibrary(h)))
 	ctx := chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, registry, engineOptions...))
 	return h, ctx, &chasmtaskqueuepb.UpsertTaskQueueUserDataRequest{
@@ -577,6 +578,7 @@ func TestTaskQueueUserDataPersistedHierarchyRoundTrip(t *testing.T) {
 		},
 	))
 	registry := chasm.NewRegistry(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(NewNilLibrary()))
 	readPersisted := func() (chasm.ExecutionKey, *chasmtaskqueuepb.GetTaskQueueUserDataResponse) {
 		t.Helper()
@@ -584,12 +586,13 @@ func TestTaskQueueUserDataPersistedHierarchyRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		restored := &persistencespb.WorkflowMutableState{}
 		require.NoError(t, proto.Unmarshal(encoded, restored))
-		require.ElementsMatch(t, []string{"", "UserData", "UserData$PerType", "UserData$PerType#1", "UserData$PerType#2"}, slices.Collect(maps.Keys(restored.ChasmNodes)))
+		require.ElementsMatch(t, []string{"", "Visibility", "UserData", "UserData$PerType", "UserData$PerType#1", "UserData$PerType#2"}, slices.Collect(maps.Keys(restored.ChasmNodes)))
 		require.Equal(t, ArchetypeID, restored.ChasmNodes[""].GetMetadata().GetComponentAttributes().GetTypeId())
 		require.Equal(t, chasm.GenerateTypeID("taskQueue.userData"), restored.ChasmNodes["UserData"].GetMetadata().GetComponentAttributes().GetTypeId())
 		taskQueue, chasmContext, err := chasm.NewDetachedExecution[*TaskQueue](context.Background(), restored, registry)
 		require.NoError(t, err)
 		require.Equal(t, chasm.LifecycleStateRunning, taskQueue.LifecycleState(chasmContext))
+		require.NotNil(t, taskQueue.Visibility.Get(chasmContext))
 		userData := taskQueue.UserData.Get(chasmContext)
 		require.Equal(t, chasm.LifecycleStateRunning, userData.LifecycleState(chasmContext))
 		return chasmContext.ExecutionKey(), userData.getTaskQueueUserData(chasmContext)
@@ -608,8 +611,8 @@ func TestTaskQueueUserDataCreatesChildInExistingTaskQueue(t *testing.T) {
 	h, ctx, req := newTestHandler(t)
 	key := chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue}
 	started, err := chasm.StartExecution(ctx, key,
-		func(chasm.MutableContext, struct{}) (*TaskQueue, error) {
-			return NewTaskQueue(), nil
+		func(ctx chasm.MutableContext, _ struct{}) (*TaskQueue, error) {
+			return NewTaskQueue(ctx), nil
 		}, struct{}{})
 	require.NoError(t, err)
 
@@ -700,8 +703,8 @@ func TestTaskQueueUserDataRejectedWritePreservesParentWithoutChild(t *testing.T)
 			h, ctx, req := newTestHandler(t)
 			started, err := chasm.StartExecution(ctx,
 				chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue},
-				func(chasm.MutableContext, chasm.NoValue) (*TaskQueue, error) {
-					return NewTaskQueue(), nil
+				func(ctx chasm.MutableContext, _ chasm.NoValue) (*TaskQueue, error) {
+					return NewTaskQueue(ctx), nil
 				}, nil)
 			require.NoError(t, err)
 			req.PerType = testCase.data

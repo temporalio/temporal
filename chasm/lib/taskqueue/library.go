@@ -37,7 +37,9 @@ func (*library) Name() string {
 
 func (*library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*TaskQueue](componentName),
+		chasm.NewRegistrableComponent[*TaskQueue](componentName,
+			chasm.WithBusinessIDAlias("TaskQueueName"),
+		),
 		chasm.NewRegistrableComponent[*UserData](userDataComponentName),
 	}
 }
