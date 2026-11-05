@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -24,7 +23,8 @@ type expectingTx struct {
 // UpdateWorkflowExecution transaction in one round trip when the plugin
 // supports it. newEvents are the request's new events and nodeRows their history
 // node rows. It returns false, so that the sequential path runs the update, when
-// the request or the plugin's connection needs it, and when Commit sent nothing.
+// the request or the plugin's connection needs it, when Begin fails after the
+// context ended, and when Commit sent nothing.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -51,9 +51,11 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	switch {
 	case errors.Is(err, sqlplugin.ErrPipelineUnsupported):
 		return false, nil
-	case len(newEvents) > 0 && (common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)):
-		// The sequential path appends the history first, and returns this error.
-		return true, &p.AppendHistoryTimeoutError{Msg: err.Error()}
+	case err != nil && ctx.Err() != nil:
+		// The sequential path returns its own error for a context that ended,
+		// without connecting. A connect timeout also wraps DeadlineExceeded, but
+		// with ctx alive.
+		return false, nil
 	case err != nil:
 		return true, convertSQLError("UpdateWorkflowExecution", "failed to start transaction", err)
 	}

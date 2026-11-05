@@ -102,7 +102,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 			db := newFakePipelineDB(request)
 			tc.setup(request)
 
-			require.NoError(t, updateWithFakes(db, request))
+			require.NoError(t, updateWithFakes(t.Context(), db, request))
 			require.Equal(t, tc.historyNodes, db.pipelined.historyNodes)
 			var lockedCurrent *sqlplugin.CurrentExecutionsFilter
 			var updatedCurrent *sqlplugin.CurrentExecutionsRow
@@ -193,7 +193,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 			db := newFakePipelineDB(request)
 			tc.setup(request, db)
 
-			require.NoError(t, updateWithFakes(db, request))
+			require.NoError(t, updateWithFakes(t.Context(), db, request))
 			require.False(t, db.pipelined.begun)
 			require.False(t, db.pipelined.committed)
 			require.Equal(t, len(request.UpdateWorkflowNewEvents)+len(request.NewWorkflowNewEvents), len(db.historyTxnIDs)+db.sequential.historyNodes)
@@ -208,7 +208,7 @@ func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing
 	db := newFakePipelineDB(request)
 	db.pipelined.commitErr = errors.New("connection reset")
 
-	err := updateWithFakes(db, request)
+	err := updateWithFakes(t.Context(), db, request)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to commit transaction: connection reset", unavailable.Message)
@@ -223,7 +223,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 	db := newFakePipelineDB(request)
 	db.beginPipelinedErr = errors.New("connection refused")
 
-	err := updateWithFakes(db, request)
+	err := updateWithFakes(t.Context(), db, request)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: connection refused", unavailable.Message)
@@ -231,34 +231,30 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 	require.False(t, db.sequential.begun)
 }
 
+// A Begin error after the context ended runs the sequential path, which returns
+// its own error for that context without connecting (these fakes answer it
+// regardless). A connect timeout with a live context returns Begin's error, as
+// the sequential path would connect again.
 func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
 	t.Parallel()
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Time{})
+	t.Cleanup(cancelExpired)
+	connectTimeout := fmt.Errorf("failed to connect: %w", context.DeadlineExceeded)
 	testCases := []struct {
-		name      string
-		setup     func(request *p.InternalUpdateWorkflowExecutionRequest)
-		beginErr  error
-		wantErr   error
-		wantCause error
+		name     string
+		ctx      context.Context
+		beginErr error
+		wantErr  error
 	}{
+		{name: "canceled", ctx: canceled, beginErr: context.Canceled},
+		{name: "deadline", ctx: expired, beginErr: context.DeadlineExceeded},
 		{
-			name:     "deadline with history",
-			setup:    func(*p.InternalUpdateWorkflowExecutionRequest) {},
-			beginErr: context.DeadlineExceeded,
-			wantErr:  &p.AppendHistoryTimeoutError{Msg: "context deadline exceeded"},
-		},
-		{
-			name:     "canceled with history",
-			setup:    func(*p.InternalUpdateWorkflowExecutionRequest) {},
-			beginErr: context.Canceled,
-			wantErr:  &p.AppendHistoryTimeoutError{Msg: "context canceled"},
-		},
-		{
-			name: "deadline without history",
-			setup: func(request *p.InternalUpdateWorkflowExecutionRequest) {
-				request.UpdateWorkflowNewEvents = nil
-			},
-			beginErr:  context.DeadlineExceeded,
-			wantCause: context.DeadlineExceeded,
+			name:     "connect timeout",
+			ctx:      t.Context(),
+			beginErr: connectTimeout,
+			wantErr:  fmt.Errorf("UpdateWorkflowExecution: failed to start transaction: %w", connectTimeout),
 		},
 	}
 	for _, tc := range testCases {
@@ -266,18 +262,10 @@ func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
 			t.Parallel()
 			request := newPipelineTestRequest()
 			db := newFakePipelineDB(request)
-			tc.setup(request)
 			db.beginPipelinedErr = tc.beginErr
 
-			err := updateWithFakes(db, request)
-			if tc.wantErr != nil {
-				require.Equal(t, tc.wantErr, err)
-			} else {
-				require.ErrorIs(t, err, tc.wantCause)
-				require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: context deadline exceeded", err.Error())
-			}
-			require.Empty(t, db.historyTxnIDs)
-			require.False(t, db.sequential.begun)
+			require.Equal(t, tc.wantErr, updateWithFakes(tc.ctx, db, request))
+			require.Equal(t, tc.wantErr == nil, db.sequential.committed)
 		})
 	}
 }
@@ -318,7 +306,7 @@ func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
 			db := newFakePipelineDB(request)
 			db.pipelined.commitErr = fmt.Errorf("%w: %w", tc.check, errors.New("division by zero"))
 
-			require.Equal(t, tc.wantErr, updateWithFakes(db, request))
+			require.Equal(t, tc.wantErr, updateWithFakes(t.Context(), db, request))
 			require.Empty(t, db.historyTxnIDs)
 			require.False(t, db.sequential.begun)
 		})
@@ -334,7 +322,7 @@ func TestUpdateWorkflowExecutionPipelined_MalformedBranch(t *testing.T) {
 	request.UpdateWorkflowNewEvents[0].BranchInfo.TreeId = "not-a-uuid"
 	_, parseErr := primitives.ParseUUID("not-a-uuid")
 
-	require.Equal(t, parseErr, updateWithFakes(db, request))
+	require.Equal(t, parseErr, updateWithFakes(t.Context(), db, request))
 	require.False(t, db.pipelined.begun)
 	require.Empty(t, db.historyTxnIDs)
 	require.False(t, db.sequential.begun)
@@ -347,7 +335,7 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
 	db := newFakePipelineDB(request)
 	db.pipelined.updateExecutionsErr = errors.New("record failed")
 
-	err := updateWithFakes(db, request)
+	err := updateWithFakes(t.Context(), db, request)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "applyWorkflowMutationTx failed. Failed to update executions row. Erorr: updateExecution failed. Erorr: record failed", unavailable.Message)
@@ -364,7 +352,7 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorConverted(t *testing.T) {
 	db := newFakePipelineDB(request)
 	db.pipelined.lockCurrentErr = serviceerror.NewInternal("ArchetypeID not specified")
 
-	err := updateWithFakes(db, request)
+	err := updateWithFakes(t.Context(), db, request)
 	require.Equal(t, serviceerror.NewUnavailable("UpdateWorkflowExecution: ArchetypeID not specified"), err)
 	require.True(t, db.pipelined.rolledBack)
 	require.False(t, db.pipelined.committed)
@@ -378,7 +366,7 @@ func TestUpdateWorkflowExecutionPipelined_PanicRollsBack(t *testing.T) {
 	db := newFakePipelineDB(request)
 	request.UpdateWorkflowMutation.NamespaceID = "not-a-uuid"
 
-	require.Panics(t, func() { _ = updateWithFakes(db, request) })
+	require.Panics(t, func() { _ = updateWithFakes(t.Context(), db, request) })
 	require.True(t, db.pipelined.rolledBack)
 	require.False(t, db.pipelined.committed)
 	require.False(t, db.sequential.begun)
@@ -393,7 +381,7 @@ func TestUpdateWorkflowExecutionPipelined_NotSentRunsSequential(t *testing.T) {
 	db := newFakePipelineDB(request)
 	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotSent, errors.New("connection reset"))
 
-	require.NoError(t, updateWithFakes(db, request))
+	require.NoError(t, updateWithFakes(t.Context(), db, request))
 	require.Equal(t, 1, db.pipelined.historyNodes)
 	require.Equal(t, []int64{20}, db.historyTxnIDs)
 	require.True(t, db.sequential.committed)
@@ -405,13 +393,11 @@ func TestUpdateWorkflowExecutionPipelined_ContextEndsDuringRecording(t *testing.
 	t.Parallel()
 	request := newPipelineTestRequest()
 	db := newFakePipelineDB(request)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	db.pipelined.cancelRecording = cancel
 	db.pipelined.commitErr = context.Canceled
-	store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
-	require.NoError(t, err)
 
-	err = store.UpdateWorkflowExecution(ctx, request)
+	err := updateWithFakes(ctx, db, request)
 	require.Equal(t, fmt.Errorf("UpdateWorkflowExecution: failed to commit transaction: %w", context.Canceled), err)
 	require.False(t, db.pipelined.rolledBack)
 	require.False(t, db.sequential.begun)
@@ -464,12 +450,12 @@ func newFakePipelineDB(request *p.InternalUpdateWorkflowExecutionRequest) *fakeP
 
 // updateWithFakes runs the update on a store whose DB is wrapped in a DbConn,
 // as Factory.NewExecutionStore wraps it.
-func updateWithFakes(db *fakePipelineDB, request *p.InternalUpdateWorkflowExecutionRequest) error {
+func updateWithFakes(ctx context.Context, db *fakePipelineDB, request *p.InternalUpdateWorkflowExecutionRequest) error {
 	store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
 	if err != nil {
 		return err
 	}
-	return store.UpdateWorkflowExecution(context.Background(), request)
+	return store.UpdateWorkflowExecution(ctx, request)
 }
 
 func (d *fakePipelineDB) BeginPipelinedTx(context.Context) (sqlplugin.PipelinedTx, error) {
