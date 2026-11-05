@@ -161,7 +161,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	logger := log.With(
 		h.logger,
 		tag.WorkflowNamespace(params.Namespace),
-		tag.WorkflowTaskQueueName(params.TaskQueue),
+		tag.TaskQueueName(params.TaskQueue),
 	)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {

@@ -269,16 +269,22 @@ func (s *VisibilityStore) listExecutionsInternal(
 	request *listExecutionsRequestInternal,
 ) (*store.InternalListExecutionsResponse, error) {
 	queryConverter, saTypeMap := request.QueryConverter, request.QueryConverter.saTypeMap
+
+	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+	queryConverter.WithQueryTime(queryTime)
+
 	queryParams, err := buildQueryParams(
 		request.NamespaceID,
 		queryConverter,
 		request.Query,
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +326,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
+			QueryTime: &queryTime,
 		})
 		if err != nil {
 			return nil, err

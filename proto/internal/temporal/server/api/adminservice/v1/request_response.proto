@@ -231,6 +231,11 @@ message ApplyNamespaceMutationRequest {
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
   // Shadow requests compare this reference with the decoded namespace_task_payload.
   bytes shadow_legacy_task_payload = 9;
+
+  // Authoritative UPDATE delivered to a peer removed from the cluster list.
+  // The default admission policy retains this snapshot even when the namespace
+  // is absent, so its config version fences delayed older additions.
+  bool removed_peer = 10;
 }
 
 message ApplyNamespaceMutationResponse {
