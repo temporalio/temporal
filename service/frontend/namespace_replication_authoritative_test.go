@@ -87,7 +87,9 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			mh := metricstest.NewCaptureHandler()
 			capture := mh.StartCapture()
 			defer mh.StopCapture(capture)
-			handler := &AdminHandler{metricsHandler: mh, logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor}
+			events := &captureRemoteClusterEventLogger{}
+			handler := &AdminHandler{metricsHandler: mh, logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor,
+				eventLogger: events, config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)}}
 			task := shadowObservationTask()
 			payload, err := nsreplication.MarshalNamespaceTask(task)
 			require.NoError(t, err)
@@ -119,10 +121,18 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			if tc.err != nil {
 				require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
 				require.ErrorIs(t, err, tc.err)
+				// The handler reports the failure once, after its retries.
+				attrs, details := remoteClusterEventValues(t, events.records)
+				require.Equal(t, string(wideevents.NamespaceReplicationProcessed), attrs["phase"])
+				require.Equal(t, nsreplication.CHASMApplyOutcomeError, details["outcome"])
+				require.Equal(t, nsreplication.CHASMApplyStageReceive, details["apply_stage"])
+				require.Equal(t, err.Error(), details["error"])
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, authoritativeReceiveOutcome(tc.outcome), recordings[0].Tags["outcome"])
 				require.Equal(t, tc.want, response.GetOutcome())
+				// The executor emits successful outcomes; this mock executor emits none.
+				require.Empty(t, events.records)
 			}
 		})
 	}

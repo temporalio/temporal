@@ -1116,7 +1116,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
 				}) {
 				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
-				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 				return nil, err
 			}
 		}
@@ -1139,15 +1139,15 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			return retryable
 		})
 		if err != nil {
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 			return nil, err
 		}
 		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 		if err != nil {
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 			return nil, err
 		}
-		adh.recordAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
+		adh.observeAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime)
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 	}
 	// Compare the byte payloads after decoding with the same schema. The typed

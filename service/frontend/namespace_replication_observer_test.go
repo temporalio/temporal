@@ -97,6 +97,15 @@ func TestReceiverCreateRaceObservesOnlyCompletedOutcome(t *testing.T) {
 			require.Equal(t, wantOutcome, response.GetOutcome())
 			_, details := remoteClusterEventValues(t, events.records)
 			require.Equal(t, wantEvent, details["outcome"], "a retried UPDATE must not emit an intermediate duplicate event")
+			// The executor's event carries the receiver's CHASM fields and its persistence details.
+			require.Equal(t, "authoritative", details["mode"])
+			require.Equal(t, nsreplication.CHASMApplyStageReceive, details["apply_stage"])
+			if !tc.create {
+				require.Contains(t, details, "local_namespace_pre_mutation")
+			}
+			if !tc.create && !tc.ambiguous {
+				require.Contains(t, details, "persistence_request")
+			}
 			shared := capture.SnapshotMetric(metrics.NamespaceReplicationApplyOutcomes.Name())
 			require.Len(t, shared, 1)
 			require.Equal(t, wantMetric, shared[0].Tags["outcome"])
