@@ -3238,13 +3238,6 @@ the stream if a sender does. A lane counts until the sender sends its retirement
 default leaves room above the sender's default of 4 for a lane to be replaced while another
 retires. Changing it restarts lane stream receivers.`,
 	)
-	ReplicationLaneEvaluateErrorGrace = NewGlobalDurationSetting(
-		"history.ReplicationLaneEvaluateErrorGrace",
-		time.Minute,
-		`ReplicationLaneEvaluateErrorGrace is how long a lane stream sender keeps a lane policy's last
-answer while the policy keeps failing, before it retires all lanes. A policy can choose another
-reaction for an error by returning a LaneEvaluateError.`,
-	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
