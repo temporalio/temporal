@@ -17,6 +17,7 @@ import (
 const (
 	NamespaceReplicationTransportModeLegacy = "legacy"
 	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
 )
 
 var (
@@ -86,9 +87,11 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 	)
 	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
-		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow, NamespaceReplicationTransportModeCHASM}),
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
+		`NamespaceReplicationTransportMode selects the outgoing namespace replication transport: legacy, shadow, or chasm.
+Enable chasm only after compatible frontend/history binaries and authoritative replication observability are deployed on every participating cluster.
+Changing this setting does not disable incoming authoritative deliveries or stop existing CHASM executions.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -1739,7 +1742,14 @@ an optional feature and also requires a metrics collection system that can handl
 	MatchingEnableWorkerMetricsEvents = NewNamespaceBoolSetting(
 		"matching.enableWorkerMetricsEvents",
 		false,
-		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events on every heartbeat.`,
+		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events from worker heartbeats.`,
+	)
+	MatchingWorkerMetricsEventInterval = NewNamespaceDurationSetting(
+		"matching.workerMetricsEventInterval",
+		5*time.Minute,
+		`Minimum interval for emitting worker_metrics events for each worker instance.
+Emitting these events can be expensive. The server controls their emission frequency independently
+of the user-configured SDK heartbeat interval.`,
 	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
@@ -2216,6 +2226,15 @@ The actual count is calculated as base * (multiplier ^ level)`,
 		3.0,
 		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
+	)
+
+	TaskThrottleController = NewGlobalTypedSetting(
+		"history.taskThrottleController",
+		DefaultTaskThrottleControllerSettings,
+		`TaskThrottleController tunes host level pacing of history task retries that a namespace
+APS or persistence rate limiter refused. Unset fields keep their defaults.
+Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
+Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -3099,8 +3118,7 @@ a low priority workflow lock before subsequent stream sender conversion attempts
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
-		`HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
-Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.`,
+		`HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.`,
 	)
 	HistoryTaskDLQUnexpectedErrorAttempts = NewGlobalIntSetting(
 		"history.TaskDLQUnexpectedErrorAttempts",

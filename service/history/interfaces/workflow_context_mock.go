@@ -305,6 +305,20 @@ func (mr *MockWorkflowContextMockRecorder) SubmitClosedWorkflowSnapshot(ctx, sha
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitClosedWorkflowSnapshot", reflect.TypeOf((*MockWorkflowContext)(nil).SubmitClosedWorkflowSnapshot), ctx, shardContext, transactionPolicy)
 }
 
+// TryLock mocks base method.
+func (m *MockWorkflowContext) TryLock(lockPriority locks.Priority) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TryLock", lockPriority)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// TryLock indicates an expected call of TryLock.
+func (mr *MockWorkflowContextMockRecorder) TryLock(lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryLock", reflect.TypeOf((*MockWorkflowContext)(nil).TryLock), lockPriority)
+}
+
 // Unlock mocks base method.
 func (m *MockWorkflowContext) Unlock() {
 	m.ctrl.T.Helper()
