@@ -23,6 +23,7 @@ type (
 	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
 	// rescheduler offers the one bucket to classes in priority order, which needs it shared.
 	// It carries the namespace name because that is what the limiters key their budgets on.
+	// Destination separates caller RPS budgets by target and is empty for other causes.
 	ThrottleKey struct {
 		Cause         enumspb.ResourceExhaustedCause
 		NamespaceName namespace.Name
