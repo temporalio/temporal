@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -2362,4 +2363,165 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates(standalone boo
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+// admitUpdateWithCallback sends an update request with one completion callback to the history
+// service, which supports waiting for admission. It returns the stage the update reached.
+func (s *NexusWorkflowUpdateTestSuite) admitUpdateWithCallback(
+	env *NexusTestEnv,
+	execution *commonpb.WorkflowExecution,
+	updateID, requestID, callbackURL string,
+) enumspb.UpdateWorkflowExecutionLifecycleStage {
+	resp, err := env.GetTestCluster().HistoryClient().UpdateWorkflowExecution(s.Context(), &historyservice.UpdateWorkflowExecutionRequest{
+		NamespaceId: env.NamespaceID().String(),
+		Request: &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: execution,
+			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED},
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: updateID},
+				Input: &updatepb.Input{
+					Name: "update",
+					Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}},
+				},
+				RequestId: requestID,
+				CompletionCallbacks: []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+				}},
+			},
+		},
+	})
+	s.Require().NoError(err)
+	return resp.GetResponse().GetStage()
+}
+
+// TestCallbacksAttachedForDuplicateOfAdmittedUpdate verifies that a second request with the same
+// update ID attaches its callbacks while the update is admitted but not yet sent to a worker.
+func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfAdmittedUpdate(standalone bool) {
+	if standalone {
+		s.T().Skip("test has no Nexus caller")
+	}
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	updateID := "duplicate-admitted-update"
+	wf := newUpdateChildWorkflow(false)
+
+	// The worker starts only after both requests are applied, so the update stays admitted.
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, wf, "initial input")
+	s.Require().NoError(err)
+
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	firstRequestID, secondRequestID := uuid.NewString(), uuid.NewString()
+	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		s.admitUpdateWithCallback(env, execution, updateID, firstRequestID, "http://localhost:9999/first"))
+	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		s.admitUpdateWithCallback(env, execution, updateID, secondRequestID, "http://localhost:9999/second"))
+
+	s.startWorker(env, taskQueue, wf)
+	_, err = env.FrontendClient().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: env.Namespace().String(),
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+			UpdateId:          updateID,
+		},
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	})
+	s.Require().NoError(err)
+
+	// The first request's callbacks are in the UpdateAccepted event; the second request's are in an
+	// OptionsUpdated event.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	acceptedRequest := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED).
+		GetWorkflowExecutionUpdateAcceptedEventAttributes().GetAcceptedRequest()
+	s.Require().Equal(firstRequestID, acceptedRequest.GetRequestId())
+	s.Require().Len(acceptedRequest.GetCompletionCallbacks(), 1)
+	s.Require().Equal("http://localhost:9999/first", acceptedRequest.GetCompletionCallbacks()[0].GetNexus().GetUrl())
+
+	updateOptions := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED).
+		GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()
+	s.Require().Len(updateOptions, 1)
+	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+	s.Require().Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
+	s.Require().Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
+
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+// TestCallbacksAttachedForDuplicateOfReappliedUpdate verifies that after a reset reapplies an
+// update as an UpdateAdmitted event, a request from another caller attaches its callbacks, and a
+// retry of the original request does not attach its callbacks a second time.
+func (s *NexusWorkflowUpdateTestSuite) TestCallbacksAttachedForDuplicateOfReappliedUpdate(standalone bool) {
+	if standalone {
+		s.T().Skip("test has no Nexus caller")
+	}
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	updateID := "duplicate-reapplied-update"
+	// The update handler blocks on a signal, so the update is in-flight when the workflow is reset.
+	wf := newUpdateChildWorkflow(true)
+
+	// Accept the update in the first run, then stop the worker so that the reapplied update stays
+	// admitted in the new run.
+	firstWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	firstWorker.RegisterWorkflow(wf)
+	s.Require().NoError(firstWorker.Start())
+	s.T().Cleanup(firstWorker.Stop)
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        taskQueue,
+		TaskQueue: taskQueue,
+	}, wf, "initial input")
+	s.Require().NoError(err)
+	firstRequestID := uuid.NewString()
+	s.admitUpdateWithCallback(env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		updateID, firstRequestID, "http://localhost:9999/first")
+	s.awaitUpdateAccepted(env, run.GetID(), run.GetRunID())
+	firstWorker.Stop()
+
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		Reason:                    "test reset with in-flight update",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, run.GetID(), run.GetRunID()),
+	})
+	s.Require().NoError(err)
+	newRunID := resetResp.GetRunId()
+
+	newExecution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}
+	secondRequestID := uuid.NewString()
+	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		s.admitUpdateWithCallback(env, newExecution, updateID, secondRequestID, "http://localhost:9999/second"))
+	s.Require().Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		s.admitUpdateWithCallback(env, newExecution, updateID, firstRequestID, "http://localhost:9999/first"))
+
+	s.startWorker(env, taskQueue, wf)
+	s.awaitUpdateAccepted(env, run.GetID(), newRunID)
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "complete-update", nil))
+	_, err = env.FrontendClient().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: env.Namespace().String(),
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID},
+			UpdateId:          updateID,
+		},
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	})
+	s.Require().NoError(err)
+
+	// The new run attaches only the second request's callbacks, in a single OptionsUpdated event.
+	// The first request's callbacks were attached by the reapplied UpdateAdmitted event.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
+	var updateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate
+	for _, event := range hist {
+		updateOptions = append(updateOptions, event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()...)
+	}
+	s.Require().Len(updateOptions, 1)
+	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+	s.Require().Len(updateOptions[0].GetAttachedCompletionCallbacks(), 1)
+	s.Require().Equal("http://localhost:9999/second", updateOptions[0].GetAttachedCompletionCallbacks()[0].GetNexus().GetUrl())
+
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "stop", nil))
 }

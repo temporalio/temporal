@@ -272,6 +272,8 @@ message RecordWorkflowTaskStartedRequest {
   // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
   // Sent only if the target version is different from the poller's version.
   temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 14;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -383,6 +385,8 @@ message RecordActivityTaskStartedRequest {
   // start information is carried within this component, obviating the need to use the fields that apply to embedded
   // activities with the exception of version_directive.
   bytes component_ref = 14;
+  // Flow control limiters attached to this task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 15;
 }
 
 message RecordActivityTaskStartedResponse {

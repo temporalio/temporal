@@ -32,6 +32,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -69,6 +70,7 @@ type TaskExecutorOptions struct {
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
+	TestHooks              testhooks.TestHooks
 }
 
 func RegisterExecutor(
@@ -438,6 +440,9 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			return err
 		}
 		emitMetrics = e.deferredOperationMetric(finalOp, callErr, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		if finalOp.State() == enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT {
+			return e.deleteTimedOutOperation(node)
+		}
 		return nil
 	})
 	if err != nil {
@@ -635,8 +640,19 @@ func (e taskExecutor) executeOperationTimeout(env hsm.Environment, node *hsm.Nod
 	if err != nil {
 		return err
 	}
+	if err := e.deleteTimedOutOperation(node); err != nil {
+		return err
+	}
 	emitOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), op, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
 	return nil
+}
+
+func (e taskExecutor) deleteTimedOutOperation(node *hsm.Node) error {
+	// Tests can retain timeout nodes to reproduce executions persisted by older servers.
+	if retain, _ := testhooks.Get(e.TestHooks, testhooks.NexusRetainTimedOutOperation, namespace.Name(node.NamespaceName())); retain {
+		return nil
+	}
+	return node.Parent.DeleteChild(node.Key)
 }
 
 // recordOperationTimeout records the NEXUS_OPERATION_TIMED_OUT history event and transitions the

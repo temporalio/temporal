@@ -514,9 +514,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(&Library{
-		componentOnlyLibrary: componentOnlyLibrary{
-			metricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
-		},
+		metricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
 	}))
 	require.NoError(t, registry.Register(callback.NewNilLibrary()))
 

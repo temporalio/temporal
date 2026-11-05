@@ -39,11 +39,11 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
+	"go.temporal.io/testx/freeport"
 	"go.uber.org/multierr"
 )
 

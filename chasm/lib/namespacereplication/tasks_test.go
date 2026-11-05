@@ -408,6 +408,21 @@ func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
 }
 
+func TestApplyLocalTask_Execute_ReplicateOnlySkipsLocalWriteAndSchedulesPeers(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.ReplicateOnly = true
+	ref := env.start(mutation, nil)
+
+	// No metadata-manager expectation: replicate-only must not touch the source.
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+	require.False(t, component.GetMutation().GetShadow(), "peer apply must remain authoritative")
+}
+
 func TestApplyLocalTask_Execute_ClonesDetailForMetadataManager(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate()
@@ -1304,14 +1319,15 @@ func TestApplyPeerTask_RecordOutcomeIgnoresStaleAttempt(t *testing.T) {
 		c.PeerApply["cellB"].AttemptCount = 2
 	})
 
-	require.NoError(t, env.peerHandler.recordPeerOutcome(
+	_, err := env.peerHandler.recordPeerOutcome(
 		env.engineCtx,
 		ref,
 		"ns-id",
 		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 1},
 		namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 		serviceerror.NewUnavailable("stale result"),
-	))
+	)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	peer := component.GetPeerApply()["cellB"]

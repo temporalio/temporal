@@ -117,6 +117,15 @@ const (
 	defaultUserTerminateIdentity = "frontend-service"
 )
 
+// TODO (Shivam): Remove these constants with the deprecated worker-versioning implementations.
+const (
+	deprecatedWorkerVersioningV1OrV2 = "v0.1_or_v0.2"
+	deprecatedWorkerVersioningV3     = "v0.3"
+
+	deprecatedWorkerVersioningPollAllowed = "allowed"
+	deprecatedWorkerVersioningPollBlocked = "blocked"
+)
+
 type (
 	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
 	ActivityHandler = activity.FrontendHandler
@@ -346,6 +355,7 @@ func NewWorkflowHandler(
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 	validator *workflow.RequestValidator,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	metricsHandler metrics.Handler,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -373,6 +383,7 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 			chasmNsReplClient,
+			metricsHandler,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
@@ -1131,13 +1142,13 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
 	if request.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
 		wh.logger.Warn("Unspecified task queue kind",
-			tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
+			tag.TaskQueueName(request.TaskQueue.GetName()),
 			tag.WorkflowNamespace(namespace.Name(request.GetNamespace()).String()),
 		)
 	}
@@ -1194,7 +1205,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 		return nil, err
@@ -1405,7 +1416,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
@@ -1448,7 +1459,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
@@ -3139,7 +3150,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat during shutdown.",
-					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+					tag.TaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
 					tag.Error(err))
 			}
 		})
@@ -3188,7 +3199,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
-			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.TaskQueueName(taskQueueName),
 			tag.Error(err))
 		return
 	}
@@ -3210,7 +3221,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 			})
 			if err != nil {
 				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-					tag.WorkflowTaskQueueName(rootPartition.RpcName()),
+					tag.TaskQueueName(rootPartition.RpcName()),
 					tag.String("worker-instance-key", workerInstanceKey),
 					tag.Error(err))
 			} else {
@@ -3252,7 +3263,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
-			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.TaskQueueName(taskQueueName),
 			tag.Error(err))
 		return
 	}
@@ -3284,7 +3295,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 				if err != nil {
 					wh.logger.Warn("Failed to resolve matching host for poll cancellation dedup, sending RPC anyway.",
 						tag.WorkflowNamespaceID(namespaceID),
-						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.TaskQueueName(partition.RpcName()),
 						tag.Error(err))
 				} else if seenHosts[host] {
 					continue
@@ -3307,7 +3318,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 				if err != nil {
 					failedPartitions.Add(1)
 					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.TaskQueueName(partition.RpcName()),
 						tag.String("worker-instance-key", workerInstanceKey),
 						tag.Error(err))
 				} else {
@@ -6515,14 +6526,14 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			})
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.TaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
 		}()
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
+	if err := wh.validatePollVersioningInfo(ctx, request.GetNamespace(), request.GetWorkerVersionCapabilities(), request.GetDeploymentOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
 
@@ -6559,7 +6570,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
 
@@ -6796,6 +6807,51 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
+func (wh *WorkflowHandler) validatePollVersioningInfo(
+	ctx context.Context,
+	nsName string,
+	capabilities *commonpb.WorkerVersionCapabilities,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+	tq *taskqueuepb.TaskQueue,
+) error {
+	featureVersion, isDeprecated := classifyDeprecatedWorkerVersioningPoll(capabilities, deploymentOptions)
+	if isDeprecated {
+		action := deprecatedWorkerVersioningPollAllowed
+		if wh.config.BlockOldVersioningPollers(nsName) {
+			action = deprecatedWorkerVersioningPollBlocked
+		}
+		// note: The frontend telemetry interceptor adds metrics.NamespaceTag(...) over here
+		// so this is already tagged by namespace
+		metrics.DeprecatedWorkerVersioningPollCounter.With(wh.metricsScope(ctx)).Record(
+			1,
+			metrics.WorkerVersioningVersionTag(featureVersion),
+			metrics.ActionType(action),
+		)
+		if action == deprecatedWorkerVersioningPollBlocked {
+			return errOldWorkerVersioningPollerNotAllowed
+		}
+	}
+
+	return wh.validateVersioningInfo(nsName, capabilities, deploymentOptions, tq)
+}
+
+// classifyDeprecatedWorkerVersioningPoll returns the deprecated feature version and whether the poll uses it.
+// Unversioned workers and workers using GA Worker Deployment versioning
+// (WorkerVersioningMode=VERSIONED) are not classified as deprecated.
+func classifyDeprecatedWorkerVersioningPoll(
+	capabilities *commonpb.WorkerVersionCapabilities,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+) (featureVersion string, isDeprecated bool) {
+	if deploymentOptions.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED ||
+		!capabilities.GetUseVersioning() {
+		return "", false
+	}
+	if capabilities.GetDeploymentSeriesName() != "" {
+		return deprecatedWorkerVersioningV3, true
+	}
+	return deprecatedWorkerVersioningV1OrV2, true
+}
+
 func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
 	// TODO: Deprecate old versioning checks
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
@@ -6994,7 +7050,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
 		wh.logger.Warn("Failed to cancel outstanding poller.",
-			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
+			tag.TaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 
 	return true
@@ -7938,6 +7994,9 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context, request *workflowservice.PollWorkflowExecutionTimeSkippingRequest) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowExecution().GetRunId() != "" {
+		return nil, serviceerror.NewInvalidArgument("polling workflow execution time skipping for a specific run ID is not supported")
 	}
 	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
 		return nil, err
