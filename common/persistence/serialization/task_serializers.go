@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1137,6 +1138,7 @@ func visibilityDeleteTaskToProto(
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		CreateTime:            timestamppb.New(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:     deleteVisibilityTask.IsRetentionDelete,
 		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
 			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
@@ -1161,6 +1163,7 @@ func visibilityDeleteTaskFromProto(
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		CreateTime:                     timestamp.TimeValue(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:              deleteVisibilityTask.IsRetentionDelete,
 	}
 }
