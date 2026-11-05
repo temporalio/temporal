@@ -126,12 +126,13 @@ func (s *activityParityTestSuite) TestMetrics() {
 		recordingTagKeys     []string
 	}
 	type scenario struct {
-		name           string
-		trace          []model.Event
-		cfg            activityConfig
-		saaOnly        bool
-		anchor         string
-		requiredMetric string
+		name                           string
+		trace                          []model.Event
+		cfg                            activityConfig
+		saaOnly                        bool
+		anchor                         string
+		requiredMetric                 string
+		taskTimeouts, terminalTimeouts int
 	}
 	type recordings map[string][]*metricstest.CapturedRecording
 
@@ -171,6 +172,27 @@ func (s *activityParityTestSuite) TestMetrics() {
 		{name: "Cancel", trace: []model.Event{model.Poll, model.RequestCancel, model.RespondCanceled}, cfg: activityConfig{MaxAttempts: 1}},
 		{name: "TerminalTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 1, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTimeout.Name()},
 		{name: "RetryableTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 2, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTaskTimeout.Name()},
+		// TODO: Compare these shared metric series with WFA once workflow handoff is supported.
+		{
+			name: "TerminalHandoffTimeout", trace: []model.Event{model.Poll, model.StartToHandoffElapses},
+			cfg:     activityConfig{MaxAttempts: 1, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1}}},
+			saaOnly: true, anchor: metrics.ActivityTimeout.Name(), taskTimeouts: 1, terminalTimeouts: 1,
+		},
+		{
+			name: "RetryableHandoffTimeout", trace: []model.Event{model.Poll, model.StartToHandoffElapses},
+			cfg:     activityConfig{MaxAttempts: 2, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 2, InitialInterval: durationpb.New(activityLongDuration)}}},
+			saaOnly: true, anchor: metrics.ActivityTaskTimeout.Name(), taskTimeouts: 1,
+		},
+		{
+			name: "TerminalCompletionTimeout", trace: []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses},
+			cfg:     activityConfig{MaxAttempts: 1, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+			saaOnly: true, anchor: metrics.ActivityTimeout.Name(), taskTimeouts: 1, terminalTimeouts: 1,
+		},
+		{
+			name: "RetryableCompletionTimeout", trace: []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses},
+			cfg:     activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+			saaOnly: true, anchor: metrics.ActivityTaskTimeout.Name(), taskTimeouts: 1,
+		},
 		{name: "RetryableTaskFailure", trace: []model.Event{model.Poll, model.FailRetryably}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "RetryableTaskFailureWithHeartbeatDetails", trace: []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{}, HasHeartbeatDetails: true}}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "Heartbeat", trace: []model.Event{model.Poll, model.Heartbeat}, cfg: activityConfig{MaxAttempts: 1}},
@@ -178,7 +200,7 @@ func (s *activityParityTestSuite) TestMetrics() {
 		{name: "Unpause", trace: []model.Event{model.Poll, model.Pause, model.Unpause}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityUnpause.Name()},
 		{name: "Reset", trace: []model.Event{model.Poll, model.Reset}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityReset.Name()},
 		{name: "UpdateOptions", trace: []model.Event{model.Poll, model.UpdateOptions}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityUpdateOptions.Name()},
-		{name: "Terminate", trace: []model.Event{model.Poll, model.Terminate}, cfg: activityConfig{MaxAttempts: 1}, saaOnly: true},
+		{name: "Terminate", trace: []model.Event{model.Poll, model.Terminate}, cfg: activityConfig{MaxAttempts: 1}, saaOnly: true, requiredMetric: metrics.ActivityTerminate.Name()},
 	}
 	expectedTimeoutType := func(trace []model.Event) string {
 		for _, event := range trace {
@@ -191,6 +213,10 @@ func (s *activityParityTestSuite) TestMetrics() {
 				return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()
 			case model.HeartbeatElapsesType:
 				return enumspb.TIMEOUT_TYPE_HEARTBEAT.String()
+			case model.StartToHandoffElapsesType:
+				return enumspb.TIMEOUT_TYPE_START_TO_HANDOFF.String()
+			case model.HandoffToCloseElapsesType:
+				return enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE.String()
 			default:
 			}
 		}
@@ -291,9 +317,20 @@ func (s *activityParityTestSuite) TestMetrics() {
 			}
 			checkTags("SAA", saa, saaNS)
 
+			if sc.taskTimeouts > 0 {
+				for metricName, count := range map[string]int{
+					metrics.ActivityTaskTimeout.Name(): sc.taskTimeouts,
+					metrics.ActivityTimeout.Name():     sc.terminalTimeouts,
+				} {
+					require.Len(t, saa[metricName], count, metricName)
+					for _, recording := range saa[metricName] {
+						require.EqualValues(t, 1, recording.Value, metricName)
+					}
+				}
+			}
+
+			// Skip WFA validations below
 			if sc.saaOnly {
-				require.NotEmpty(t, saa[metrics.ActivityTerminate.Name()],
-					"terminating a standalone activity must emit activity_terminate")
 				return
 			}
 

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type activityParityTestSuite struct {
@@ -1113,6 +1114,178 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 // Handoff lifecycle tests use raw task RPCs so they do not depend on SDK handoff support.
 // WFA branches are placeholders until workflow activity handoff is implemented.
 func (s *activityParityTestSuite) TestAsyncHandoff() {
+	// Presence changes preserve the current task token and phase. Original options remain restorable.
+	s.Run("LiveOptions", func(s *activityParityTestSuite) {
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			for _, testCase := range []struct {
+				name                  string
+				configured, handedOff bool
+			}{
+				{name: "AddBeforeHandoff"},
+				{name: "AddAfterHandoff", handedOff: true},
+				{name: "EditBeforeHandoff", configured: true},
+				{name: "EditAfterHandoff", configured: true, handedOff: true},
+			} {
+				s.Run(testCase.name, func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					cfg := activityConfig{}
+					options := &activitypb.AsyncHandoffOptions{
+						StartToHandoffTimeout: durationpb.New(time.Minute),
+						HandoffToCloseTimeout: durationpb.New(time.Hour),
+					}
+					if testCase.configured {
+						cfg.AsyncHandoffOptions = options
+					}
+					trace := []model.Event{model.Poll}
+					if testCase.handedOff {
+						trace = append(trace, model.Handoff)
+					}
+					a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+					before := a.describe(t).GetInfo()
+					token := a.taskResponse().GetTaskToken()
+					ctx := testcontext.For(t)
+
+					update := func(options *activitypb.ActivityOptions, paths ...string) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+						return env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+							Namespace: env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID,
+							ActivityOptions: options, UpdateMask: &fieldmaskpb.FieldMask{Paths: paths},
+						})
+					}
+
+					response, err := update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					require.NoError(t, err)
+					require.NotNil(t, response.GetActivityOptions().GetAsyncHandoffOptions().GetRetryPolicy())
+
+					// Existing executions remain editable after disablement, including nested policy replacement.
+					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false}})
+					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						HeartbeatTimeout: durationpb.New(time.Minute),
+						RetryPolicy:      &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), MaximumAttempts: 3},
+					}}, "asyncHandoffOptions.heartbeatTimeout", "asyncHandoffOptions.retryPolicy")
+					require.NoError(t, err)
+					require.EqualValues(t, 3, a.describe(t).GetInfo().GetAsyncHandoffOptions().GetRetryPolicy().GetMaximumAttempts())
+
+					_, err = update(&activitypb.ActivityOptions{}, "async_handoff_options")
+					require.NoError(t, err)
+					removed := a.describe(t).GetInfo()
+					require.Nil(t, removed.GetAsyncHandoffOptions())
+					require.Zero(t, removed.GetHandoffAttempt())
+
+					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+					require.Nil(t, a.describe(t).GetInfo().GetAsyncHandoffOptions())
+
+					env.GetTestCluster().OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, []dynamicconfig.ConstrainedValue{{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true}})
+					_, err = update(&activitypb.ActivityOptions{AsyncHandoffOptions: options}, "async_handoff_options")
+					require.NoError(t, err)
+					_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+						Namespace: env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID, RestoreOriginal: true,
+					})
+					require.NoError(t, err)
+
+					restored := a.describe(t).GetInfo()
+					protorequire.ProtoEqual(t, before.GetAsyncHandoffOptions(), restored.GetAsyncHandoffOptions())
+					require.Equal(t, before.GetAttempt(), restored.GetAttempt())
+					require.Equal(t, before.GetAwaitingCompletion(), restored.GetAwaitingCompletion())
+					protorequire.ProtoEqual(t, before.GetAsyncHandoffTime(), restored.GetAsyncHandoffTime())
+
+					// Complete using the original worker token after every presence and policy change.
+					_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+						Namespace: env.Namespace().String(), TaskToken: token,
+					})
+					require.NoError(t, err)
+					require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+				})
+			}
+		})
+	})
+
+	// Verify policy selection through frontend validation, merging, persistence and Describe.
+	s.Run("RetryPolicyUpdatesWhileWaiting", func(s *activityParityTestSuite) {
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			for _, testCase := range []struct {
+				name                                            string
+				handedOff, updateActivityPolicy, removeAndReadd bool
+				expectedInterval                                time.Duration
+			}{
+				{name: "HandoffPolicy", expectedInterval: time.Minute},
+				{name: "HandoffRetryIgnoresActivityPolicy", updateActivityPolicy: true, expectedInterval: time.Hour},
+				{name: "ActivityPolicy", handedOff: true, updateActivityPolicy: true, expectedInterval: time.Minute},
+				{name: "ActivityRetryIgnoresHandoffPolicy", handedOff: true, expectedInterval: time.Hour},
+				{name: "ReaddedHandoffPolicy", removeAndReadd: true, expectedInterval: time.Minute},
+			} {
+				s.Run(testCase.name, func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					cfg := activityConfig{
+						RetryInterval: time.Hour,
+						AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+							RetryPolicy: &commonpb.RetryPolicy{
+								InitialInterval:    durationpb.New(time.Hour),
+								MaximumInterval:    durationpb.New(time.Hour),
+								BackoffCoefficient: 2,
+							},
+						},
+					}
+					trace := []model.Event{model.Poll}
+					if testCase.handedOff {
+						trace = append(trace, model.Handoff)
+					}
+					trace = append(trace, model.FailRetryably)
+					a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+					before := a.describe(t).GetInfo()
+					require.Equal(t, time.Hour, before.GetCurrentRetryInterval().AsDuration())
+					ctx := testcontext.For(t)
+					update := func(options *activitypb.ActivityOptions, path string) {
+						t.Helper()
+						_, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+							Namespace: env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID,
+							ActivityOptions: options, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{path}},
+						})
+						require.NoError(t, err)
+					}
+
+					expectedHandoffAttempt := before.GetHandoffAttempt()
+					if testCase.removeAndReadd {
+						update(&activitypb.ActivityOptions{}, "async_handoff_options")
+						update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}}, "async_handoff_options")
+						readded := a.describe(t).GetInfo()
+						require.EqualValues(t, 1, readded.GetHandoffAttempt())
+						require.Equal(t, time.Hour, readded.GetCurrentRetryInterval().AsDuration())
+						expectedHandoffAttempt = 1
+					}
+
+					policy := &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Minute)}
+					if testCase.updateActivityPolicy {
+						update(&activitypb.ActivityOptions{RetryPolicy: policy}, "retry_policy.initial_interval")
+					} else {
+						update(&activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: policy}}, "async_handoff_options.retry_policy.initial_interval")
+					}
+
+					after := a.describe(t).GetInfo()
+					require.Equal(t, before.GetAttempt(), after.GetAttempt())
+					require.Equal(t, expectedHandoffAttempt, after.GetHandoffAttempt())
+					require.Equal(t, testCase.expectedInterval, after.GetCurrentRetryInterval().AsDuration())
+					protorequire.ProtoEqual(t, before.GetLastAttemptCompleteTime(), after.GetLastAttemptCompleteTime())
+					require.Equal(t, before.GetLastAttemptCompleteTime().AsTime().Add(testCase.expectedInterval), after.GetNextAttemptScheduleTime().AsTime())
+					_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
+						Namespace: env.Namespace().String(), TaskToken: a.taskResponse().GetTaskToken(),
+					})
+					require.ErrorAs(t, err, new(*serviceerror.NotFound))
+				})
+			}
+		})
+	})
+
 	s.Run("RecordHandoffAndCompleteExternally", func(s *activityParityTestSuite) {
 		cfg := activityConfig{
 			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
