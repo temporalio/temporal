@@ -69,16 +69,18 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
 		return true, convertTxError("UpdateWorkflowExecution", err)
 	}
-	// A context that ended during recording sends nothing at Commit, so with new
-	// events return the error Begin returns for it.
-	if err := ctx.Err(); err != nil && len(newEvents) > 0 {
-		return true, &p.AppendHistoryTimeoutError{Msg: err.Error()}
-	}
 	sent = true
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	switch {
+	case err == nil:
+		return true, nil
+	case len(newEvents) > 0 && errors.Is(err, sqlplugin.ErrPipelineNotSent) && ctx.Err() != nil:
+		// Commit sent nothing, so return the error Begin returns for a context
+		// that ended.
+		return true, &p.AppendHistoryTimeoutError{Msg: ctx.Err().Error()}
+	default:
 		return true, pipelinedCommitError(request.ShardID, err)
 	}
-	return true, nil
 }
 
 // pipelinedCommitError returns the error the sequential path returns for the

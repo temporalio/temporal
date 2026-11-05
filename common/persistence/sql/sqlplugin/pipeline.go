@@ -11,6 +11,9 @@ var (
 	ErrNoPipelinedResults = errors.New("pipelined statements return no results")
 	// ErrPipelineUnsupported is returned when the plugin cannot pipeline.
 	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
+	// ErrPipelineNotSent is returned by a PipelinedTx's Commit, wrapping the
+	// driver error, when it sent nothing.
+	ErrPipelineNotSent = errors.New("pipelined transaction sent nothing")
 
 	// A PipelinedTx's Commit returns one of these errors, wrapping the database
 	// error, when the check that stands for it fails.
@@ -26,8 +29,8 @@ type (
 	// them as one implicit transaction, in one round trip once the connection has
 	// prepared them. Its reads return no results, so the checks a caller would make
 	// on them are statements that fail the transaction instead. Commit returns the
-	// error of the check that failed. Any other Commit error leaves the outcome
-	// unknown.
+	// error of the check that failed, or ErrPipelineNotSent when it sent nothing.
+	// Any other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		// UpdateExecutionsWithCondition fails the transaction with

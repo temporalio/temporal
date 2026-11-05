@@ -370,22 +370,43 @@ func TestUpdateWorkflowExecutionPipelined_PanicRollsBack(t *testing.T) {
 	require.False(t, db.sequential.begun)
 }
 
-// A context that ends during recording returns what Begin returns for it, and
-// sends nothing.
+// A context that ends during recording returns what Begin returns for it when
+// Commit sent nothing, and the context error otherwise.
 func TestUpdateWorkflowExecutionPipelined_ContextEndsDuringRecording(t *testing.T) {
 	t.Parallel()
-	request := newPipelineTestRequest()
-	db := newFakePipelineDB(request)
-	ctx, cancel := context.WithCancel(context.Background())
-	db.pipelined.cancelRecording = cancel
-	store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
-	require.NoError(t, err)
+	testCases := []struct {
+		name      string
+		commitErr error
+		wantErr   error
+	}{
+		{
+			name:      "nothing sent",
+			commitErr: fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotSent, context.Canceled),
+			wantErr:   &p.AppendHistoryTimeoutError{Msg: "context canceled"},
+		},
+		{
+			name:      "sent",
+			commitErr: context.Canceled,
+			wantErr:   fmt.Errorf("UpdateWorkflowExecution: failed to commit transaction: %w", context.Canceled),
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			request := newPipelineTestRequest()
+			db := newFakePipelineDB(request)
+			ctx, cancel := context.WithCancel(context.Background())
+			db.pipelined.cancelRecording = cancel
+			db.pipelined.commitErr = tc.commitErr
+			store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
+			require.NoError(t, err)
 
-	err = store.UpdateWorkflowExecution(ctx, request)
-	require.Equal(t, &p.AppendHistoryTimeoutError{Msg: "context canceled"}, err)
-	require.True(t, db.pipelined.rolledBack)
-	require.False(t, db.pipelined.committed)
-	require.False(t, db.sequential.begun)
+			err = store.UpdateWorkflowExecution(ctx, request)
+			require.Equal(t, tc.wantErr, err)
+			require.False(t, db.pipelined.rolledBack)
+			require.False(t, db.sequential.begun)
+		})
+	}
 }
 
 func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {

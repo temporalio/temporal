@@ -62,13 +62,13 @@ func (s *pipelineSuite) TestReadLockShardsWithRangeID() {
 	s.NoError(err)
 	filter := sqlplugin.ShardsFilter{ShardID: shard.ShardID}
 
-	written, err := s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
+	written, err := s.commit(newExecutionContext(), shard.ShardID, func(tx sqlplugin.PipelinedTx) {
 		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID))
 	})
 	s.NoError(err)
 	s.True(written)
 
-	written, err = s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
+	written, err = s.commit(newExecutionContext(), shard.ShardID, func(tx sqlplugin.PipelinedTx) {
 		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID+1))
 	})
 	s.requireCheckFailed(err, sqlplugin.ErrShardRangeIDMismatch)
@@ -86,14 +86,14 @@ func (s *pipelineSuite) TestLockCurrentExecutionsWithRunID() {
 			ArchetypeID: archetypeID,
 		}
 
-		written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		written, err := s.commit(newExecutionContext(), current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
 		})
 		s.NoError(err)
 		s.True(written)
 
 		filter.RunID = primitives.NewUUID()
-		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		written, err = s.commit(newExecutionContext(), current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
 		})
 		s.requireCheckFailed(err, sqlplugin.ErrCurrentExecutionRunIDMismatch)
@@ -102,7 +102,7 @@ func (s *pipelineSuite) TestLockCurrentExecutionsWithRunID() {
 		filter.RunID = current.RunID
 		_, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
 		s.NoError(err)
-		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		written, err = s.commit(newExecutionContext(), current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
 		})
 		s.requireCheckFailed(err, sqlplugin.ErrCurrentExecutionMissing)
@@ -121,7 +121,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	update := sqlplugin.ExecutionsUpdate{ExecutionsRow: execution, Condition: execution.NextEventID}
 
 	update.DBRecordVersion = execution.DBRecordVersion + 2
-	written, err := s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+	written, err := s.commit(newExecutionContext(), execution.ShardID, func(tx sqlplugin.PipelinedTx) {
 		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
 		s.NoError(err)
 	})
@@ -132,7 +132,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	s.Equal(execution.DBRecordVersion, stored.DBRecordVersion)
 
 	update.DBRecordVersion = execution.DBRecordVersion + 1
-	written, err = s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+	written, err = s.commit(newExecutionContext(), execution.ShardID, func(tx sqlplugin.PipelinedTx) {
 		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
 		s.NoError(err)
 	})
@@ -145,7 +145,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	_, err = s.store.DeleteFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	update.DBRecordVersion++
-	written, err = s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+	written, err = s.commit(newExecutionContext(), execution.ShardID, func(tx sqlplugin.PipelinedTx) {
 		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
 		s.NoError(err)
 	})
@@ -170,7 +170,7 @@ LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test update'; END $$`))
 		changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		changed.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
-		written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		written, err := s.commit(newExecutionContext(), current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
 				s.NoError(tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row))
 			}
@@ -193,7 +193,7 @@ AFTER UPDATE ON %s
 FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update()`, tc.table, current.ShardID)))
 		s.T().Cleanup(func() { s.NoError(s.admin.Exec(fmt.Sprintf(`DROP TRIGGER pipeline_test_fail_update ON %s`, tc.table))) })
 
-		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+		written, err = s.commit(newExecutionContext(), current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), &changed))
 		})
 		s.NoError(err)
@@ -210,7 +210,7 @@ func (s *pipelineSuite) TestDuplicateInsert() {
 		DataEncoding: testHistoryTransferTaskEncoding,
 	}}
 
-	written, err := s.commit(shardID, func(tx sqlplugin.PipelinedTx) {
+	written, err := s.commit(newExecutionContext(), shardID, func(tx sqlplugin.PipelinedTx) {
 		for range 2 {
 			_, err := tx.InsertIntoTransferTasks(newExecutionContext(), task)
 			s.NoError(err)
@@ -222,7 +222,7 @@ func (s *pipelineSuite) TestDuplicateInsert() {
 	s.False(written)
 
 	// A rejected batch does not leave a pooled connection mid-batch.
-	written, err = s.commit(shardID, func(tx sqlplugin.PipelinedTx) {
+	written, err = s.commit(newExecutionContext(), shardID, func(tx sqlplugin.PipelinedTx) {
 		_, err := tx.InsertIntoTransferTasks(newExecutionContext(), task)
 		s.NoError(err)
 	})
@@ -261,7 +261,17 @@ END $$`) == nil
 	err = <-commitErr
 	s.ErrorIs(err, context.Canceled)
 	s.NotErrorIs(err, sqlplugin.ErrShardRangeIDMismatch)
+	s.NotErrorIs(err, sqlplugin.ErrPipelineNotSent)
 	s.NoError(lockTx.Rollback())
+}
+
+// A context that ends before Commit sends nothing.
+func (s *pipelineSuite) TestContextEndsBeforeCommit() {
+	ctx, cancel := context.WithCancel(context.Background())
+	written, err := s.commit(ctx, rand.Int31(), func(sqlplugin.PipelinedTx) { cancel() })
+	s.ErrorIs(err, sqlplugin.ErrPipelineNotSent)
+	s.ErrorIs(err, context.Canceled)
+	s.False(written)
 }
 
 // A Begin that cannot check out a connection returns the context error.
@@ -285,7 +295,7 @@ AFTER INSERT ON history_node DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit()`, shardID)))
 	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_commit ON history_node`)) }()
 
-	written, err := s.commit(shardID, func(sqlplugin.PipelinedTx) {})
+	written, err := s.commit(newExecutionContext(), shardID, func(sqlplugin.PipelinedTx) {})
 	s.ErrorContains(err, "pipeline test commit failure")
 	s.False(written)
 }
@@ -326,9 +336,10 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_read_only()
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// commit queues a history node, then the statements queue adds, and commits.
-// It returns whether the history node was written and the Commit error.
-func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedTx)) (bool, error) {
+// commit begins with ctx, queues a history node, then the statements queue adds,
+// and commits. It returns whether the history node was written and the Commit
+// error.
+func (s *pipelineSuite) commit(ctx context.Context, shardID int32, queue func(tx sqlplugin.PipelinedTx)) (bool, error) {
 	node := sqlplugin.HistoryNodeRow{
 		ShardID:      shardID,
 		TreeID:       primitives.NewUUID(),
@@ -340,7 +351,7 @@ func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedT
 		DataEncoding: testHistoryNodeEncoding,
 	}
 
-	tx := s.beginPipelinedTx(newExecutionContext())
+	tx := s.beginPipelinedTx(ctx)
 	_, err := tx.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	queue(tx)
