@@ -24,7 +24,7 @@ type expectingTx struct {
 // supports it. newEvents are the request's new events and nodeRows their history
 // node rows. It returns false, so that the sequential path runs the update, when
 // the request or the plugin's connection needs it, when Begin fails after the
-// context ended, and when Commit sent nothing.
+// context ended, and when Commit ran none of the statements.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -114,7 +114,8 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 ) error {
 	for _, nodeRow := range nodeRows {
 		// InsertIntoHistoryNode can change the row (Postgres negates its TxnID), and
-		// the sequential path appends nodeRows after a Commit that sent nothing.
+		// the sequential path appends nodeRows after a Commit that ran none of the
+		// statements.
 		row := *nodeRow
 		if _, err := tx.InsertIntoHistoryNode(ctx, &row); err != nil {
 			return err

@@ -249,7 +249,8 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == divisionByZeroCode && s.checkErr != nil {
 				return fmt.Errorf("%w: %w", s.checkErr, err)
 			}
-			// pgx marks an error it returns before sending anything as safe to retry.
+			// pgx marks an error as safe to retry when the write that runs the
+			// statements sent nothing.
 			if pgconn.SafeToRetry(err) {
 				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotSent, err)
 			}
