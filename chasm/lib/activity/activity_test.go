@@ -1279,13 +1279,46 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 		},
 	}
 	// per-component cap = 1; activity already has 1 link, so any additional must fail.
-	validator := newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 1 }, defaultLinkMaxSize)
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerExecution = func(string) int { return 1 }
+	validator := test.NewLinksValidator(t, cfg)
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
 
 	err := activity.attachLinks(ctx, []*commonpb.Link{newLink}, "req-new", validator, "ns")
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+}
+
+// TestAttachLinks_OnlyEnforcesAggregateLimits verifies that attachLinks skips the
+// per-request count and size checks. The frontend runs those checks, and
+// attachLinks only enforces the per-execution limit.
+func TestAttachLinks_OnlyEnforcesAggregateLimits(t *testing.T) {
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleRequestLinks: func(chasm.Component, string) ([]*commonpb.Link, error) {
+				return nil, nil
+			},
+		},
+	}
+	// Both links would fail the per-request count and size limits.
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerRequest = func(string) int { return 1 }
+	cfg.LinkMaxSize = func(string) int { return 1 }
+	validator := test.NewLinksValidator(t, cfg)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+	}
+
+	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", validator, "ns"))
+	require.Equal(t, []*commonpb.Link{linkA, linkB}, ctx.LinksByRequest[activity]["req-1"])
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted

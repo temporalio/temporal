@@ -27,16 +27,16 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// CurrentLinksInfo describes the caller-attached links already on an execution, so that aggregate
-// limits can be enforced. Mirrors callbacks.CurrentCallbacksInfo.
-type CurrentLinksInfo struct {
+// Usage describes the caller-attached links already on an execution. ValidateAdditions uses it to
+// enforce per-execution limits.
+type Usage struct {
 	Count int
 }
 
-// CurrentLinksInfoOf computes the [CurrentLinksInfo] for the links already attached to an execution,
-// e.g. chasm.Context.Links(component).
-func CurrentLinksInfoOf(existing []*commonpb.Link) CurrentLinksInfo {
-	return CurrentLinksInfo{Count: len(existing)}
+// UsageOf computes the [Usage] of the links already attached to an execution, e.g.
+// chasm.Context.Links(component).
+func UsageOf(existing []*commonpb.Link) Usage {
+	return Usage{Count: len(existing)}
 }
 
 // Validator validates links attached to executions (e.g. workflows, standalone activities, and
@@ -53,7 +53,7 @@ type Validator interface {
 	//
 	// newLinks must only contain links attached directly to the request. Callback-embedded links are
 	// charged to the callback budget instead (see package docs).
-	ValidateAdditions(namespaceName string, newLinks []*commonpb.Link, existing CurrentLinksInfo) error
+	ValidateAdditions(namespaceName string, newLinks []*commonpb.Link, existing Usage) error
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
@@ -135,7 +135,7 @@ func (v *validator) Validate(namespaceName string, links []*commonpb.Link, cbs [
 func (v *validator) ValidateAdditions(
 	namespaceName string,
 	newLinks []*commonpb.Link,
-	existing CurrentLinksInfo,
+	existing Usage,
 ) error {
 	if len(newLinks) == 0 {
 		return nil

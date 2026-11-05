@@ -37,7 +37,7 @@ func newTestValidator(t *testing.T, config *Config) *validator {
 		nil,
 		nil,
 		test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
-		newTestLinkValidator(t, 10, 10),
+		test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 	)
 }
 
@@ -486,7 +486,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		{
 			name: "links - rejects more than the per-request limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				// newTestLinkValidator below allows 10 links per request.
+				// test.NewLinksValidatorConfig allows 10 links per request.
 				for i := range 11 {
 					r.Links = append(r.Links, testLink(fmt.Sprintf("wf-%d", i)))
 				}
@@ -509,7 +509,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		{
 			name: "links - rejects an oversized link carried by a callback",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				// newTestLinkValidator sets a default 4000 bytes per link limit.
+				// test.NewLinksValidatorConfig sets a 4000 byte per-link limit.
 				cb := newNexusCallback()
 				cb.Links = []*commonpb.Link{testLink(strings.Repeat("x", 4001))}
 				r.CompletionCallbacks = []*commonpb.Callback{cb}
@@ -595,7 +595,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
-			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, newTestLinkValidator(t, 10, 10))
+			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 
 			err := v.validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {
