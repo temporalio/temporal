@@ -29,7 +29,7 @@ type (
 	// and counts the history nodes appended outside a transaction.
 	fakePipelineDB struct {
 		sqlplugin.DB
-		pipelined         *fakeUpdateTx
+		pipelined         *fakePipelinedTx
 		sequential        *fakeUpdateTx
 		beginPipelinedErr error
 		historyNodes      int
@@ -38,18 +38,27 @@ type (
 	// fakeUpdateTx answers the calls of a minimal update the way a successful
 	// update sees them.
 	fakeUpdateTx struct {
-		sqlplugin.PipelinedTx
+		sqlplugin.Tx
 		request *p.InternalUpdateWorkflowExecutionRequest
 
 		updateExecutionsErr error
 		commitErr           error
 
-		begun          bool
-		historyNodes   int
+		begun        bool
+		historyNodes int
+		committed    bool
+		rolledBack   bool
+	}
+
+	// fakePipelinedTx adds the checks of a pipelined transaction to fakeUpdateTx.
+	fakePipelinedTx struct {
+		*fakeUpdateTx
+
+		lockCurrentErr  error
+		cancelRecording context.CancelFunc
+
 		lockedCurrent  *sqlplugin.CurrentExecutionsFilter
 		updatedCurrent *sqlplugin.CurrentExecutionsRow
-		committed      bool
-		rolledBack     bool
 	}
 )
 
@@ -321,6 +330,36 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
 	require.False(t, db.sequential.begun)
 }
 
+// A recording error is converted as the sequential transaction converts it.
+func TestUpdateWorkflowExecutionPipelined_RecordErrorConverted(t *testing.T) {
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	db.pipelined.lockCurrentErr = serviceerror.NewInternal("ArchetypeID not specified")
+
+	err := updateWithFakes(db, request)
+	require.Equal(t, serviceerror.NewUnavailable("UpdateWorkflowExecution: ArchetypeID not specified"), err)
+	require.True(t, db.pipelined.rolledBack)
+	require.False(t, db.pipelined.committed)
+	require.False(t, db.sequential.begun)
+}
+
+// A context that ends during recording returns what Begin returns for it, and
+// sends nothing.
+func TestUpdateWorkflowExecutionPipelined_ContextEndsDuringRecording(t *testing.T) {
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	ctx, cancel := context.WithCancel(context.Background())
+	db.pipelined.cancelRecording = cancel
+	store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
+	require.NoError(t, err)
+
+	err = store.UpdateWorkflowExecution(ctx, request)
+	require.Equal(t, &p.AppendHistoryTimeoutError{Msg: "context canceled"}, err)
+	require.True(t, db.pipelined.rolledBack)
+	require.False(t, db.pipelined.committed)
+	require.False(t, db.sequential.begun)
+}
+
 func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
 	return &p.InternalUpdateWorkflowExecutionRequest{
 		ShardID:     1,
@@ -361,7 +400,7 @@ func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
 
 func newFakePipelineDB(request *p.InternalUpdateWorkflowExecutionRequest) *fakePipelineDB {
 	return &fakePipelineDB{
-		pipelined:  &fakeUpdateTx{request: request},
+		pipelined:  &fakePipelinedTx{fakeUpdateTx: &fakeUpdateTx{request: request}},
 		sequential: &fakeUpdateTx{request: request},
 	}
 }
@@ -407,7 +446,10 @@ func (t *fakeUpdateTx) ReadLockShards(context.Context, sqlplugin.ShardsFilter) (
 	return t.request.RangeID, nil
 }
 
-func (t *fakeUpdateTx) ReadLockShardsWithRangeID(context.Context, sqlplugin.ShardsFilter, int64) error {
+func (t *fakePipelinedTx) ReadLockShardsWithRangeID(context.Context, sqlplugin.ShardsFilter, int64) error {
+	if t.cancelRecording != nil {
+		t.cancelRecording()
+	}
 	return nil
 }
 
@@ -420,12 +462,12 @@ func (t *fakeUpdateTx) LockCurrentExecutions(context.Context, sqlplugin.CurrentE
 	}, nil
 }
 
-func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(_ context.Context, filter sqlplugin.CurrentExecutionsFilter) error {
+func (t *fakePipelinedTx) LockCurrentExecutionsWithRunID(_ context.Context, filter sqlplugin.CurrentExecutionsFilter) error {
 	t.lockedCurrent = &filter
-	return nil
+	return t.lockCurrentErr
 }
 
-func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(_ context.Context, row *sqlplugin.CurrentExecutionsRow) error {
+func (t *fakePipelinedTx) UpdateCurrentExecutionsIfChanged(_ context.Context, row *sqlplugin.CurrentExecutionsRow) error {
 	t.updatedCurrent = row
 	return nil
 }

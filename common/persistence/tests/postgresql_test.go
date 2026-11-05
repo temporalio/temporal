@@ -62,7 +62,8 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 	}
 	defer func() { _ = db.Close() }()
 	var beginTxCount func() int64
-	if p.pluginName == "postgres12_pgx" {
+	// Simple protocol runs every update sequentially.
+	if p.pluginName == "postgres12_pgx" && p.connectAttrs["default_query_exec_mode"] != "simple_protocol" {
 		counter := &beginTxCounter{DB: db}
 		executionStore, err = sql.NewSQLExecutionStore(&sql.DbConn{DB: counter}, testData.Logger, serialization.NewSerializer())
 		if err != nil {
@@ -490,6 +491,11 @@ func (p *PostgreSQLSuite) TestPostgreSQLPipelineSuite() {
 		_ = store.Close()
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
+	if p.connectAttrs["default_query_exec_mode"] == "simple_protocol" {
+		_, err := store.(sqlplugin.TxPipeliner).BeginPipelinedTx(context.Background())
+		p.Require().ErrorIs(err, sqlplugin.ErrPipelineUnsupported)
+		return
+	}
 
 	s := sqltests.NewPipelineSuite(p.T(), store, admin)
 	suite.Run(p.T(), s)

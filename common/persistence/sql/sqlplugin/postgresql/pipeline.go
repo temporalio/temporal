@@ -49,7 +49,8 @@ var (
 )
 
 // BeginPipelinedTx takes the connection Commit sends the batch on from the pool.
-// It returns ErrPipelineUnsupported unless that is a pgx connection.
+// It returns ErrPipelineUnsupported unless that is a pgx connection in extended
+// protocol.
 func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
 	sqlDB, err := pdb.handle.DB()
 	if err != nil {
@@ -63,8 +64,11 @@ func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, err
 		return nil, pdb.handle.ConvertError(err)
 	}
 	err = conn.Raw(func(driverConn any) error {
-		// A custom SQL.Connect can return another driver's connections.
-		if _, ok := driverConn.(*stdlib.Conn); !ok {
+		// A custom SQL.Connect can return another driver's connections. Simple
+		// protocol sends the batch as one query, which Postgres logs whole, values
+		// included, when a check fails.
+		pgxConn, ok := driverConn.(*stdlib.Conn)
+		if !ok || pgxConn.Conn().Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol {
 			return sqlplugin.ErrPipelineUnsupported
 		}
 		return nil
@@ -229,16 +233,11 @@ func (p *pipeline) sendOnConn() error {
 // retry. An error after every statement succeeded comes from the commit, which
 // may have happened. A check statement fails with a division by zero, which send
 // wraps in the statement's checkErr.
-//
-// In simple protocol the batch is one multi-statement query, and Postgres
-// reports a commit error as the last statement's result. A trailing statement
-// that cannot fail on its own keeps that error apart from the statements'.
 func (p *pipeline) send(conn *pgx.Conn) (notWritten bool, err error) {
 	batch := &pgx.Batch{}
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
 	}
-	batch.Queue("SELECT 1")
 	results := conn.SendBatch(p.ctx, batch)
 	for _, s := range p.statements {
 		if _, err := results.Exec(); err != nil {
@@ -250,10 +249,6 @@ func (p *pipeline) send(conn *pgx.Conn) (notWritten bool, err error) {
 			}
 			return notWritten, err
 		}
-	}
-	if _, err := results.Exec(); err != nil {
-		_ = results.Close()
-		return false, err
 	}
 	return false, results.Close()
 }

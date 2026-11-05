@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/primitives"
 )
 
 // expectingTx answers the row counts that applyWorkflowMutationTx checks with
@@ -61,7 +60,15 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 		if rollBackErr := tx.Rollback(); rollBackErr != nil {
 			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
-		return true, err
+		return true, convertTxError("UpdateWorkflowExecution", err)
+	}
+	// A context that ended during recording sends nothing at Commit, so with new
+	// events return the error Begin returns for it.
+	if err := ctx.Err(); err != nil && len(newEvents) > 0 {
+		if rollBackErr := tx.Rollback(); rollBackErr != nil {
+			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+		}
+		return true, &p.AppendHistoryTimeoutError{Msg: err.Error()}
 	}
 	if err := tx.Commit(); err != nil {
 		return true, pipelinedCommitError(request.ShardID, err)
@@ -105,29 +112,10 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 			return err
 		}
 	}
-	if err := tx.ReadLockShardsWithRangeID(ctx, sqlplugin.ShardsFilter{ShardID: request.ShardID}, request.RangeID); err != nil {
+	if err := readLockShard(ctx, tx, request.ShardID, request.RangeID); err != nil {
 		return err
 	}
-	if request.Mode == p.UpdateWorkflowModeUpdateCurrent {
-		row, err := buildCurrentExecutionRow(request)
-		if err != nil {
-			return err
-		}
-		err = tx.LockCurrentExecutionsWithRunID(ctx, sqlplugin.CurrentExecutionsFilter{
-			ShardID:     row.ShardID,
-			NamespaceID: row.NamespaceID,
-			WorkflowID:  row.WorkflowID,
-			RunID:       primitives.MustParseUUID(request.UpdateWorkflowMutation.ExecutionState.RunId),
-			ArchetypeID: row.ArchetypeID,
-		})
-		if err != nil {
-			return err
-		}
-		if err := tx.UpdateCurrentExecutionsIfChanged(ctx, &row); err != nil {
-			return err
-		}
-	}
-	return m.applyWorkflowMutationTx(ctx, &expectingTx{PipelinedTx: tx}, request.ShardID, &request.UpdateWorkflowMutation)
+	return m.updateWorkflowExecutionTx(ctx, &expectingTx{PipelinedTx: tx}, request)
 }
 
 func (t *expectingTx) UpdateExecutionsWithCondition(ctx context.Context, update *sqlplugin.ExecutionsUpdate) (sql.Result, error) {

@@ -24,7 +24,7 @@ const (
       OR (CAST(:db_record_version AS BIGINT) = 0 AND next_event_id = :condition))`
 	// updateExecutionWithConditionOrRejectQuery divides by the updated row count,
 	// so a condition mismatch fails the statement.
-	updateExecutionWithConditionOrRejectQuery = `WITH updated AS (` + updateExecutionWithConditionQuery + `
+	updateExecutionWithConditionOrRejectQuery = `/* fails when the execution does not match the condition */ WITH updated AS (` + updateExecutionWithConditionQuery + `
  RETURNING 1) SELECT 1/count(*) FROM updated`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
@@ -40,7 +40,7 @@ const (
 	readLockExecutionQuery  = lockExecutionQueryBase + ` FOR SHARE`
 	// writeLockExecutionExistsQuery divides by the matching row count, so a missing
 	// execution fails the statement.
-	writeLockExecutionExistsQuery = `SELECT 1/count(*) FROM (` + writeLockExecutionQuery + `) AS e`
+	writeLockExecutionExistsQuery = `/* fails when the execution does not exist */ SELECT 1/count(*) FROM (` + writeLockExecutionQuery + `) AS e`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
 (shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
@@ -74,10 +74,10 @@ WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.business_id = $3 AND ce.a
 	lockCurrentChasmExecutionQuery = getCurrentChasmExecutionQuery + ` FOR UPDATE`
 	// The Exists and WithRunID queries divide by the matching row count, so a
 	// missing current execution or a run ID mismatch fails the statement.
-	lockCurrentExecutionExistsQuery         = `SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c`
-	lockCurrentChasmExecutionExistsQuery    = `SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c`
-	lockCurrentExecutionWithRunIDQuery      = `SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c WHERE run_id = $4`
-	lockCurrentChasmExecutionWithRunIDQuery = `SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c WHERE run_id = $5`
+	lockCurrentExecutionExistsQuery         = `/* fails when the current execution does not exist */ SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c`
+	lockCurrentChasmExecutionExistsQuery    = `/* fails when the current execution does not exist */ SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c`
+	lockCurrentExecutionWithRunIDQuery      = `/* fails when the current execution has another run ID */ SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c WHERE run_id = $4`
+	lockCurrentChasmExecutionWithRunIDQuery = `/* fails when the current execution has another run ID */ SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c WHERE run_id = $5`
 
 	updateCurrentExecutionsColumns = `(run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding)`
 	updateCurrentExecutionsValues  = `(:run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`

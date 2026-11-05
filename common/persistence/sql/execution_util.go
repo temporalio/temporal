@@ -947,11 +947,24 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	serializer serialization.Serializer,
 ) error {
+	if pipelinedTx, ok := tx.(sqlplugin.PipelinedTx); ok {
+		// A pipelined transaction checks only the run ID, in SQL. A check on another
+		// field of currentRow needs a SQL counterpart here.
+		err := pipelinedTx.LockCurrentExecutionsWithRunID(ctx, sqlplugin.CurrentExecutionsFilter{
+			ShardID:     row.ShardID,
+			NamespaceID: row.NamespaceID,
+			WorkflowID:  row.WorkflowID,
+			RunID:       previousRunID,
+			ArchetypeID: row.ArchetypeID,
+		})
+		if err != nil {
+			return err
+		}
+		return pipelinedTx.UpdateCurrentExecutionsIfChanged(ctx, &row)
+	}
 	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
-		// The pipelined update (execution_pipeline.go) checks only the run ID, in
-		// SQL. A check on another field of currentRow needs a SQL counterpart there.
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
 			if err != nil {
