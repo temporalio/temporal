@@ -50,7 +50,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 
 	allSubqueuesEmpty := true
 	for subqueue := 0; subqueue < state.subqueues; subqueue++ {
-		for nProcessed < maxTasksPerJob {
+		for nDeleted < maxTasksPerJob {
 			resp, err1 := s.getTasks(s.lifecycleCtx, key, subqueue, taskBatchSize)
 			if err1 != nil {
 				err = err1
@@ -89,7 +89,10 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 				break
 			}
 		}
-		if nProcessed >= maxTasksPerJob {
+		if nDeleted >= maxTasksPerJob {
+			// The budget is charged for deletions, not inspections: deferring
+			// after inspecting tasks without deleting any would restart the scan
+			// at subqueue 0 on the next run and never reach the later subqueues.
 			return handlerStatusDefer
 		}
 	}
