@@ -56,7 +56,8 @@ type simplePartitionScaler struct {
 	ts                        clock.TimeSource
 	logger                    log.Logger
 	metricsHandler            metrics.Handler
-	trackers                  map[time.Duration]*taskTracker
+	upTrackers                map[time.Duration]*taskTracker
+	downTrackers              map[time.Duration]*taskTracker
 	lastLoggedTargetBeforeMax int
 	lastCall                  time.Time
 }
@@ -74,16 +75,17 @@ func newSimplePartitionScaler(
 		ts:             ts,
 		logger:         logger,
 		metricsHandler: metricsHandler,
-		trackers:       make(map[time.Duration]*taskTracker),
+		upTrackers:     make(map[time.Duration]*taskTracker),
+		downTrackers:   make(map[time.Duration]*taskTracker),
 	}
 }
 
-func (s *simplePartitionScaler) getTracker(interval time.Duration) *taskTracker {
-	if t, ok := s.trackers[interval]; ok {
+func (s *simplePartitionScaler) getTracker(trackers map[time.Duration]*taskTracker, interval time.Duration) *taskTracker {
+	if t, ok := trackers[interval]; ok {
 		return t
 	}
 	t := newTaskTracker(s.ts, interval/simplePartitionScalerTrackerBuckets, interval)
-	s.trackers[interval] = t
+	trackers[interval] = t
 	return t
 }
 
@@ -125,15 +127,18 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 
 	// init trackers in use
 	for _, down := range cfg.Downs {
-		_ = s.getTracker(down.Window)
+		_ = s.getTracker(s.downTrackers, down.Window)
 	}
 	for _, up := range cfg.Ups {
-		_ = s.getTracker(up.Window)
+		_ = s.getTracker(s.upTrackers, up.Window)
 	}
 
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
-	for _, t := range s.trackers {
+	for _, t := range s.upTrackers {
+		t.incOver(in.NumTasks, prevCall)
+	}
+	for _, t := range s.downTrackers {
 		t.incOver(in.NumTasks, prevCall)
 	}
 
@@ -207,19 +212,21 @@ func (w windowRate) String() string {
 }
 
 // updateAddTarget returns the new add target, a description of which window determined it
-// (for logging), and whether all windows were full.
+// (for logging), and whether all Ups windows were full.
 func (s *simplePartitionScaler) updateAddTarget(
 	cfg dynamicconfig.SimplePartitionScalerSettings,
-	target int,
+	prevTarget int,
 ) (int, string, bool) {
+	target := prevTarget
 	// decider is the window that moved the target. if no window moved it, closestDown and
 	// closestUp are the windows nearest to moving it, i.e. what held it in place.
 	var decider, closestDown, closestUp windowRate
 
 	for i, down := range cfg.Downs {
-		rate, full := s.getTracker(down.Window).rateAndFull()
+		rate, full := s.getTracker(s.downTrackers, down.Window).rateAndFull()
 		if !full {
-			return 0, "", false
+			// A decrease requires a full window of data since the last increase or since startup.
+			continue
 		}
 		// decrease target so that each partition is ~= target rate
 		wr := windowRate{kind: "downs", index: i, window: down.Window, rate: rate,
@@ -233,7 +240,7 @@ func (s *simplePartitionScaler) updateAddTarget(
 	}
 
 	for i, up := range cfg.Ups {
-		rate, full := s.getTracker(up.Window).rateAndFull()
+		rate, full := s.getTracker(s.upTrackers, up.Window).rateAndFull()
 		if !full {
 			return 0, "", false
 		}
@@ -253,6 +260,14 @@ func (s *simplePartitionScaler) updateAddTarget(
 		target = 1
 		if decider.kind == "" && closestDown.kind == "" && closestUp.kind == "" {
 			return target, "no rate windows, floor of 1", true
+		}
+	}
+
+	if prevTarget > 0 && target > prevTarget {
+		// Down windows include load from before this increase, so they would immediately
+		// pull the target back down. Restart them so a decrease needs a full window of new data.
+		for _, t := range s.downTrackers {
+			t.clear()
 		}
 	}
 

@@ -302,8 +302,14 @@ type NamespaceMutation struct {
 	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
 	// Required for shadow mutations and preserved unchanged through peer delivery.
 	ShadowLegacyTaskPayload []byte `protobuf:"bytes,7,opt,name=shadow_legacy_task_payload,json=shadowLegacyTaskPayload,proto3" json:"shadow_legacy_task_payload,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Replicate-only preserves the legacy no-op UpdateNamespace behavior: the
+	// source snapshot is already authoritative, so do not rewrite it, consume a
+	// notification-version CAS slot, or emit a namespace-updated lifecycle event.
+	// Peer applies remain authoritative. This is deliberately distinct from
+	// shadow, which suppresses writes in both the source and destination cells.
+	ReplicateOnly bool `protobuf:"varint,8,opt,name=replicate_only,json=replicateOnly,proto3" json:"replicate_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NamespaceMutation) Reset() {
@@ -383,6 +389,13 @@ func (x *NamespaceMutation) GetShadowLegacyTaskPayload() []byte {
 		return x.ShadowLegacyTaskPayload
 	}
 	return nil
+}
+
+func (x *NamespaceMutation) GetReplicateOnly() bool {
+	if x != nil {
+		return x.ReplicateOnly
+	}
+	return false
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -653,7 +666,7 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto p
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\x92\x03\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xb9\x03\n" +
 	"\x11NamespaceMutation\x12N\n" +
 	"\toperation\x18\x01 \x01(\x0e20.temporal.server.api.enums.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
@@ -662,7 +675,8 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12.\n" +
 	"\x13is_global_namespace\x18\x05 \x01(\bR\x11isGlobalNamespace\x12\x16\n" +
 	"\x06shadow\x18\x06 \x01(\bR\x06shadow\x12;\n" +
-	"\x1ashadow_legacy_task_payload\x18\a \x01(\fR\x17shadowLegacyTaskPayload\"\x91\x05\n" +
+	"\x1ashadow_legacy_task_payload\x18\a \x01(\fR\x17shadowLegacyTaskPayload\x12%\n" +
+	"\x0ereplicate_only\x18\b \x01(\bR\rreplicateOnly\"\x91\x05\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +
