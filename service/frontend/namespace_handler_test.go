@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -119,6 +120,8 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -692,7 +695,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
-	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.False(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
@@ -713,7 +716,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
-	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
@@ -731,7 +734,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
-	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)

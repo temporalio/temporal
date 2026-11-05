@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,7 +23,8 @@ var TransitionScheduled = chasm.NewTransition(
 		o.Attempt++
 		// Emit an invocation task to start the operation.
 		// The destination is the endpoint name, which routes the task to the correct outbound queue.
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		// System endpoint tasks have no destination and are scheduled on the transfer queue.
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -94,7 +96,7 @@ var transitionRescheduled = chasm.NewTransition(
 		o.NextAttemptScheduleTime = nil
 
 		// Emit a new invocation task for the retry attempt
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -201,7 +203,7 @@ var TransitionSucceeded = chasm.NewTransition(
 
 		o.emitOnSucceededMetrics(ctx, closeTime)
 		// Schedule the SANO's completion callbacks.
-		return o.scheduleCompletionCallbacks(ctx)
+		return callback.ScheduleCompletionCallbacks(ctx, o)
 	},
 )
 

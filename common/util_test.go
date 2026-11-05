@@ -3,12 +3,14 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -20,7 +22,10 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protopack"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestIsContextDeadlineExceededErr(t *testing.T) {
@@ -647,4 +652,132 @@ func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 
 	// ensure the original request object is unmodified
 	require.Equal(t, startRequestClone, startRequest)
+}
+
+func TestGrantEagerDispatchWithoutClient(t *testing.T) {
+	require.False(t, GrantEagerDispatch(
+		context.Background(),
+		nil,
+		"namespace-id",
+		"task-queue",
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		nil,
+		nil,
+	))
+}
+
+func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testing.T) {
+	state := &commonpb.TimeSkippingStatePropagation{
+		InitialSkippedDuration: durationpb.New(2 * time.Hour),
+	}
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                    uuid.NewString(),
+		WorkflowId:                   uuid.NewString(),
+		TimeSkippingStatePropagation: state,
+	}
+
+	historyRequest := CreateHistoryStartWorkflowRequest(
+		startRequest.Namespace,
+		startRequest,
+		nil,
+		nil,
+		time.Now(),
+	)
+
+	require.Equal(t, state, historyRequest.GetTimeSkippingStatePropagation())
+}
+
+// statusOnlyError implements the older Status() convention that GetRPCStatus
+// checks for with a direct type assertion, rather than the canonical
+// GRPCStatus() that status.FromError looks for through errors.As.
+type statusOnlyError struct{ st *status.Status }
+
+func (e *statusOnlyError) Error() string          { return e.st.Message() }
+func (e *statusOnlyError) Status() *status.Status { return e.st }
+
+// GetRPCStatus handles two status conventions, and handles them differently.
+// The canonical GRPCStatus() is found by status.FromError through errors.As,
+// so it is found on a wrapped error too. The older Status() is matched with a
+// direct type assertion, so it is found only on a bare error: wrapped, it is
+// not recognized as a gRPC error at all.
+//
+// IsRetryableRPCError inherits both behaviours, and an unrecognized error is
+// not retryable. Nexus operation retryability is decided from it
+// (chasm/lib/nexusoperation, hsm/nexusoperations), which is why both callers
+// unwrap before they call. The cases below cover each convention bare and
+// wrapped, so a change to either path shows up here.
+func TestGetRPCStatusWrapping(t *testing.T) {
+	unavailable := status.New(codes.Unavailable, "down")
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		wantOK   bool
+		wantCode codes.Code
+	}{
+		{
+			name:     "bare status error",
+			err:      unavailable.Err(),
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			// status.FromError finds a GRPCStatus() method through errors.As.
+			name:     "wrapped status error is unwrapped",
+			err:      fmt.Errorf("calling handler: %w", unavailable.Err()),
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			name:     "bare Status() error",
+			err:      &statusOnlyError{st: unavailable},
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			// The Status() convention is matched by a direct type assertion,
+			// so wrapping hides it, and status.FromError does not look for it.
+			name:   "wrapped Status() error is not unwrapped",
+			err:    fmt.Errorf("calling handler: %w", &statusOnlyError{st: unavailable}),
+			wantOK: false,
+		},
+		{
+			name:   "not a gRPC error",
+			err:    errors.New("plain"),
+			wantOK: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, ok := GetRPCStatus(tc.err)
+			require.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				require.Equal(t, tc.wantCode, st.Code())
+			}
+		})
+	}
+}
+
+func TestIsRetryableRPCErrorWrapping(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"bare retryable status", status.Error(codes.Unavailable, "down"), true},
+		{"wrapped retryable status", fmt.Errorf("calling handler: %w", status.Error(codes.Unavailable, "down")), true},
+		{"bare non-retryable status", status.Error(codes.InvalidArgument, "bad"), false},
+		{"wrapped non-retryable status", fmt.Errorf("calling handler: %w", status.Error(codes.InvalidArgument, "bad")), false},
+		{"bare Status() error", &statusOnlyError{st: status.New(codes.Unavailable, "down")}, true},
+		// Hidden by the wrapper, so it is not a gRPC error as far as this is
+		// concerned, and an unrecognized error is not retryable.
+		{"wrapped Status() error", fmt.Errorf("calling handler: %w", &statusOnlyError{st: status.New(codes.Unavailable, "down")}), false},
+		{"not a gRPC error", errors.New("plain"), false},
+		// status.FromError(nil) reports ok with a nil status, whose Code() is
+		// OK. Worth pinning: it reads like it could panic.
+		{"nil", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, IsRetryableRPCError(tc.err))
+		})
+	}
 }

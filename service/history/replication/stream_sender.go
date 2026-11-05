@@ -599,9 +599,6 @@ Loop:
 						workflowLockPriority = locks.PriorityHigh
 					}
 				}
-				// Wrap as convertError so isSkippable can tell "the task could not be built"
-				// (its source info is corrupt/unusable) apart from transient send/rate-limit
-				// failures, which must not be skipped.
 				return s.recordRetry(
 					item,
 					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
@@ -698,16 +695,8 @@ Loop:
 				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 				metrics.ReplicationTaskPriorityTag(priority),
 			)
-			// Only skip a task that could not be *built* after exhausting retries (isSkippable):
-			// its source info is corrupt/unusable, so retrying or reconnecting will never make it
-			// send. Transient send/rate-limit failures are NOT skipped (dropping a task that would
-			// have succeeded on reconnect is silent data loss), and infra/teardown errors
-			// (shard-ownership-lost, stream error, context canceled) must still tear the stream
-			// down so shard handoff / reconnect can proceed. Deterministic non-retryable failures
-			// such as an oversized gRPC message are also intentionally NOT handled here: they
-			// surface from the send path as a (non-retryable) StreamError, are left to the
-			// transport-layer message-size fix, and remain observable via the throttled skip log
-			// and the ReplicationTaskSendSkipped metric.
+			// Retry exhaustion alone does not establish that a task is unbuildable.
+			// Only explicitly identified task conversion failures may advance the watermark.
 			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
 				s.recordStuckTaskSkipped(item, attempt, priority, err)
 				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
@@ -921,9 +910,7 @@ func (s *StreamSenderImpl) recordStuckTaskSkipped(
 	}
 }
 
-// convertError marks a failure to build ("convert") a replication task from its source task info.
-// Such a task cannot be re-sent as-is, so — unlike a transient send or rate-limit failure — it is a
-// candidate to skip when ReplicationStreamSenderSkipStuckTask is enabled. See isSkippable.
+// convertError identifies the failed stage without classifying its cause as permanent.
 type convertError struct {
 	err error
 }
@@ -931,18 +918,15 @@ type convertError struct {
 func (e *convertError) Error() string { return e.err.Error() }
 func (e *convertError) Unwrap() error { return e.err }
 
-// isSkippable reports whether a task that failed to send after exhausting its retry budget may be
-// safely skipped (dropped, with the watermark advanced past it) instead of wedging the stream. We
-// skip only when BOTH hold:
-//   - the task could not be built (convertError): its source info is corrupt/unusable, so retrying
-//     or reconnecting will never make it send; and
-//   - the underlying error is otherwise retryable: infra/teardown errors (shard-ownership-lost,
-//     stream error, context canceled) can also surface from the convert step, and those must still
-//     tear the stream down so shard handoff / reconnect can proceed.
-//
-// Transient send and rate-limit failures are deliberately excluded (they are not convertErrors):
-// dropping a task that would have succeeded on reconnect would be silent data loss.
+// isSkippable allows only identified conversion failures after retries are exhausted.
 func isSkippable(err error) bool {
-	var convErr *convertError
-	return errors.As(err, &convErr) && isRetryableError(err)
+	convErr, ok := errors.AsType[*convertError](err)
+	if !ok || !isRetryableError(err) {
+		return false
+	}
+	if unbuildable, ok := errors.AsType[*unbuildableTaskError](convErr.err); ok {
+		_, internal := errors.AsType[*serviceerror.Internal](unbuildable.err)
+		return internal
+	}
+	return errors.Is(convErr.err, errUnknownReplicationTask)
 }

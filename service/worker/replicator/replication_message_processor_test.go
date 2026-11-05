@@ -217,10 +217,11 @@ func TestHandleTaskQueueUserDataDLQEmitsTerminalOutcome(t *testing.T) {
 			TaskQueueName: "task-queue",
 		},
 	}
-	ns := namespace.NewLocalNamespaceForTest(
+	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
 		nil,
-		"cluster-b",
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
 	)
 	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
 	matchingClient.EXPECT().ApplyTaskQueueUserDataReplicationEvent(gomock.Any(), gomock.Any()).
@@ -260,10 +261,11 @@ func TestHandleTaskQueueUserDataAppliedOutcome(t *testing.T) {
 			TaskQueueName: "task-queue",
 		},
 	}
-	ns := namespace.NewLocalNamespaceForTest(
+	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
 		nil,
-		"cluster-b",
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"cluster-a", "cluster-b"}},
+		0,
 	)
 	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil).Times(2)
 	gomock.InOrder(
@@ -305,6 +307,37 @@ func TestHandleTaskQueueUserDataNotAdmittedOutcome(t *testing.T) {
 	require.Len(t, outcomes, 1)
 	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
 	require.Len(t, capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyEndToEndLatency.Name()], 1)
+}
+
+func TestHandleTaskQueueUserDataLocalNamespaceNotAdmitted(t *testing.T) {
+	p, task, _, _, _ := newReplicationEventTestProcessor(t, false, 1)
+	controller := gomock.NewController(t)
+	registry := namespace.NewMockRegistry(controller)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.applyOutcomeMetricsHandler = metricsHandler
+	p.namespaceRegistry = registry
+	task.TaskType = enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA
+	task.Attributes = &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+		TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+			NamespaceId:   "namespace-id",
+			TaskQueueName: "task-queue",
+		},
+	}
+	registry.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
+		namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+			nil,
+			"cluster-b",
+		),
+		nil,
+	)
+
+	p.handleReplicationTasks()
+
+	outcomes := capture.Snapshot()[metrics.TaskQueueUserDataReplicationApplyOutcomes.Name()]
+	require.Len(t, outcomes, 1)
+	require.Equal(t, taskQueueUserDataMetricsOutcomeNotAdmitted, outcomes[0].Tags[metrics.OutcomeTag("").Key])
 }
 
 func TestHandleNamespaceReplicationTaskEventsDisabled(t *testing.T) {

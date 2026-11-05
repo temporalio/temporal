@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
@@ -30,6 +32,113 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestNamespaceReplicationCreatesCompleteSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []enumsspb.NamespaceOperation{
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+	} {
+		t.Run(operation.String(), func(t *testing.T) {
+			t.Parallel()
+			modifiedAt := timestamppb.New(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+			task := &replicationspb.NamespaceTaskAttributes{
+				NamespaceOperation: operation,
+				Id:                 "namespace-id",
+				Info: &namespacepb.NamespaceInfo{
+					Name:        "payments",
+					State:       enumspb.NAMESPACE_STATE_REGISTERED,
+					Description: "payment workflows",
+					OwnerEmail:  "payments@example.com",
+					Data:        map[string]string{"team": "payments"},
+				},
+				Config: &namespacepb.NamespaceConfig{
+					WorkflowExecutionRetentionTtl: durationpb.New(72 * time.Hour),
+					HistoryArchivalState:          enumspb.ARCHIVAL_STATE_ENABLED,
+					HistoryArchivalUri:            "s3://history/payments",
+					VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_ENABLED,
+					VisibilityArchivalUri:         "s3://visibility/payments",
+					CustomSearchAttributeAliases:  map[string]string{"Keyword01": "PaymentId"},
+					BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+						"bad-checksum": {Reason: "incorrect payment processing", Operator: "oncall", CreateTime: modifiedAt},
+					}},
+				},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+					ActiveClusterName: "active",
+					Clusters:          []*replicationpb.ClusterReplicationConfig{{ClusterName: "active"}, {ClusterName: "standby"}},
+					State:             enumspb.REPLICATION_STATE_HANDOVER,
+				},
+				ConfigVersion:   2,
+				FailoverVersion: 11,
+				FailoverHistory: []*replicationpb.FailoverStatus{{FailoverTime: modifiedAt, FailoverVersion: 11}},
+			}
+			expected := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:          "namespace-id",
+					Name:        "payments",
+					State:       enumspb.NAMESPACE_STATE_REGISTERED,
+					Description: "payment workflows",
+					Owner:       "payments@example.com",
+					Data:        map[string]string{"team": "payments"},
+				},
+				Config: &persistencespb.NamespaceConfig{
+					Retention:                    durationpb.New(72 * time.Hour),
+					HistoryArchivalState:         enumspb.ARCHIVAL_STATE_ENABLED,
+					HistoryArchivalUri:           "s3://history/payments",
+					VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_ENABLED,
+					VisibilityArchivalUri:        "s3://visibility/payments",
+					CustomSearchAttributeAliases: map[string]string{"Keyword01": "PaymentId"},
+					BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
+						"bad-checksum": {Reason: "incorrect payment processing", Operator: "oncall", CreateTime: modifiedAt},
+					}},
+				},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "active",
+					Clusters:          []string{"active", "standby"},
+					State:             enumspb.REPLICATION_STATE_HANDOVER,
+					FailoverHistory:   []*persistencespb.FailoverStatus{{FailoverTime: modifiedAt, FailoverVersion: 11}},
+				},
+				ConfigVersion:   2,
+				FailoverVersion: 11,
+			}
+			metadata := persistence.NewMockMetadataManager(gomock.NewController(t))
+			var stored *persistencespb.NamespaceDetail
+			metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+					if stored == nil {
+						return nil, serviceerror.NewNamespaceNotFound("payments")
+					}
+					return &persistence.GetNamespaceResponse{
+						Namespace: proto.Clone(stored).(*persistencespb.NamespaceDetail), IsGlobalNamespace: true,
+					}, nil
+				}).AnyTimes()
+			metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 10}, nil).AnyTimes()
+			metadata.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+					if stored != nil {
+						return nil, serviceerror.NewNamespaceAlreadyExists("payments")
+					}
+					require.True(t, request.IsGlobalNamespace)
+					stored = proto.Clone(request.Namespace).(*persistencespb.NamespaceDetail)
+					return &persistence.CreateNamespaceResponse{ID: "namespace-id"}, nil
+				}).AnyTimes()
+			executor := NewTaskExecutor("standby", metadata, NewNoopDataMerger(), NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{})
+			require.NoError(t, executor.Execute(t.Context(), task))
+			protorequire.ProtoEqual(t, expected, stored)
+
+			require.NoError(t, executor.Execute(t.Context(), task))
+			protorequire.ProtoEqual(t, expected, stored)
+
+			// A delayed older CREATE must not replace the newer snapshot.
+			olderCreate := proto.Clone(task).(*replicationspb.NamespaceTaskAttributes)
+			olderCreate.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
+			olderCreate.ConfigVersion = 1
+			olderCreate.Config.BadBinaries = nil
+			require.NoError(t, executor.Execute(t.Context(), olderCreate))
+			protorequire.ProtoEqual(t, expected, stored)
+		})
+	}
+}
 
 type (
 	namespaceDataMergerFunc func(
@@ -309,7 +418,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			Info: &persistencespb.NamespaceInfo{
 				Id: nsID,
 			},
-		}}, nil
+		}, IsGlobalNamespace: true}, nil
 	}).Times(2)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err = s.namespaceReplicator.Execute(context.Background(), task)
@@ -421,8 +530,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
@@ -462,7 +572,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Info: &persistencespb.NamespaceInfo{
 			Id: id,
 		},
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id,
 	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
@@ -471,8 +581,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeDuplicate, outcome)
 	s.requireMetricOutcome(metricsOutcomeNoChange, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeDuplicate))
 }
@@ -496,10 +607,43 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateLocalNamespaceTask_NotAdmitted() {
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:                 uuid.NewString(),
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+		Info: &namespacepb.NamespaceInfo{
+			Name:  uuid.NewString(),
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config: &namespacepb.NamespaceConfig{},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: s.namespaceReplicator.currentCluster},
+			},
+		},
+		ConfigVersion:   1,
+		FailoverVersion: 1,
+	}
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: task.GetInfo().GetName(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{Id: task.GetId()},
+		},
+		IsGlobalNamespace: false,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	s.Require().NoError(err)
+	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationUpdate)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
@@ -583,8 +727,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask, MutationApplyOptions{})
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
 	s.Equal("12", request["namespace"].(map[string]any)["config_version"])
@@ -664,7 +809,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 				},
 			},
 		},
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
@@ -694,7 +839,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			FailoverNotificationVersion: updateFailoverVersion,
 			FailoverVersion:             updateFailoverVersion,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: updateFailoverVersion,
 	}))
 	err := s.namespaceReplicator.Execute(s.replicationEventContext(updateTask), updateTask)
@@ -769,7 +914,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		FailoverVersion:   updateFailoverVersion + 1,
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
@@ -797,7 +942,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             updateFailoverVersion + 1,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: updateFailoverVersion,
 	}))
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
@@ -863,7 +1008,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		ConfigVersion:     updateConfigVersion + 1,
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
@@ -879,7 +1024,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			FailoverNotificationVersion: updateFailoverVersion,
 			FailoverVersion:             updateFailoverVersion,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: updateFailoverVersion,
 	}))
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
@@ -956,7 +1101,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		ConfigVersion:     updateConfigVersion + 1,
 		FailoverVersion:   updateFailoverVersion + 1,
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
@@ -1016,7 +1161,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		ConfigVersion:   existingConfigVersion,
 		FailoverVersion: existingFailoverVersion,
-	}}, nil).Times(2)
+	}, IsGlobalNamespace: true}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
@@ -1031,7 +1176,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			FailoverNotificationVersion: updateFailoverVersion,
 			FailoverVersion:             updateFailoverVersion,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: updateFailoverVersion,
 	}))
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)

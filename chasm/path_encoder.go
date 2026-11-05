@@ -130,3 +130,7 @@ func (e *defaultPathEncoder) Decode(
 	path = append(path, b.String())
 	return path, nil
 }
+
+func isRootPath(path []string) bool {
+	return len(path) == 0
+}

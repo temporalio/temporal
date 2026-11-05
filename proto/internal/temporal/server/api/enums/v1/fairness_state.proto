@@ -4,7 +4,10 @@ package temporal.server.api.enums.v1;
 
 option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
+// Deprecated. Retained for compatibility with older servers during rolling upgrades.
 enum FairnessState {
+  option deprecated = true;
+
   FAIRNESS_STATE_UNSPECIFIED = 0;
   FAIRNESS_STATE_V0 = 1;
   FAIRNESS_STATE_V1 = 2;

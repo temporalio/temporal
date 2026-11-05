@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -111,6 +112,8 @@ func TestCherryPick(t *testing.T) {
 			nexusoperations.StartedEventDefinition{},
 			nexusoperations.CompletedEventDefinition{},
 			nexusoperations.CancelRequestedEventDefinition{},
+			nexusoperations.CancelRequestCompletedEventDefinition{},
+			nexusoperations.CancelRequestFailedEventDefinition{},
 			nexusoperations.CanceledEventDefinition{},
 			nexusoperations.FailedEventDefinition{},
 			nexusoperations.TimedOutEventDefinition{},
@@ -122,6 +125,80 @@ func TestCherryPick(t *testing.T) {
 			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
 		}
 	})
+
+	for _, tc := range []struct {
+		name      string
+		def       hsm.EventDefinition
+		event     func(scheduledEventID int64) *historypb.HistoryEvent
+		wantState enumspb.NexusOperationCancellationState
+	}{
+		{
+			name: "CancelRequestCompleted",
+			def:  nexusoperations.CancelRequestCompletedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+						},
+					},
+				}
+			},
+			wantState: enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED,
+		},
+		{
+			name: "CancelRequestFailed",
+			def:  nexusoperations.CancelRequestFailedEventDefinition{},
+			event: func(scheduledEventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+						NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							Failure:          &failurepb.Failure{Message: "cancel failed"},
+						},
+					},
+				}
+			},
+			wantState: enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
+		},
+	} {
+		t.Run(tc.name+"WithoutCancelationReportsNotFound", func(t *testing.T) {
+			node, _, eventID := setup(t)
+			err := tc.def.CherryPick(node.Parent, tc.event(eventID), nil)
+			require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+		})
+
+		t.Run(tc.name+"WithCancelationIsCherryPicked", func(t *testing.T) {
+			node, _, eventID := setup(t)
+			require.NoError(t, nexusoperations.CancelRequestedEventDefinition{}.Apply(node.Parent, &historypb.HistoryEvent{
+				EventId: eventID + 1,
+				Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+					NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+						ScheduledEventId: eventID,
+					},
+				},
+			}))
+			// Transition the operation to STARTED so the cancelation gets scheduled.
+			require.NoError(t, nexusoperations.StartedEventDefinition{}.Apply(node.Parent, &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+						ScheduledEventId: eventID,
+						OperationToken:   "token",
+					},
+				},
+			}))
+
+			err := tc.def.CherryPick(node.Parent, tc.event(eventID), nil)
+			require.NoError(t, err)
+
+			op, err := hsm.MachineData[nexusoperations.Operation](node)
+			require.NoError(t, err)
+			cancelation, err := op.Cancelation(node)
+			require.NoError(t, err)
+			require.NotNil(t, cancelation)
+			require.Equal(t, tc.wantState, cancelation.State())
+		})
+	}
 }
 
 func TestTerminalStatesDeletion(t *testing.T) {

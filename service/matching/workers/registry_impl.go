@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -32,11 +33,12 @@ type listWorkersPageToken struct {
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
-		nsID           namespace.ID
-		hb             *workerpb.WorkerHeartbeat
-		lastSeen       time.Time
-		elem           *list.Element
-		isSystemWorker bool
+		nsID                namespace.ID
+		hb                  *workerpb.WorkerHeartbeat
+		lastSeen            time.Time
+		elem                *list.Element
+		isSystemWorker      bool
+		lastMetricsEmitTime time.Time
 	}
 	// nsEntries holds all worker entries for a single namespace.
 	nsEntries struct {
@@ -55,27 +57,35 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets            []*bucket                        // buckets for partitioning the keyspace
-		maxItemsFn         dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
-		ttlFn              dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
-		minEvictAgeFn      dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
-		evictionIntervalFn dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
-		total              atomic.Int64                     // atomic counter of total entries
-		quit               chan struct{}                    // channel to signal shutdown of the eviction loop
-		seed               maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler     metrics.Handler                  // metrics handler for recording registry metrics
-		metricsEmitter     *workerMetricsEmitter            // emitter for heartbeat-derived metrics
+		buckets                    []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn                 dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn                      dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn              dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn         dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total                      atomic.Int64                     // atomic counter of total entries
+		quit                       chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed                       maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler             metrics.Handler                  // metrics handler for recording registry metrics
+		metricsEmitter             *workerMetricsEmitter            // emitter for heartbeat-derived metrics
+		eventLogger                otellog.Logger                   // OTEL logger for wide events
+		enableWorkerConfigEvents   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableWorkerMetricsEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		workerMetricsEventInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets       dynamicconfig.IntPropertyFn
-		TTL              dynamicconfig.DurationPropertyFn
-		MinEvictAge      dynamicconfig.DurationPropertyFn
-		MaxItems         dynamicconfig.IntPropertyFn
-		EvictionInterval dynamicconfig.DurationPropertyFn
-		MetricsHandler   metrics.Handler
-		MetricsConfig    WorkerMetricsConfig
+		NumBuckets                 dynamicconfig.IntPropertyFn
+		TTL                        dynamicconfig.DurationPropertyFn
+		MinEvictAge                dynamicconfig.DurationPropertyFn
+		MaxItems                   dynamicconfig.IntPropertyFn
+		EvictionInterval           dynamicconfig.DurationPropertyFn
+		MetricsHandler             metrics.Handler
+		MetricsConfig              WorkerMetricsConfig
+		EventLogger                otellog.Logger
+		EnableWorkerConfigEvents   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableWorkerMetricsEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		WorkerMetricsEventInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -87,13 +97,21 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns the count of added and removed entries separately.
+// Returns the count of added and removed entries separately, and the heartbeats
+// from workers not previously seen by this registry (first heartbeat from that worker).
+// Also returns heartbeats eligible for metrics event emission.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
-	now := time.Now()
-
+func (b *bucket) upsertHeartbeats(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	principal *commonpb.Principal,
+	heartbeats []*workerpb.WorkerHeartbeat,
+	enableMetricsEvents bool,
+	metricsEventInterval time.Duration,
+) (added int64, removed int64, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor []*workerpb.WorkerHeartbeat) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	now := time.Now()
 
 	ns, ok := b.namespaces[nsID]
 	if !ok {
@@ -118,7 +136,8 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, prin
 		isSystemWorker := isSystemWorker(principal, hb.GetTaskQueue())
 
 		// Normal upsert
-		if e, exists := ns.workers[key]; exists {
+		e, exists := ns.workers[key]
+		if exists {
 			e.hb = hb
 			e.lastSeen = now
 			e.isSystemWorker = isSystemWorker
@@ -133,10 +152,15 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, prin
 			e.elem = b.order.PushBack(e)
 			ns.workers[key] = e
 			added++
+			heartbeatsFromNewWorkers = append(heartbeatsFromNewWorkers, hb)
+		}
+		if enableMetricsEvents && (e.lastMetricsEmitTime.IsZero() || now.Sub(e.lastMetricsEmitTime) >= metricsEventInterval) {
+			e.lastMetricsEmitTime = now
+			heartbeatsToEmitMetricsFor = append(heartbeatsToEmitMetricsFor, hb)
 		}
 	}
 
-	return added, removed
+	return added, removed, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -236,17 +260,22 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:            make([]*bucket, params.NumBuckets()),
-		maxItemsFn:         params.MaxItems,
-		ttlFn:              params.TTL,
-		minEvictAgeFn:      params.MinEvictAge,
-		evictionIntervalFn: params.EvictionInterval,
-		seed:               maphash.MakeSeed(),
-		quit:               make(chan struct{}),
-		metricsHandler:     params.MetricsHandler,
+		buckets:                    make([]*bucket, params.NumBuckets()),
+		maxItemsFn:                 params.MaxItems,
+		ttlFn:                      params.TTL,
+		minEvictAgeFn:              params.MinEvictAge,
+		evictionIntervalFn:         params.EvictionInterval,
+		seed:                       maphash.MakeSeed(),
+		quit:                       make(chan struct{}),
+		metricsHandler:             params.MetricsHandler,
+		eventLogger:                params.EventLogger,
+		enableWorkerConfigEvents:   params.EnableWorkerConfigEvents,
+		enableWorkerMetricsEvents:  params.EnableWorkerMetricsEvents,
+		workerMetricsEventInterval: params.WorkerMetricsEventInterval,
 		metricsEmitter: &workerMetricsEmitter{
-			handler: params.MetricsHandler,
-			config:  params.MetricsConfig,
+			handler:     params.MetricsHandler,
+			config:      params.MetricsConfig,
+			eventLogger: params.EventLogger,
 		},
 	}
 
@@ -271,7 +300,13 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats)
+	enableMetricsEvents := m.enableWorkerMetricsEvents != nil && m.enableWorkerMetricsEvents(nsName.String())
+	var metricsEventInterval time.Duration
+	if enableMetricsEvents {
+		metricsEventInterval = m.workerMetricsEventInterval(nsName.String())
+		enableMetricsEvents = metricsEventInterval > 0
+	}
+	added, removed, heartbeatsFromNewWorkers, heartbeatsToEmitMetricsFor := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, enableMetricsEvents, metricsEventInterval)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -280,6 +315,15 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
 	}
 	m.recordUtilizationMetric()
+	// Emit config events only for newly seen workers, outside the bucket lock.
+	if m.enableWorkerConfigEvents != nil && m.enableWorkerConfigEvents(nsName.String()) {
+		for _, hb := range heartbeatsFromNewWorkers {
+			emitWorkerConfigEvent(m.eventLogger, nsName, hb)
+		}
+	}
+	for _, hb := range heartbeatsToEmitMetricsFor {
+		m.metricsEmitter.emitWorkerMetricsEvent(nsName, hb)
+	}
 }
 
 // recordUtilizationMetric records the overall capacity utilization ratio.

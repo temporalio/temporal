@@ -91,6 +91,10 @@ const (
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
+	taskQueueFamilyBloomFilterOutcomeAccepted      = "accepted"
+	taskQueueFamilyBloomFilterOutcomeFalsePositive = "false_positive"
+	taskQueueFamilyBloomFilterOutcomeRejected      = "rejected"
+
 	errFailedPrecondition   = "FailedPrecondition"
 	errInvalidComputeConfig = "errInvalidComputeConfig"
 
@@ -121,6 +125,11 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
+
+func isMaxTaskQueuesInVersionError(err error) bool {
+	applicationError, ok := errors.AsType[*temporal.ApplicationError](err)
+	return ok && applicationError.Type() == errMaxTaskQueuesInVersionType
+}
 
 var (
 	defaultActivityOptions = workflow.ActivityOptions{
