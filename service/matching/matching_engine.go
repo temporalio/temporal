@@ -555,7 +555,7 @@ func (e *matchingEngineImpl) watchMembership() {
 		// Note that we have to get the next change time before checking ownership, otherwise
 		// we could miss a change in between.
 		for _, p := range partitions {
-			if next := rc.NextRouteChange(p); !next.IsZero() {
+			if next := e.nextRouteChange(p); !next.IsZero() {
 				checks.Add(routeCheck{at: next, partition: p})
 			}
 		}
@@ -609,11 +609,10 @@ func (e *matchingEngineImpl) watchMembership() {
 // watchRouteChange arranges for watchMembership to check ownership of a newly loaded partition
 // if it may change during a gradual membership change.
 func (e *matchingEngineImpl) watchRouteChange(p tqid.Partition) {
-	rc, ok := e.matchingRawClient.(matching.RoutingClient)
-	if !ok || e.config.MembershipUnloadDelay() == 0 {
+	if e.config.MembershipUnloadDelay() == 0 {
 		return
 	}
-	next := rc.NextRouteChange(p)
+	next := e.nextRouteChange(p)
 	if next.IsZero() {
 		return
 	}
@@ -624,6 +623,15 @@ func (e *matchingEngineImpl) watchRouteChange(p tqid.Partition) {
 	case e.routeChecksCh <- struct{}{}:
 	default:
 	}
+}
+
+// nextRouteChange returns the next time that ownership of p may change during a gradual
+// membership change, or the zero time if there is none or the client doesn't support it.
+func (e *matchingEngineImpl) nextRouteChange(p tqid.Partition) time.Time {
+	if rc, ok := e.matchingRawClient.(matching.RouteChangeClient); ok {
+		return rc.NextRouteChange(p)
+	}
+	return time.Time{}
 }
 
 func (e *matchingEngineImpl) getTaskQueuePartitions(maxCount int) (lists []taskQueuePartitionManager) {

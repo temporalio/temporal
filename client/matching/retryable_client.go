@@ -50,7 +50,7 @@ func (c *retryableClient) Route(p tqid.Partition) (string, error) {
 }
 
 func (c *retryableClient) NextRouteChange(p tqid.Partition) time.Time {
-	if rc, ok := c.client.(RoutingClient); ok {
+	if rc, ok := c.client.(RouteChangeClient); ok {
 		return rc.NextRouteChange(p)
 	}
 	return time.Time{}

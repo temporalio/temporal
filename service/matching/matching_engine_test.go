@@ -7005,10 +7005,6 @@ func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
 
-func (r *routingMatchingClient) NextRouteChange(tqid.Partition) time.Time {
-	return time.Time{}
-}
-
 func TestMatchingConfigIgnoresPersistedFairnessState(t *testing.T) {
 	controller := gomock.NewController(t)
 
