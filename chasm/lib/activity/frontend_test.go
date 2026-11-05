@@ -108,12 +108,8 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
-		linkValidator: newLinkValidator(
-			defaultMaxLinksPerRequest,
-			func(string) int { return 2000 },
-			defaultLinkMaxSize,
-		),
-		logger: log.NewNoopLogger(),
+		linkValidator: newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
+		logger:        log.NewNoopLogger(),
 	}
 	nsID := namespace.ID("test-namespace-id")
 
@@ -230,11 +226,7 @@ func TestEagerStartFallback(t *testing.T) {
 				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 				StartDelayEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 			},
-			linkValidator: newLinkValidator(
-				defaultMaxLinksPerRequest,
-				func(string) int { return 2000 },
-				defaultLinkMaxSize,
-			),
+			linkValidator:  newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
 			logger:         log.NewNoopLogger(),
 			metricsHandler: metrics.NoopMetricsHandler,
 		}
