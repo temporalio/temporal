@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -473,6 +474,57 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 			require.Equal(t, tc.wantReplicateOnly, request.GetMutation().GetReplicateOnly())
 			require.Equal(t, []byte("legacy-reference"), request.GetMutation().GetShadowLegacyTaskPayload())
 			require.True(t, request.GetMutation().GetIsGlobalNamespace())
+		})
+	}
+}
+
+type failingNamespaceReplicationClient struct{ err error }
+
+func (c failingNamespaceReplicationClient) TriggerNamespaceMutation(
+	context.Context,
+	*namespacereplicationpb.TriggerNamespaceMutationRequest,
+	...grpc.CallOption,
+) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
+	return nil, c.err
+}
+
+func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
+	t.Parallel()
+	const message = "namespace replication authoritative trigger RPC did not complete"
+	for _, shadow := range []bool{false, true} {
+		name := "authoritative"
+		if shadow {
+			name = "shadow"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
+			triggerErr := context.DeadlineExceeded
+			handler := &namespaceHandler{logger: logger, chasmNsReplClient: failingNamespaceReplicationClient{err: triggerErr}}
+			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
+				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+				IsGlobalNamespace: true,
+				Shadow:            shadow,
+			})
+			require.ErrorIs(t, err, triggerErr)
+			if shadow {
+				// The shadow caller logs its own background trigger failure.
+				for _, record := range capture.Snapshot() {
+					require.NotEqual(t, message, record.Message)
+				}
+				return
+			}
+			capture.RequireContains(t, testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: message,
+				Tags: map[string]any{
+					"wf-namespace-id": "namespace-id",
+					"business_id":     "namespace-id:mutation-id",
+					"operation":       enumsspb.NAMESPACE_OPERATION_UPDATE.String(),
+				},
+			})
 		})
 	}
 }

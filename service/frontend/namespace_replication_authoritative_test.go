@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -125,6 +126,30 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthoritativeNamespaceMutationObservesUnknownOutcome(t *testing.T) {
+	t.Parallel()
+	executor := nsreplication.NewMockMutationTaskExecutor(gomock.NewController(t))
+	executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), gomock.Any()).Return(nsreplication.ApplyOutcomeUnspecified, nil)
+	mh := metricstest.NewCaptureHandler()
+	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
+	events := &captureRemoteClusterEventLogger{}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor,
+		metricsHandler: mh, eventLogger: events, config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)}}
+	payload, err := nsreplication.MarshalNamespaceTask(shadowObservationTask())
+	require.NoError(t, err)
+	_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, SourceCluster: "cellA"})
+	var internal *serviceerror.Internal
+	require.ErrorAs(t, err, &internal)
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
+	require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
+	attrs, details := remoteClusterEventValues(t, events.records)
+	require.Equal(t, string(wideevents.NamespaceReplicationProcessed), attrs["phase"])
+	require.Equal(t, err.Error(), details["error"])
 }
 
 func TestAuthoritativeNamespaceMutationRejectsMalformedPayload(t *testing.T) {

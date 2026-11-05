@@ -367,9 +367,15 @@ func authoritativeEventMatches(
 			}
 			return true
 		})
-		require.Contains(t, []string{string(wideevents.NamespaceReplicationProcessed), string(wideevents.NamespaceReplicationPeerDelivery), string(wideevents.NamespaceReplicationCompleted)}, attributes["phase"])
 		var details map[string]any
 		require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
+		wantPhase := map[any]wideevents.NamespaceReplicationPhase{
+			nsreplicationcommon.CHASMApplyStageLocal:     wideevents.NamespaceReplicationLocalApply,
+			nsreplicationcommon.CHASMApplyStagePeer:      wideevents.NamespaceReplicationPeerDelivery,
+			nsreplicationcommon.CHASMApplyStageComponent: wideevents.NamespaceReplicationCompleted,
+		}[details["apply_stage"]]
+		require.NotEmpty(t, wantPhase, "unexpected apply stage %v", details["apply_stage"])
+		require.Equal(t, string(wantPhase), attributes["phase"])
 		if details["apply_stage"] == stage && details["outcome"] == outcome {
 			matches = append(matches, details)
 		}
@@ -509,6 +515,7 @@ func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 	)
 	require.Equal(t, ref.BusinessID, details["component_business_id"])
 	require.Equal(t, ref.RunID, details["component_run_id"])
+	require.InDelta(t, 1, details["attempt_count"], 0)
 }
 
 func TestApplyLocalTask_Execute_MetadataWriteCommitFailureObserved(t *testing.T) {
@@ -628,6 +635,7 @@ func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 	require.Equal(t, map[string]any{}, details["peer_outcomes"])
 	require.Equal(t, map[string]any{}, details["peer_attempt_counts"])
 	require.Equal(t, map[string]any{}, details["peer_outcome_counts"])
+	require.NotContains(t, details, "end_to_end_duration_ms", "a component without a scheduling time must not report a duration")
 }
 
 func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
@@ -716,6 +724,7 @@ func TestApplyLocalTask_Execute_UpdateRetryRecoversCommittedWrite(t *testing.T) 
 
 func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 	env := newNsreplTestEnv(t)
+	_, eventLogger := env.enableObservability()
 	mutation := env.mutationUpdate("cellB")
 	ref := env.start(mutation, nil)
 
@@ -751,6 +760,8 @@ func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 	component = env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+	details := requireAuthoritativeEvent(t, eventLogger, nsreplicationcommon.CHASMApplyStageLocal, nsreplicationcommon.CHASMApplyOutcomeApplied)
+	require.InDelta(t, 2, details["attempt_count"], 0, "the reconciled commit reports the durable retry attempt")
 }
 
 func TestApplyLocalTask_Execute_UpdateEarlierAmbiguousAttemptSurvivesDefiniteLaterFailure(t *testing.T) {

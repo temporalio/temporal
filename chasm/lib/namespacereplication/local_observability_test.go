@@ -7,14 +7,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type localCommitPollTimeoutEngine struct {
@@ -172,6 +176,71 @@ func TestStaleLocalApplyObservesSkippedTransition(t *testing.T) {
 			require.Empty(t, events.records)
 			require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMLocalPendingAge.Name()))
 			require.Empty(t, capture.SnapshotMetric(metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.Name()))
+		})
+	}
+}
+
+func TestComponentTerminalEventReportsEndToEndDuration(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		mutation func(*nsreplTestEnv) *namespacereplicationpb.NamespaceMutation
+		seed     func(*NamespaceMutationComponent)
+		run      func(*testing.T, *nsreplTestEnv, chasm.ComponentRef)
+		outcome  string
+	}{
+		{
+			name:     "local commit without peers",
+			mutation: func(env *nsreplTestEnv) *namespacereplicationpb.NamespaceMutation { return env.mutationUpdate() },
+			run: func(t *testing.T, env *nsreplTestEnv, ref chasm.ComponentRef) {
+				env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+				require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+			},
+			outcome: nsreplicationcommon.CHASMApplyOutcomeCompleted,
+		},
+		{
+			name: "local failure",
+			mutation: func(env *nsreplTestEnv) *namespacereplicationpb.NamespaceMutation {
+				mutation := env.mutationUpdate("cellB")
+				mutation.IsGlobalNamespace = false
+				return mutation
+			},
+			run: func(t *testing.T, env *nsreplTestEnv, ref chasm.ComponentRef) {
+				require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+			},
+			outcome: nsreplicationcommon.CHASMApplyOutcomeFailed,
+		},
+		{
+			name:     "last peer completion",
+			mutation: func(env *nsreplTestEnv) *namespacereplicationpb.NamespaceMutation { return env.mutationUpdate("cellB") },
+			seed: func(c *NamespaceMutationComponent) {
+				c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+			},
+			run: func(t *testing.T, env *nsreplTestEnv, ref chasm.ComponentRef) {
+				env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+				env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+					&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
+				require.NoError(t, env.peerHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"}))
+			},
+			outcome: nsreplicationcommon.CHASMApplyOutcomeCompleted,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			started := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+			timeSource := clock.NewEventTimeSource().Update(started)
+			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			_, events := env.enableObservability()
+			ref := env.start(tc.mutation(env), func(c *NamespaceMutationComponent) {
+				c.StartedAt = timestamppb.New(started)
+				if tc.seed != nil {
+					tc.seed(c)
+				}
+			})
+			timeSource.Advance(45 * time.Second)
+			tc.run(t, env, ref)
+			details := requireAuthoritativeEvent(t, events, nsreplicationcommon.CHASMApplyStageComponent, tc.outcome)
+			require.InDelta(t, 45_000, details["end_to_end_duration_ms"], 0)
 		})
 	}
 }

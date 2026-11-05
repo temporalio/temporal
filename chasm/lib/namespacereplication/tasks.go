@@ -158,11 +158,13 @@ func (h *applyLocalTaskHandler) Execute(
 		loaded.Operation,
 		loaded.Detail,
 	)
+	// Attempt counts are one-based, matching retry observations.
+	attemptCount := int(task.GetAttempt()) + 1
 	observe := func(outcome string, applyErr error, details map[string]any) {
-		h.observeLocalApply(ref, namespaceTask, outcome, applyErr, startTime, details)
+		h.observeLocalApply(ref, namespaceTask, attemptCount, outcome, applyErr, startTime, details)
 	}
 	observeResult := func(recorded localApplyRecord, applyErr error, recordErr error) {
-		h.observeLocalApplyResult(ref, namespaceTask, recorded, applyErr, recordErr, startTime)
+		h.observeLocalApplyResult(ref, namespaceTask, attemptCount, recorded, applyErr, recordErr, startTime)
 	}
 	emitTerminal := func(recorded *componentTerminalObservation, terminalErr error) {
 		emitComponentTerminal(
@@ -185,7 +187,7 @@ func (h *applyLocalTaskHandler) Execute(
 			retryErr,
 		)
 		if recorded.attemptCount == 0 {
-			recorded.attemptCount = int(task.GetAttempt()) + 1
+			recorded.attemptCount = attemptCount
 		}
 		h.observeLocalRetry(ref, namespaceTask, recorded, retryErr, recordErr, startTime)
 		if recordErr == nil {
@@ -268,14 +270,13 @@ func (h *applyLocalTaskHandler) Execute(
 				applyErr,
 			)
 		default:
-			_, recordErr := h.recordLocalFailure(
-				ctx,
-				ref,
-				loaded.Detail.GetInfo().GetId(),
-				task,
-				fmt.Errorf("unsupported namespace operation: %v", loaded.Operation),
+			// The write switch above already failed unsupported operations.
+			softassert.Fail(
+				h.logger,
+				"local apply reconciliation reached an unsupported namespace operation",
+				tag.Operation(loaded.Operation.String()),
 			)
-			return recordErr
+			return fmt.Errorf("unsupported namespace operation: %v", loaded.Operation)
 		}
 		if reconcileErr != nil {
 			// Persist the retry before acknowledging this task so queue-local retry
@@ -582,7 +583,7 @@ func (h *applyLocalTaskHandler) resolveLocal(
 				if err := TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{}); err != nil {
 					return localApplyRecord{}, err
 				}
-				record := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
+				record := newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, mctx.Now(c))
 				if shadow {
 					record.shadowCompletion = newShadowCompletionRecord(c, mctx.Now(c))
 				}
@@ -671,6 +672,7 @@ func (h *applyLocalTaskHandler) recordLocalRetry(
 				record.componentTerminal = newComponentTerminalObservation(
 					c,
 					namespacereplicationpb.COMPONENT_STATUS_FAILED,
+					now,
 				)
 				return record, nil
 			}
@@ -721,7 +723,7 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 			if err != nil {
 				return localApplyRecord{}, err
 			}
-			return localApplyRecord{stateUpdated: true, componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED)}, nil
+			return localApplyRecord{stateUpdated: true, componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED, mctx.Now(c))}, nil
 		},
 		nil,
 	)
@@ -759,7 +761,7 @@ func (h *applyLocalTaskHandler) recordLocalIndeterminate(
 			if err != nil {
 				return localApplyRecord{}, err
 			}
-			return localApplyRecord{stateUpdated: true, componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED)}, nil
+			return localApplyRecord{stateUpdated: true, componentTerminal: newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED, mctx.Now(c))}, nil
 		},
 		nil,
 	)
@@ -1122,7 +1124,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					return peerOutcomeRecord{}, err
 				}
 				record.completion = newShadowCompletionRecord(c, now)
-				record.componentTerminal = newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED)
+				record.componentTerminal = newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, now)
 			}
 			return record, nil
 		},

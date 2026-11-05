@@ -30,11 +30,14 @@ type componentTerminalObservation struct {
 	peerOutcomeCounts map[string]int
 	peerCount         int
 	peerAttemptCount  int
+	startedAt         time.Time
+	terminalAt        time.Time
 }
 
 func newComponentTerminalObservation(
 	c *NamespaceMutationComponent,
 	status namespacereplicationpb.ComponentStatus,
+	terminalAt time.Time,
 ) *componentTerminalObservation {
 	observation := &componentTerminalObservation{
 		status:            status,
@@ -43,6 +46,10 @@ func newComponentTerminalObservation(
 		peerAttemptCounts: make(map[string]int, len(c.GetPeerApply())),
 		peerOutcomeCounts: make(map[string]int),
 		peerCount:         len(c.GetPeerApply()),
+		terminalAt:        terminalAt,
+	}
+	if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
+		observation.startedAt = started.AsTime()
 	}
 	for peerName, peer := range c.GetPeerApply() {
 		observation.peerOutcomes[peerName] = peer.GetOutcome().String()
@@ -75,6 +82,18 @@ func emitComponentTerminal(
 	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
 	}
+	details := map[string]any{
+		"component_status":    terminal.status.String(),
+		"local_apply_outcome": terminal.localOutcome.String(),
+		"peer_count":          terminal.peerCount,
+		"peer_attempt_count":  terminal.peerAttemptCount,
+		"peer_outcomes":       terminal.peerOutcomes,
+		"peer_attempt_counts": terminal.peerAttemptCounts,
+		"peer_outcome_counts": terminal.peerOutcomeCounts,
+	}
+	if !terminal.startedAt.IsZero() {
+		details["end_to_end_duration_ms"] = max(terminal.terminalAt.Sub(terminal.startedAt), 0).Milliseconds()
+	}
 	nsreplicationcommon.EmitCHASMAuthoritativeApply(
 		eventLogger,
 		nsreplicationcommon.CHASMAuthoritativeApplyObservation{
@@ -85,15 +104,7 @@ func emitComponentTerminal(
 			ComponentBusinessID: ref.BusinessID,
 			ComponentRunID:      ref.RunID,
 			Error:               terminalErr,
-			Details: map[string]any{
-				"component_status":    terminal.status.String(),
-				"local_apply_outcome": terminal.localOutcome.String(),
-				"peer_count":          terminal.peerCount,
-				"peer_attempt_count":  terminal.peerAttemptCount,
-				"peer_outcomes":       terminal.peerOutcomes,
-				"peer_attempt_counts": terminal.peerAttemptCounts,
-				"peer_outcome_counts": terminal.peerOutcomeCounts,
-			},
+			Details:             details,
 		},
 	)
 }
@@ -101,6 +112,7 @@ func emitComponentTerminal(
 func (h *applyLocalTaskHandler) observeLocalApplyResult(
 	ref chasm.ComponentRef,
 	task *replicationspb.NamespaceTaskAttributes,
+	attemptCount int,
 	recorded localApplyRecord,
 	applyErr error,
 	recordErr error,
@@ -110,6 +122,7 @@ func (h *applyLocalTaskHandler) observeLocalApplyResult(
 		h.observeLocalApply(
 			ref,
 			task,
+			attemptCount,
 			nsreplicationcommon.CHASMApplyOutcomeStateTransitionError,
 			recordErr,
 			startTime,
@@ -120,6 +133,7 @@ func (h *applyLocalTaskHandler) observeLocalApplyResult(
 	h.observeLocalApply(
 		ref,
 		task,
+		attemptCount,
 		stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeTerminalError, recorded.stateUpdated, nil),
 		applyErr,
 		startTime,
@@ -130,6 +144,7 @@ func (h *applyLocalTaskHandler) observeLocalApplyResult(
 func (h *applyLocalTaskHandler) observeLocalApply(
 	ref chasm.ComponentRef,
 	task *replicationspb.NamespaceTaskAttributes,
+	attemptCount int,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
@@ -145,6 +160,7 @@ func (h *applyLocalTaskHandler) observeLocalApply(
 		TargetCluster:       h.currentCluster,
 		ComponentBusinessID: ref.BusinessID,
 		ComponentRunID:      ref.RunID,
+		AttemptCount:        attemptCount,
 		Duration:            time.Since(startTime),
 		Error:               applyErr,
 		Details:             details,

@@ -1115,7 +1115,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
 					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
 				}) {
-				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+				return nil, err
 			}
 		}
 		// Absorb transient Unavailable errors, including cell-wide metadata CAS
@@ -1142,6 +1144,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		}
 		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
 			return nil, err
 		}
 		adh.recordAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
