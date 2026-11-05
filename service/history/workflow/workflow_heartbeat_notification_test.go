@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,19 +11,8 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 )
-
-type bufferedWorkflowHeartbeatNotificationUpdateRegistry struct {
-	update.Registry
-	hasOutgoing bool
-}
-
-func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) FailoverVersion() int64 { return 1 }
-func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) HasOutgoingMessages(bool) bool {
-	return r.hasOutgoing
-}
 
 func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	t.Parallel()
@@ -56,7 +44,6 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 		started       bool
 		newEvents     []enumspb.EventType
 		priorEvents   []enumspb.EventType
-		pendingUpdate bool
 		bufferedTypes []string
 		firstType     string
 	}{
@@ -72,13 +59,6 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			started:       true,
 			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
 			priorEvents:   []enumspb.EventType{enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
-			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
-		},
-		{
-			name:          "previous update",
-			started:       true,
-			newEvents:     []enumspb.EventType{enumspb.EVENT_TYPE_TIMER_FIRED},
-			pendingUpdate: true,
 			bufferedTypes: []string{"EVENT_TYPE_TIMER_FIRED"},
 		},
 		{
@@ -123,9 +103,6 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 					return false
 				})
 				mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-				if len(tc.priorEvents) == 0 || tc.firstType != "" || tc.pendingUpdate {
-					mutableState.EXPECT().GetCurrentVersion().Return(int64(1))
-				}
 			}
 
 			metricsHandler := metricstest.NewCaptureHandler()
@@ -134,15 +111,12 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 			workflowContext := &ContextImpl{
 				MutableState:   mutableState,
 				metricsHandler: metricsHandler,
-				updateRegistry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{
-					hasOutgoing: tc.pendingUpdate,
-				},
 			}
 			newEvents := make([]*historypb.HistoryEvent, 0, len(tc.newEvents))
 			for _, eventType := range tc.newEvents {
 				newEvents = append(newEvents, &historypb.HistoryEvent{EventType: eventType})
 			}
-			workflowContext.emitWorkflowHeartbeatNotificationBufferedInputMetrics(context.Background(), newEvents)
+			workflowContext.emitWorkflowHeartbeatNotificationBufferedInputMetrics(newEvents)
 
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))
@@ -150,7 +124,7 @@ func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 				require.Equal(t, inputType, buffered[i].Tags["input_type"])
 				require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), buffered[i].Tags["namespace"])
 			}
-			first := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationFirstBufferedInput.Name())
+			first := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
 			if tc.firstType == "" {
 				require.Empty(t, first)
 			} else {

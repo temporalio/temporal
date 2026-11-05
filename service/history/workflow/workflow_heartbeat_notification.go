@@ -1,15 +1,10 @@
 package workflow
 
 import (
-	"context"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/metrics"
 )
-
-// WorkflowHeartbeatNotificationUpdateAdmittedInputType identifies an Update waiting in the Registry.
-const WorkflowHeartbeatNotificationUpdateAdmittedInputType = "UPDATE_ADMITTED"
 
 // IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
 // Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
@@ -38,7 +33,6 @@ func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 }
 
 func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
-	ctx context.Context,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
 	if !c.MutableState.HasStartedWorkflowTask() {
@@ -63,14 +57,15 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 		}
 		return bufferedInputCount > len(eventTypes)
 	})
-	firstBufferedInput := !hadBufferedInput && !c.UpdateRegistry(ctx).HasOutgoingMessages(false)
+	// TODO: Account for pending Updates without changing Registry state during metrics collection.
+	firstBufferedInput := !hadBufferedInput
 	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(c.MutableState.GetNamespaceEntry().Name().String()))
 
 	for _, eventType := range eventTypes {
 		inputHandler := handler.WithTags(metrics.StringTag("input_type", eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
 		if firstBufferedInput {
-			metrics.WorkflowHeartbeatNotificationFirstBufferedInput.With(inputHandler).Record(1)
+			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(inputHandler).Record(1)
 			firstBufferedInput = false
 		}
 	}
