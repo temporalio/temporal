@@ -15,6 +15,7 @@ func NewLinksValidatorConfig() links.ValidatorConfig {
 		MaxLinksPerRequest:   func(string) int { return 10 },
 		LinkMaxSize:          func(string) int { return 4000 },
 		MaxLinksPerExecution: func(string) int { return 2000 },
+		TotalLinksMaxSize:    func(string) int { return 2 * 1024 * 1024 },
 	}
 }
 
