@@ -48,12 +48,14 @@ func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 					serializer := serialization.NewSerializer()
 					manager := persistence.NewTaskManager(store, serializer)
 					info := &persistencespb.TaskQueueInfo{
-						NamespaceId:             tv.NamespaceID().String(),
-						Name:                    tv.StickyTaskQueue().GetName(),
-						TaskType:                tc.taskType,
-						Kind:                    enumspb.TASK_QUEUE_KIND_STICKY,
-						LastUpdateTime:          timestamppb.New(time.Unix(42, 0)),
-						ExclusiveWorkerAssigned: tc.assigned,
+						NamespaceId:    tv.NamespaceID().String(),
+						Name:           tv.StickyTaskQueue().GetName(),
+						TaskType:       tc.taskType,
+						Kind:           enumspb.TASK_QUEUE_KIND_STICKY,
+						LastUpdateTime: timestamppb.New(time.Unix(42, 0)),
+					}
+					if tc.assigned {
+						info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
 					}
 					if tc.expiry {
 						info.ExpiryTime = timestamppb.New(time.Unix(3600, 0))

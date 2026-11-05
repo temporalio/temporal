@@ -7219,7 +7219,7 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 				require.NoError(t, err)
 				if tc.assigned {
 					info = common.CloneProto(info)
-					info.ExclusiveWorkerAssigned = true
+					info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
 					info.ExpiryTime = nil
 					_, err = s.v1TaskManager.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 						RangeID: 2, PrevRangeID: 1, TaskQueueInfo: info,

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1344,17 +1345,22 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 				StickyPartition(tv.StickyTaskQueue().GetName())
 			queue := UnversionedQueueKey(partition)
 			cfg := newTaskQueueConfig(partition.TaskQueue(), NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewMemoryClient(), logger)), tv.NamespaceName())
+			info := &persistencespb.TaskQueueInfo{
+				NamespaceId:    queue.NamespaceId(),
+				Name:           queue.PersistenceName(),
+				TaskType:       queue.TaskType(),
+				Kind:           enumspb.TASK_QUEUE_KIND_STICKY,
+				LastUpdateTime: timestamppb.Now(),
+				ExpiryTime:     timestamppb.New(time.Now().Add(time.Hour)),
+			}
+			if tc.assigned {
+				info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
+				unknownField := protowire.AppendTag(nil, 1, protowire.BytesType)
+				unknownField = protowire.AppendString(unknownField, "future-session-reference")
+				info.GetExclusiveWorkerAssignment().ProtoReflect().SetUnknown(unknownField)
+			}
 			_, err := store.CreateTaskQueue(t.Context(), &persistence.CreateTaskQueueRequest{
-				RangeID: 1,
-				TaskQueueInfo: &persistencespb.TaskQueueInfo{
-					NamespaceId:             queue.NamespaceId(),
-					Name:                    queue.PersistenceName(),
-					TaskType:                queue.TaskType(),
-					Kind:                    enumspb.TASK_QUEUE_KIND_STICKY,
-					LastUpdateTime:          timestamppb.Now(),
-					ExpiryTime:              timestamppb.New(time.Now().Add(time.Hour)),
-					ExclusiveWorkerAssigned: tc.assigned,
-				},
+				RangeID: 1, TaskQueueInfo: info,
 			})
 			require.NoError(t, err)
 
@@ -1369,9 +1375,10 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 					NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 				})
 				require.NoError(t, err)
-				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
+				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil)
 				require.Equal(t, int64(iteration+1), persisted.TaskQueueInfo.GetAckLevel())
 				if tc.assigned {
+					protorequire.ProtoEqual(t, info.GetExclusiveWorkerAssignment(), persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
 					require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
 				} else {
 					require.NotNil(t, persisted.TaskQueueInfo.GetExpiryTime())
@@ -1402,7 +1409,7 @@ func TestSingleSessionAssignmentPersists(t *testing.T) {
 		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 	})
 	require.NoError(t, err)
-	require.True(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
+	require.NotNil(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
 	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
 	require.Equal(t, rangeID, persisted.RangeID, "assignment preserves the writer's allocated ID block")
 

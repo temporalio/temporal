@@ -227,9 +227,12 @@ func TestSingleSessionMetadataCleanup(t *testing.T) {
 						RangeID: 7,
 						Data: &persistencespb.TaskQueueInfo{
 							NamespaceId: tv.NamespaceID().String(), Name: tv.StickyTaskQueue().GetName(),
-							TaskType: tc.taskType, Kind: tc.kind, ExclusiveWorkerAssigned: tc.assigned,
+							TaskType: tc.taskType, Kind: tc.kind,
 							LastUpdateTime: timestamppb.New(time.Now().Add(-72 * time.Hour)),
 						},
+					}
+					if tc.assigned {
+						info.Data.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
 					}
 					response := &p.GetTasksResponse{}
 					if expiredTask {
