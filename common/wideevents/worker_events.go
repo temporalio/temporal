@@ -72,16 +72,19 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 // WorkerTaskTypeStats holds per-task-type capacity data. Pointer fields are
 // omitted when the source message is absent, distinguishing "not reported"
 // from an actual zero value.
-// Poller targets mirror current counts until SDK heartbeats report targets.
 type WorkerTaskTypeStats struct {
-	TotalSlots           *int32
-	UsedSlots            *int32
-	CurrentPollers       *int32
-	TargetPollers        *int32
+	TotalSlots *int32
+	UsedSlots  *int32
+	// Current number of in-flight pollers.
+	CurrentPollers *int32
+	// Desired number of pollers.
+	TargetPollers *int32
+	// Current number of in-flight sticky pollers.
 	CurrentStickyPollers *int32
-	TargetStickyPollers  *int32
-	TotalProcessedTasks  *int32
-	TotalFailedTasks     *int32
+	// Desired number of sticky pollers.
+	TargetStickyPollers *int32
+	TotalProcessedTasks *int32
+	TotalFailedTasks    *int32
 }
 
 // appendAttributes adds one attribute per reported stat, prefixed with the
