@@ -108,6 +108,8 @@ type AdminServiceClient interface {
 	// Shadow requests validate the transported payload and never write receiver
 	// namespace state. Authoritative requests apply the mutation when it is newer
 	// than the receiver state and report the resulting apply outcome.
+	// Operator repair uses this direct apply path to repair namespace metadata
+	// without starting another replication execution or publishing a queue task.
 	ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
@@ -169,7 +171,14 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
-	// Reconcile covered pending fan-outs after an operator repair.
+	// ReconcileNamespaceMutationComponents closes outstanding CHASM peer deliveries
+	// after namespace data has been repaired and verified by the caller. It updates
+	// component state only; it does not repair namespace metadata. Call the active
+	// source cluster with the verified source versions, replica set, and cutoff.
+	// Current peers must be verified before their deliveries can be closed. Removed
+	// peers' deliveries are abandoned without inspecting or updating those peers.
+	// Each call processes one visibility page and returns per-execution results.
+	// Visibility is eventually consistent; repeat discovery to find delayed records.
 	ReconcileNamespaceMutationComponents(ctx context.Context, in *ReconcileNamespaceMutationComponentsRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationComponentsResponse, error)
 	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
@@ -691,6 +700,8 @@ type AdminServiceServer interface {
 	// Shadow requests validate the transported payload and never write receiver
 	// namespace state. Authoritative requests apply the mutation when it is newer
 	// than the receiver state and report the resulting apply outcome.
+	// Operator repair uses this direct apply path to repair namespace metadata
+	// without starting another replication execution or publishing a queue task.
 	ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)
@@ -752,7 +763,14 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
-	// Reconcile covered pending fan-outs after an operator repair.
+	// ReconcileNamespaceMutationComponents closes outstanding CHASM peer deliveries
+	// after namespace data has been repaired and verified by the caller. It updates
+	// component state only; it does not repair namespace metadata. Call the active
+	// source cluster with the verified source versions, replica set, and cutoff.
+	// Current peers must be verified before their deliveries can be closed. Removed
+	// peers' deliveries are abandoned without inspecting or updating those peers.
+	// Each call processes one visibility page and returns per-execution results.
+	// Visibility is eventually consistent; repeat discovery to find delayed records.
 	ReconcileNamespaceMutationComponents(context.Context, *ReconcileNamespaceMutationComponentsRequest) (*ReconcileNamespaceMutationComponentsResponse, error)
 	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
 	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)

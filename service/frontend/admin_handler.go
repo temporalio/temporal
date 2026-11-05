@@ -1112,9 +1112,6 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 	}
 	if !request.GetShadow() {
-		if request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR {
-			ctx = nsreplication.WithOperatorRepair(ctx)
-		}
 		ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 			SourceCluster: request.GetSourceCluster(), TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
 			Transport: namespaceMutationTransport(request),
@@ -1132,7 +1129,6 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				}) {
 				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
 			}
-			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
 		}
 		// Absorb transient Unavailable errors, including cell-wide metadata CAS
 		// contention and an UPDATE losing a missing-row CREATE race to an older
@@ -1145,7 +1141,10 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithBackoffCoefficient(2).
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
-			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
+				Admission:      nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+				OperatorRepair: request.GetAttribution().GetOrigin() == adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
 			return retryable

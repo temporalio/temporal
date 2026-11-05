@@ -29,6 +29,8 @@ type namespaceRepairObserverOptions struct {
 	DynamicConfig   *dynamicconfig.Collection
 }
 
+// namespaceRepairObserver records manual reconciliation after the component save
+// succeeds. Manual closure is reported separately from transport delivery attempts.
 type namespaceRepairObserver struct {
 	logger                       log.Logger
 	eventLogger                  otellog.Logger

@@ -29,9 +29,12 @@ service NamespaceReplicationService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
-  // ReconcileNamespaceMutation applies an operator repair to one exact
-  // namespace-mutation execution. Discovery and paging happen at frontend;
-  // routing by the exact business ID keeps the CHASM update shard-local.
+  // ReconcileNamespaceMutation records manual reconciliation of pending peer
+  // deliveries on one exact execution under its execution lock. It preserves
+  // existing terminal outcomes and completes the component when all peers are terminal.
+  // Namespace metadata repair and verification happen before this call; frontend
+  // handles discovery and paging. This call updates only the CHASM component.
+  // Eligibility is checked against the verified versions and local-resolution cutoff.
   rpc ReconcileNamespaceMutation(ReconcileNamespaceMutationRequest) returns (ReconcileNamespaceMutationResponse) {
     option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
     option (temporal.server.api.routing.v1.routing).business_id = "business_id";
@@ -65,18 +68,29 @@ message TriggerNamespaceMutationRequest {
 message TriggerNamespaceMutationResponse {}
 
 message ReconcileNamespaceMutationRequest {
+  // System namespace containing the component; used with business_id for shard routing.
   string system_namespace_id = 1;
+  // Business ID of the namespace-mutation execution discovered by frontend.
   string business_id = 2;
+  // Exact run to reconcile, preventing selection of another execution with the same business ID.
   string run_id = 3;
+  // ID of the repaired namespace; must match the component's mutation.
   string namespace_id = 4;
+  // Identifier correlating this reconciliation with the repair's metadata writes.
   string repair_id = 5;
+  // Operator-provided explanation persisted on manually closed peer deliveries.
   string reason = 6;
+  // Only mutations whose successful local phase resolved at or before this time are eligible.
   google.protobuf.Timestamp cutoff = 7;
   // Current peers in the frozen authoritative source replica set (excluding
-  // the source cell).
+  // the source cell). Pending deliveries outside this set are abandoned without
+  // inspecting or updating the removed peers, which may retain stale membership.
   repeated string authoritative_peer_cells = 8;
-  // Configured peers whose repaired state passed final verification.
+  // Subset of authoritative_peer_cells whose repaired state passed caller verification.
+  // Pending deliveries to other current peers remain open.
   repeated string verified_peer_cells = 9;
+  // Upper bound on eligible mutation config versions. Presence is significant even when zero.
   google.protobuf.Int64Value verified_config_version = 10;
+  // Upper bound on eligible mutation failover versions. Presence is significant even when zero.
   google.protobuf.Int64Value verified_failover_version = 11;
 }

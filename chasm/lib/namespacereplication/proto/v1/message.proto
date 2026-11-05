@@ -121,11 +121,18 @@ enum PeerApplyOutcome {
   PEER_APPLY_OUTCOME_MANUALLY_RECONCILED = 9;
 }
 
+// ManualReconciliation explains a peer's MANUALLY_RECONCILED terminal outcome.
+// It records operator intent, not evidence that the transport delivered the mutation.
 message ManualReconciliation {
+  // Identifier correlating the repair's metadata writes and component reconciliation.
   string repair_id = 1;
+  // Operator-provided explanation for closing the delivery.
   string reason = 2;
+  // Time the delivery was marked MANUALLY_RECONCILED.
   google.protobuf.Timestamp reconciled_at = 3;
+  // Operator scope: the component's successful local phase resolved at or before this time.
   google.protobuf.Timestamp cutoff = 4;
+  // Whether the current peer was verified or a removed peer's delivery was abandoned.
   temporal.server.api.enums.v1.ManualReconciliationBasis basis = 5;
 }
 
@@ -164,14 +171,23 @@ message PeerApplyStatus {
 }
 
 message ReconcileNamespaceMutationResponse {
+  // Per-peer dispositions, including already terminal and unverified deliveries.
   repeated PeerReconciliation peers = 1;
+  // All peers are terminal and the component is completed, including an already completed run.
   bool component_completed = 2;
+  // The running component passed reconciliation guards, or was already completed.
+  // Eligibility does not mean every pending peer was verified and closed.
   bool component_eligible = 3;
+  // Explanation when the component did not pass reconciliation guards.
   string ineligible_reason = 4;
 }
 
 message PeerReconciliation {
+  // Destination cluster of the delivery.
   string target_cell = 1;
+  // Whether reconciliation closed, preserved, or left the delivery unverified.
   temporal.server.api.enums.v1.NamespaceReconciliationOutcome outcome = 2;
+  // Why a delivery was manually closed, including a previous reconciliation.
+  // Unspecified for peers that have not been manually reconciled.
   temporal.server.api.enums.v1.ManualReconciliationBasis basis = 3;
 }

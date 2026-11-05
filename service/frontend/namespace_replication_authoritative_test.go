@@ -39,8 +39,8 @@ func TestNamespaceRepairApplyAttribution(t *testing.T) {
 	task := shadowObservationTask()
 	payload, err := nsreplication.MarshalNamespaceTask(task)
 	require.NoError(t, err)
-	executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
+	executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{OperatorRepair: true}).DoAndReturn(
+		func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
 			metricContext, ok := nsreplication.TaskMetricsContextFromContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, nsreplication.OperatorRepair, metricContext.Transport)
@@ -131,7 +131,7 @@ func TestAuthoritativeNamespaceMutationUsesDecodedPayload(t *testing.T) {
 			}
 			executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Cond(func(received *replicationspb.NamespaceTaskAttributes) bool {
 				return proto.Equal(task, received)
-			})).DoAndReturn(func(ctx context.Context, received *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
+			}), nsreplication.MutationApplyOptions{}).DoAndReturn(func(ctx context.Context, received *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
 				metadata, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
 				require.True(t, ok)
 				require.Equal(t, "cellA", metadata.SourceCluster)
@@ -174,12 +174,16 @@ func TestAuthoritativeNamespaceMutationRejectsMalformedPayload(t *testing.T) {
 func TestAuthoritativeNamespaceMutationShortRetry(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name      string
-		firstErr  error
-		cancel    bool
-		wantRetry bool
+		name           string
+		firstErr       error
+		cancel         bool
+		wantRetry      bool
+		removed        bool
+		operatorRepair bool
 	}{
 		{name: "contention clears", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true},
+		{name: "removal intent survives retry", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true, removed: true},
+		{name: "repair intent survives retry", firstErr: serviceerror.NewUnavailable("CAS conflict"), wantRetry: true, operatorRepair: true},
 		{name: "invalid input", firstErr: serviceerror.NewInvalidArgument("bad task")},
 		{name: "throttled", firstErr: &serviceerror.ResourceExhausted{Message: "busy"}},
 		{name: "cancelled during apply", firstErr: serviceerror.NewUnavailable("CAS conflict"), cancel: true},
@@ -189,20 +193,36 @@ func TestAuthoritativeNamespaceMutationShortRetry(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			executor := nsreplication.NewMockMutationTaskExecutor(gomock.NewController(t))
-			first := executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.ApplyOutcome, error) {
+			options := nsreplication.MutationApplyOptions{
+				Admission:      nsreplication.AdmissionOptions{RemovedPeer: tc.removed},
+				OperatorRepair: tc.operatorRepair,
+			}
+			first := executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), options).DoAndReturn(
+				func(context.Context, *replicationspb.NamespaceTaskAttributes, nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
 					if tc.cancel {
 						cancel()
 					}
 					return nsreplication.ApplyOutcomeUnspecified, tc.firstErr
 				})
 			if tc.wantRetry {
-				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any()).After(first).Return(nsreplication.ApplyOutcomeNoOpStale, nil)
+				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), options).After(first).Return(nsreplication.ApplyOutcomeNoOpStale, nil)
 			}
-			payload, err := nsreplication.MarshalNamespaceTask(shadowObservationTask())
+			task := shadowObservationTask()
+			if tc.removed {
+				task = removalTestTask(true)
+			}
+			payload, err := nsreplication.MarshalNamespaceTask(task)
 			require.NoError(t, err)
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t), namespaceMutationExecutor: executor}
-			response, err := handler.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload})
+			request := &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, RemovedPeer: tc.removed}
+			if tc.operatorRepair {
+				request.Attribution = &adminservice.NamespaceMutationAttribution{
+					Origin:   adminservice.NamespaceMutationAttribution_ORIGIN_OPERATOR_REPAIR,
+					RepairId: "repair-id",
+					Reason:   "operator repair",
+				}
+			}
+			response, err := handler.ApplyNamespaceMutation(ctx, request)
 			if tc.wantRetry {
 				require.NoError(t, err)
 				require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE, response.GetOutcome())

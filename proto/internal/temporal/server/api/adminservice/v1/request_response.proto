@@ -227,7 +227,7 @@ message ApplyNamespaceMutationRequest {
   int32 attempt_count = 7;
 
   // Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
-  // decodes this payload with its local schema for shadow comparison.
+  // decodes this payload with its local schema for shadow comparison or authoritative apply.
   bytes namespace_task_payload = 8;
 
   // Original legacy NamespaceTaskAttributes encoding prepared by frontend.
@@ -239,7 +239,7 @@ message ApplyNamespaceMutationRequest {
   // is absent, so its config version fences delayed older additions.
   bool removed_peer = 10;
 
-  // Attribution for direct operator repair.
+  // Selects direct operator-repair handling and records the repair's audit context.
   NamespaceMutationAttribution attribution = 11;
 }
 
@@ -825,44 +825,78 @@ message NamespaceMutationAttribution {
     ORIGIN_OPERATOR_REPAIR = 1;
   }
 
+  // Selects operator-repair handling when set to ORIGIN_OPERATOR_REPAIR.
   Origin origin = 1;
+  // Identifier correlating metadata writes and component reconciliation for one repair.
   string repair_id = 2;
+  // Operator-provided explanation recorded in repair events.
   string reason = 3;
 }
 
-// ReconcileNamespaceMutationComponentsRequest closes only pending CHASM peer
-// fan-outs that a verified operator repair has superseded.
+// ReconcileNamespaceMutationComponentsRequest scopes component reconciliation to
+// the namespace state covered by the caller's final repair verification.
 message ReconcileNamespaceMutationComponentsRequest {
+  // ID of the repaired namespace, whose components run in temporal-system.
   string namespace_id = 1;
+  // Identifier correlating this reconciliation with the repair's metadata writes.
   string repair_id = 2;
+  // Operator-provided explanation persisted on reconciled peer deliveries.
   string reason = 3;
+  // Includes only mutations whose successful local phase resolved at or before this time.
+  // Versions establish snapshot coverage; this cutoff limits operator scope.
   google.protobuf.Timestamp cutoff_time = 4;
+  // Current source replica set excluding the source cluster. Peers outside this
+  // set have their pending deliveries abandoned and may retain stale membership.
   repeated string authoritative_peer_clusters = 5;
+  // Subset of authoritative_peer_clusters verified after repair. Other current
+  // peers retain their pending deliveries. The caller performs this verification.
   repeated string verified_peer_clusters = 6;
+  // Maximum visibility records to process. Defaults to 100 and is capped at 100.
   int32 page_size = 7;
+  // Token from the previous response; other request fields must remain unchanged.
   bytes next_page_token = 8;
-  // Source versions covered by the final verification. Presence is significant even when zero.
+  // Source config version covered by final verification; presence is significant even when zero.
+  // The source must still have this version, and newer mutations are ineligible.
   google.protobuf.Int64Value verified_config_version = 9;
+  // Source failover version covered by final verification; presence is significant even when zero.
+  // The source must still have this version, and newer mutations are ineligible.
   google.protobuf.Int64Value verified_failover_version = 10;
 }
 
 message ReconcileNamespaceMutationComponentsResponse {
+  // Results for the visibility records processed by this call. One execution's
+  // error does not roll back successful reconciliation of other executions.
   repeated NamespaceMutationComponentReconciliation components = 1;
+  // Token for the next visibility page. Empty means this scan has no more pages,
+  // not that all running components have reached visibility.
   bytes next_page_token = 2;
 }
 
 message NamespaceMutationComponentReconciliation {
+  // Business ID of the discovered namespace-mutation execution.
   string business_id = 1;
+  // Exact execution run inspected or reconciled.
   string run_id = 2;
+  // The running component passed reconciliation guards, or was already completed.
+  // Eligibility does not mean every pending peer was verified and closed.
   bool eligible = 3;
+  // Explanation when the component did not pass reconciliation guards.
   string ineligible_reason = 4;
+  // All peers are terminal and the component is completed, including an already completed run.
   bool completed = 5;
+  // Per-peer dispositions. Existing terminal delivery outcomes are preserved.
   repeated NamespaceMutationPeerReconciliation peers = 6;
+  // Failure inspecting or reconciling this execution. Other fields do not establish
+  // eligibility or completion when this field is set.
   string error = 7;
 }
 
 message NamespaceMutationPeerReconciliation {
+  // Destination cluster of the delivery.
   string target_cluster = 1;
+  // Whether reconciliation closed, preserved, or left the delivery unverified.
   temporal.server.api.enums.v1.NamespaceReconciliationOutcome outcome = 2;
+  // Why a delivery was manually closed. Also returned on retries for a peer that
+  // was manually reconciled previously; unspecified for other terminal outcomes.
   temporal.server.api.enums.v1.ManualReconciliationBasis basis = 3;
 }

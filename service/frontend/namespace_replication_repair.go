@@ -24,6 +24,9 @@ const (
 	namespaceMutationRepairConcurrency        = 4
 )
 
+// ReconcileNamespaceMutationComponents processes one visibility page of pending
+// replication work after caller-verified namespace repair. Namespace data is
+// unchanged; each component is reconciled independently under its execution lock.
 func (adh *AdminHandler) ReconcileNamespaceMutationComponents(
 	ctx context.Context,
 	request *adminservice.ReconcileNamespaceMutationComponentsRequest,

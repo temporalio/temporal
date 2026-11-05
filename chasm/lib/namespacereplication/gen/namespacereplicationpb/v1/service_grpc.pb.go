@@ -31,9 +31,12 @@ type NamespaceReplicationServiceClient interface {
 	// TriggerNamespaceMutation starts a component and waits for local apply to
 	// resolve. Peer fan-out continues asynchronously after the RPC returns.
 	TriggerNamespaceMutation(ctx context.Context, in *TriggerNamespaceMutationRequest, opts ...grpc.CallOption) (*TriggerNamespaceMutationResponse, error)
-	// ReconcileNamespaceMutation applies an operator repair to one exact
-	// namespace-mutation execution. Discovery and paging happen at frontend;
-	// routing by the exact business ID keeps the CHASM update shard-local.
+	// ReconcileNamespaceMutation records manual reconciliation of pending peer
+	// deliveries on one exact execution under its execution lock. It preserves
+	// existing terminal outcomes and completes the component when all peers are terminal.
+	// Namespace metadata repair and verification happen before this call; frontend
+	// handles discovery and paging. This call updates only the CHASM component.
+	// Eligibility is checked against the verified versions and local-resolution cutoff.
 	ReconcileNamespaceMutation(ctx context.Context, in *ReconcileNamespaceMutationRequest, opts ...grpc.CallOption) (*ReconcileNamespaceMutationResponse, error)
 }
 
@@ -70,9 +73,12 @@ type NamespaceReplicationServiceServer interface {
 	// TriggerNamespaceMutation starts a component and waits for local apply to
 	// resolve. Peer fan-out continues asynchronously after the RPC returns.
 	TriggerNamespaceMutation(context.Context, *TriggerNamespaceMutationRequest) (*TriggerNamespaceMutationResponse, error)
-	// ReconcileNamespaceMutation applies an operator repair to one exact
-	// namespace-mutation execution. Discovery and paging happen at frontend;
-	// routing by the exact business ID keeps the CHASM update shard-local.
+	// ReconcileNamespaceMutation records manual reconciliation of pending peer
+	// deliveries on one exact execution under its execution lock. It preserves
+	// existing terminal outcomes and completes the component when all peers are terminal.
+	// Namespace metadata repair and verification happen before this call; frontend
+	// handles discovery and paging. This call updates only the CHASM component.
+	// Eligibility is checked against the verified versions and local-resolution cutoff.
 	ReconcileNamespaceMutation(context.Context, *ReconcileNamespaceMutationRequest) (*ReconcileNamespaceMutationResponse, error)
 	mustEmbedUnimplementedNamespaceReplicationServiceServer()
 }

@@ -1808,7 +1808,7 @@ type ApplyNamespaceMutationRequest struct {
 	// Task redelivery and transport retries may reuse the same number.
 	AttemptCount int32 `protobuf:"varint,7,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
 	// Exact deterministic protobuf encoding of NamespaceTaskAttributes. The receiver
-	// decodes this payload with its local schema for shadow comparison.
+	// decodes this payload with its local schema for shadow comparison or authoritative apply.
 	NamespaceTaskPayload []byte `protobuf:"bytes,8,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
 	// Original legacy NamespaceTaskAttributes encoding prepared by frontend.
 	// Shadow requests compare this reference with the decoded namespace_task_payload.
@@ -1817,7 +1817,7 @@ type ApplyNamespaceMutationRequest struct {
 	// The default admission policy retains this snapshot even when the namespace
 	// is absent, so its config version fences delayed older additions.
 	RemovedPeer bool `protobuf:"varint,10,opt,name=removed_peer,json=removedPeer,proto3" json:"removed_peer,omitempty"`
-	// Attribution for direct operator repair.
+	// Selects direct operator-repair handling and records the repair's audit context.
 	Attribution   *NamespaceMutationAttribution `protobuf:"bytes,11,opt,name=attribution,proto3" json:"attribution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -6425,10 +6425,13 @@ func (x *CountExecutionsResponse) GetGroups() []*CountExecutionsResponse_Aggrega
 }
 
 type NamespaceMutationAttribution struct {
-	state         protoimpl.MessageState              `protogen:"open.v1"`
-	Origin        NamespaceMutationAttribution_Origin `protobuf:"varint,1,opt,name=origin,proto3,enum=temporal.server.api.adminservice.v1.NamespaceMutationAttribution_Origin" json:"origin,omitempty"`
-	RepairId      string                              `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
-	Reason        string                              `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Selects operator-repair handling when set to ORIGIN_OPERATOR_REPAIR.
+	Origin NamespaceMutationAttribution_Origin `protobuf:"varint,1,opt,name=origin,proto3,enum=temporal.server.api.adminservice.v1.NamespaceMutationAttribution_Origin" json:"origin,omitempty"`
+	// Identifier correlating metadata writes and component reconciliation for one repair.
+	RepairId string `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	// Operator-provided explanation recorded in repair events.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6484,20 +6487,34 @@ func (x *NamespaceMutationAttribution) GetReason() string {
 	return ""
 }
 
-// ReconcileNamespaceMutationComponentsRequest closes only pending CHASM peer
-// fan-outs that a verified operator repair has superseded.
+// ReconcileNamespaceMutationComponentsRequest scopes component reconciliation to
+// the namespace state covered by the caller's final repair verification.
 type ReconcileNamespaceMutationComponentsRequest struct {
-	state                     protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId               string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	RepairId                  string                 `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
-	Reason                    string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	CutoffTime                *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cutoff_time,json=cutoffTime,proto3" json:"cutoff_time,omitempty"`
-	AuthoritativePeerClusters []string               `protobuf:"bytes,5,rep,name=authoritative_peer_clusters,json=authoritativePeerClusters,proto3" json:"authoritative_peer_clusters,omitempty"`
-	VerifiedPeerClusters      []string               `protobuf:"bytes,6,rep,name=verified_peer_clusters,json=verifiedPeerClusters,proto3" json:"verified_peer_clusters,omitempty"`
-	PageSize                  int32                  `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken             []byte                 `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Source versions covered by the final verification. Presence is significant even when zero.
-	VerifiedConfigVersion   *wrapperspb.Int64Value `protobuf:"bytes,9,opt,name=verified_config_version,json=verifiedConfigVersion,proto3" json:"verified_config_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID of the repaired namespace, whose components run in temporal-system.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Identifier correlating this reconciliation with the repair's metadata writes.
+	RepairId string `protobuf:"bytes,2,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	// Operator-provided explanation persisted on reconciled peer deliveries.
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Includes only mutations whose successful local phase resolved at or before this time.
+	// Versions establish snapshot coverage; this cutoff limits operator scope.
+	CutoffTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cutoff_time,json=cutoffTime,proto3" json:"cutoff_time,omitempty"`
+	// Current source replica set excluding the source cluster. Peers outside this
+	// set have their pending deliveries abandoned and may retain stale membership.
+	AuthoritativePeerClusters []string `protobuf:"bytes,5,rep,name=authoritative_peer_clusters,json=authoritativePeerClusters,proto3" json:"authoritative_peer_clusters,omitempty"`
+	// Subset of authoritative_peer_clusters verified after repair. Other current
+	// peers retain their pending deliveries. The caller performs this verification.
+	VerifiedPeerClusters []string `protobuf:"bytes,6,rep,name=verified_peer_clusters,json=verifiedPeerClusters,proto3" json:"verified_peer_clusters,omitempty"`
+	// Maximum visibility records to process. Defaults to 100 and is capped at 100.
+	PageSize int32 `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from the previous response; other request fields must remain unchanged.
+	NextPageToken []byte `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// Source config version covered by final verification; presence is significant even when zero.
+	// The source must still have this version, and newer mutations are ineligible.
+	VerifiedConfigVersion *wrapperspb.Int64Value `protobuf:"bytes,9,opt,name=verified_config_version,json=verifiedConfigVersion,proto3" json:"verified_config_version,omitempty"`
+	// Source failover version covered by final verification; presence is significant even when zero.
+	// The source must still have this version, and newer mutations are ineligible.
 	VerifiedFailoverVersion *wrapperspb.Int64Value `protobuf:"bytes,10,opt,name=verified_failover_version,json=verifiedFailoverVersion,proto3" json:"verified_failover_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -6604,9 +6621,13 @@ func (x *ReconcileNamespaceMutationComponentsRequest) GetVerifiedFailoverVersion
 }
 
 type ReconcileNamespaceMutationComponentsResponse struct {
-	state         protoimpl.MessageState                      `protogen:"open.v1"`
-	Components    []*NamespaceMutationComponentReconciliation `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
-	NextPageToken []byte                                      `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Results for the visibility records processed by this call. One execution's
+	// error does not roll back successful reconciliation of other executions.
+	Components []*NamespaceMutationComponentReconciliation `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
+	// Token for the next visibility page. Empty means this scan has no more pages,
+	// not that all running components have reached visibility.
+	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6656,16 +6677,25 @@ func (x *ReconcileNamespaceMutationComponentsResponse) GetNextPageToken() []byte
 }
 
 type NamespaceMutationComponentReconciliation struct {
-	state            protoimpl.MessageState                 `protogen:"open.v1"`
-	BusinessId       string                                 `protobuf:"bytes,1,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	RunId            string                                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Eligible         bool                                   `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
-	IneligibleReason string                                 `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
-	Completed        bool                                   `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
-	Peers            []*NamespaceMutationPeerReconciliation `protobuf:"bytes,6,rep,name=peers,proto3" json:"peers,omitempty"`
-	Error            string                                 `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Business ID of the discovered namespace-mutation execution.
+	BusinessId string `protobuf:"bytes,1,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	// Exact execution run inspected or reconciled.
+	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// The running component passed reconciliation guards, or was already completed.
+	// Eligibility does not mean every pending peer was verified and closed.
+	Eligible bool `protobuf:"varint,3,opt,name=eligible,proto3" json:"eligible,omitempty"`
+	// Explanation when the component did not pass reconciliation guards.
+	IneligibleReason string `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
+	// All peers are terminal and the component is completed, including an already completed run.
+	Completed bool `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
+	// Per-peer dispositions. Existing terminal delivery outcomes are preserved.
+	Peers []*NamespaceMutationPeerReconciliation `protobuf:"bytes,6,rep,name=peers,proto3" json:"peers,omitempty"`
+	// Failure inspecting or reconciling this execution. Other fields do not establish
+	// eligibility or completion when this field is set.
+	Error         string `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NamespaceMutationComponentReconciliation) Reset() {
@@ -6748,10 +6778,14 @@ func (x *NamespaceMutationComponentReconciliation) GetError() string {
 }
 
 type NamespaceMutationPeerReconciliation struct {
-	state         protoimpl.MessageState             `protogen:"open.v1"`
-	TargetCluster string                             `protobuf:"bytes,1,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
-	Outcome       v14.NamespaceReconciliationOutcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.api.enums.v1.NamespaceReconciliationOutcome" json:"outcome,omitempty"`
-	Basis         v14.ManualReconciliationBasis      `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination cluster of the delivery.
+	TargetCluster string `protobuf:"bytes,1,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
+	// Whether reconciliation closed, preserved, or left the delivery unverified.
+	Outcome v14.NamespaceReconciliationOutcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.api.enums.v1.NamespaceReconciliationOutcome" json:"outcome,omitempty"`
+	// Why a delivery was manually closed. Also returned on retries for a peer that
+	// was manually reconciled previously; unspecified for other terminal outcomes.
+	Basis         v14.ManualReconciliationBasis `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

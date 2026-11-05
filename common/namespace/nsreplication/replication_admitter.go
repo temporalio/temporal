@@ -11,20 +11,20 @@ import (
 // NamespaceReplicationAdmitter decides whether to process a namespace
 // replication task when the namespace does not yet exist locally.
 type NamespaceReplicationAdmitter interface {
-	Admit(ctx context.Context, currentCluster string, task *replicationspb.NamespaceTaskAttributes) bool
+	Admit(ctx context.Context, currentCluster string, task *replicationspb.NamespaceTaskAttributes, options AdmissionOptions) bool
+}
+
+// AdmissionOptions carries delivery intent to the namespace admission policy.
+// The zero value preserves legacy membership-based admission.
+type AdmissionOptions struct {
+	// RemovedPeer marks a validated authoritative UPDATE to a removed cluster.
+	// The default policy retains the snapshot even if no namespace exists locally,
+	// fencing delayed older additions. Custom policies retain control of admission.
+	RemovedPeer bool
 }
 
 // DefaultAdmitter accepts member snapshots and explicit removal deliveries.
 type DefaultAdmitter struct{}
-
-type removedPeerDeliveryContextKey struct{}
-
-// WithRemovedPeerDelivery marks a validated authoritative removal delivery.
-// The default policy retains the nonmember snapshot to fence older additions;
-// custom admitters remain responsible for their own admission decisions.
-func WithRemovedPeerDelivery(ctx context.Context) context.Context {
-	return context.WithValue(ctx, removedPeerDeliveryContextKey{}, true)
-}
 
 // NewDefaultAdmitter creates the default NamespaceReplicationAdmitter.
 func NewDefaultAdmitter() NamespaceReplicationAdmitter {
@@ -34,13 +34,14 @@ func NewDefaultAdmitter() NamespaceReplicationAdmitter {
 // Admit accepts members and explicit removal deliveries. Legacy delivery does
 // not set removal intent and retains the membership-only admission policy.
 func (*DefaultAdmitter) Admit(
-	ctx context.Context,
+	_ context.Context,
 	currentCluster string,
 	task *replicationspb.NamespaceTaskAttributes,
+	options AdmissionOptions,
 ) bool {
 	clusters := task.GetReplicationConfig().GetClusters()
 	return checkClusterIncludedInReplicationConfig(currentCluster, clusters) ||
-		(currentCluster != "" && ctx.Value(removedPeerDeliveryContextKey{}) == true &&
+		(currentCluster != "" && options.RemovedPeer &&
 			task.GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_UPDATE && len(clusters) > 0)
 }
 

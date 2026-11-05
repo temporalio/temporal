@@ -24,19 +24,8 @@ import (
 
 type rejectRemovalAdmitter struct{}
 
-func (rejectRemovalAdmitter) Admit(context.Context, string, *replicationspb.NamespaceTaskAttributes) bool {
+func (rejectRemovalAdmitter) Admit(context.Context, string, *replicationspb.NamespaceTaskAttributes, nsreplication.AdmissionOptions) bool {
 	return false
-}
-
-// delegatingRemovalAdmitter models a custom policy that adds its own routing
-// logic, then falls back to the default admission rules with the original
-// context. Removal intent must survive that delegation.
-type delegatingRemovalAdmitter struct {
-	delegate nsreplication.NamespaceReplicationAdmitter
-}
-
-func (a delegatingRemovalAdmitter) Admit(ctx context.Context, currentCluster string, task *replicationspb.NamespaceTaskAttributes) bool {
-	return a.delegate.Admit(ctx, currentCluster, task)
 }
 
 func removalTestTask(removed bool) *replicationspb.NamespaceTaskAttributes {
@@ -61,13 +50,12 @@ func removalTestTask(removed bool) *replicationspb.NamespaceTaskAttributes {
 func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name            string
-		removalFirst    bool
-		createRace      bool
-		updateConflict  bool
-		commitTimeout   bool
-		customReject    bool
-		delegateDefault bool
+		name           string
+		removalFirst   bool
+		createRace     bool
+		updateConflict bool
+		commitTimeout  bool
+		customReject   bool
 	}{
 		{name: "removal before addition", removalFirst: true},
 		{name: "addition before removal"},
@@ -75,7 +63,6 @@ func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T)
 		{name: "notification counter contention", updateConflict: true},
 		{name: "write commits before timeout", commitTimeout: true},
 		{name: "custom policy still rejects", removalFirst: true, customReject: true},
-		{name: "custom policy delegates default removal admission", removalFirst: true, delegateDefault: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -128,8 +115,6 @@ func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T)
 			admitter := nsreplication.NewDefaultAdmitter()
 			if tc.customReject {
 				admitter = rejectRemovalAdmitter{}
-			} else if tc.delegateDefault {
-				admitter = delegatingRemovalAdmitter{delegate: admitter}
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters,
 				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellC", metadata, nsreplication.NewNoopDataMerger(), admitter, log.NewNoopLogger(), testhooks.TestHooks{}),

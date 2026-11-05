@@ -489,12 +489,19 @@ func (x *NamespaceMutationState) GetStartedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ManualReconciliation explains a peer's MANUALLY_RECONCILED terminal outcome.
+// It records operator intent, not evidence that the transport delivered the mutation.
 type ManualReconciliation struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	RepairId      string                       `protobuf:"bytes,1,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
-	Reason        string                       `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	ReconciledAt  *timestamppb.Timestamp       `protobuf:"bytes,3,opt,name=reconciled_at,json=reconciledAt,proto3" json:"reconciled_at,omitempty"`
-	Cutoff        *timestamppb.Timestamp       `protobuf:"bytes,4,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Identifier correlating the repair's metadata writes and component reconciliation.
+	RepairId string `protobuf:"bytes,1,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	// Operator-provided explanation for closing the delivery.
+	Reason string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Time the delivery was marked MANUALLY_RECONCILED.
+	ReconciledAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=reconciled_at,json=reconciledAt,proto3" json:"reconciled_at,omitempty"`
+	// Operator scope: the component's successful local phase resolved at or before this time.
+	Cutoff *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	// Whether the current peer was verified or a removed peer's delivery was abandoned.
 	Basis         v1.ManualReconciliationBasis `protobuf:"varint,5,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -757,13 +764,18 @@ func (x *PeerApplyStatus) GetManualReconciliation() *ManualReconciliation {
 }
 
 type ReconcileNamespaceMutationResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Peers              []*PeerReconciliation  `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
-	ComponentCompleted bool                   `protobuf:"varint,2,opt,name=component_completed,json=componentCompleted,proto3" json:"component_completed,omitempty"`
-	ComponentEligible  bool                   `protobuf:"varint,3,opt,name=component_eligible,json=componentEligible,proto3" json:"component_eligible,omitempty"`
-	IneligibleReason   string                 `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Per-peer dispositions, including already terminal and unverified deliveries.
+	Peers []*PeerReconciliation `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	// All peers are terminal and the component is completed, including an already completed run.
+	ComponentCompleted bool `protobuf:"varint,2,opt,name=component_completed,json=componentCompleted,proto3" json:"component_completed,omitempty"`
+	// The running component passed reconciliation guards, or was already completed.
+	// Eligibility does not mean every pending peer was verified and closed.
+	ComponentEligible bool `protobuf:"varint,3,opt,name=component_eligible,json=componentEligible,proto3" json:"component_eligible,omitempty"`
+	// Explanation when the component did not pass reconciliation guards.
+	IneligibleReason string `protobuf:"bytes,4,opt,name=ineligible_reason,json=ineligibleReason,proto3" json:"ineligible_reason,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ReconcileNamespaceMutationResponse) Reset() {
@@ -825,10 +837,14 @@ func (x *ReconcileNamespaceMutationResponse) GetIneligibleReason() string {
 }
 
 type PeerReconciliation struct {
-	state         protoimpl.MessageState            `protogen:"open.v1"`
-	TargetCell    string                            `protobuf:"bytes,1,opt,name=target_cell,json=targetCell,proto3" json:"target_cell,omitempty"`
-	Outcome       v1.NamespaceReconciliationOutcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.api.enums.v1.NamespaceReconciliationOutcome" json:"outcome,omitempty"`
-	Basis         v1.ManualReconciliationBasis      `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Destination cluster of the delivery.
+	TargetCell string `protobuf:"bytes,1,opt,name=target_cell,json=targetCell,proto3" json:"target_cell,omitempty"`
+	// Whether reconciliation closed, preserved, or left the delivery unverified.
+	Outcome v1.NamespaceReconciliationOutcome `protobuf:"varint,2,opt,name=outcome,proto3,enum=temporal.server.api.enums.v1.NamespaceReconciliationOutcome" json:"outcome,omitempty"`
+	// Why a delivery was manually closed, including a previous reconciliation.
+	// Unspecified for peers that have not been manually reconciled.
+	Basis         v1.ManualReconciliationBasis `protobuf:"varint,3,opt,name=basis,proto3,enum=temporal.server.api.enums.v1.ManualReconciliationBasis" json:"basis,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

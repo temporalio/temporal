@@ -70,13 +70,13 @@ func TestOperatorRepairPreservesLocalConfigAndRejectsIdentityCollision(t *testin
 				})
 			}
 			executor := NewTaskExecutor("source", metadata, NewNoopDataMerger(), NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{})
-			_, err := executor.(*taskExecutorImpl).handleNamespaceUpdateReplicationTask(WithOperatorRepair(t.Context()), &replicationspb.NamespaceTaskAttributes{
+			_, err := executor.(*taskExecutorImpl).handleNamespaceUpdateReplicationTask(t.Context(), &replicationspb.NamespaceTaskAttributes{
 				NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE, Id: "namespace-id",
 				Info:              &namespacepb.NamespaceInfo{Name: "payments", State: enumspb.NAMESPACE_STATE_REGISTERED},
 				Config:            &namespacepb.NamespaceConfig{WorkflowExecutionRetentionTtl: durationpb.New(72 * time.Hour)},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "source", Clusters: []*replicationpb.ClusterReplicationConfig{{ClusterName: "source"}, {ClusterName: "target"}}},
 				ConfigVersion:     11,
-			})
+			}, MutationApplyOptions{OperatorRepair: true})
 			if collision {
 				require.ErrorIs(t, err, ErrNameUUIDCollision)
 			} else {
@@ -636,7 +636,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
 	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
@@ -712,7 +712,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Require().NoError(err)
 	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
@@ -832,7 +832,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask, MutationApplyOptions{})
 	s.Nil(err)
 	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)

@@ -59,7 +59,17 @@ type (
 
 	// MutationTaskExecutor applies namespace mutations and reports the receiver outcome.
 	MutationTaskExecutor interface {
-		ExecuteWithOutcome(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (ApplyOutcome, error)
+		ExecuteWithOutcome(ctx context.Context, task *replicationspb.NamespaceTaskAttributes, options MutationApplyOptions) (ApplyOutcome, error)
+	}
+
+	// MutationApplyOptions controls how a receiver applies a namespace mutation.
+	// The zero value preserves ordinary replication behavior.
+	MutationApplyOptions struct {
+		// Admission controls processing when the namespace does not exist locally.
+		Admission AdmissionOptions
+		// OperatorRepair preserves receiver-local configuration and checks namespace
+		// identity before updating an existing snapshot.
+		OperatorRepair bool
 	}
 
 	// TaskExecutorOption configures a namespace replication task executor.
@@ -179,7 +189,7 @@ func (h *taskExecutorImpl) Execute(
 		return err
 	}
 	execute := func() error {
-		outcome, err := h.executeValidatedTask(ctx, task)
+		outcome, err := h.executeValidatedTask(ctx, task, MutationApplyOptions{})
 		if err == nil && outcome == ApplyOutcomeDuplicate {
 			h.observeDuplicate(ctx, task)
 		}
@@ -201,11 +211,12 @@ func (h *taskExecutorImpl) Execute(
 func (h *taskExecutorImpl) ExecuteWithOutcome(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
+	options MutationApplyOptions,
 ) (ApplyOutcome, error) {
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return ApplyOutcomeUnspecified, err
 	}
-	outcome, err := h.executeValidatedTask(ctx, task)
+	outcome, err := h.executeValidatedTask(ctx, task, options)
 	if err == nil && outcome == ApplyOutcomeDuplicate && task.GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_UPDATE {
 		// An UPDATE can lose a missing-row CREATE race to an older snapshot.
 		// Retry through apply-if-higher before acknowledging the newer update.
@@ -225,8 +236,9 @@ func (h *taskExecutorImpl) observeDuplicate(ctx context.Context, task *replicati
 func (h *taskExecutorImpl) executeValidatedTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
+	options MutationApplyOptions,
 ) (ApplyOutcome, error) {
-	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
+	if shouldProcess, err := h.shouldProcessTask(ctx, task, options.Admission); !shouldProcess || err != nil {
 		if !shouldProcess && err == nil {
 			h.recordOutcome(ctx, task, metricsOutcomeNotAdmitted)
 			h.emitNamespaceReplicationProcessed(
@@ -247,13 +259,13 @@ func (h *taskExecutorImpl) executeValidatedTask(
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		return h.handleNamespaceCreationReplicationTask(ctx, task)
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return h.handleNamespaceUpdateReplicationTask(ctx, task)
+		return h.handleNamespaceUpdateReplicationTask(ctx, task, options)
 	default:
 		return ApplyOutcomeUnspecified, ErrInvalidNamespaceOperation
 	}
 }
 
-func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
+func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes, options AdmissionOptions) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
 	})
@@ -279,7 +291,7 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		return h.admitter.Admit(ctx, h.currentCluster, task), nil
+		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil
 	default:
 		// return the original err
 		return false, err
@@ -404,6 +416,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
+	options MutationApplyOptions,
 ) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
@@ -434,8 +447,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	localNamespacePreMutation := h.cloneLocalNamespaceForReplicationEvent(ctx, resp.Namespace)
 
 	recordUpdated := false
-	operatorRepair := isOperatorRepair(ctx)
-	if operatorRepair && resp.Namespace.GetInfo().GetId() != task.GetId() {
+	if options.OperatorRepair && resp.Namespace.GetInfo().GetId() != task.GetId() {
 		return ApplyOutcomeUnspecified, ErrNameUUIDCollision
 	}
 	request := &persistence.UpdateNamespaceRequest{
@@ -471,7 +483,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			Data:        data,
 		}
 		config := &persistencespb.NamespaceConfig{}
-		if operatorRepair && request.Namespace.Config != nil {
+		if options.OperatorRepair && request.Namespace.Config != nil {
 			// Repair changes replicated fields without clearing receiver-local config,
 			// including when preparing the active source's config version.
 			config = proto.CloneOf(request.Namespace.Config)

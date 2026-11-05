@@ -1,22 +1,6 @@
 package nsreplication
 
-import (
-	"context"
-
-	"go.temporal.io/api/serviceerror"
-)
-
-type operatorRepairContextKey struct{}
-
-// WithOperatorRepair preserves receiver-local fields during direct operator
-// writes and enforces identity before applying an existing namespace snapshot.
-func WithOperatorRepair(ctx context.Context) context.Context {
-	return context.WithValue(ctx, operatorRepairContextKey{}, true)
-}
-
-func isOperatorRepair(ctx context.Context) bool {
-	return ctx.Value(operatorRepairContextKey{}) == true
-}
+import "go.temporal.io/api/serviceerror"
 
 func validatePeerSet(field string, peers []string) (map[string]struct{}, error) {
 	result := make(map[string]struct{}, len(peers))

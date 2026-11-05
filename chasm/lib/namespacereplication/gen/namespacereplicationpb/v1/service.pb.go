@@ -145,20 +145,31 @@ func (*TriggerNamespaceMutationResponse) Descriptor() ([]byte, []int) {
 }
 
 type ReconcileNamespaceMutationRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	SystemNamespaceId string                 `protobuf:"bytes,1,opt,name=system_namespace_id,json=systemNamespaceId,proto3" json:"system_namespace_id,omitempty"`
-	BusinessId        string                 `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	NamespaceId       string                 `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	RepairId          string                 `protobuf:"bytes,5,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
-	Reason            string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
-	Cutoff            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// System namespace containing the component; used with business_id for shard routing.
+	SystemNamespaceId string `protobuf:"bytes,1,opt,name=system_namespace_id,json=systemNamespaceId,proto3" json:"system_namespace_id,omitempty"`
+	// Business ID of the namespace-mutation execution discovered by frontend.
+	BusinessId string `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	// Exact run to reconcile, preventing selection of another execution with the same business ID.
+	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// ID of the repaired namespace; must match the component's mutation.
+	NamespaceId string `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Identifier correlating this reconciliation with the repair's metadata writes.
+	RepairId string `protobuf:"bytes,5,opt,name=repair_id,json=repairId,proto3" json:"repair_id,omitempty"`
+	// Operator-provided explanation persisted on manually closed peer deliveries.
+	Reason string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Only mutations whose successful local phase resolved at or before this time are eligible.
+	Cutoff *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
 	// Current peers in the frozen authoritative source replica set (excluding
-	// the source cell).
+	// the source cell). Pending deliveries outside this set are abandoned without
+	// inspecting or updating the removed peers, which may retain stale membership.
 	AuthoritativePeerCells []string `protobuf:"bytes,8,rep,name=authoritative_peer_cells,json=authoritativePeerCells,proto3" json:"authoritative_peer_cells,omitempty"`
-	// Configured peers whose repaired state passed final verification.
-	VerifiedPeerCells       []string               `protobuf:"bytes,9,rep,name=verified_peer_cells,json=verifiedPeerCells,proto3" json:"verified_peer_cells,omitempty"`
-	VerifiedConfigVersion   *wrapperspb.Int64Value `protobuf:"bytes,10,opt,name=verified_config_version,json=verifiedConfigVersion,proto3" json:"verified_config_version,omitempty"`
+	// Subset of authoritative_peer_cells whose repaired state passed caller verification.
+	// Pending deliveries to other current peers remain open.
+	VerifiedPeerCells []string `protobuf:"bytes,9,rep,name=verified_peer_cells,json=verifiedPeerCells,proto3" json:"verified_peer_cells,omitempty"`
+	// Upper bound on eligible mutation config versions. Presence is significant even when zero.
+	VerifiedConfigVersion *wrapperspb.Int64Value `protobuf:"bytes,10,opt,name=verified_config_version,json=verifiedConfigVersion,proto3" json:"verified_config_version,omitempty"`
+	// Upper bound on eligible mutation failover versions. Presence is significant even when zero.
 	VerifiedFailoverVersion *wrapperspb.Int64Value `protobuf:"bytes,11,opt,name=verified_failover_version,json=verifiedFailoverVersion,proto3" json:"verified_failover_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
