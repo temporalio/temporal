@@ -226,6 +226,10 @@ type (
 
 		// isResetStateUpdated is used to track if resetRunID is updated.
 		isResetStateUpdated bool
+		// localStateVisibilityPending defers re-recording conflict-resolution state to transaction
+		// close, so visibility reflects the final execution state. A replicated snapshot can replace
+		// a closed local branch with a running one after the state was recorded.
+		localStateVisibilityPending bool
 
 		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
 		timeSkippingInfoUpdated bool
@@ -7236,7 +7240,8 @@ func (ms *MutableStateImpl) RecordHistoryBranch() error {
 		return nil
 	}
 	ms.executionInfo.LastBranchTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-	return ms.generateLocalStateVisibilityTask()
+	ms.localStateVisibilityPending = true
+	return nil
 }
 
 func (ms *MutableStateImpl) RecordOrphanedOperations() error {
@@ -7244,7 +7249,8 @@ func (ms *MutableStateImpl) RecordOrphanedOperations() error {
 		return nil
 	}
 	ms.executionInfo.LastOrphanedOperationsTime = timestamppb.New(ms.shard.GetTimeSource().Now())
-	return ms.generateLocalStateVisibilityTask()
+	ms.localStateVisibilityPending = true
+	return nil
 }
 
 func (ms *MutableStateImpl) RecordRunSuperseded(supersededRunID string) error {
@@ -7253,11 +7259,13 @@ func (ms *MutableStateImpl) RecordRunSuperseded(supersededRunID string) error {
 	}
 	ms.executionInfo.LastSupersedeTime = timestamppb.New(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.LastSupersededRunId = supersededRunID
-	return ms.generateLocalStateVisibilityTask()
+	ms.localStateVisibilityPending = true
+	return nil
 }
 
 // generateLocalStateVisibilityTask re-records visibility for conflict-resolution state, which is
-// cluster-local and so only indexed by the cluster that set it. The Record methods only apply to
+// cluster-local and so only indexed by the cluster that set it. It runs when the transaction closes,
+// after the Record methods marked it pending. The Record methods only apply to
 // workflows: these workflow visibility tasks would overwrite another archetype's CHASM record, which
 // needs a CHASM visibility re-record that leaves replicated state unchanged.
 func (ms *MutableStateImpl) generateLocalStateVisibilityTask() error {
@@ -8509,6 +8517,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
+	}
+
+	if ms.localStateVisibilityPending {
+		ms.localStateVisibilityPending = false
+		if err := ms.generateLocalStateVisibilityTask(); err != nil {
+			return err
+		}
 	}
 
 	ms.closeTransactionCollapseVisibilityTasks()

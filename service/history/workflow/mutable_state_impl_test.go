@@ -10264,7 +10264,7 @@ func (s *mutableStateSuite) TestRecordHistoryBranch() {
 			before := s.mockShard.GetTimeSource().Now()
 			s.NoError(ms.RecordHistoryBranch())
 			s.WithinRange(ms.GetExecutionInfo().GetLastBranchTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
-			tc.expectVisibility(ms.InsertTasks[tasks.CategoryVisibility])
+			tc.expectVisibility(s.closeTransactionVisibilityTasks(ms))
 		})
 	}
 }
@@ -10309,7 +10309,7 @@ func (s *mutableStateSuite) TestRecordRunSuperseded() {
 	s.NoError(ms.RecordRunSuperseded("superseded-run"))
 	s.WithinRange(ms.GetExecutionInfo().GetLastSupersedeTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
 	s.Equal("superseded-run", ms.GetExecutionInfo().GetLastSupersededRunId())
-	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
 	s.Len(visibilityTasks, 1)
 	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
 }
@@ -10340,9 +10340,38 @@ func (s *mutableStateSuite) TestRecordOrphanedOperations() {
 	before := s.mockShard.GetTimeSource().Now()
 	s.NoError(ms.RecordOrphanedOperations())
 	s.WithinRange(ms.GetExecutionInfo().GetLastOrphanedOperationsTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
-	visibilityTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
 	s.Len(visibilityTasks, 1)
 	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+}
+
+// closeTransactionVisibilityTasks closes the transaction, which is when conflict-resolution
+// visibility updates are generated, and returns its visibility tasks.
+func (s *mutableStateSuite) closeTransactionVisibilityTasks(ms *MutableStateImpl) []tasks.Task {
+	mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+	s.NoError(err)
+	return mutation.Tasks[tasks.CategoryVisibility]
+}
+
+func (s *mutableStateSuite) TestRecordHistoryBranch_VisibilityFollowsAppliedSnapshot() {
+	// The local, losing branch is closed when the branch is recorded; the replicated snapshot that
+	// follows makes the run running again. Visibility must be re-recorded for the running run.
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	dbState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.NoError(ms.RecordHistoryBranch())
+	s.NoError(ms.RecordOrphanedOperations())
+	snapshot := s.buildWorkflowMutableState()
+	s.NoError(ms.ApplySnapshot(snapshot))
+
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+	s.NotNil(ms.GetExecutionInfo().GetLastBranchTime())
+	s.NotNil(ms.GetExecutionInfo().GetLastOrphanedOperationsTime())
 }
 
 func (s *mutableStateSuite) TestRecordHistoryBranch_IgnoresTimeSkipping() {

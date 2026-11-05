@@ -314,7 +314,8 @@ type (
 		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
-		// The Record methods below are no-ops for non-workflow executions; see
+		// The Record methods below are no-ops for non-workflow executions. Their visibility update is
+		// generated when the transaction closes, from the final execution state; see
 		// generateLocalStateVisibilityTask.
 
 		// RecordHistoryBranch stamps LastBranchTime and schedules a visibility update for it. Called
