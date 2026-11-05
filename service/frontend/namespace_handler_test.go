@@ -1499,8 +1499,8 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary(
 			}},
 		},
 	})
-	s.NoError(err)
-	s.NotNil(updateReq)
+	s.Require().NoError(err)
+	s.Require().NotNil(updateReq)
 	s.Contains(updateReq.Namespace.Config.BadBinaries.Binaries, "bad-checksum")
 	s.Equal(int64(1), updateReq.Namespace.ConfigVersion)
 }
