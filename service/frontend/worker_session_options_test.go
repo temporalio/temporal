@@ -23,7 +23,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		{name: "ordinary sticky poll", kind: enumspb.TASK_QUEUE_KIND_STICKY},
 		{name: "empty options on sticky poll", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{}},
 		{name: "options on normal queue", kind: enumspb.TASK_QUEUE_KIND_NORMAL, options: &sessionpb.WorkerSessionOptions{}, invalid: true},
-		{name: "unsupported isolation", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{Isolation: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"}}}, unsupported: true},
+		{name: "unsupported isolation", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"}}}, unsupported: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

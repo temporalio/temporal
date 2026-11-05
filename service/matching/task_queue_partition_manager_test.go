@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -1533,6 +1534,103 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
+}
+
+/*
+TestStickyActivityAssignmentRules tests sticky routing after assignment rules are resolved:
+1. Resolve an activity's assignment-rules directive with no selected version to its sticky queue.
+2. Preserve validation for workflow tasks, explicit build IDs, and selected legacy versions.
+3. Preserve rejection when a redirect requires another worker.
+*/
+func TestStickyActivityAssignmentRules(t *testing.T) {
+	t.Parallel()
+	missingBuildID := serviceerror.NewInternal("should have a build ID directive on versioned sticky queue")
+	for _, tc := range []struct {
+		name           string
+		taskType       enumspb.TaskQueueType
+		directive      *taskqueuespb.TaskVersionDirective
+		versioningData *persistencespb.VersioningData
+		wantError      error
+	}{
+		{
+			name: "activity without version directive", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		{
+			name: "activity without legacy data", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(),
+		},
+		{
+			name: "activity with empty legacy data", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), versioningData: &persistencespb.VersioningData{},
+		},
+		{
+			name: "workflow still requires explicit build ID", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+		},
+		{
+			name: "activity with explicit empty build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective(""), wantError: missingBuildID,
+		},
+		{
+			name: "activity with selected build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			versioningData: &persistencespb.VersioningData{
+				AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp("build")},
+			},
+		},
+		{
+			name: "activity with selected version set", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			versioningData: &persistencespb.VersioningData{
+				VersionSets: []*persistencespb.CompatibleVersionSet{createVersionSet("build")},
+			},
+		},
+		{
+			name: "activity with explicit build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective("build"),
+		},
+		{
+			name: "activity with redirected build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective("build"), wantError: serviceerrors.NewStickyWorkerUnavailable(),
+			versioningData: &persistencespb.VersioningData{
+				RedirectRules: []*persistencespb.RedirectRule{{
+					Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "build", TargetBuildId: "replacement"},
+				}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			queue := NewMockphysicalTaskQueueManager(gomock.NewController(t))
+			queueFuture := future.NewFuture[physicalTaskQueueManager]()
+			queueFuture.Set(queue, nil)
+			pm := &taskQueuePartitionManagerImpl{
+				partition:          newTestTaskQueue(namespaceID, taskQueueName, tc.taskType).StickyPartition("sticky-worker"),
+				defaultQueueFuture: queueFuture,
+				userDataManager: &mockUserDataManager{data: &persistencespb.VersionedTaskQueueUserData{
+					Data: &persistencespb.TaskQueueUserData{VersioningData: tc.versioningData},
+				}},
+			}
+			spoolQueue, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(t.Context(), tc.directive, nil, "run", "workflow", false)
+			if tc.wantError != nil {
+				switch tc.wantError.(type) {
+				case *serviceerror.Internal:
+					require.ErrorAs(t, err, new(*serviceerror.Internal))
+				case *serviceerrors.StickyWorkerUnavailable:
+					require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				default:
+					t.Fatalf("unsupported expected error type %T", tc.wantError)
+				}
+				require.EqualError(t, err, tc.wantError.Error())
+				require.Nil(t, spoolQueue)
+				require.Nil(t, syncMatchQueue)
+				return
+			}
+			require.NoError(t, err)
+			require.Same(t, queue, spoolQueue)
+			require.Same(t, queue, syncMatchQueue)
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {

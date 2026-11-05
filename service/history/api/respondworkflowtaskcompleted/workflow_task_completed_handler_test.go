@@ -50,6 +50,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestCommandProtocolMessage(t *testing.T) {
@@ -1325,7 +1326,7 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 		ActivityId: "activity", ActivityType: &commonpb.ActivityType{Name: "activity"},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: "normal-queue"},
 		StartToCloseTimeout: durationpb.New(time.Second),
-		SessionOptions:      &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}},
+		SessionOptions:      &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
 	})
 	require.NoError(t, err)
 	require.Nil(t, event)

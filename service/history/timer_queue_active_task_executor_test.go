@@ -56,6 +56,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1415,7 +1416,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 				},
 			)
 			if tc.session {
-				activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Session: &sessionpb.ActivitySessionOptions_UseWorkflowSession{UseWorkflowSession: true}}
+				activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
 			if !tc.missingPlacement {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
@@ -1442,10 +1443,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			if tc.session && !tc.missingPlacement {
 				expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 			}
-			directive := worker_versioning.MakeUseAssignmentRulesDirective()
-			if tc.session {
-				directive = nil
-			}
 			if !tc.missingPlacement {
 				s.mockMatchingClient.EXPECT().AddActivityTask(
 					gomock.Any(),
@@ -1456,7 +1453,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 						ScheduledEventId:       activityInfo.ScheduledEventId,
 						ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
 						Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
-						VersionDirective:       directive,
+						VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 					}),
 					gomock.Any(),
 				).Return(&matchingservice.AddActivityTaskResponse{}, nil)

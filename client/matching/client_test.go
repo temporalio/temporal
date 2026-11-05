@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -239,8 +240,9 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 	request := &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: testNamespaceID,
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{Name: testTaskQueueName},
-			Identity:  "worker",
+			TaskQueue:      &taskqueuepb.TaskQueue{Name: testTaskQueueName},
+			Identity:       "worker",
+			SessionOptions: &sessionpb.WorkerSessionOptions{},
 		},
 	}
 	response := &matchingservice.PollWorkflowTaskQueueResponse{}
@@ -249,6 +251,7 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 		func(_ context.Context, outgoing *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetPollRequest().GetTaskQueue().GetName())
 			require.Equal(t, "worker", outgoing.GetPollRequest().GetIdentity())
+			require.Same(t, request.GetPollRequest().GetSessionOptions(), outgoing.GetPollRequest().GetSessionOptions())
 			return response, nil
 		},
 	)

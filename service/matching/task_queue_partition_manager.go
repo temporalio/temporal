@@ -2373,6 +2373,14 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	redirectBuildId = FindRedirectBuildId(buildId, data.GetRedirectRules())
 
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		// TODO (Shivam): Replace this inferred session check with session options on TaskInfo
+		// once they are propagated by task-add requests.
+		if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
+			directive.GetUseAssignmentRules() != nil &&
+			buildId == "" && versionSet == "" && redirectBuildId == "" {
+			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
+		}
+
 		// We may kick off this worker if there's a new default build ID in the version set.
 		// unknownBuild flag is ignored because we don't have any special logic for it anymore. unknown build can
 		// happen in two scenarios:

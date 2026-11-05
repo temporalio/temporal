@@ -7982,7 +7982,7 @@ func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQ
 	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
 	}
-	if options.GetIsolation() != nil {
+	if options.GetAdmission() != nil {
 		return serviceerror.NewUnimplemented("Single-session isolation is not supported")
 	}
 	return nil
