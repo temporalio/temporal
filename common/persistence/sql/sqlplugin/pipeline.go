@@ -30,7 +30,8 @@ type (
 	// a caller would make on them are statements that fail the transaction instead.
 	// Commit returns the error of the check that failed, or ErrPipelineNotSent when
 	// none of the statements ran, after which the caller can run them another way.
-	// Any other Commit error leaves the outcome unknown.
+	// Any other Commit error leaves the outcome unknown unless the database
+	// rejected a statement, which rolls the whole transaction back.
 	PipelinedTx interface {
 		Tx
 		// UpdateExecutionsWithCondition fails the transaction with

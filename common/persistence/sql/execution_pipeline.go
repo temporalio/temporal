@@ -20,7 +20,7 @@ type expectingTx struct {
 }
 
 // updateWorkflowExecutionPipelined appends the history and runs the
-// UpdateWorkflowExecution transaction in one round trip when the plugin
+// UpdateWorkflowExecution transaction as one batch when the plugin
 // supports it. newEvents are the request's new events and nodeRows their history
 // node rows. It returns false, so that the sequential path runs the update, when
 // the request or the plugin's connection needs it, when Begin fails after the
@@ -85,7 +85,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 }
 
 // pipelinedCommitError returns the error the sequential path returns for the
-// check that failed, or Unavailable when the outcome is unknown.
+// check that failed, and converts any other error as a failed COMMIT is
+// converted.
 func pipelinedCommitError(shardID int32, err error) error {
 	const prefix = "UpdateWorkflowExecution: "
 	switch {
