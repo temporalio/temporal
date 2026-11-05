@@ -71,7 +71,7 @@ func (s *pipelineSuite) TestReadLockShardsWithRangeID() {
 	written, err = s.commit(shard.ShardID, func(tx sqlplugin.PipelinedTx) {
 		s.NoError(tx.ReadLockShardsWithRangeID(newExecutionContext(), filter, shard.RangeID+1))
 	})
-	_ = s.requireRejected(err, divisionByZeroCode)
+	s.requireCheckFailed(err, sqlplugin.ErrShardRangeIDMismatch)
 	s.False(written)
 }
 
@@ -96,7 +96,16 @@ func (s *pipelineSuite) TestLockCurrentExecutionsWithRunID() {
 		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
 		})
-		_ = s.requireRejected(err, divisionByZeroCode)
+		s.requireCheckFailed(err, sqlplugin.ErrCurrentExecutionRunIDMismatch)
+		s.False(written)
+
+		filter.RunID = current.RunID
+		_, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
+		s.NoError(err)
+		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+			s.NoError(tx.LockCurrentExecutionsWithRunID(newExecutionContext(), filter))
+		})
+		s.requireCheckFailed(err, sqlplugin.ErrCurrentExecutionMissing)
 		s.False(written)
 	}
 }
@@ -116,7 +125,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
 		s.NoError(err)
 	})
-	_ = s.requireRejected(err, divisionByZeroCode)
+	s.requireCheckFailed(err, sqlplugin.ErrExecutionConditionMismatch)
 	s.False(written)
 	stored, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -132,6 +141,16 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	stored, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(update.DBRecordVersion, stored.DBRecordVersion)
+
+	_, err = s.store.DeleteFromExecutions(newExecutionContext(), filter)
+	s.NoError(err)
+	update.DBRecordVersion++
+	written, err = s.commit(execution.ShardID, func(tx sqlplugin.PipelinedTx) {
+		_, err := tx.UpdateExecutionsWithCondition(newExecutionContext(), &update)
+		s.NoError(err)
+	})
+	s.requireCheckFailed(err, sqlplugin.ErrExecutionMissing)
+	s.False(written)
 }
 
 func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
@@ -199,6 +218,7 @@ func (s *pipelineSuite) TestDuplicateInsert() {
 	})
 	pgErr := s.requireRejected(err, uniqueViolationCode)
 	s.True(s.store.IsDupEntryError(pgErr))
+	s.Same(pgErr, err)
 	s.False(written)
 
 	// A rejected batch does not leave a pooled connection mid-batch.
@@ -210,8 +230,7 @@ func (s *pipelineSuite) TestDuplicateInsert() {
 	s.True(written)
 }
 
-// A canceled batch is not a rejection, since Postgres may still run and commit
-// the statements it received.
+// A batch canceled after Postgres received it returns the context error.
 func (s *pipelineSuite) TestCanceledContext() {
 	shard := s.newShardRow()
 	_, err := s.store.InsertIntoShards(newExecutionContext(), &shard)
@@ -240,22 +259,22 @@ END $$`) == nil
 	}, 10*time.Second, 10*time.Millisecond)
 	cancel()
 	err = <-commitErr
-	s.Error(err)
-	s.NotErrorIs(err, sqlplugin.ErrPipelineNotWritten)
+	s.ErrorIs(err, context.Canceled)
+	s.NotErrorIs(err, sqlplugin.ErrShardRangeIDMismatch)
 	s.NoError(lockTx.Rollback())
 }
 
-// A Commit that cannot check out a connection sends nothing.
-func (s *pipelineSuite) TestCommitWithoutConnection() {
+// A Begin that cannot check out a connection returns the context error.
+func (s *pipelineSuite) TestBeginWithoutConnection() {
+	pipeliner, ok := s.store.(sqlplugin.TxPipeliner)
+	s.True(ok)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := s.beginPipelinedTx(ctx).Commit()
-	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
+	_, err := pipeliner.BeginPipelinedTx(ctx)
 	s.ErrorIs(err, context.Canceled)
 }
 
-// An error at the implicit commit is not a rejection, since it can follow a
-// commit that happened.
+// An error at the implicit commit fails Commit.
 func (s *pipelineSuite) TestCommitError() {
 	shardID := rand.Int31()
 	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_fail_commit() RETURNS trigger
@@ -268,7 +287,6 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit
 
 	written, err := s.commit(shardID, func(sqlplugin.PipelinedTx) {})
 	s.Error(err)
-	s.NotErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	s.False(written)
 }
 
@@ -297,7 +315,6 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_read_only()
 	})
 	s.NoError(err)
 	err = tx.Commit()
-	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	var unavailable *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailable)
 	s.Equal("database connection lost: ERROR: pipeline test read only (SQLSTATE 25006)", unavailable.Message)
@@ -342,10 +359,16 @@ func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedT
 	return len(rows) > 0, commitErr
 }
 
+// requireCheckFailed requires the failure of check, which wraps its statement's
+// division by zero.
+func (s *pipelineSuite) requireCheckFailed(err error, check error) {
+	_ = s.requireRejected(err, divisionByZeroCode)
+	s.ErrorIs(err, check)
+}
+
 // requireRejected requires a rejection by the Postgres error with code, and
 // returns that error.
 func (s *pipelineSuite) requireRejected(err error, code string) *pgconn.PgError {
-	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
 	var pgErr *pgconn.PgError
 	s.ErrorAs(err, &pgErr)
 	s.Equal(code, pgErr.Code)

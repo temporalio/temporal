@@ -49,6 +49,7 @@ type (
 		lockedCurrent  *sqlplugin.CurrentExecutionsFilter
 		updatedCurrent *sqlplugin.CurrentExecutionsRow
 		committed      bool
+		rolledBack     bool
 	}
 )
 
@@ -135,18 +136,10 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 		pipelinedBegun bool
 	}{
 		{
-			name: "rejected",
+			name: "unsupported connection",
 			setup: func(_ *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB) {
-				db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, errors.New("division by zero"))
+				db.beginPipelinedErr = sqlplugin.ErrPipelineUnsupported
 			},
-			pipelinedBegun: true,
-		},
-		{
-			name: "record error",
-			setup: func(_ *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB) {
-				db.pipelined.updateExecutionsErr = errors.New("record failed")
-			},
-			pipelinedBegun: true,
 		},
 		{
 			name: "new branch",
@@ -218,6 +211,112 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: connection refused", unavailable.Message)
+	require.Zero(t, db.historyNodes)
+	require.False(t, db.sequential.begun)
+}
+
+func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
+	testCases := []struct {
+		name      string
+		setup     func(request *p.InternalUpdateWorkflowExecutionRequest)
+		beginErr  error
+		wantErr   error
+		wantCause error
+	}{
+		{
+			name:     "deadline with history",
+			setup:    func(*p.InternalUpdateWorkflowExecutionRequest) {},
+			beginErr: context.DeadlineExceeded,
+			wantErr:  &p.AppendHistoryTimeoutError{Msg: "context deadline exceeded"},
+		},
+		{
+			name:     "canceled with history",
+			setup:    func(*p.InternalUpdateWorkflowExecutionRequest) {},
+			beginErr: context.Canceled,
+			wantErr:  &p.AppendHistoryTimeoutError{Msg: "context canceled"},
+		},
+		{
+			name: "deadline without history",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest) {
+				request.UpdateWorkflowNewEvents = nil
+			},
+			beginErr:  context.DeadlineExceeded,
+			wantCause: context.DeadlineExceeded,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPipelineTestRequest()
+			db := newFakePipelineDB(request)
+			tc.setup(request)
+			db.beginPipelinedErr = tc.beginErr
+
+			err := updateWithFakes(db, request)
+			if tc.wantErr != nil {
+				require.Equal(t, tc.wantErr, err)
+			} else {
+				require.ErrorIs(t, err, tc.wantCause)
+				require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: context deadline exceeded", err.Error())
+			}
+			require.Zero(t, db.historyNodes)
+			require.False(t, db.sequential.begun)
+		})
+	}
+}
+
+// A failed check returns the error type the sequential transaction returns for
+// the same check.
+func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
+	testCases := []struct {
+		check   error
+		wantErr error
+	}{
+		{
+			check:   sqlplugin.ErrShardRangeIDMismatch,
+			wantErr: &p.ShardOwnershipLostError{ShardID: 1, Msg: "UpdateWorkflowExecution: shard does not have the range ID"},
+		},
+		{
+			check:   sqlplugin.ErrCurrentExecutionMissing,
+			wantErr: serviceerror.NewUnavailable("UpdateWorkflowExecution: current execution does not exist"),
+		},
+		{
+			check:   sqlplugin.ErrCurrentExecutionRunIDMismatch,
+			wantErr: &p.CurrentWorkflowConditionFailedError{Msg: "UpdateWorkflowExecution: current execution has another run ID"},
+		},
+		{
+			check:   sqlplugin.ErrExecutionMissing,
+			wantErr: &p.ConditionFailedError{Msg: "UpdateWorkflowExecution: execution does not exist"},
+		},
+		{
+			check:   sqlplugin.ErrExecutionConditionMismatch,
+			wantErr: &p.WorkflowConditionFailedError{Msg: "UpdateWorkflowExecution: execution does not match the condition"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.check.Error(), func(t *testing.T) {
+			request := newPipelineTestRequest()
+			db := newFakePipelineDB(request)
+			db.pipelined.commitErr = fmt.Errorf("%w: %w", tc.check, errors.New("division by zero"))
+
+			require.Equal(t, tc.wantErr, updateWithFakes(db, request))
+			require.Zero(t, db.historyNodes)
+			require.False(t, db.sequential.begun)
+		})
+	}
+}
+
+// A recording error writes nothing, so it returns the connection and the error.
+func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	db.pipelined.updateExecutionsErr = errors.New("record failed")
+
+	err := updateWithFakes(db, request)
+	var unavailable *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailable)
+	require.Equal(t, "applyWorkflowMutationTx failed. Failed to update executions row. Erorr: updateExecution failed. Erorr: record failed", unavailable.Message)
+	require.True(t, db.pipelined.rolledBack)
+	require.False(t, db.pipelined.committed)
 	require.Zero(t, db.historyNodes)
 	require.False(t, db.sequential.begun)
 }
@@ -355,5 +454,6 @@ func (t *fakeUpdateTx) Commit() error {
 }
 
 func (t *fakeUpdateTx) Rollback() error {
+	t.rolledBack = true
 	return nil
 }

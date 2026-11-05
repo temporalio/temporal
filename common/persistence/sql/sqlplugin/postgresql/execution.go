@@ -38,6 +38,9 @@ const (
 
 	writeLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
 	readLockExecutionQuery  = lockExecutionQueryBase + ` FOR SHARE`
+	// writeLockExecutionExistsQuery divides by the matching row count, so a missing
+	// execution fails the statement.
+	writeLockExecutionExistsQuery = `SELECT 1/count(*) FROM (` + writeLockExecutionQuery + `) AS e`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
 (shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
@@ -69,20 +72,16 @@ WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.business_id = $3 AND ce.a
 
 	lockCurrentExecutionQuery      = getCurrentExecutionQuery + ` FOR UPDATE`
 	lockCurrentChasmExecutionQuery = getCurrentChasmExecutionQuery + ` FOR UPDATE`
-	// The WithRunID queries divide by the matching row count, so a run ID mismatch
-	// fails the statement.
+	// The Exists and WithRunID queries divide by the matching row count, so a
+	// missing current execution or a run ID mismatch fails the statement.
+	lockCurrentExecutionExistsQuery         = `SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c`
+	lockCurrentChasmExecutionExistsQuery    = `SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c`
 	lockCurrentExecutionWithRunIDQuery      = `SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c WHERE run_id = $4`
 	lockCurrentChasmExecutionWithRunIDQuery = `SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c WHERE run_id = $5`
 
-	updateCurrentExecutionsBase = ` SET
-run_id = :run_id,
-create_request_id = :create_request_id,
-state = :state,
-status = :status,
-start_time = :start_time,
-last_write_version = :last_write_version,
-data = :data,
-data_encoding = :data_encoding
+	updateCurrentExecutionsColumns = `(run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding)`
+	updateCurrentExecutionsValues  = `(:run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
+	updateCurrentExecutionsBase    = ` SET ` + updateCurrentExecutionsColumns + ` = ` + updateCurrentExecutionsValues + `
 WHERE
 shard_id = :shard_id AND
 namespace_id = :namespace_id
@@ -91,8 +90,7 @@ namespace_id = :namespace_id
 	updateCurrentChasmExecutionsQuery = `UPDATE current_chasm_executions` + updateCurrentExecutionsBase + ` AND business_id = :workflow_id AND archetype_id = :archetype_id`
 
 	updateCurrentExecutionsIfChangedCondition = `
- AND (run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding)
- IS DISTINCT FROM (:run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
+ AND ` + updateCurrentExecutionsColumns + ` IS DISTINCT FROM ` + updateCurrentExecutionsValues
 	updateCurrentExecutionsIfChangedQuery      = updateCurrentExecutionsQuery + updateCurrentExecutionsIfChangedCondition
 	updateCurrentChasmExecutionsIfChangedQuery = updateCurrentChasmExecutionsQuery + updateCurrentExecutionsIfChangedCondition
 

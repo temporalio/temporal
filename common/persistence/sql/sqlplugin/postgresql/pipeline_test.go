@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -41,13 +42,69 @@ func TestBeginPipelinedTx_OtherDriverUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
 }
 
-func TestCommit_OtherDriverConnectionNotWritten(t *testing.T) {
+func TestBeginPipelinedTx_OtherDriverConnectionUnsupported(t *testing.T) {
 	t.Parallel()
 	pdb := newPipelineTestDB(t, otherDriverConnector{driver: stdlib.GetDefaultDriver()})
 
+	_, err := pdb.BeginPipelinedTx(context.Background())
+	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
+	sqlDB, err := pdb.handle.DB()
+	require.NoError(t, err)
+	require.Zero(t, sqlDB.Stats().InUse)
+}
+
+// A pipelined transaction holds a pooled connection from Begin until Rollback.
+func TestRollback_ReleasesConnection(t *testing.T) {
+	t.Parallel()
+	pdb := newPipelineTestDB(t, stdlib.GetConnector(*fakeServerConfig(t, serveFake)))
+	sqlDB, err := pdb.handle.DB()
+	require.NoError(t, err)
+
 	tx, err := pdb.BeginPipelinedTx(context.Background())
 	require.NoError(t, err)
-	require.ErrorIs(t, tx.Commit(), sqlplugin.ErrPipelineNotWritten)
+	require.Equal(t, 1, sqlDB.Stats().InUse)
+	require.NoError(t, tx.Rollback())
+	require.Zero(t, sqlDB.Stats().InUse)
+}
+
+// Only a division by zero at a check statement is that check failing.
+func TestSend_CheckFailure(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name      string
+		code      string
+		checkErr  error
+		wantCheck bool
+	}{
+		{name: "division by zero at a check", code: "22012", checkErr: sqlplugin.ErrShardRangeIDMismatch, wantCheck: true},
+		{name: "deadlock at a check", code: "40P01", checkErr: sqlplugin.ErrShardRangeIDMismatch},
+		{name: "division by zero at another statement", code: "22012"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			config := fakeServerConfig(t, serveFakeError(tc.code))
+			config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+			conn, err := pgx.ConnectConfig(context.Background(), config)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = conn.Close(context.Background()) })
+			p := &pipeline{
+				ctx:        context.Background(),
+				statements: []pipelinedStatement{{sql: "SELECT 1", checkErr: tc.checkErr}},
+			}
+
+			notWritten, err := p.send(conn)
+			require.True(t, notWritten)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, tc.code, pgErr.Code)
+			if tc.wantCheck {
+				require.ErrorIs(t, err, tc.checkErr)
+			} else {
+				require.Same(t, pgErr, err)
+			}
+		})
+	}
 }
 
 // A batch whose context is done before pgx sends it writes nothing.
@@ -80,6 +137,15 @@ func newPipelineTestDB(t *testing.T, connector sqldriver.Connector) *db {
 // connectToFakeServer connects pgx to an in-process server that completes the
 // startup handshake and then discards what it receives.
 func connectToFakeServer(t *testing.T) *pgx.Conn {
+	conn, err := pgx.ConnectConfig(context.Background(), fakeServerConfig(t, serveFake))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	return conn
+}
+
+// fakeServerConfig returns a pgx config whose connections go to an in-process
+// server that runs serve.
+func fakeServerConfig(t *testing.T, serve func(net.Conn)) *pgx.ConnConfig {
 	config, err := pgx.ParseConfig("host=fake user=temporal sslmode=disable")
 	require.NoError(t, err)
 	config.LookupFunc = func(_ context.Context, host string) ([]string, error) {
@@ -87,27 +153,55 @@ func connectToFakeServer(t *testing.T) *pgx.Conn {
 	}
 	config.DialFunc = func(context.Context, string, string) (net.Conn, error) {
 		client, server := net.Pipe()
-		go serveFake(server)
+		go serve(server)
 		return client, nil
 	}
-	conn, err := pgx.ConnectConfig(context.Background(), config)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-	return conn
+	return config
 }
 
 func serveFake(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
-	backend := pgproto3.NewBackend(conn, conn)
-	if _, err := backend.ReceiveStartupMessage(); err != nil {
-		return
-	}
-	backend.Send(&pgproto3.AuthenticationOk{})
-	backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
-	if err := backend.Flush(); err != nil {
+	if startFake(conn) == nil {
 		return
 	}
 	_, _ = io.Copy(io.Discard, conn)
+}
+
+// serveFakeError answers the first query with an error with code.
+func serveFakeError(code string) func(net.Conn) {
+	return func(conn net.Conn) {
+		defer func() { _ = conn.Close() }()
+		backend := startFake(conn)
+		if backend == nil {
+			return
+		}
+		if _, err := backend.Receive(); err != nil {
+			return
+		}
+		backend.Send(&pgproto3.ErrorResponse{Severity: "ERROR", Code: code, Message: "fake error"})
+		backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+		if err := backend.Flush(); err != nil {
+			return
+		}
+		_, _ = io.Copy(io.Discard, conn)
+	}
+}
+
+// startFake completes the startup handshake, and returns nil when it fails.
+func startFake(conn net.Conn) *pgproto3.Backend {
+	backend := pgproto3.NewBackend(conn, conn)
+	if _, err := backend.ReceiveStartupMessage(); err != nil {
+		return nil
+	}
+	backend.Send(&pgproto3.AuthenticationOk{})
+	// pgx runs simple protocol queries only with these settings.
+	backend.Send(&pgproto3.ParameterStatus{Name: "standard_conforming_strings", Value: "on"})
+	backend.Send(&pgproto3.ParameterStatus{Name: "client_encoding", Value: "UTF8"})
+	backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+	if err := backend.Flush(); err != nil {
+		return nil
+	}
+	return backend
 }
 
 func (c otherDriverConnector) Connect(context.Context) (sqldriver.Conn, error) {

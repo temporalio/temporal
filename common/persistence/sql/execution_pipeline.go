@@ -7,6 +7,8 @@ import (
 	"errors"
 	"slices"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -22,9 +24,8 @@ type expectingTx struct {
 
 // updateWorkflowExecutionPipelined appends the history and runs the
 // UpdateWorkflowExecution transaction in one round trip when the plugin
-// supports it. It returns false when nothing was written. The caller then runs
-// the sequential path, which returns its own error for a request the database
-// rejected.
+// supports it. It returns false when the request or the plugin's connection
+// needs the sequential path, before anything is sent.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -38,7 +39,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if request.Mode != p.UpdateWorkflowModeUpdateCurrent && request.Mode != p.UpdateWorkflowModeIgnoreCurrent {
 		return false, nil
 	}
-	for _, req := range slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents) {
+	newEvents := slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents)
+	for _, req := range newEvents {
 		// A new branch also inserts its history_tree row in its own transaction.
 		if req.IsNewBranch {
 			return false, nil
@@ -46,25 +48,44 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	}
 
 	tx, err := pipeliner.BeginPipelinedTx(ctx)
-	if errors.Is(err, sqlplugin.ErrPipelineUnsupported) {
+	switch {
+	case errors.Is(err, sqlplugin.ErrPipelineUnsupported):
 		return false, nil
-	}
-	if err != nil {
+	case len(newEvents) > 0 && (common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)):
+		// The sequential path appends the history first, and returns this error.
+		return true, &p.AppendHistoryTimeoutError{Msg: err.Error()}
+	case err != nil:
 		return true, convertSQLError("UpdateWorkflowExecution", "failed to start transaction", err)
 	}
 	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
-		m.logger.Warn("UpdateWorkflowExecution pipeline recording failed", tag.ShardID(request.ShardID), tag.Error(err))
-		return false, nil
+		if rollBackErr := tx.Rollback(); rollBackErr != nil {
+			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+		}
+		return true, err
 	}
+	if err := tx.Commit(); err != nil {
+		return true, pipelinedCommitError(request.ShardID, err)
+	}
+	return true, nil
+}
 
-	err = tx.Commit()
+// pipelinedCommitError returns the error the sequential path returns for the
+// check that failed, or Unavailable when the outcome is unknown.
+func pipelinedCommitError(shardID int32, err error) error {
+	const prefix = "UpdateWorkflowExecution: "
 	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, sqlplugin.ErrPipelineNotWritten):
-		return false, nil
+	case errors.Is(err, sqlplugin.ErrShardRangeIDMismatch):
+		return &p.ShardOwnershipLostError{ShardID: shardID, Msg: prefix + sqlplugin.ErrShardRangeIDMismatch.Error()}
+	case errors.Is(err, sqlplugin.ErrCurrentExecutionMissing):
+		return serviceerror.NewUnavailable(prefix + sqlplugin.ErrCurrentExecutionMissing.Error())
+	case errors.Is(err, sqlplugin.ErrCurrentExecutionRunIDMismatch):
+		return &p.CurrentWorkflowConditionFailedError{Msg: prefix + sqlplugin.ErrCurrentExecutionRunIDMismatch.Error()}
+	case errors.Is(err, sqlplugin.ErrExecutionMissing):
+		return &p.ConditionFailedError{Msg: prefix + sqlplugin.ErrExecutionMissing.Error()}
+	case errors.Is(err, sqlplugin.ErrExecutionConditionMismatch):
+		return &p.WorkflowConditionFailedError{Msg: prefix + sqlplugin.ErrExecutionConditionMismatch.Error()}
 	default:
-		return true, convertSQLError("UpdateWorkflowExecution", "failed to commit transaction", err)
+		return convertSQLError("UpdateWorkflowExecution", "failed to commit transaction", err)
 	}
 }
 

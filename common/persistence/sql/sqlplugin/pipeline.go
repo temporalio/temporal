@@ -11,26 +11,35 @@ var (
 	ErrNoPipelinedResults = errors.New("pipelined statements return no results")
 	// ErrPipelineUnsupported is returned when the plugin cannot pipeline.
 	ErrPipelineUnsupported = errors.New("pipelined transactions are not supported")
-	// ErrPipelineNotWritten wraps the error that stopped a PipelinedTx's Commit
-	// before anything the transaction queued was written.
-	ErrPipelineNotWritten = errors.New("pipelined transaction not written")
+
+	// A PipelinedTx's Commit returns one of these errors, wrapping the database
+	// error, when the check that stands for it fails.
+	ErrShardRangeIDMismatch          = errors.New("shard does not have the range ID")
+	ErrCurrentExecutionMissing       = errors.New("current execution does not exist")
+	ErrCurrentExecutionRunIDMismatch = errors.New("current execution has another run ID")
+	ErrExecutionMissing              = errors.New("execution does not exist")
+	ErrExecutionConditionMismatch    = errors.New("execution does not match the condition")
 )
 
 type (
 	// PipelinedTx is a transaction that queues its statements until Commit sends
 	// them as one implicit transaction, in one round trip once the connection has
 	// prepared them. Its reads return no results, so the checks a caller would make
-	// on them are statements that fail the transaction instead, and its
-	// UpdateExecutionsWithCondition fails the transaction when it updates no row.
-	// Commit returns ErrPipelineNotWritten only when nothing it queued was
-	// written. Any other Commit error leaves the outcome unknown.
+	// on them are statements that fail the transaction instead. Commit returns the
+	// error of the check that failed. Any other Commit error leaves the outcome
+	// unknown.
 	PipelinedTx interface {
 		Tx
+		// UpdateExecutionsWithCondition fails the transaction with
+		// ErrExecutionMissing when the execution does not exist, and with
+		// ErrExecutionConditionMismatch when it does not match the condition.
 		HistoryExecutionConditionalUpdater
-		// ReadLockShardsWithRangeID fails the transaction unless the shard has rangeID.
+		// ReadLockShardsWithRangeID fails the transaction with ErrShardRangeIDMismatch
+		// unless the shard has rangeID.
 		ReadLockShardsWithRangeID(ctx context.Context, filter ShardsFilter, rangeID int64) error
-		// LockCurrentExecutionsWithRunID fails the transaction unless the current
-		// execution has filter.RunID.
+		// LockCurrentExecutionsWithRunID fails the transaction with
+		// ErrCurrentExecutionMissing when the current execution does not exist, and
+		// with ErrCurrentExecutionRunIDMismatch unless it has filter.RunID.
 		LockCurrentExecutionsWithRunID(ctx context.Context, filter CurrentExecutionsFilter) error
 		// UpdateCurrentExecutionsIfChanged updates the current execution only when
 		// it differs from row.
