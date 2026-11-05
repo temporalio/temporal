@@ -134,6 +134,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 			require.Equal(t, lockedCurrent, db.pipelined.lockedCurrent)
 			require.Equal(t, updatedCurrent, db.pipelined.updatedCurrent)
 			require.True(t, db.pipelined.committed)
+			require.False(t, db.pipelined.rolledBack)
 			require.Zero(t, db.historyNodes)
 			require.False(t, db.sequential.begun)
 		})
@@ -212,6 +213,7 @@ func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to commit transaction: connection reset", unavailable.Message)
+	require.False(t, db.pipelined.rolledBack)
 	require.Zero(t, db.historyNodes)
 	require.False(t, db.sequential.begun)
 }

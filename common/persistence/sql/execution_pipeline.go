@@ -56,29 +56,25 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	case err != nil:
 		return true, convertSQLError("UpdateWorkflowExecution", "failed to start transaction", err)
 	}
-	// Only Commit and Rollback return the connection Begin took to the pool.
+	// Commit returns the connection Begin took to the pool, and this rollback
+	// returns it on every other exit, a panic while recording included.
+	sent := false
 	defer func() {
-		if rec := recover(); rec != nil {
+		if !sent {
 			if rollBackErr := tx.Rollback(); rollBackErr != nil {
 				m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 			}
-			panic(rec) //nolint:forbidigo
 		}
 	}()
 	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
-		if rollBackErr := tx.Rollback(); rollBackErr != nil {
-			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
 		return true, convertTxError("UpdateWorkflowExecution", err)
 	}
 	// A context that ended during recording sends nothing at Commit, so with new
 	// events return the error Begin returns for it.
 	if err := ctx.Err(); err != nil && len(newEvents) > 0 {
-		if rollBackErr := tx.Rollback(); rollBackErr != nil {
-			m.logger.Error("transaction rollback error", tag.Error(rollBackErr))
-		}
 		return true, &p.AppendHistoryTimeoutError{Msg: err.Error()}
 	}
+	sent = true
 	if err := tx.Commit(); err != nil {
 		return true, pipelinedCommitError(request.ShardID, err)
 	}
