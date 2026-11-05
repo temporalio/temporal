@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -277,10 +276,16 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 			partition := queue.partitionMgr.partition.TaskQueue().StickyPartition(tv.StickyTaskQueue().GetName())
 			queue.partitionMgr.partition = partition
 			queue.queue = UnversionedQueueKey(partition)
+			queue.backlogMgr.getDB().queue = queue.queue
+			_, err := queue.backlogMgr.getDB().RenewLease(t.Context())
+			require.NoError(t, err)
+			initialRangeID := queue.backlogMgr.getDB().RangeID()
+			queue.partitionMgr.engine.partitions[partition.Key()] = queue.partitionMgr
 			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 			queue.matchingClient = client
+			queue.matcher.partition = partition
+			queue.matcher.client = client
 			metadata := &pollMetadata{
-				singleSessionAcquisitionInProgress: true,
 				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
 				}},
@@ -297,25 +302,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 			if tc.empty {
 				response.TaskToken = nil
 			}
-			client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(callCtx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
-					require.Empty(t, request.GetForwardedSource(), "normal read partition selection must remain enabled")
-					require.Equal(t, partition.NamespaceId(), request.GetNamespaceId())
-					require.Equal(t, partition.TaskQueue().Name(), request.GetPollRequest().GetTaskQueue().GetName())
-					require.Equal(t, enumspb.TASK_QUEUE_KIND_NORMAL, request.GetPollRequest().GetTaskQueue().GetKind())
-					require.Equal(t, tv.WorkerIdentity(), request.GetPollRequest().GetIdentity())
-					require.Equal(t, ctx.Value(pollerIDKey), request.GetPollerId())
-					protorequire.ProtoEqual(t, metadata.sessionOptions, request.GetPollRequest().GetSessionOptions())
-					protorequire.ProtoEqual(t, metadata.deploymentOptions, request.GetPollRequest().GetDeploymentOptions())
-					require.Equal(t, metadata.workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey())
-					require.Equal(t, metadata.workerControlTaskQueue, request.GetPollRequest().GetWorkerControlTaskQueue())
-					protorequire.ProtoEqual(t, metadata.conditions, request.GetConditions())
-					deadline, ok := callCtx.Deadline()
-					require.True(t, ok)
-					originalDeadline, _ := ctx.Deadline()
-					require.Equal(t, originalDeadline, deadline)
-					return response, tc.err
-				})
+			client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Return(response, tc.err)
 			clock := clock.NewEventTimeSource()
 			idle := false
 			queue.liveness = newLiveness(clock, func() time.Duration { return time.Minute }, func() { idle = true })
@@ -332,6 +319,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 				require.NoError(t, err)
 				require.Same(t, response, task.pollWorkflowTaskQueueResponse())
 			}
+			require.Equal(t, initialRangeID, queue.backlogMgr.getDB().RangeID())
+			require.Same(t, queue.partitionMgr, queue.partitionMgr.engine.partitions[partition.Key()], "assignment must not unload the partition")
+			require.NoError(t, queue.tqCtx.Err())
+			require.Equal(t, !tc.empty && tc.err == nil, queue.ExclusiveWorkerAssigned())
 			clock.Advance(30 * time.Second)
 			require.False(t, idle, "the acquisition poll must refresh the sticky queue's idle timer")
 			clock.Advance(30 * time.Second)
@@ -354,6 +345,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCanc
 			queue.queue = UnversionedQueueKey(queue.partitionMgr.partition)
 			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 			queue.matchingClient = client
+			queue.matcher.partition = queue.partitionMgr.partition
+			queue.matcher.client = client
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			entered := make(chan struct{})
@@ -365,7 +358,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCanc
 				})
 			done := make(chan error, 1)
 			go func() {
-				_, err := queue.PollTask(ctx, &pollMetadata{singleSessionAcquisitionInProgress: true})
+				_, err := queue.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"}},
+				}})
 				done <- err
 			}()
 			await.Rcv(t, entered)

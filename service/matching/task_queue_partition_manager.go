@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -93,10 +92,6 @@ type (
 		initCancel         func()
 
 		cancelFairnessSub func()
-
-		singleSessionAcquisitionMutex      sync.Mutex
-		singleSessionAcquisitionInProgress bool
-		singleSessionAcquisitionCV         *locks.ConditionVariableImpl
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -945,15 +940,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	// based on whether the effectiveRPS has changed.
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
-	var task *internalTask
-	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY &&
-		pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
-		pollMetadata.sessionOptions.GetSingleSession() != nil {
-		// This is a single session poller and has a slightly different overall flow of polling.
-		task, err = pm.pollForSingleSessionWorker(ctx, dbq, pollMetadata)
-	} else {
-		task, err = dbq.PollTask(ctx, pollMetadata)
-	}
+	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task)
 	}
@@ -965,91 +952,6 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	return task, versionSetUsed, err
-}
-
-func (pm *taskQueuePartitionManagerImpl) pollForSingleSessionWorker(
-	ctx context.Context,
-	queue physicalTaskQueueManager,
-	metadata *pollMetadata,
-) (*internalTask, error) {
-	shouldAcquire, err := pm.beginSingleSessionAcquisition(ctx, queue, metadata.conditions.GetNoWait())
-	if err != nil {
-		return nil, err
-	}
-	if !shouldAcquire {
-		// If the poller is not allowed to acquire a session, it means that another poller is already acquiring a session
-		// or has already acquired a session for the same identity. Poll only on the sticky task queue in this case.
-		return queue.PollTask(ctx, metadata)
-	}
-
-	// CONSIDER(shivam): Reconcile uncertain starts after errors, cancellation, or timeouts
-	// before allowing another acquisition. Failure handling is deferred in this POC.
-	defer pm.finishSingleSessionAcquisition()
-	return pm.acquireSingleSession(ctx, queue, metadata)
-}
-
-func (pm *taskQueuePartitionManagerImpl) beginSingleSessionAcquisition(
-	ctx context.Context,
-	queue physicalTaskQueueManager,
-	noWait bool,
-) (bool, error) {
-	// The main idea here is to have a sequential allowance of pollers that are polling with the
-	// same stable identity so that we do not have multiple pollers for the same identity acquiring tasks
-	// from multiple workflows at the same time
-	pm.singleSessionAcquisitionMutex.Lock()
-	defer pm.singleSessionAcquisitionMutex.Unlock()
-
-	// Wait instead of repeatedly returning empty polls that consume poll RPS.
-	for pm.singleSessionAcquisitionInProgress {
-		if noWait || ctx.Err() != nil {
-			return false, errNoTasks
-		}
-		queue.MarkAlive()
-		if pm.singleSessionAcquisitionCV == nil {
-			pm.singleSessionAcquisitionCV = locks.NewConditionVariable(&pm.singleSessionAcquisitionMutex)
-		}
-		// This poller shall wait until a previous poller completes its acquisition or returns with an empty poll.
-		pm.singleSessionAcquisitionCV.Wait(ctx.Done())
-	}
-	if ctx.Err() != nil {
-		return false, errNoTasks
-	}
-	if queue.ExclusiveWorkerAssigned() {
-		return false, nil
-	}
-	if pm.partition.TaskQueue().Name() == "" {
-		return false, serviceerror.NewInvalidArgument("single-session workflow polls require a normal task queue name")
-	}
-	pm.singleSessionAcquisitionInProgress = true
-	return true, nil
-}
-
-func (pm *taskQueuePartitionManagerImpl) finishSingleSessionAcquisition() {
-	pm.singleSessionAcquisitionMutex.Lock()
-	defer pm.singleSessionAcquisitionMutex.Unlock()
-	pm.singleSessionAcquisitionInProgress = false
-	if pm.singleSessionAcquisitionCV != nil {
-		// Wake up all pollers that are waiting for this acquisition to complete
-		pm.singleSessionAcquisitionCV.Broadcast()
-	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) acquireSingleSession(
-	ctx context.Context,
-	queue physicalTaskQueueManager,
-	metadata *pollMetadata,
-) (*internalTask, error) {
-	acquisitionMetadata := *metadata
-	acquisitionMetadata.singleSessionAcquisitionInProgress = true
-	task, err := queue.PollTask(ctx, &acquisitionMetadata)
-	if err != nil {
-		return nil, err
-	}
-	if err := queue.AssignExclusiveWorker(); err != nil {
-		return nil, err
-	}
-	task.namespace = pm.ns.Name()
-	return task, nil
 }
 
 // GetPhysicalQueueAdjustedStats retrieves task queue stats for the given physical queue.

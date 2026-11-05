@@ -22,10 +22,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -92,6 +95,8 @@ func (s *PriMatcherSuite) newTestMatcher(ctx context.Context, opts testMatcherOp
 		rateLimitManager,
 		func() {}, // onRateLimited
 		func() {}, // markAlive
+		func() bool { return true },
+		func() error { return nil },
 	)
 }
 
@@ -782,6 +787,7 @@ func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
 		tm := newPriTaskMatcher(
 			ctx, cfg, childPartition, fwdr, mockClient, mockValidator,
 			s.logger, metrics.NoopMetricsHandler, rateLimitManager, func() {}, func() {},
+			func() bool { return true }, func() error { return nil },
 		)
 		tm.Start()
 		defer tm.Stop()
@@ -850,7 +856,8 @@ func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
 		manager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		manager.Start()
 		tm := newPriTaskMatcher(ctx, cfg, child, fwdr, client, nil,
-			s.logger, metrics.NoopMetricsHandler, manager, func() {}, func() {})
+			s.logger, metrics.NoopMetricsHandler, manager, func() {}, func() {},
+			func() bool { return true }, func() error { return nil })
 		defer tm.Stop()
 		done := make(chan taskResponse, workers)
 		addTasks := func(firstID int64) {
@@ -1031,6 +1038,336 @@ func (s *PriMatcherSuite) TestSingleSessionNoWaitSkipsForwarder() {
 			})
 			s.Require().ErrorIs(err, errNoTasks)
 			s.Require().Nil(task)
+		})
+	}
+}
+
+func (s *PriMatcherSuite) TestSingleSessionAcquisitionPoll() {
+	for _, tc := range []struct {
+		name          string
+		empty         bool
+		noWait        bool
+		forwardErr    error
+		assignmentErr error
+	}{
+		{name: "workflow task"},
+		{name: "empty poll", empty: true},
+		{name: "no wait", noWait: true},
+		{name: "rpc failure", forwardErr: serviceerror.NewUnavailable("matching unavailable")},
+		{name: "assignment failed", assignmentErr: serviceerror.NewUnavailable("assignment failed")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+			defer cancel()
+			ctx = context.WithValue(ctx, identityKey, tv.WorkerIdentity())
+			ctx = context.WithValue(ctx, pollerIDKey, tv.Any().String())
+			client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+			tm := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+			tm.partition = testMatcherTaskQueue.StickyPartition("session")
+			defer tm.Stop()
+			var assigned atomic.Bool
+			tm.isExclusiveWorkerAssigned = assigned.Load
+			assignmentCalls := 0
+			tm.assignExclusiveWorker = func() error {
+				assignmentCalls++
+				if tc.assignmentErr != nil {
+					return tc.assignmentErr
+				}
+				assigned.Store(true)
+				return nil
+			}
+			metadata := &pollMetadata{
+				sessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tm.partition.RpcName()},
+				}},
+				deploymentOptions:      tv.WorkerDeploymentOptions(true),
+				workerInstanceKey:      tv.WorkerInstanceKey(),
+				workerControlTaskQueue: tv.Any().String(),
+				conditions:             &matchingservice.PollConditions{NoWait: tc.noWait},
+			}
+			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+			if tc.empty {
+				response.TaskToken = nil
+			}
+			client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(callCtx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+					require.Empty(t, request.GetForwardedSource(), "normal read partition selection must remain enabled")
+					require.Equal(t, tm.partition.NamespaceId(), request.GetNamespaceId())
+					require.Equal(t, tm.partition.TaskQueue().Name(), request.GetPollRequest().GetTaskQueue().GetName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_NORMAL, request.GetPollRequest().GetTaskQueue().GetKind())
+					require.Equal(t, tv.WorkerIdentity(), request.GetPollRequest().GetIdentity())
+					require.Equal(t, ctx.Value(pollerIDKey), request.GetPollerId())
+					protorequire.ProtoEqual(t, metadata.sessionOptions, request.GetPollRequest().GetSessionOptions())
+					protorequire.ProtoEqual(t, metadata.deploymentOptions, request.GetPollRequest().GetDeploymentOptions())
+					require.Equal(t, metadata.workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey())
+					require.Equal(t, metadata.workerControlTaskQueue, request.GetPollRequest().GetWorkerControlTaskQueue())
+					protorequire.ProtoEqual(t, metadata.conditions, request.GetConditions())
+					deadline, ok := callCtx.Deadline()
+					require.True(t, ok)
+					originalDeadline, _ := ctx.Deadline()
+					require.Equal(t, originalDeadline, deadline)
+					return response, tc.forwardErr
+				})
+			task, err := tm.Poll(ctx, metadata)
+			switch {
+			case tc.forwardErr != nil:
+				require.ErrorIs(t, err, tc.forwardErr)
+			case tc.empty:
+				require.ErrorIs(t, err, errNoTasks)
+			case tc.assignmentErr != nil:
+				require.ErrorIs(t, err, tc.assignmentErr)
+			default:
+				require.NoError(t, err)
+				require.Same(t, response, task.pollWorkflowTaskQueueResponse())
+			}
+			if tc.empty || tc.forwardErr != nil {
+				require.Zero(t, assignmentCalls)
+			} else {
+				require.Equal(t, 1, assignmentCalls)
+			}
+			require.Equal(t, !tc.empty && tc.forwardErr == nil && tc.assignmentErr == nil, assigned.Load())
+			require.False(t, metadata.isSingleSessionAcquisitionInProgress(), "acquisition must not mutate caller metadata")
+			require.False(t, tm.singleSessionAcquisitionInProgress)
+		})
+	}
+}
+
+func (s *PriMatcherSuite) TestSingleSessionConcurrentAcquisition() {
+	for _, persistBlocked := range []bool{false, true} {
+		name := "forwarding"
+		if persistBlocked {
+			name = "persisting assignment"
+		}
+		s.Run(name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+				tm.partition = testMatcherTaskQueue.StickyPartition("session")
+				defer tm.Stop()
+				var assigned atomic.Bool
+				tm.isExclusiveWorkerAssigned = assigned.Load
+				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tm.partition.RpcName()},
+					},
+				}}
+				entered := make(chan struct{}, 1)
+				release := make(chan struct{})
+				block := func() error {
+					entered <- struct{}{}
+					select {
+					case <-release:
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+				client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, *matchingservice.PollWorkflowTaskQueueRequest, ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+						if !persistBlocked {
+							if err := block(); err != nil {
+								return nil, err
+							}
+						}
+						return response, nil
+					})
+				tm.assignExclusiveWorker = func() error {
+					if persistBlocked {
+						if err := block(); err != nil {
+							return err
+						}
+					}
+					assigned.Store(true)
+					return nil
+				}
+				type result struct {
+					task *internalTask
+					err  error
+				}
+				completed := make(chan result, 1)
+				go func() {
+					task, err := tm.Poll(ctx, metadata)
+					completed <- result{task: task, err: err}
+				}()
+				await.Rcv(t, entered)
+				competing := make(chan result, 2)
+				for range 2 {
+					go func() {
+						task, err := tm.Poll(ctx, metadata)
+						competing <- result{task: task, err: err}
+					}()
+				}
+				synctest.Wait()
+				select {
+				case <-competing:
+					t.Fatal("competing polls must wait for acquisition to finish")
+				default:
+				}
+				task, err := tm.Poll(ctx, &pollMetadata{sessionOptions: metadata.sessionOptions, conditions: &matchingservice.PollConditions{NoWait: true}})
+				require.ErrorIs(t, err, errNoTasks)
+				require.Nil(t, task)
+				_, err = tm.Poll(ctx, &pollMetadata{conditions: &matchingservice.PollConditions{NoWait: true}})
+				require.ErrorIs(t, err, errNoTasks, "ordinary polls do not enter the acquisition guard")
+
+				other := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+				other.partition = testMatcherTaskQueue.StickyPartition("other-session")
+				defer other.Stop()
+				other.isExclusiveWorkerAssigned = func() bool { return false }
+				other.assignExclusiveWorker = func() error { return nil }
+				client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Return(response, nil)
+				task, err = other.Poll(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: other.partition.RpcName()},
+					},
+				}})
+				require.NoError(t, err)
+				require.NotNil(t, task, "a different session acquires independently")
+
+				close(release)
+				first := await.Rcv(t, completed)
+				require.NoError(t, first.err)
+				require.Same(t, response, first.task.pollWorkflowTaskQueueResponse())
+				synctest.Wait()
+				tm.data.lock.Lock()
+				waiting := tm.data.pollers.Len()
+				tm.data.lock.Unlock()
+				require.Equal(t, 2, waiting, "assigned pollers wait on the local matcher")
+				for id := int64(1); id <= 2; id++ {
+					local := s.newBacklogTask(id, make(chan taskResponse, 1))
+					require.NoError(t, tm.AddTask(local))
+					got := await.Rcv(t, competing)
+					require.NoError(t, got.err)
+					require.Same(t, local, got.task)
+				}
+			})
+		})
+	}
+}
+
+func (s *PriMatcherSuite) TestSingleSessionEmptyAcquisitionCanRetry() {
+	t := s.T()
+	ctx := t.Context()
+	client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	tm := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+	tm.partition = testMatcherTaskQueue.StickyPartition("session")
+	defer tm.Stop()
+	var assigned atomic.Bool
+	tm.isExclusiveWorkerAssigned = assigned.Load
+	tm.assignExclusiveWorker = func() error {
+		assigned.Store(true)
+		return nil
+	}
+	metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+		Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"}},
+	}}
+	response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+	gomock.InOrder(
+		client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, nil),
+		client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Return(response, nil),
+	)
+	task, err := tm.Poll(ctx, metadata)
+	require.ErrorIs(t, err, errNoTasks)
+	require.Nil(t, task)
+	require.False(t, assigned.Load())
+	task, err = tm.Poll(ctx, metadata)
+	require.NoError(t, err)
+	require.Same(t, response, task.pollWorkflowTaskQueueResponse())
+	require.True(t, assigned.Load())
+}
+
+func (s *PriMatcherSuite) TestSingleSessionWaitingPollContext() {
+	for _, tc := range []struct {
+		name     string
+		cancel   bool
+		assigned bool
+	}{
+		{name: "cancelled while waiting", cancel: true},
+		{name: "deadline while waiting"},
+		{name: "deadline retained after assignment", assigned: true},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{client: client})
+				tm.partition = testMatcherTaskQueue.StickyPartition("session")
+				defer tm.Stop()
+				var assigned atomic.Bool
+				tm.isExclusiveWorkerAssigned = assigned.Load
+				tm.assignExclusiveWorker = func() error {
+					assigned.Store(true)
+					return nil
+				}
+				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "session"}},
+				}}
+				entered := make(chan struct{})
+				release := make(chan struct{})
+				client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(callCtx context.Context, _ *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+						close(entered)
+						select {
+						case <-release:
+							return &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}, nil
+						case <-callCtx.Done():
+							return nil, callCtx.Err()
+						}
+					})
+				owner := make(chan error, 1)
+				go func() {
+					_, err := tm.Poll(ctx, metadata)
+					owner <- err
+				}()
+				await.Rcv(t, entered)
+				deadline := time.Now().Add(10 * time.Second)
+				waiterCtx, cancelWaiter := context.WithDeadline(ctx, deadline)
+				defer cancelWaiter()
+				waiter := make(chan error, 1)
+				go func() {
+					_, err := tm.Poll(waiterCtx, metadata)
+					waiter <- err
+				}()
+				synctest.Wait()
+				select {
+				case <-waiter:
+					t.Fatal("competing poll must wait for acquisition or its context")
+				default:
+				}
+				if tc.assigned {
+					timer := time.NewTimer(3 * time.Second)
+					defer timer.Stop()
+					await.Rcv(t, timer.C)
+					close(release)
+					require.NoError(t, await.Rcv(t, owner))
+					synctest.Wait()
+					tm.data.lock.Lock()
+					waiting := tm.data.pollers.Len()
+					tm.data.lock.Unlock()
+					require.Equal(t, 1, waiting)
+					require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
+					require.Equal(t, deadline, time.Now(), "local polling must retain the original deadline")
+					require.ErrorIs(t, waiterCtx.Err(), context.DeadlineExceeded)
+					return
+				}
+				if tc.cancel {
+					cancelWaiter()
+				}
+				require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
+				require.NoError(t, ctx.Err(), "a waiting poll must not cancel the acquisition owner")
+				select {
+				case <-owner:
+					t.Fatal("acquisition must remain pending when a waiting poll ends")
+				default:
+				}
+				close(release)
+				require.NoError(t, await.Rcv(t, owner))
+			})
 		})
 	}
 }

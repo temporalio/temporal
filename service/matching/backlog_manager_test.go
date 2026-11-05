@@ -1394,23 +1394,21 @@ func TestSingleSessionAssignmentPersists(t *testing.T) {
 	_, err := db.RenewLease(t.Context())
 	require.NoError(t, err)
 	require.False(t, db.ExclusiveWorkerAssigned())
-	staleRange := db.rangeID
+	rangeID := db.RangeID()
 
-	changed, err := db.assignExclusiveWorker(t.Context())
+	err = db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
-	require.True(t, changed)
 	persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 	})
 	require.NoError(t, err)
 	require.True(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
 	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
-	require.Equal(t, staleRange+1, persisted.RangeID, "assignment fences snapshots taken before retention")
+	require.Equal(t, rangeID, persisted.RangeID, "assignment preserves the writer's allocated ID block")
 
-	changed, err = db.assignExclusiveWorker(t.Context())
+	err = db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
-	require.False(t, changed)
-	require.Equal(t, persisted.RangeID, db.rangeID)
+	require.Equal(t, persisted.RangeID, db.RangeID())
 
 	reloaded := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
 	_, err = reloaded.RenewLease(t.Context())

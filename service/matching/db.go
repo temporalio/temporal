@@ -117,16 +117,17 @@ func (db *taskQueueDB) ExclusiveWorkerAssigned() bool {
 	return db.exclusiveWorkerAssigned
 }
 
-func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) (bool, error) {
+func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
 	if db.exclusiveWorkerAssigned {
-		return false, nil
+		return nil
 	}
 	db.exclusiveWorkerAssigned = true
 	db.lastChange = time.Now()
-	// Fence scanner snapshots captured before this record became retained metadata.
-	return true, db.updateTaskQueueLocked(ctx, true)
+	// TODO (Shivam): Protect against a delayed scanner deleting this record using a pre-assignment
+	// snapshot with the same RangeID. Keep the range unchanged here so the writer retains its ID block.
+	return db.updateTaskQueueLocked(ctx, false)
 }
 
 // RangeID returns the current persistence view of rangeID

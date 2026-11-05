@@ -74,20 +74,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTaskToMatcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTaskToMatcher), task)
 }
 
-// AssignExclusiveWorker mocks base method.
-func (m *MockphysicalTaskQueueManager) AssignExclusiveWorker() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AssignExclusiveWorker")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AssignExclusiveWorker indicates an expected call of AssignExclusiveWorker.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) AssignExclusiveWorker() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignExclusiveWorker", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AssignExclusiveWorker))
-}
-
 // DispatchNexusTask mocks base method.
 func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -116,20 +102,6 @@ func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, ta
 func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, task)
-}
-
-// ExclusiveWorkerAssigned mocks base method.
-func (m *MockphysicalTaskQueueManager) ExclusiveWorkerAssigned() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExclusiveWorkerAssigned")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ExclusiveWorkerAssigned indicates an expected call of ExclusiveWorkerAssigned.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) ExclusiveWorkerAssigned() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExclusiveWorkerAssigned", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ExclusiveWorkerAssigned))
 }
 
 // FinishedDraining mocks base method.

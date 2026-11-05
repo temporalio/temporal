@@ -1320,7 +1320,11 @@ func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 			if tc.assigned {
 				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
 				require.NoError(t, err)
-				require.NoError(t, pm.(*taskQueuePartitionManagerImpl).defaultQueue().AssignExclusiveWorker())
+				queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+				require.NoError(t, queue.AssignExclusiveWorker())
+				if !tc.loaded {
+					s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+				}
 			}
 			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
 			require.NoError(t, err)
