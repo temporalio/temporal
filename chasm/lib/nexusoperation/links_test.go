@@ -9,18 +9,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	commonlinks "go.temporal.io/server/common/links"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 )
-
-// newTestLinkValidator returns a links.Validator with the given caps and a permissive per-link size limit.
-func newTestLinkValidator(t *testing.T, maxPerRequest, maxPerExecution int) commonlinks.Validator {
-	cfg := test.NewLinksValidatorConfig()
-	cfg.MaxLinksPerRequest = func(string) int { return maxPerRequest }
-	cfg.MaxLinksPerExecution = func(string) int { return maxPerExecution }
-	return test.NewLinksValidator(t, cfg)
-}
 
 // newLinkTestContext returns a mock context backed by stored, standing in for the framework's
 // per-request link storage: writes land in ctx.LinksByRequest, while reads (Links/RequestLinks) are
@@ -73,7 +64,7 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
 		link := testLink("wf-id")
 
-		op, err := newStandaloneOperation(ctx, newStartReq(link), cbValidator, newTestLinkValidator(t, 10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(link), cbValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 		require.NoError(t, err)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
@@ -84,19 +75,21 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 	t.Run("WithoutLinks", func(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
 
-		op, err := newStandaloneOperation(ctx, newStartReq(), cbValidator, newTestLinkValidator(t, 10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(), cbValidator, test.NewLinksValidator(t, test.NewLinksValidatorConfig()))
 		require.NoError(t, err)
 		require.Empty(t, ctx.LinksByRequest[op])
 	})
 
 	t.Run("EnforcesThePerComponentCap", func(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
+		cfg := test.NewLinksValidatorConfig()
+		cfg.MaxLinksPerExecution = func(string) int { return 1 }
 
 		_, err := newStandaloneOperation(
 			ctx,
 			newStartReq(testLink("wf-1"), testLink("wf-2")),
 			cbValidator,
-			newTestLinkValidator(t, 10, 1),
+			test.NewLinksValidator(t, cfg),
 		)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "cannot attach more than 1 links to an execution")
@@ -111,7 +104,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		ctx := newLinkTestContext(stored)
 		op := newScheduledTestOperation(t, ctx)
 
-		require.NoError(t, op.attachLinks(ctx, nil, "req-id", newTestLinkValidator(t, 10, 10), "ns-name"))
+		require.NoError(t, op.attachLinks(ctx, nil, "req-id", test.NewLinksValidator(t, test.NewLinksValidatorConfig()), "ns-name"))
 		require.Empty(t, ctx.LinksByRequest[op])
 	})
 
@@ -120,7 +113,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		stored := map[string][]*commonpb.Link{}
 		ctx := newLinkTestContext(stored)
 		op := newScheduledTestOperation(t, ctx)
-		validator := newTestLinkValidator(t, 10, 10)
+		validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 		linkA, linkB := testLink("wf-a"), testLink("wf-b")
 
 		// The first call records the request's links verbatim, without intra-batch dedup, matching
@@ -138,7 +131,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		stored := map[string][]*commonpb.Link{}
 		ctx := newLinkTestContext(stored)
 		op := newScheduledTestOperation(t, ctx)
-		validator := newTestLinkValidator(t, 10, 10)
+		validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 
 		require.NoError(t, op.attachLinks(ctx, []*commonpb.Link{testLink("wf-1")}, "req-1", validator, "ns-name"))
 		stored["req-1"] = ctx.LinksByRequest[op]["req-1"]
@@ -152,7 +145,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		require.NoError(t, TransitionSucceeded.Apply(op, ctx, EventSucceeded{}))
 
-		err := op.attachLinks(ctx, []*commonpb.Link{testLink("wf-id")}, "req-new", newTestLinkValidator(t, 10, 10), "ns-name")
+		err := op.attachLinks(ctx, []*commonpb.Link{testLink("wf-id")}, "req-new", test.NewLinksValidator(t, test.NewLinksValidatorConfig()), "ns-name")
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "cannot attach links to a closed nexus operation")
 	})
@@ -165,7 +158,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		require.NoError(t, TransitionSucceeded.Apply(op, ctx, EventSucceeded{}))
 
-		require.NoError(t, op.attachLinks(ctx, []*commonpb.Link{link}, "req-1", newTestLinkValidator(t, 10, 10), "ns-name"))
+		require.NoError(t, op.attachLinks(ctx, []*commonpb.Link{link}, "req-1", test.NewLinksValidator(t, test.NewLinksValidatorConfig()), "ns-name"))
 	})
 
 	t.Run("OnlyEnforcesAggregateLimits", func(t *testing.T) {
@@ -173,12 +166,14 @@ func TestOperationAttachLinks(t *testing.T) {
 		// the per-execution aggregates, mirroring callback.ValidateAndAttach.
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
 		op := newScheduledTestOperation(t, ctx)
+		cfg := test.NewLinksValidatorConfig()
+		cfg.MaxLinksPerRequest = func(string) int { return 1 }
 
 		err := op.attachLinks(
 			ctx,
 			[]*commonpb.Link{testLink("wf-1"), testLink("wf-2")},
 			"req-id",
-			newTestLinkValidator(t, 1, 10),
+			test.NewLinksValidator(t, cfg),
 			"ns-name",
 		)
 		require.NoError(t, err)
@@ -188,12 +183,14 @@ func TestOperationAttachLinks(t *testing.T) {
 	t.Run("RejectsExceedingThePerComponentCapWithAlreadyAttachedLinks", func(t *testing.T) {
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{"req-1": {testLink("wf-existing")}})
 		op := newScheduledTestOperation(t, ctx)
+		cfg := test.NewLinksValidatorConfig()
+		cfg.MaxLinksPerExecution = func(string) int { return 1 }
 
 		err := op.attachLinks(
 			ctx,
 			[]*commonpb.Link{testLink("wf-new")},
 			"req-2",
-			newTestLinkValidator(t, 10, 1),
+			test.NewLinksValidator(t, cfg),
 			"ns-name",
 		)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))

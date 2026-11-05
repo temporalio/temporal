@@ -496,7 +496,8 @@ func (o *Operation) attachLinks(
 	}
 	// The aggregates bound caller-attached links only; links returned by the Nexus handler
 	// (OperationState.links) arrive on a separate path and are not counted here.
-	if err := validator.ValidateAdditions(namespaceName, links, commonlinks.CurrentLinksInfoOf(ctx.Links(o))); err != nil {
+	linkUsage := commonlinks.UsageOf(ctx.Links(o))
+	if err := validator.ValidateAdditions(namespaceName, links, linkUsage); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(o, requestID, links)

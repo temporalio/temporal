@@ -1,6 +1,8 @@
 package links_test
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -313,7 +315,7 @@ func TestValidate_Callbacks(t *testing.T) {
 func TestValidateAdditions(t *testing.T) {
 	t.Run("WithinLimit", func(t *testing.T) {
 		v := newValidator(t, 10, 1024, 3)
-		existing := links.CurrentLinksInfoOf([]*commonpb.Link{batchJobLink("a")})
+		existing := links.UsageOf([]*commonpb.Link{batchJobLink("a")})
 		require.NoError(t, v.ValidateAdditions("ns", []*commonpb.Link{batchJobLink("b"), batchJobLink("c")}, existing))
 	})
 
@@ -322,7 +324,7 @@ func TestValidateAdditions(t *testing.T) {
 		err := v.ValidateAdditions(
 			"ns",
 			[]*commonpb.Link{batchJobLink("b"), batchJobLink("c"), batchJobLink("d")},
-			links.CurrentLinksInfo{Count: 1},
+			links.Usage{Count: 1},
 		)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.EqualError(t, err, "cannot attach more than 3 links to an execution (1 links already attached)")
@@ -331,13 +333,31 @@ func TestValidateAdditions(t *testing.T) {
 	t.Run("NoAdditionsAlwaysPasses", func(t *testing.T) {
 		// An execution already over a since-lowered limit must not fail a request that adds nothing.
 		v := newValidator(t, 10, 1024, 1)
-		require.NoError(t, v.ValidateAdditions("ns", nil, links.CurrentLinksInfo{Count: 5}))
+		require.NoError(t, v.ValidateAdditions("ns", nil, links.Usage{Count: 5}))
 	})
 }
 
-func TestNewValidator_MissingConfig(t *testing.T) {
-	_, err := links.NewValidator(links.ValidatorConfig{})
-	require.EqualError(t, err, "missing required fields: [MaxLinksPerRequest LinkMaxSize MaxLinksPerExecution]")
+func TestValidatorConfigValidate(t *testing.T) {
+	t.Run("MissingFields", func(t *testing.T) {
+		cfg := test.NewLinksValidatorConfig()
+		cfg.MaxLinksPerRequest = nil
+		cfg.MaxLinksPerExecution = nil
+
+		_, err := links.NewValidator(cfg)
+		require.EqualError(t, err, "missing required fields: [MaxLinksPerRequest MaxLinksPerExecution]")
+	})
+
+	// Verify that all fields will be reported if unset. (And adding a new field
+	// will not silently be considered valid.)
+	t.Run("MissingAllFields", func(t *testing.T) {
+		var fields []string
+		for field := range reflect.TypeFor[links.ValidatorConfig]().Fields() {
+			fields = append(fields, field.Name)
+		}
+
+		_, err := links.NewValidator(links.ValidatorConfig{})
+		require.EqualError(t, err, fmt.Sprintf("missing required fields: %v", fields))
+	})
 }
 
 func TestValidator_LimitsAreNamespaceScoped(t *testing.T) {
@@ -354,7 +374,7 @@ func TestValidator_LimitsAreNamespaceScoped(t *testing.T) {
 	require.ErrorContains(t, v.Validate("strict", twoLinks, nil),
 		"cannot attach more than 1 links per request, got 2")
 
-	require.NoError(t, v.ValidateAdditions("loose", twoLinks, links.CurrentLinksInfo{Count: 2}))
-	require.ErrorContains(t, v.ValidateAdditions("strict", twoLinks, links.CurrentLinksInfo{Count: 2}),
+	require.NoError(t, v.ValidateAdditions("loose", twoLinks, links.Usage{Count: 2}))
+	require.ErrorContains(t, v.ValidateAdditions("strict", twoLinks, links.Usage{Count: 2}),
 		"cannot attach more than 1 links to an execution")
 }

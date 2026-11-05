@@ -362,7 +362,8 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if a.LifecycleState(ctx).IsClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach links to a closed activity")
 	}
-	if err := validator.ValidateAdditions(namespaceName, links, commonlinks.CurrentLinksInfoOf(ctx.Links(a))); err != nil {
+	linkUsage := commonlinks.UsageOf(ctx.Links(a))
+	if err := validator.ValidateAdditions(namespaceName, links, linkUsage); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)

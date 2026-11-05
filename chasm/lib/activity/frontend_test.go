@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -108,7 +109,7 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
-		linkValidator: newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
+		linkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		logger:        log.NewNoopLogger(),
 	}
 	nsID := namespace.ID("test-namespace-id")
@@ -226,7 +227,7 @@ func TestEagerStartFallback(t *testing.T) {
 				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 				StartDelayEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 			},
-			linkValidator:  newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
+			linkValidator:  test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 			logger:         log.NewNoopLogger(),
 			metricsHandler: metrics.NoopMetricsHandler,
 		}
