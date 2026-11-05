@@ -8,8 +8,12 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// IsBufferedWHNInputEvent reports whether an event is an input eligible for WHN.
-func IsBufferedWHNInputEvent(eventType enumspb.EventType) bool {
+// WorkflowHeartbeatNotificationUpdateAdmittedInputType identifies an Update waiting in the Registry.
+const WorkflowHeartbeatNotificationUpdateAdmittedInputType = "UPDATE_ADMITTED"
+
+// IsWorkflowHeartbeatNotificationInputType reports whether an event type is eligible for a Workflow Task heartbeat notification.
+// Buffering alone does not make an event eligible; for example, ActivityTaskStarted records progress but does not normally require a new Workflow Task.
+func IsWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool {
 	switch eventType {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
@@ -33,7 +37,7 @@ func IsBufferedWHNInputEvent(eventType enumspb.EventType) bool {
 	}
 }
 
-func (c *ContextImpl) emitBufferedWHNInputMetrics(
+func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	ctx context.Context,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
@@ -43,7 +47,7 @@ func (c *ContextImpl) emitBufferedWHNInputMetrics(
 
 	eventTypes := make([]string, 0, len(newBufferedEvents))
 	for _, event := range newBufferedEvents {
-		if IsBufferedWHNInputEvent(event.GetEventType()) {
+		if IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
 			eventTypes = append(eventTypes, enumspb.EventType_name[int32(event.GetEventType())])
 		}
 	}
@@ -54,7 +58,7 @@ func (c *ContextImpl) emitBufferedWHNInputMetrics(
 	// The closed transaction's builder contains both prior buffered events and this mutation's new events.
 	bufferedInputCount := 0
 	hadBufferedInput := c.MutableState.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-		if IsBufferedWHNInputEvent(event.GetEventType()) {
+		if IsWorkflowHeartbeatNotificationInputType(event.GetEventType()) {
 			bufferedInputCount++
 		}
 		return bufferedInputCount > len(eventTypes)

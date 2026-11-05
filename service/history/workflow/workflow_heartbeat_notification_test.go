@@ -16,17 +16,17 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type bufferedWHNUpdateRegistry struct {
+type bufferedWorkflowHeartbeatNotificationUpdateRegistry struct {
 	update.Registry
 	hasOutgoing bool
 }
 
-func (r bufferedWHNUpdateRegistry) FailoverVersion() int64 { return 1 }
-func (r bufferedWHNUpdateRegistry) HasOutgoingMessages(bool) bool {
+func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) FailoverVersion() int64 { return 1 }
+func (r bufferedWorkflowHeartbeatNotificationUpdateRegistry) HasOutgoingMessages(bool) bool {
 	return r.hasOutgoing
 }
 
-func TestIsBufferedWHNInputEvent(t *testing.T) {
+func TestIsWorkflowHeartbeatNotificationInputType(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		name      string
@@ -44,12 +44,12 @@ func TestIsBufferedWHNInputEvent(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.eligible, IsBufferedWHNInputEvent(tc.eventType))
+			require.Equal(t, tc.eligible, IsWorkflowHeartbeatNotificationInputType(tc.eventType))
 		})
 	}
 }
 
-func TestEmitBufferedWHNInputMetrics(t *testing.T) {
+func TestEmitWorkflowHeartbeatNotificationBufferedInputMetrics(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		name          string
@@ -134,7 +134,7 @@ func TestEmitBufferedWHNInputMetrics(t *testing.T) {
 			workflowContext := &ContextImpl{
 				MutableState:   mutableState,
 				metricsHandler: metricsHandler,
-				updateRegistry: bufferedWHNUpdateRegistry{
+				updateRegistry: bufferedWorkflowHeartbeatNotificationUpdateRegistry{
 					hasOutgoing: tc.pendingUpdate,
 				},
 			}
@@ -142,7 +142,7 @@ func TestEmitBufferedWHNInputMetrics(t *testing.T) {
 			for _, eventType := range tc.newEvents {
 				newEvents = append(newEvents, &historypb.HistoryEvent{EventType: eventType})
 			}
-			workflowContext.emitBufferedWHNInputMetrics(context.Background(), newEvents)
+			workflowContext.emitWorkflowHeartbeatNotificationBufferedInputMetrics(context.Background(), newEvents)
 
 			buffered := capture.SnapshotMetric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
 			require.Len(t, buffered, len(tc.bufferedTypes))

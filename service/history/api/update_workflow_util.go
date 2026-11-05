@@ -116,6 +116,7 @@ func UpdateWorkflowWithNew(
 	if updateErr != nil {
 		return updateErr
 	}
+
 	if postActions.AbortUpdates {
 		workflowLease.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	}

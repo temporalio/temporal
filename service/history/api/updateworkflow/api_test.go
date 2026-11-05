@@ -212,8 +212,8 @@ func TestApplyRequest_CountsBufferedUpdates(t *testing.T) {
 		action, err := updater.ApplyRequest(context.Background(), registry, ms)
 		require.NoError(t, err)
 		require.True(t, action.Noop)
-		require.True(t, updater.bufferedInput)
-		require.Equal(t, i == 0, updater.firstBufferedInput)
+		require.True(t, updater.bufferedForWHN)
+		require.Equal(t, i == 0, updater.firstBufferedForWHN)
 	}
 }
 

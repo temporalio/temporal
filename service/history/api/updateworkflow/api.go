@@ -58,8 +58,8 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
-	bufferedInput          bool
-	firstBufferedInput     bool
+	bufferedForWHN         bool
+	firstBufferedForWHN    bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -110,13 +110,13 @@ func (u *Updater) Invoke(
 	if err != nil {
 		return nil, err
 	}
-	if u.bufferedInput {
+	if u.bufferedForWHN {
 		handler := u.shardCtx.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(u.req.Request.Namespace),
-			metrics.StringTag("input_type", "update"),
+			metrics.StringTag("input_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedInputType),
 		)
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
-		if u.firstBufferedInput {
+		if u.firstBufferedForWHN {
 			metrics.WorkflowHeartbeatNotificationFirstBufferedInput.With(handler).Record(1)
 		}
 	}
@@ -197,10 +197,10 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 	startedWorkflowTask := ms.HasStartedWorkflowTask()
-	hadBufferedInput := false
+	hadWHNBufferedInput := false
 	if startedWorkflowTask {
-		hadBufferedInput = ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-			return workflow.IsBufferedWHNInputEvent(event.GetEventType())
+		hadWHNBufferedInput = ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+			return workflow.IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
 		}) || updateReg.HasOutgoingMessages(false)
 	}
 
@@ -220,8 +220,8 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 	if startedWorkflowTask && !alreadyExisted {
-		u.bufferedInput = true
-		u.firstBufferedInput = !hadBufferedInput
+		u.bufferedForWHN = true
+		u.firstBufferedForWHN = !hadWHNBufferedInput
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
