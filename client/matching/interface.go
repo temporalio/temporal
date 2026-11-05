@@ -10,9 +10,7 @@ type RoutingClient interface {
 	Route(p tqid.Partition) (string, error)
 }
 
-// RouteChangeClient is implemented by routing clients that know about gradual membership
-// changes. It's separate from RoutingClient so that a wrapper around a matching client that
-// only forwards Route keeps routing, without being notified of gradual changes.
+// RouteChangeClient is implemented by routing clients that know about gradual membership changes.
 type RouteChangeClient interface {
 	// NextRouteChange returns the earliest time after now at which the result of Route(p) may
 	// change due to a gradual change that's already in progress (without a membership
