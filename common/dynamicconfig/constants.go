@@ -1495,9 +1495,11 @@ This can help reduce effects of task queue movement.`,
 		"matching.gradualMembershipChange",
 		0*time.Second,
 		`MatchingGradualMembershipChange is the duration over which task queue partitions are
-moved due to a membership change. Requires matching.alignMembershipChange. All of the cluster
-must be running a version that understands gradual membership changes before this is enabled,
-and it must be disabled before downgrading to a version that doesn't. Capped at 5 minutes.
+moved due to a membership change. Requires matching.alignMembershipChange, which must be under
+about 12 seconds: a change scheduled 15 seconds or more ahead happens immediately, with no window.
+All of the cluster must be running a version that understands gradual membership changes before
+this is enabled, and it must be disabled before downgrading to a version that doesn't. Capped at
+4 minutes.
 Note: This extends the time for matching nodes to shut down by up to this duration, so the
 termination grace period in your deployment configuration must cover it.
 `,

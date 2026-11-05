@@ -47,8 +47,9 @@ const (
 	// 3 seconds of propagation time buffer.
 	maxScheduledEventTimeSeconds = 15
 
-	// Gradual change windows are capped as a sanity check.
-	maxGradualChangeWindow = 5 * time.Minute
+	// Gradual change windows are capped as a sanity check, and to keep a leaving node's wait
+	// within the server's stop timeout.
+	maxGradualChangeWindow = 4 * time.Minute
 )
 
 type monitor struct {
