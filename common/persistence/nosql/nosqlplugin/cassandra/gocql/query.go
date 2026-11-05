@@ -28,6 +28,15 @@ func newQuery(
 	}
 }
 
+// with returns a copy of q that wraps gocqlQuery and keeps q's session and tracer factory.
+func (q *query) with(gocqlQuery *gocql.Query) *query {
+	return &query{
+		session:       q.session,
+		gocqlQuery:    gocqlQuery,
+		tracerFactory: q.tracerFactory,
+	}
+}
+
 func (q *query) Exec(ctx context.Context) (retError error) {
 	defer func() { q.session.handleError(retError) }()
 	q.maybeTrace(ctx)
@@ -78,40 +87,40 @@ func (q *query) Iter(ctx context.Context) Iter {
 
 func (q *query) PageSize(n int) Query {
 	q.gocqlQuery.PageSize(n)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) PageState(state []byte) Query {
 	q.gocqlQuery.PageState(state)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Consistency(c Consistency) Query {
 	q.gocqlQuery.Consistency(mustConvertConsistency(c))
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) WithTimestamp(timestamp int64) Query {
 	q.gocqlQuery.WithTimestamp(timestamp)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) WithTrace(tr TracerFactory) Query {
 	q.tracerFactory = tr
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Bind(v ...any) Query {
 	q.gocqlQuery.Bind(v...)
-	return newQuery(q.session, q.gocqlQuery)
+	return q.with(q.gocqlQuery)
 }
 
 func (q *query) Idempotent(value bool) Query {
-	return newQuery(q.session, q.gocqlQuery.Idempotent(value))
+	return q.with(q.gocqlQuery.Idempotent(value))
 }
 
 func (q *query) SetSpeculativeExecutionPolicy(policy SpeculativeExecutionPolicy) Query {
-	return newQuery(q.session, q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
+	return q.with(q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
 }
 
 func (q *query) maybeTrace(ctx context.Context) {

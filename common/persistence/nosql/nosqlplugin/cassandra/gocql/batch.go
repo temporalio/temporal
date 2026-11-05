@@ -32,6 +32,15 @@ func newBatch(
 	}
 }
 
+// with returns a copy of b that wraps gocqlBatch and keeps b's session and tracer factory.
+func (b *Batch) with(gocqlBatch *gocql.Batch) *Batch {
+	return &Batch{
+		session:       b.session,
+		gocqlBatch:    gocqlBatch,
+		tracerFactory: b.tracerFactory,
+	}
+}
+
 func (b *Batch) Query(stmt string, args ...any) {
 	b.gocqlBatch.Query(stmt, args...)
 }
@@ -54,12 +63,12 @@ func (b *Batch) MapExecCAS(ctx context.Context, dest map[string]any) (_ bool, _ 
 
 func (b *Batch) WithTimestamp(timestamp int64) *Batch {
 	b.gocqlBatch.WithTimestamp(timestamp)
-	return newBatch(b.session, b.gocqlBatch)
+	return b.with(b.gocqlBatch)
 }
 
 func (b *Batch) WithTrace(tr TracerFactory) *Batch {
 	b.tracerFactory = tr
-	return newBatch(b.session, b.gocqlBatch)
+	return b.with(b.gocqlBatch)
 }
 
 func mustConvertBatchType(batchType BatchType) gocql.BatchType {
