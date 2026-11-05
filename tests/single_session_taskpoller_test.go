@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -32,6 +33,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	tv := env.Tv()
 	namespace := env.Namespace().String()
 	client := env.FrontendClient()
+	matching := env.GetTestCluster().MatchingClient()
 	poller := taskpoller.New(t, client, namespace)
 	session := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
@@ -42,12 +44,20 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 	})
 	require.NoError(t, err)
+	workflowPollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
+	}
+	activityPollRequest := &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
+	}
+	_, err = client.PollWorkflowTaskQueue(testcore.NewContext(t.Context()), workflowPollRequest)
+	var disabled *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &disabled)
+	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true)
 
 	// With SessionOptions.StableIdentity set to the sticky task queue name, the worker will only poll the sticky task queue with poll forwarding to
 	// normal queue to only happen for the very first workflow task
-	stickyPoller := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
-	})
+	stickyPoller := poller.PollWorkflowTask(workflowPollRequest)
 	_, err = stickyPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
@@ -61,16 +71,41 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
 
-	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session,
-	}).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, false)
+	_, err = client.SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace, WorkflowExecution: tv.WorkflowExecution(), SignalName: tv.SignalName(),
+	})
+	require.NoError(t, err)
+	await.Require(t.Context(), t, func(t *await.T) {
+		for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			response, err := matching.DescribeTaskQueuePartition(t.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
+				NamespaceId: env.NamespaceID().String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: taskType,
+					PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().GetName()},
+				},
+				Versions: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true}, ReportStats: true, OnlyIfLoaded: true,
+			})
+			require.NoError(t, err)
+			require.Positive(t, response.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats().GetApproximateBacklogCount())
+		}
+	}, 10*time.Second, 10*time.Millisecond)
+	_, err = client.PollWorkflowTaskQueue(testcore.NewContext(t.Context()), workflowPollRequest)
+	require.ErrorAs(t, err, &disabled)
+	_, err = client.PollActivityTaskQueue(testcore.NewContext(t.Context()), activityPollRequest)
+	require.ErrorAs(t, err, &disabled)
+	env.OverrideDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true)
+
+	_, err = poller.PollActivityTask(activityPollRequest).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		require.Equal(t, tv.ActivityID(), task.GetActivityId())
+		require.Equal(t, int32(1), task.GetAttempt())
 		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
 	_, err = stickyPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+		require.Equal(t, int32(1), task.GetAttempt())
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
@@ -94,7 +129,6 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 		require.Positive(t, response.GetStats().GetApproximateBacklogCount())
 	}, 10*time.Second, 10*time.Millisecond)
 
-	matching := env.GetTestCluster().MatchingClient()
 	_, err = matching.ForceUnloadTaskQueuePartition(t.Context(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: env.NamespaceID().String(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -150,6 +184,7 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, time.Second),
@@ -237,6 +272,7 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -341,6 +377,7 @@ func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newVersioning3TestEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 3),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0),

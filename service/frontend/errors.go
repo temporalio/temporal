@@ -115,6 +115,8 @@ var (
 	errWorkerVersioningV2_0NotAllowed         = serviceerror.NewPermissionDenied("Worker versioning v0.2 (Rules-based, deprecated) is disabled on this namespace.", "")
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
+	errExclusiveWorkerSessionsDisabled = serviceerror.NewFailedPrecondition("Exclusive-worker sessions are disabled for this namespace.")
+
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 
 	errWorkflowTimeSkippingNotEnabled          = workflow.ErrWorkflowTimeSkippingNotEnabled

@@ -1147,6 +1147,9 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
 		return nil, err
 	}
+	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
+		return nil, err
+	}
 
 	callTime := time.Now().UTC()
 
@@ -1403,6 +1406,9 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue()); err != nil {
+		return nil, err
+	}
+	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
 		return nil, err
 	}
 
@@ -7973,6 +7979,13 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 		return nil, err
 	}
 	return histResp.GetResponse(), nil
+}
+
+func (wh *WorkflowHandler) checkExclusiveWorkerSessionsEnabled(namespaceName string, options *sessionpb.WorkerSessionOptions) error {
+	if options.GetSingleSession() != nil && !wh.config.EnableExclusiveWorkerSessions(namespaceName) {
+		return errExclusiveWorkerSessionsDisabled
+	}
+	return nil
 }
 
 func validateWorkerSessionOptions(options *sessionpb.WorkerSessionOptions, taskQueue *taskqueuepb.TaskQueue) error {
