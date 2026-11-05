@@ -144,9 +144,8 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		name           string
-		setup          func(request *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB)
-		pipelinedBegun bool
+		name  string
+		setup func(request *p.InternalUpdateWorkflowExecutionRequest, db *fakePipelineDB)
 	}{
 		{
 			name: "unsupported connection",
@@ -195,7 +194,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 			tc.setup(request, db)
 
 			require.NoError(t, updateWithFakes(db, request))
-			require.Equal(t, tc.pipelinedBegun, db.pipelined.begun)
+			require.False(t, db.pipelined.begun)
 			require.False(t, db.pipelined.committed)
 			require.Equal(t, len(request.UpdateWorkflowNewEvents)+len(request.NewWorkflowNewEvents), db.historyNodes+db.sequential.historyNodes)
 			require.True(t, db.sequential.committed)
