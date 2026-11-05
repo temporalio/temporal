@@ -15669,17 +15669,45 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 		ctx := s.Context()
 
 		activityID, taskQueue := env.Tv().ActivityID(), env.Tv().TaskQueue().GetName()
-		start := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		startRequest := &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			TaskQueue:           env.Tv().TaskQueue(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().RequestID(),
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{},
+		}
+		start, err := env.FrontendClient().StartActivityExecution(ctx, startRequest)
+		require.NoError(t, err)
 		task := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, start.GetRunId())
 
 		handoff := &workflowservice.RespondActivityTaskHandoffRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: task.GetTaskToken(),
 		}
-		_, err := env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
+		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
 		require.NoError(t, err)
 
 		env.OverrideDynamicConfig(activity.StandaloneAsyncHandoffEnabled, false)
+
+		// Disabled admission rejects opted-in Start requests before deduplication or USE_EXISTING.
+		for _, testCase := range []struct {
+			name, requestID string
+			conflictPolicy  enumspb.ActivityIdConflictPolicy
+		}{
+			{name: "successful Start retry", requestID: startRequest.GetRequestId()},
+			{name: "use existing", requestID: env.Tv().Any().String(), conflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING},
+		} {
+			retry := common.CloneProto(startRequest)
+			retry.RequestId = testCase.requestID
+			retry.IdConflictPolicy = testCase.conflictPolicy
+			_, err := env.FrontendClient().StartActivityExecution(ctx, retry)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument), testCase.name)
+		}
+
 		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
 		require.ErrorAs(t, err, new(*serviceerror.Unimplemented))
 
@@ -15729,6 +15757,27 @@ func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
 
 		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
+
+		// The flag cannot enable updates until the workflow activity path persists handoff options.
+		env.OverrideDynamicConfig(activity.WorkflowAsyncHandoffEnabled, true)
+
+		// Neither workflow update API may opt an activity into the standalone-only feature.
+		for _, path := range []string{"async_handoff_options", "asyncHandoffOptions.heartbeatTimeout"} {
+			_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+				Namespace: env.Namespace().String(), WorkflowId: run.GetID(), RunId: run.GetRunID(), ActivityId: task.GetActivityId(),
+				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
+			})
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+
+			_, err = env.FrontendClient().UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
+				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+				Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: task.GetActivityId()},
+				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
+			})
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		}
 
 		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
 			Namespace: env.Namespace().String(),

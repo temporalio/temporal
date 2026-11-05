@@ -1122,7 +1122,8 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 	// Mutate a nested field to verify current options don't share memory with the original snapshot.
 	activity.AsyncHandoffOptions.StartToHandoffTimeout.Seconds++
 
-	err = activity.mergeActivityOptions(&workflowservice.UpdateActivityExecutionOptionsRequest{
+	beforeUpdate := common.CloneProto(activity.ActivityState)
+	options, err := activity.mergeActivityOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 		ActivityId: "act",
 		ActivityOptions: &apiactivitypb.ActivityOptions{
 			StartToCloseTimeout: durationpb.New(5 * time.Second),
@@ -1142,6 +1143,8 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		}},
 	})
 	require.NoError(t, err)
+	protorequire.ProtoEqual(t, beforeUpdate, activity.ActivityState)
+	activity.applyActivityOptions(options)
 
 	originalOptions := activity.GetOriginalOptions()
 	protorequire.ProtoEqual(t, original, originalOptions)

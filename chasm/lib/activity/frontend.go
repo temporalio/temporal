@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -568,6 +569,13 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	}
 	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
+
+	updatesWorkflowHandoffOptions := req.GetWorkflowId() != "" && req.GetUpdateMask() != nil &&
+		util.FieldMaskHasPathOrSubPath(util.ParseFieldMask(req.GetUpdateMask()), "asyncHandoffOptions")
+	// Workflow activity updates do not yet persist handoff options, regardless of the feature flag.
+	if updatesWorkflowHandoffOptions {
+		return nil, serviceerror.NewInvalidArgument("async handoff options are not supported for workflow activities")
 	}
 
 	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
