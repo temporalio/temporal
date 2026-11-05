@@ -402,3 +402,47 @@ func TestValidator_LimitsAreNamespaceScoped(t *testing.T) {
 	require.ErrorContains(t, v.ValidateAdditions("strict", twoLinks, links.Usage{Count: 2}),
 		"cannot attach more than 1 links to an execution")
 }
+
+func TestSanitize(t *testing.T) {
+	t.Run("EmptyIsANoOp", func(t *testing.T) {
+		kept, err := newValidator(t, 2, 1024, 2000).Sanitize("ns", nil)
+		require.NoError(t, err)
+		require.Empty(t, kept)
+	})
+
+	t.Run("KeepsValidLinks", func(t *testing.T) {
+		in := []*commonpb.Link{batchJobLink("a"), batchJobLink("b")}
+		kept, err := newValidator(t, 2, 1024, 2000).Sanitize("ns", in)
+		require.NoError(t, err)
+		require.Equal(t, in, kept)
+	})
+
+	t.Run("DropsInvalidLinksAndKeepsTheRest", func(t *testing.T) {
+		a, c := batchJobLink("a"), batchJobLink("c")
+		kept, err := newValidator(t, 10, 1024, 2000).Sanitize("ns", []*commonpb.Link{a, batchJobLink(""), c, {}})
+		require.Equal(t, []*commonpb.Link{a, c}, kept)
+		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+		require.ErrorContains(t, err, "unsupported link variant")
+	})
+
+	t.Run("DropsOversizedLinks", func(t *testing.T) {
+		small, large := batchJobLink("a"), batchJobLink("a-much-longer-job-id")
+		kept, err := newValidator(t, 10, small.Size(), 2000).Sanitize("ns", []*commonpb.Link{large, small})
+		require.Equal(t, []*commonpb.Link{small}, kept)
+		require.ErrorContains(t, err, "link exceeds allowed size")
+	})
+
+	t.Run("TruncatesToTheCountLimit", func(t *testing.T) {
+		a, b := batchJobLink("a"), batchJobLink("b")
+		kept, err := newValidator(t, 2, 1024, 2000).Sanitize("ns", []*commonpb.Link{a, b, batchJobLink("c"), batchJobLink("d")})
+		require.Equal(t, []*commonpb.Link{a, b}, kept)
+		require.EqualError(t, err, "dropped 2 links beyond the limit of 2")
+	})
+
+	t.Run("InvalidLinksDoNotUseUpTheCountLimit", func(t *testing.T) {
+		a, b := batchJobLink("a"), batchJobLink("b")
+		kept, err := newValidator(t, 2, 1024, 2000).Sanitize("ns", []*commonpb.Link{{}, a, b})
+		require.Equal(t, []*commonpb.Link{a, b}, kept)
+		require.EqualError(t, err, "unsupported link variant")
+	})
+}

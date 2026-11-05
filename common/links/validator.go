@@ -13,12 +13,20 @@
 // are part of its size, so they are already charged to the callback budget enforced by
 // [go.temporal.io/server/common/callbacks.Validator.ValidateAdditions].
 //
+// Links returned by a remote Nexus handler or worker (in a StartOperation response or an async
+// completion) are not caller input, and are never grounds for rejecting the response: the operation has
+// already happened. [Validator.Sanitize] filters them instead, dropping any that would fail Validate's
+// per-request checks. Because each operation receives at most one start response and one completion,
+// these per-response bounds also bound the total, so handler links are not counted toward execution
+// aggregates.
+//
 // Only CHASM components that store caller-attached links (standalone activities and standalone Nexus
 // operations) enforce execution aggregates. Workflow links are persisted in history events, so their
 // total is bounded by history size limits instead.
 package links
 
 import (
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,6 +63,14 @@ type Validator interface {
 	// newLinks must only contain links attached directly to the request. Callback-embedded links are
 	// charged to the callback budget instead (see package docs).
 	ValidateAdditions(namespaceName string, newLinks []*commonpb.Link, existing Usage) error
+
+	// Sanitize filters links returned by a remote Nexus handler or worker, applying the same per-request
+	// limits as Validate. Instead of rejecting, it drops malformed or oversized links and truncates the
+	// result to the per-request count limit. The returned error describes what was dropped (nil if
+	// nothing was), for the caller to log; it is not a reason to fail the response.
+	//
+	// Call it where the links enter the system, before they are persisted.
+	Sanitize(namespaceName string, links []*commonpb.Link) ([]*commonpb.Link, error)
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
@@ -175,17 +191,46 @@ func totalSize(links []*commonpb.Link) int {
 	return n
 }
 
+// Sanitize keeps the valid links, in order, up to the per-request count limit.
+func (v *validator) Sanitize(namespaceName string, links []*commonpb.Link) ([]*commonpb.Link, error) {
+	if len(links) == 0 {
+		return links, nil
+	}
+	maxCount := v.config.MaxLinksPerRequest(namespaceName)
+	maxSize := v.config.LinkMaxSize(namespaceName)
+
+	var errs []error
+	kept := make([]*commonpb.Link, 0, min(len(links), maxCount))
+	for i, l := range links {
+		if len(kept) == maxCount {
+			errs = append(errs, fmt.Errorf("dropped %d links beyond the limit of %d", len(links)-i, maxCount))
+			break
+		}
+		if err := validateLink(l, maxSize); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return kept, errors.Join(errs...)
+}
+
 // validateEach checks the size and required fields of each link.
 func validateEach(links []*commonpb.Link, maxSize int) error {
 	for _, l := range links {
-		if l.Size() > maxSize {
-			return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
-		}
-		if err := validateFields(l); err != nil {
+		if err := validateLink(l, maxSize); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validateLink checks the size and required fields of a single link.
+func validateLink(l *commonpb.Link, maxSize int) error {
+	if l.Size() > maxSize {
+		return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
+	}
+	return validateFields(l)
 }
 
 // validateFields confirms that Link has all the required fields.

@@ -2564,6 +2564,136 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+// TestHandlerStartLinksAreSanitized verifies that links on a Nexus handler's start response are filtered
+// where they enter the system: at most frontend.maxlinksPerRequest are kept, and the excess is dropped
+// rather than failing the operation.
+func (s *NexusStandaloneTestSuite) TestHandlerStartLinksAreSanitized() {
+	env := s.newTestEnv()
+	const maxLinks = 2
+	env.OverrideDynamicConfig(dynamicconfig.FrontendMaxLinksPerRequest, maxLinks)
+	handlerLinks := s.handlerLinks(env, maxLinks+1)
+
+	handler := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service string,
+			operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			nexus.AddHandlerLinks(ctx, handlerLinks...)
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+
+	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: "test-op",
+		Endpoint:    endpointName,
+	})
+	s.NoError(err)
+
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: "test-op",
+		RunId:       startResp.RunId,
+		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+	})
+	s.NoError(err)
+
+	descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: "test-op",
+		RunId:       startResp.RunId,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+	s.Len(descResp.GetInfo().GetLinks(), maxLinks)
+}
+
+// TestHandlerCompletionLinksAreSanitized is TestHandlerStartLinksAreSanitized for links on an async
+// completion. Completion links are only recorded when the completion arrives before the start response,
+// so the handler holds its start response until the completion has been delivered.
+func (s *NexusStandaloneTestSuite) TestHandlerCompletionLinksAreSanitized() {
+	env := s.newTestEnv()
+	const maxLinks = 2
+	env.OverrideDynamicConfig(dynamicconfig.FrontendMaxLinksPerRequest, maxLinks)
+	handlerLinks := s.handlerLinks(env, maxLinks+1)
+
+	type callbackInfo struct {
+		token string
+		url   string
+	}
+	callbackCh := make(chan callbackInfo, 1)
+	completedCh := make(chan struct{})
+	handler := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service string,
+			operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			callbackCh <- callbackInfo{
+				token: options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
+				url:   options.CallbackURL,
+			}
+			<-completedCh
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+
+	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: "test-op",
+		Endpoint:    endpointName,
+	})
+	s.NoError(err)
+	callback := s.Rcv(callbackCh)
+
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	err = c.CompleteOperation(s.Context(), callback.url, nexusrpc.CompleteOperationOptions{
+		Result:         payload.EncodeString("result"),
+		Header:         nexus.Header{commonnexus.CallbackTokenHeader: callback.token},
+		OperationToken: "test-operation-token",
+		Links:          handlerLinks,
+	})
+	close(completedCh)
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		require.Len(t, descResp.GetInfo().GetLinks(), maxLinks)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// handlerLinks returns n distinct, valid workflow event links in Nexus form.
+func (s *NexusStandaloneTestSuite) handlerLinks(env *NexusTestEnv, n int) []nexus.Link {
+	links := make([]nexus.Link, n)
+	for i := range links {
+		links[i] = commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			Namespace:  env.Namespace().String(),
+			WorkflowId: fmt.Sprintf("handler-workflow-%d", i),
+			RunId:      "handler-run-id",
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		})
+	}
+	return links
+}
+
 func (s *NexusStandaloneTestSuite) startNexusOperation(
 	env *NexusTestEnv,
 	req *workflowservice.StartNexusOperationExecutionRequest,

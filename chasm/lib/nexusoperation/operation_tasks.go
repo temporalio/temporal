@@ -88,7 +88,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			h.logger.Error("endpoint not found while processing invocation task", tag.Error(err))
 			handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
-			result, err := newInvocationResult(nil, handlerErr)
+			result, err := newInvocationResult(nil, nil, handlerErr)
 			if err != nil {
 				return fmt.Errorf("failed to construct invocation result: %w", err)
 			}
@@ -192,7 +192,13 @@ func (h *operationInvocationTaskHandler) Execute(
 
 	h.recordCallOutcome(endpoint, startCallOutcomeTag(callCtx, response, callErr), callErr, callDuration, failureSource, traceCtx)
 
-	result, err := newInvocationResult(response, callErr)
+	// Handler links are sanitized here, where they enter the system, rather than in saveInvocationResult:
+	// the transition also runs for workflow-scheduled operations via the workflow-backed store.
+	var handlerLinks []*commonpb.Link
+	if callErr == nil && response != nil {
+		handlerLinks = commonnexus.ConvertAndSanitizeHandlerLinks(response.Links, ns.Name().String(), h.linkValidator, h.logger)
+	}
+	result, err := newInvocationResult(response, handlerLinks, callErr)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation result: %w", err)
 	}

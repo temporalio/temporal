@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
@@ -97,6 +98,7 @@ func newInvocationTaskTestEnv(
 			logger:            log.NewNoopLogger(),
 			clientProvider:    clientProvider,
 			endpointRegistry:  endpointReg,
+			linkValidator:     test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		},
 		callbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 	}
@@ -638,7 +640,7 @@ func TestNewInvocationResult_CanceledBareFailure(t *testing.T) {
 	}
 	require.NoError(t, nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr))
 
-	result, err := newInvocationResult(nil, opErr)
+	result, err := newInvocationResult(nil, nil, opErr)
 	require.NoError(t, err)
 
 	cancel, ok := result.(invocationResultCancel)
