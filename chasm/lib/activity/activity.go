@@ -321,6 +321,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
+	a.releaseAttemptLimiters(ctx)
 	return callback.ScheduleCompletionCallbacks(ctx, a)
 }
 

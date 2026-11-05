@@ -15,11 +15,12 @@ import (
 	v12 "go.temporal.io/api/activity/v1"
 	v1 "go.temporal.io/api/common/v1"
 	v14 "go.temporal.io/api/deployment/v1"
-	v17 "go.temporal.io/api/enums/v1"
-	v18 "go.temporal.io/api/failure/v1"
-	v16 "go.temporal.io/api/nexus/v1"
-	v15 "go.temporal.io/api/sdk/v1"
+	v18 "go.temporal.io/api/enums/v1"
+	v19 "go.temporal.io/api/failure/v1"
+	v17 "go.temporal.io/api/nexus/v1"
+	v16 "go.temporal.io/api/sdk/v1"
 	v11 "go.temporal.io/api/taskqueue/v1"
+	v15 "go.temporal.io/server/api/taskqueue/v1"
 	v13 "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -770,7 +771,9 @@ type ActivityAttemptState struct {
 	WorkerControlTaskQueue string `protobuf:"bytes,16,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
 	// The serialized ComponentRef that matching embedded in the task token sent to the worker.
 	// Set when the attempt starts. Used to build the task token for worker commands.
-	ComponentRef  []byte `protobuf:"bytes,17,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	ComponentRef []byte `protobuf:"bytes,17,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	// Flow control limiters held by the currently started activity task.
+	Limiters      []*v15.LimiterRef `protobuf:"bytes,18,rep,name=limiters,proto3" json:"limiters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -924,6 +927,13 @@ func (x *ActivityAttemptState) GetComponentRef() []byte {
 	return nil
 }
 
+func (x *ActivityAttemptState) GetLimiters() []*v15.LimiterRef {
+	if x != nil {
+		return x.Limiters
+	}
+	return nil
+}
+
 type ActivityHeartbeatState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Details provided in the last recorded activity heartbeat.
@@ -997,10 +1007,10 @@ type ActivityRequestData struct {
 	// this empty.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/chasm/lib/activity/proto/v1/activity_state.proto.
-	UserMetadata *v15.UserMetadata `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	UserMetadata *v16.UserMetadata `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
 	// Serialization context from the Nexus caller that started this activity. Kept for worker
 	// retries and for DescribeActivityExecution and PollActivityExecution responses.
-	PropagatedNexusSerializationContext *v16.PropagatedSerializationContext `protobuf:"bytes,4,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
+	PropagatedNexusSerializationContext *v17.PropagatedSerializationContext `protobuf:"bytes,4,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
 	unknownFields                       protoimpl.UnknownFields
 	sizeCache                           protoimpl.SizeCache
 }
@@ -1050,14 +1060,14 @@ func (x *ActivityRequestData) GetHeader() *v1.Header {
 }
 
 // Deprecated: Marked as deprecated in temporal/server/chasm/lib/activity/proto/v1/activity_state.proto.
-func (x *ActivityRequestData) GetUserMetadata() *v15.UserMetadata {
+func (x *ActivityRequestData) GetUserMetadata() *v16.UserMetadata {
 	if x != nil {
 		return x.UserMetadata
 	}
 	return nil
 }
 
-func (x *ActivityRequestData) GetPropagatedNexusSerializationContext() *v16.PropagatedSerializationContext {
+func (x *ActivityRequestData) GetPropagatedNexusSerializationContext() *v17.PropagatedSerializationContext {
 	if x != nil {
 		return x.PropagatedNexusSerializationContext
 	}
@@ -1072,7 +1082,7 @@ type ActivityOutcome struct {
 	//	*ActivityOutcome_Failed_
 	Variant isActivityOutcome_Variant `protobuf_oneof:"variant"`
 	// The retry state associated with an unsuccessful activity execution.
-	RetryState    v17.RetryState `protobuf:"varint,3,opt,name=retry_state,json=retryState,proto3,enum=temporal.api.enums.v1.RetryState" json:"retry_state,omitempty"`
+	RetryState    v18.RetryState `protobuf:"varint,3,opt,name=retry_state,json=retryState,proto3,enum=temporal.api.enums.v1.RetryState" json:"retry_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1132,11 +1142,11 @@ func (x *ActivityOutcome) GetFailed() *ActivityOutcome_Failed {
 	return nil
 }
 
-func (x *ActivityOutcome) GetRetryState() v17.RetryState {
+func (x *ActivityOutcome) GetRetryState() v18.RetryState {
 	if x != nil {
 		return x.RetryState
 	}
-	return v17.RetryState(0)
+	return v18.RetryState(0)
 }
 
 type isActivityOutcome_Variant interface {
@@ -1160,7 +1170,7 @@ type ActivityAttemptState_LastFailureDetails struct {
 	// The last time the activity attempt failed.
 	Time *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
 	// Failure details from the last failed attempt.
-	Failure       *v18.Failure `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
+	Failure       *v19.Failure `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1202,7 +1212,7 @@ func (x *ActivityAttemptState_LastFailureDetails) GetTime() *timestamppb.Timesta
 	return nil
 }
 
-func (x *ActivityAttemptState_LastFailureDetails) GetFailure() *v18.Failure {
+func (x *ActivityAttemptState_LastFailureDetails) GetFailure() *v19.Failure {
 	if x != nil {
 		return x.Failure
 	}
@@ -1257,7 +1267,7 @@ type ActivityOutcome_Failed struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
 	// failures will be recorded in ActivityAttemptState.last_failure_details.
-	Failure       *v18.Failure `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
+	Failure       *v19.Failure `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1292,7 +1302,7 @@ func (*ActivityOutcome_Failed) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{7, 1}
 }
 
-func (x *ActivityOutcome_Failed) GetFailure() *v18.Failure {
+func (x *ActivityOutcome_Failed) GetFailure() *v19.Failure {
 	if x != nil {
 		return x.Failure
 	}
@@ -1303,7 +1313,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a9temporal/server/chasm/lib/callback/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a#temporal/api/nexus/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xe0\x0e\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a9temporal/server/chasm/lib/callback/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a#temporal/api/nexus/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\xe0\x0e\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -1348,7 +1358,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId\"\xcf\t\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\x99\n" +
+	"\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -1368,7 +1379,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\rdispatch_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\fdispatchTime\x12\x8b\x01\n" +
 	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x129\n" +
 	"\x19worker_control_task_queue\x18\x10 \x01(\tR\x16workerControlTaskQueue\x12#\n" +
-	"\rcomponent_ref\x18\x11 \x01(\fR\fcomponentRef\x1a\x80\x01\n" +
+	"\rcomponent_ref\x18\x11 \x01(\fR\fcomponentRef\x12H\n" +
+	"\blimiters\x18\x12 \x03(\v2,.temporal.server.api.taskqueue.v1.LimiterRefR\blimiters\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +
@@ -1451,12 +1463,13 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_goType
 	(*v13.CallbackMetadata)(nil),                    // 20: temporal.server.chasm.lib.callbacks.proto.v1.CallbackMetadata
 	(*v1.Principal)(nil),                            // 21: temporal.api.common.v1.Principal
 	(*v14.WorkerDeploymentVersion)(nil),             // 22: temporal.api.deployment.v1.WorkerDeploymentVersion
-	(*v1.Payloads)(nil),                             // 23: temporal.api.common.v1.Payloads
-	(*v1.Header)(nil),                               // 24: temporal.api.common.v1.Header
-	(*v15.UserMetadata)(nil),                        // 25: temporal.api.sdk.v1.UserMetadata
-	(*v16.PropagatedSerializationContext)(nil),      // 26: temporal.api.nexus.v1.PropagatedSerializationContext
-	(v17.RetryState)(0),                             // 27: temporal.api.enums.v1.RetryState
-	(*v18.Failure)(nil),                             // 28: temporal.api.failure.v1.Failure
+	(*v15.LimiterRef)(nil),                          // 23: temporal.server.api.taskqueue.v1.LimiterRef
+	(*v1.Payloads)(nil),                             // 24: temporal.api.common.v1.Payloads
+	(*v1.Header)(nil),                               // 25: temporal.api.common.v1.Header
+	(*v16.UserMetadata)(nil),                        // 26: temporal.api.sdk.v1.UserMetadata
+	(*v17.PropagatedSerializationContext)(nil),      // 27: temporal.api.nexus.v1.PropagatedSerializationContext
+	(v18.RetryState)(0),                             // 28: temporal.api.enums.v1.RetryState
+	(*v19.Failure)(nil),                             // 29: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdxs = []int32{
 	13, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_type:type_name -> temporal.api.common.v1.ActivityType
@@ -1486,24 +1499,25 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	22, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	17, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.dispatch_time:type_name -> google.protobuf.Timestamp
 	1,  // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval_source:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource
-	23, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
-	17, // 28: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
-	23, // 29: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
-	24, // 30: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
-	25, // 31: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	26, // 32: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
-	11, // 33: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	12, // 34: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	27, // 35: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.retry_state:type_name -> temporal.api.enums.v1.RetryState
-	17, // 36: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
-	28, // 37: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
-	23, // 38: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
-	28, // 39: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	40, // [40:40] is the sub-list for method output_type
-	40, // [40:40] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	23, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.limiters:type_name -> temporal.server.api.taskqueue.v1.LimiterRef
+	24, // 28: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
+	17, // 29: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
+	24, // 30: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
+	25, // 31: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
+	26, // 32: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	27, // 33: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
+	11, // 34: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	12, // 35: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	28, // 36: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.retry_state:type_name -> temporal.api.enums.v1.RetryState
+	17, // 37: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
+	29, // 38: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
+	24, // 39: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
+	29, // 40: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	41, // [41:41] is the sub-list for method output_type
+	41, // [41:41] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init() }
