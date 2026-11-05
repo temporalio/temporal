@@ -211,6 +211,25 @@ func TestComponentTerminalEventReportsEndToEndDuration(t *testing.T) {
 			outcome: nsreplicationcommon.CHASMApplyOutcomeFailed,
 		},
 		{
+			name:     "local retry exhaustion",
+			mutation: func(env *nsreplTestEnv) *namespacereplicationpb.NamespaceMutation { return env.mutationUpdate("cellB") },
+			seed: func(c *NamespaceMutationComponent) {
+				c.LocalApply.FirstAttemptAt = timestamppb.New(c.GetStartedAt().AsTime())
+			},
+			run: func(t *testing.T, env *nsreplTestEnv, ref chasm.ComponentRef) {
+				// The 45s retry budget runs out exactly at the 45s clock advance.
+				env.localHandler.config = &config{
+					localRetryExpirationInterval: func() time.Duration { return 45 * time.Second },
+				}
+				env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.TimeoutError{Msg: "write result unknown"})
+				// The counter is still at mutationUpdate's expected version (7), so the write stays unresolved.
+				env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+				require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+				require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, env.read(ref).GetStatus())
+			},
+			outcome: nsreplicationcommon.CHASMApplyOutcomeFailed,
+		},
+		{
 			name:     "last peer completion",
 			mutation: func(env *nsreplTestEnv) *namespacereplicationpb.NamespaceMutation { return env.mutationUpdate("cellB") },
 			seed: func(c *NamespaceMutationComponent) {
