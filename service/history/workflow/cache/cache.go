@@ -107,8 +107,16 @@ func NewHostLevelCache(
 		maxSize = config.HistoryHostLevelCacheMaxSizeBytes()
 	}
 	opts := &cache.Options{
-		TTL:             config.HistoryCacheTTL(),
-		Pin:             true,
+		TTL: config.HistoryCacheTTL(),
+		Pin: true,
+		EvictOnUnpin: func(val any) bool {
+			ctx, ok := val.(*cacheItem).wfContext.(*workflow.ContextImpl)
+			if !ok || !ctx.TryLock(locks.PriorityLow) {
+				return false
+			}
+			defer ctx.Unlock()
+			return !ctx.HasCachedState()
+		},
 		BackgroundEvict: config.HistoryCacheBackgroundEvict,
 		OnPut: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion

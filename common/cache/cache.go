@@ -56,6 +56,11 @@ type Options struct {
 
 	OnPut func(val any)
 
+	// EvictOnUnpin removes values that have no reusable state after the final
+	// Release. It runs under the cache mutex with no remaining users.
+	// The callback must not block or call back into the cache.
+	EvictOnUnpin func(val any) bool
+
 	OnEvict func(val any)
 
 	// BackgroundEvict configures background scanning for expired entries.
