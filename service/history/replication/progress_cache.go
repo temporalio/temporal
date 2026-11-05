@@ -39,7 +39,7 @@ type (
 	}
 
 	progressCacheImpl struct {
-		cacheLock      sync.Mutex
+		cacheLock      sync.RWMutex
 		cache          cache.Cache
 		maxSize        int
 		maxSizeFn      dynamicconfig.IntPropertyFn
@@ -122,8 +122,8 @@ func (c *progressCacheImpl) Get(
 	targetClusterID int32,
 ) *ReplicationProgress {
 	cacheKey := makeCacheKey(runID, targetClusterID)
-	c.cacheLock.Lock()
-	defer c.cacheLock.Unlock()
+	c.cacheLock.RLock()
+	defer c.cacheLock.RUnlock()
 
 	progress, ok := c.cache.Get(cacheKey).(*ReplicationProgress)
 	if !ok {
