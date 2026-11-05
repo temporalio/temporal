@@ -21,11 +21,7 @@ func NewCaller() Caller {
 	return Caller{"https", "version-info.temporal.io"}
 }
 
-func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
-	return c.CallContext(context.Background(), r)
-}
-
-func (c Caller) CallContext(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
+func (c Caller) Call(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
 		return nil, err

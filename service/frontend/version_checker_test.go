@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/versioninfo"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,6 +34,7 @@ func TestVersionCheckerShutdown(t *testing.T) {
 		name              string
 		disabled          bool
 		disableAfterStart bool
+		disableLogging    bool
 		metadataError     error
 		status            int
 		upgrade           bool
@@ -40,6 +42,7 @@ func TestVersionCheckerShutdown(t *testing.T) {
 		conflict          bool
 	}{
 		{name: "fresh metadata", status: http.StatusOK},
+		{name: "logging disabled", status: http.StatusOK, disableLogging: true},
 		{name: "upgrade recommended", status: http.StatusOK, upgrade: true},
 		{name: "save conflict", status: http.StatusOK, conflict: true},
 		{name: "save error", status: http.StatusOK, saveError: errors.New("database unavailable")},
@@ -70,7 +73,7 @@ func TestVersionCheckerShutdown(t *testing.T) {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				reported <- request
+				await.Snd(t, reported, request)
 				w.WriteHeader(test.status)
 				if test.status == http.StatusOK {
 					err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
@@ -103,6 +106,34 @@ func TestVersionCheckerShutdown(t *testing.T) {
 			wantRequests := !test.disabled && !test.disableAfterStart && test.metadataError == nil
 			saves := make(chan *persistence.SaveClusterMetadataRequest, 1)
 			if wantRequests && test.status == http.StatusOK {
+				manager.EXPECT().SaveClusterMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.SaveClusterMetadataRequest) (bool, error) {
+						await.Snd(t, saves, request)
+						return !test.conflict, test.saveError
+					},
+				)
+			}
+			var enabled atomic.Bool
+			enabled.Store(!test.disabled)
+			recorder := interceptor.NewSDKVersionInterceptor()
+			recorder.RecordSDKInfo("temporal-go", "1.0.0")
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			checker := NewVersionChecker(&Config{
+				EnableServerVersionCheck:        enabled.Load,
+				EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(!test.disableLogging),
+			}, handler, manager, recorder, logger)
+			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
+			defer checker.Stop()
+			checker.Start()
+			if test.disableAfterStart {
+				enabled.Store(false)
+			}
+			checker.InitiateShutdown()
+			checker.InitiateShutdown()
+			await.Rcv(t, checker.doneChan)
+			if wantRequests && test.status == http.StatusOK && !test.disableLogging {
 				message := "Version check reported issues; review the alerts"
 				tags := []any{
 					tag.NewStringTag("product", product.Product),
@@ -117,30 +148,7 @@ func TestVersionCheckerShutdown(t *testing.T) {
 					)
 				}
 				tags = append(tags, tag.NewAnyTag("alerts", product.Alerts))
-				gomock.InOrder(
-					logger.EXPECT().Info(message, tags...),
-					manager.EXPECT().SaveClusterMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
-						func(_ context.Context, request *persistence.SaveClusterMetadataRequest) (bool, error) {
-							saves <- request
-							return !test.conflict, test.saveError
-						},
-					),
-				)
-			}
-			var enabled atomic.Bool
-			enabled.Store(!test.disabled)
-			recorder := interceptor.NewSDKVersionInterceptor()
-			recorder.RecordSDKInfo("temporal-go", "1.0.0")
-			handler := metricstest.NewCaptureHandler()
-			capture := handler.StartCapture()
-			defer handler.StopCapture(capture)
-			checker := NewVersionChecker(&Config{
-				EnableServerVersionCheck: enabled.Load,
-			}, handler, manager, recorder, logger)
-			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
-			checker.Start()
-			if test.disableAfterStart {
-				enabled.Store(false)
+				logger.EXPECT().Info(message, tags...)
 			}
 			checker.Stop()
 			// Repeated lifecycle calls must not send another report or close channels twice.
@@ -151,14 +159,14 @@ func TestVersionCheckerShutdown(t *testing.T) {
 				return
 			}
 			require.EqualValues(t, 1, requests.Load())
-			request := <-reported
+			request := await.Rcv(t, reported)
 			require.Equal(t, "test-cluster", request.ClusterID)
 			require.Equal(t, headers.ServerVersion, request.Version)
 			require.Equal(t, []versioninfo.SDKInfo{{Name: "temporal-go", Version: "1.0.0"}}, request.SDKInfo)
 			require.Positive(t, request.Timestamp)
 			if test.status == http.StatusOK {
 				require.Len(t, saves, 1)
-				saved := <-saves
+				saved := await.Rcv(t, saves)
 				require.Equal(t, product.Current.Version, saved.VersionInfo.Current.Version)
 				require.Equal(t, product.Recommended.Version, saved.VersionInfo.Recommended.Version)
 				require.NotNil(t, saved.VersionInfo.LastUpdateTime)
@@ -194,10 +202,7 @@ func TestVersionCheckerRequestCancellation(t *testing.T) {
 	endpoint, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	manager := persistence.NewMockClusterMetadataManager(gomock.NewController(t))
-	manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: &persistencespb.ClusterMetadata{ClusterId: "test-cluster"},
-	}, nil)
-	manager.EXPECT().GetName().Return("test-db")
+
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
@@ -205,6 +210,7 @@ func TestVersionCheckerRequestCancellation(t *testing.T) {
 		EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true),
 	}, handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
 	checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
+	defer checker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	checker.checkVersion(ctx, false)
@@ -231,14 +237,14 @@ func TestVersionCheckerDisabledPeriodicCheck(t *testing.T) {
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
-	checker := NewVersionChecker(&Config{EnableServerVersionCheck: enabled.Load}, handler,
+	checker := NewVersionChecker(&Config{EnableServerVersionCheck: enabled.Load, EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)}, handler,
 		manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
 	checker.performVersionCheck(context.Background())
 	enabled.Store(false)
 	checker.performVersionCheck(context.Background())
 	recordings := capture.Snapshot()[metrics.VersionCheckLatency.Name()]
 	require.Len(t, recordings, 1)
-	require.Equal(t, "regular", recordings[0].Tags["version_check_type"])
+	require.Equal(t, "periodic", recordings[0].Tags["version_check_type"])
 }
 
 func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
@@ -260,15 +266,16 @@ func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
 			<-r.Context().Done()
 			return
 		}
-		reported <- request
-		if err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
+		await.Snd(t, reported, request)
+		err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
 			Products: []versioninfo.ProductVersionReport{{
 				Product:     headers.ClientNameServer,
 				Current:     versioninfo.ReleaseInfo{Version: headers.ServerVersion},
 				Recommended: versioninfo.ReleaseInfo{Version: headers.ServerVersion},
 				Alerts:      []versioninfo.Alert{{Message: "test alert", Severity: versioninfo.SeverityHigh}},
 			}},
-		}); err != nil {
+		})
+		if err != nil {
 			t.Error(err)
 		}
 	}))
@@ -293,27 +300,22 @@ func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
-	checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true)},
+	checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true), EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)},
 		handler, manager, recorder, logger)
 	checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
+	defer checker.Stop()
 	checker.Start()
-	<-started
+	await.Rcv(t, started)
 	recorder.RecordSDKInfo("temporal-go", "1.0.0")
-	done := make(chan struct{})
-	go func() {
-		checker.Stop()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("Stop did not cancel the in-flight check")
-	}
+	checker.InitiateShutdown()
+	await.Rcv(t, checker.doneChan)
+	checker.Stop()
+
 	require.Equal(t, int32(2), requests.Load())
 	require.ElementsMatch(t, []versioninfo.SDKInfo{
 		{Name: "temporal-java", Version: "1.0.0"},
 		{Name: "temporal-go", Version: "1.0.0"},
-	}, (<-reported).SDKInfo)
+	}, await.Rcv(t, reported).SDKInfo)
 	snapshot := capture.Snapshot()
 	require.Len(t, snapshot[metrics.VersionCheckSuccessCount.Name()], 1)
 	require.Equal(t, "shutdown", snapshot[metrics.VersionCheckSuccessCount.Name()][0].Tags["version_check_type"])
@@ -322,25 +324,120 @@ func TestVersionCheckerStopCancelsInFlightCheck(t *testing.T) {
 	require.Empty(t, snapshot[metrics.VersionCheckFailedCount.Name()])
 }
 
-func TestVersionCheckerShutdownDeadline(t *testing.T) {
-	manager := persistence.NewMockClusterMetadataManager(gomock.NewController(t))
-	manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).DoAndReturn(func(ctx context.Context) (*persistence.GetClusterMetadataResponse, error) {
-		deadline, ok := ctx.Deadline()
-		require.True(t, ok)
-		require.LessOrEqual(t, time.Until(deadline), versionCheckShutdownTimeout)
-		return nil, context.DeadlineExceeded
-	})
-	handler := metricstest.NewCaptureHandler()
-	capture := handler.StartCapture()
-	defer handler.StopCapture(capture)
-	checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true)},
-		handler, manager, interceptor.NewSDKVersionInterceptor(), log.NewNoopLogger())
-	checker.checkVersion(context.Background(), true)
-	snapshot := capture.Snapshot()
-	require.Len(t, snapshot[metrics.VersionCheckFailedCount.Name()], 1)
-	require.Equal(t, "shutdown", snapshot[metrics.VersionCheckFailedCount.Name()][0].Tags["version_check_type"])
-	require.Len(t, snapshot[metrics.VersionCheckLatency.Name()], 1)
-	require.Equal(t, "shutdown", snapshot[metrics.VersionCheckLatency.Name()][0].Tags["version_check_type"])
+func TestVersionCheckerStopCancelsShutdownCheck(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"metadata read", "HTTP request", "metadata save"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			blocked := make(chan context.Context, 1)
+			alerts := []versioninfo.Alert{{Message: "test alert", Severity: versioninfo.SeverityLow}}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if _, err := io.Copy(io.Discard, r.Body); err != nil {
+					t.Error(err)
+					return
+				}
+				if stage == "HTTP request" {
+					await.Snd(t, blocked, r.Context())
+					<-r.Context().Done()
+					return
+				}
+				err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
+					Products: []versioninfo.ProductVersionReport{{
+						Product:     headers.ClientNameServer,
+						Current:     versioninfo.ReleaseInfo{Version: headers.ServerVersion},
+						Recommended: versioninfo.ReleaseInfo{Version: headers.ServerVersion},
+						Alerts:      alerts,
+					}},
+				})
+				if err != nil {
+					t.Error(err)
+				}
+			}))
+			defer server.Close()
+			endpoint, err := url.Parse(server.URL)
+			require.NoError(t, err)
+			controller := gomock.NewController(t)
+			manager := persistence.NewMockClusterMetadataManager(controller)
+			logger := log.NewMockLogger(controller)
+			metadata := &persistence.GetClusterMetadataResponse{
+				ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterId: "test-cluster",
+					VersionInfo: &versionpb.VersionInfo{
+						Current:        &versionpb.ReleaseInfo{Version: headers.ServerVersion},
+						LastUpdateTime: timestamppb.Now(),
+					},
+				},
+			}
+			startup := make(chan struct{})
+			manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).DoAndReturn(
+				func(context.Context) (*persistence.GetClusterMetadataResponse, error) {
+					close(startup)
+					return metadata, nil
+				},
+			)
+			switch stage {
+			case "metadata read":
+				manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).DoAndReturn(
+					func(ctx context.Context) (*persistence.GetClusterMetadataResponse, error) {
+						await.Snd(t, blocked, ctx)
+						<-ctx.Done()
+						return nil, ctx.Err()
+					},
+				)
+			case "HTTP request":
+				manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(metadata, nil)
+				manager.EXPECT().GetName().Return("test-db")
+			case "metadata save":
+				manager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(metadata, nil).Times(2)
+				manager.EXPECT().GetName().Return("test-db")
+				manager.EXPECT().SaveClusterMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, _ *persistence.SaveClusterMetadataRequest) (bool, error) {
+						await.Snd(t, blocked, ctx)
+						<-ctx.Done()
+						return false, ctx.Err()
+					},
+				)
+			default:
+				t.Fatalf("unknown stage: %s", stage)
+			}
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			checker := NewVersionChecker(&Config{
+				EnableServerVersionCheck:        dynamicconfig.GetBoolPropertyFn(true),
+				EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true),
+			}, handler, manager, interceptor.NewSDKVersionInterceptor(), logger)
+			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
+			defer checker.Stop()
+			checker.Start()
+			await.Rcv(t, startup)
+			checker.InitiateShutdown()
+			ctx := await.Rcv(t, blocked)
+			if stage != "HTTP request" {
+				_, hasDeadline := ctx.Deadline()
+				require.False(t, hasDeadline)
+			}
+			if stage == "metadata save" {
+				logger.EXPECT().Info("Version check reported issues; review the alerts",
+					tag.NewStringTag("product", headers.ClientNameServer),
+					tag.NewStringTag("current-version", headers.ServerVersion),
+					tag.NewAnyTag("alerts", alerts),
+				)
+			}
+			done := make(chan struct{})
+			go func() {
+				checker.Stop()
+				close(done)
+			}()
+			await.Rcv(t, done)
+			await.Rcv(t, ctx.Done())
+			require.ErrorIs(t, ctx.Err(), context.Canceled)
+			snapshot := capture.Snapshot()
+			require.Empty(t, snapshot[metrics.VersionCheckFailedCount.Name()])
+			require.Empty(t, snapshot[metrics.VersionCheckRequestFailedCount.Name()])
+			require.Empty(t, snapshot[metrics.VersionCheckSuccessCount.Name()])
+		})
+	}
 }
 
 func TestVersionCheckerLogsBeforeSaveFailure(t *testing.T) {
@@ -354,14 +451,15 @@ func TestVersionCheckerLogsBeforeSaveFailure(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			alerts := []versioninfo.Alert{{Message: "test alert", Severity: versioninfo.SeverityLow}}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				if err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
+				err := json.NewEncoder(w).Encode(versioninfo.VersionCheckResponse{
 					Products: []versioninfo.ProductVersionReport{{
 						Product:     headers.ClientNameServer,
 						Current:     versioninfo.ReleaseInfo{Version: "1.0.0"},
 						Recommended: versioninfo.ReleaseInfo{Version: "1.0.0"},
 						Alerts:      alerts,
 					}},
-				}); err != nil {
+				})
+				if err != nil {
 					t.Error(err)
 				}
 			}))
@@ -386,9 +484,10 @@ func TestVersionCheckerLogsBeforeSaveFailure(t *testing.T) {
 			handler := metricstest.NewCaptureHandler()
 			capture := handler.StartCapture()
 			defer handler.StopCapture(capture)
-			checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true)},
+			checker := NewVersionChecker(&Config{EnableServerVersionCheck: dynamicconfig.GetBoolPropertyFn(true), EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)},
 				handler, manager, interceptor.NewSDKVersionInterceptor(), logger)
 			checker.versionInfoCaller = versioninfo.Caller{Scheme: endpoint.Scheme, Host: endpoint.Host}
+			defer checker.Stop()
 			checker.performVersionCheck(context.Background())
 			snapshot := capture.Snapshot()
 			require.Len(t, snapshot[metrics.VersionCheckFailedCount.Name()], 1)
@@ -429,7 +528,7 @@ func TestVersionCheckerLogRecommendations(t *testing.T) {
 					tag.NewStringTag("upgrade-instructions", "upgrade instructions"),
 				)
 			}
-			checker := &VersionChecker{logger: logger}
+			checker := &VersionChecker{logger: logger, config: &Config{EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)}}
 			checker.logVersionInfo(&versioninfo.VersionCheckResponse{
 				Products: []versioninfo.ProductVersionReport{{
 					Product: test.product,
@@ -460,7 +559,7 @@ func TestVersionCheckerLogUpgradeWithAlerts(t *testing.T) {
 		tag.NewStringTag("upgrade-instructions", "upgrade instructions"),
 		tag.NewAnyTag("alerts", alerts),
 	)
-	checker := &VersionChecker{logger: logger}
+	checker := &VersionChecker{logger: logger, config: &Config{EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)}}
 	checker.logVersionInfo(&versioninfo.VersionCheckResponse{
 		Products: []versioninfo.ProductVersionReport{{
 			Product: headers.ClientNameServer,
@@ -503,7 +602,7 @@ func TestVersionCheckerLogAlerts(t *testing.T) {
 					logger.EXPECT().Info("Version check reported issues; review the alerts", tags...)
 				}
 			}
-			checker := &VersionChecker{logger: logger}
+			checker := &VersionChecker{logger: logger, config: &Config{EnableServerVersionCheckLogging: dynamicconfig.GetBoolPropertyFn(true)}}
 			response := &versioninfo.VersionCheckResponse{}
 			for _, product := range []string{headers.ClientNameServer, headers.ClientNameGoSDK} {
 				response.Products = append(response.Products, versioninfo.ProductVersionReport{

@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/versioninfo"
 )
 
-func TestCallContextCancellation(t *testing.T) {
+func TestCallCancellation(t *testing.T) {
 	started := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		if _, err := io.Copy(io.Discard, r.Body); err != nil {
@@ -32,15 +33,15 @@ func TestCallContextCancellation(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := caller.CallContext(ctx, &versioninfo.VersionCheckRequest{
+		_, err := caller.Call(ctx, &versioninfo.VersionCheckRequest{
 			Product: "server", Version: "1.0.0", ClusterID: "test-cluster",
 			DB: "test-db", OS: "linux", Arch: "arm64", Timestamp: time.Now().UnixNano(),
 		})
 		done <- err
 	}()
-	<-started
+	await.Rcv(t, started)
 	cancel()
-	require.ErrorIs(t, <-done, context.Canceled)
+	require.ErrorIs(t, await.Rcv(t, done), context.Canceled)
 }
 
 func TestPostInfo(t *testing.T) {
@@ -100,7 +101,7 @@ func TestPostInfo(t *testing.T) {
 		Name:    "sdk-java",
 		Version: "3.11",
 	}}
-	_, err = caller.Call(&versioninfo.VersionCheckRequest{
+	_, err = caller.Call(t.Context(), &versioninfo.VersionCheckRequest{
 		Product:   "server",
 		Version:   "0.1",
 		ClusterID: "foo",

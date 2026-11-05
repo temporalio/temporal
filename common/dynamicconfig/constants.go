@@ -995,6 +995,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == "",
 		`EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled`,
 	)
+	EnableServerVersionCheckLogging = NewGlobalBoolSetting(
+		"frontend.enableServerVersionCheckLogging",
+		true,
+		`EnableServerVersionCheckLogging controls logging of version recommendations and alerts. Embedded servers can disable it without disabling version reporting.`,
+	)
 	EnableTokenNamespaceEnforcement = NewGlobalBoolSetting(
 		"frontend.enableTokenNamespaceEnforcement",
 		true,
