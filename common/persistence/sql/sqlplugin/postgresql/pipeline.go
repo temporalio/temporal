@@ -202,9 +202,15 @@ func (t pipelinedTx) UpdateCurrentExecutionsIfChanged(
 }
 
 // Commit sends the queued statements as one batch and returns the connection to
-// the pool. Its errors go through ConvertError, as BeginTx's do.
+// the pool. Its errors go through ConvertError, as BeginTx's do, except
+// ErrPipelineNotSent: the caller runs the statements another way, and the pool
+// discards the connection pgx closed when it next checks it out.
 func (t pipelinedTx) Commit() error {
-	return t.handle.ConvertError(t.pipe.sendOnConn())
+	err := t.pipe.sendOnConn()
+	if errors.Is(err, sqlplugin.ErrPipelineNotSent) {
+		return err
+	}
+	return t.handle.ConvertError(err)
 }
 
 // Rollback returns the connection to the pool without sending the queued

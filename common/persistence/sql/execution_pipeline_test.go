@@ -26,13 +26,13 @@ import (
 
 type (
 	// fakePipelineDB begins its pipelined and sequential transactions from fakes,
-	// and counts the history nodes appended outside a transaction.
+	// and records the TxnIDs of the history nodes appended outside a transaction.
 	fakePipelineDB struct {
 		sqlplugin.DB
 		pipelined         *fakePipelinedTx
 		sequential        *fakeUpdateTx
 		beginPipelinedErr error
-		historyNodes      int
+		historyTxnIDs     []int64
 	}
 
 	// fakeUpdateTx answers the calls of a minimal update the way a successful
@@ -135,7 +135,7 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 			require.Equal(t, updatedCurrent, db.pipelined.updatedCurrent)
 			require.True(t, db.pipelined.committed)
 			require.False(t, db.pipelined.rolledBack)
-			require.Zero(t, db.historyNodes)
+			require.Empty(t, db.historyTxnIDs)
 			require.False(t, db.sequential.begun)
 		})
 	}
@@ -196,7 +196,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 			require.NoError(t, updateWithFakes(db, request))
 			require.False(t, db.pipelined.begun)
 			require.False(t, db.pipelined.committed)
-			require.Equal(t, len(request.UpdateWorkflowNewEvents)+len(request.NewWorkflowNewEvents), db.historyNodes+db.sequential.historyNodes)
+			require.Equal(t, len(request.UpdateWorkflowNewEvents)+len(request.NewWorkflowNewEvents), len(db.historyTxnIDs)+db.sequential.historyNodes)
 			require.True(t, db.sequential.committed)
 		})
 	}
@@ -213,7 +213,7 @@ func TestUpdateWorkflowExecutionPipelined_UnknownOutcomeIsUnavailable(t *testing
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to commit transaction: connection reset", unavailable.Message)
 	require.False(t, db.pipelined.rolledBack)
-	require.Zero(t, db.historyNodes)
+	require.Empty(t, db.historyTxnIDs)
 	require.False(t, db.sequential.begun)
 }
 
@@ -227,7 +227,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
 	require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: connection refused", unavailable.Message)
-	require.Zero(t, db.historyNodes)
+	require.Empty(t, db.historyTxnIDs)
 	require.False(t, db.sequential.begun)
 }
 
@@ -276,7 +276,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginContextError(t *testing.T) {
 				require.ErrorIs(t, err, tc.wantCause)
 				require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: context deadline exceeded", err.Error())
 			}
-			require.Zero(t, db.historyNodes)
+			require.Empty(t, db.historyTxnIDs)
 			require.False(t, db.sequential.begun)
 		})
 	}
@@ -319,7 +319,7 @@ func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
 			db.pipelined.commitErr = fmt.Errorf("%w: %w", tc.check, errors.New("division by zero"))
 
 			require.Equal(t, tc.wantErr, updateWithFakes(db, request))
-			require.Zero(t, db.historyNodes)
+			require.Empty(t, db.historyTxnIDs)
 			require.False(t, db.sequential.begun)
 		})
 	}
@@ -336,7 +336,7 @@ func TestUpdateWorkflowExecutionPipelined_MalformedBranch(t *testing.T) {
 
 	require.Equal(t, parseErr, updateWithFakes(db, request))
 	require.False(t, db.pipelined.begun)
-	require.Zero(t, db.historyNodes)
+	require.Empty(t, db.historyTxnIDs)
 	require.False(t, db.sequential.begun)
 }
 
@@ -353,7 +353,7 @@ func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
 	require.Equal(t, "applyWorkflowMutationTx failed. Failed to update executions row. Erorr: updateExecution failed. Erorr: record failed", unavailable.Message)
 	require.True(t, db.pipelined.rolledBack)
 	require.False(t, db.pipelined.committed)
-	require.Zero(t, db.historyNodes)
+	require.Empty(t, db.historyTxnIDs)
 	require.False(t, db.sequential.begun)
 }
 
@@ -384,43 +384,37 @@ func TestUpdateWorkflowExecutionPipelined_PanicRollsBack(t *testing.T) {
 	require.False(t, db.sequential.begun)
 }
 
-// A context that ends during recording returns what Begin returns for it when
-// Commit sent nothing, and the context error otherwise.
+// A Commit that ran none of the statements runs the update on the sequential
+// path, with the history rows built from the request.
+func TestUpdateWorkflowExecutionPipelined_NotSentRunsSequential(t *testing.T) {
+	t.Parallel()
+	request := newPipelineTestRequest()
+	request.UpdateWorkflowNewEvents[0].Node.TransactionID = 20
+	db := newFakePipelineDB(request)
+	db.pipelined.commitErr = fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotSent, errors.New("connection reset"))
+
+	require.NoError(t, updateWithFakes(db, request))
+	require.Equal(t, 1, db.pipelined.historyNodes)
+	require.Equal(t, []int64{20}, db.historyTxnIDs)
+	require.True(t, db.sequential.committed)
+}
+
+// A context that ends during recording, with a Commit that sent the statements,
+// leaves the outcome unknown.
 func TestUpdateWorkflowExecutionPipelined_ContextEndsDuringRecording(t *testing.T) {
 	t.Parallel()
-	testCases := []struct {
-		name      string
-		commitErr error
-		wantErr   error
-	}{
-		{
-			name:      "nothing sent",
-			commitErr: fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotSent, context.Canceled),
-			wantErr:   &p.AppendHistoryTimeoutError{Msg: "context canceled"},
-		},
-		{
-			name:      "sent",
-			commitErr: context.Canceled,
-			wantErr:   fmt.Errorf("UpdateWorkflowExecution: failed to commit transaction: %w", context.Canceled),
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			request := newPipelineTestRequest()
-			db := newFakePipelineDB(request)
-			ctx, cancel := context.WithCancel(context.Background())
-			db.pipelined.cancelRecording = cancel
-			db.pipelined.commitErr = tc.commitErr
-			store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
-			require.NoError(t, err)
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	ctx, cancel := context.WithCancel(context.Background())
+	db.pipelined.cancelRecording = cancel
+	db.pipelined.commitErr = context.Canceled
+	store, err := NewSQLExecutionStore(&DbConn{DB: db}, log.NewNoopLogger(), serialization.NewSerializer())
+	require.NoError(t, err)
 
-			err = store.UpdateWorkflowExecution(ctx, request)
-			require.Equal(t, tc.wantErr, err)
-			require.False(t, db.pipelined.rolledBack)
-			require.False(t, db.sequential.begun)
-		})
-	}
+	err = store.UpdateWorkflowExecution(ctx, request)
+	require.Equal(t, fmt.Errorf("UpdateWorkflowExecution: failed to commit transaction: %w", context.Canceled), err)
+	require.False(t, db.pipelined.rolledBack)
+	require.False(t, db.sequential.begun)
 }
 
 func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
@@ -491,14 +485,21 @@ func (d *fakePipelineDB) BeginTx(context.Context) (sqlplugin.Tx, error) {
 	return d.sequential, nil
 }
 
-func (d *fakePipelineDB) InsertIntoHistoryNode(context.Context, *sqlplugin.HistoryNodeRow) (sql.Result, error) {
-	d.historyNodes++
+func (d *fakePipelineDB) InsertIntoHistoryNode(_ context.Context, row *sqlplugin.HistoryNodeRow) (sql.Result, error) {
+	d.historyTxnIDs = append(d.historyTxnIDs, row.TxnID)
 	return driver.RowsAffected(1), nil
 }
 
 func (t *fakeUpdateTx) InsertIntoHistoryNode(context.Context, *sqlplugin.HistoryNodeRow) (sql.Result, error) {
 	t.historyNodes++
 	return driver.RowsAffected(1), nil
+}
+
+// InsertIntoHistoryNode negates the row's TxnID in place, as the Postgres
+// plugin's insert does.
+func (t *fakePipelinedTx) InsertIntoHistoryNode(ctx context.Context, row *sqlplugin.HistoryNodeRow) (sql.Result, error) {
+	row.TxnID = -row.TxnID
+	return t.fakeUpdateTx.InsertIntoHistoryNode(ctx, row)
 }
 
 func (t *fakeUpdateTx) InsertIntoHistoryTree(context.Context, *sqlplugin.HistoryTreeRow) (sql.Result, error) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -36,6 +37,13 @@ type (
 	switchingConnector struct {
 		pgx       sqldriver.Connector
 		connected atomic.Bool
+	}
+
+	// resetConn fails its writes with ECONNRESET, before sending anything, once
+	// reset is set, as a socket the server reset does.
+	resetConn struct {
+		net.Conn
+		reset *atomic.Bool
 	}
 )
 
@@ -102,6 +110,33 @@ func TestRollback_ReleasesConnection(t *testing.T) {
 	require.Equal(t, 1, sqlDB.Stats().InUse)
 	require.NoError(t, tx.Rollback())
 	require.Zero(t, sqlDB.Stats().InUse)
+}
+
+// A batch whose write sent nothing returns ErrPipelineNotSent and keeps the
+// handle's pool for the sequential path.
+func TestCommit_NotSent(t *testing.T) {
+	t.Parallel()
+	config := fakeServerConfig(t, serveFake)
+	dial := config.DialFunc
+	var reset atomic.Bool
+	config.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dial(ctx, network, address)
+		return resetConn{Conn: conn, reset: &reset}, err
+	}
+	pdb := newPipelineTestDB(t, stdlib.GetConnector(*config))
+	sqlDB, err := pdb.handle.DB()
+	require.NoError(t, err)
+	tx, err := pdb.BeginPipelinedTx(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, tx.ReadLockShardsWithRangeID(context.Background(), sqlplugin.ShardsFilter{ShardID: 1}, 5))
+
+	reset.Store(true)
+	err = tx.Commit()
+	require.ErrorIs(t, err, sqlplugin.ErrPipelineNotSent)
+	require.ErrorIs(t, err, syscall.ECONNRESET)
+	handleDB, err := pdb.handle.DB()
+	require.NoError(t, err)
+	require.Same(t, sqlDB, handleDB)
 }
 
 // Only a division by zero at a check statement is that check failing.
@@ -240,4 +275,11 @@ func (c *switchingConnector) Connect(ctx context.Context) (sqldriver.Conn, error
 
 func (c *switchingConnector) Driver() sqldriver.Driver {
 	return c.pgx.Driver()
+}
+
+func (c resetConn) Write(b []byte) (int, error) {
+	if c.reset.Load() {
+		return 0, syscall.ECONNRESET
+	}
+	return c.Conn.Write(b)
 }

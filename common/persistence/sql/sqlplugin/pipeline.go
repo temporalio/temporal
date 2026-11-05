@@ -29,7 +29,8 @@ type (
 	// them as one implicit transaction. Its reads return no results, so the checks
 	// a caller would make on them are statements that fail the transaction instead.
 	// Commit returns the error of the check that failed, or ErrPipelineNotSent when
-	// it sent nothing. Any other Commit error leaves the outcome unknown.
+	// it sent nothing, after which the caller can run the statements another way.
+	// Any other Commit error leaves the outcome unknown.
 	PipelinedTx interface {
 		Tx
 		// UpdateExecutionsWithCondition fails the transaction with

@@ -23,8 +23,8 @@ type expectingTx struct {
 // updateWorkflowExecutionPipelined appends the history and runs the
 // UpdateWorkflowExecution transaction in one round trip when the plugin
 // supports it. newEvents are the request's new events and nodeRows their history
-// node rows. It returns false when the request or the plugin's connection needs
-// the sequential path, before anything is sent.
+// node rows. It returns false, so that the sequential path runs the update, when
+// the request or the plugin's connection needs it, and when Commit sent nothing.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -75,10 +75,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	switch {
 	case err == nil:
 		return true, nil
-	case len(newEvents) > 0 && errors.Is(err, sqlplugin.ErrPipelineNotSent) && ctx.Err() != nil:
-		// Commit sent nothing, so return the error Begin returns for a context
-		// that ended.
-		return true, &p.AppendHistoryTimeoutError{Msg: ctx.Err().Error()}
+	case errors.Is(err, sqlplugin.ErrPipelineNotSent):
+		return false, nil
 	default:
 		return true, pipelinedCommitError(request.ShardID, err)
 	}
@@ -113,7 +111,10 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 	nodeRows []*sqlplugin.HistoryNodeRow,
 ) error {
 	for _, nodeRow := range nodeRows {
-		if _, err := tx.InsertIntoHistoryNode(ctx, nodeRow); err != nil {
+		// InsertIntoHistoryNode can change the row (Postgres negates its TxnID), and
+		// the sequential path appends nodeRows after a Commit that sent nothing.
+		row := *nodeRow
+		if _, err := tx.InsertIntoHistoryNode(ctx, &row); err != nil {
 			return err
 		}
 	}
