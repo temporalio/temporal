@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
@@ -52,7 +51,6 @@ type (
 		config                         *configs.Config
 		shardContext                   historyi.ShardContext
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
-		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
 		eventNotifier                  events.Notifier
 		tokenSerializer                *tasktoken.Serializer
@@ -86,7 +84,6 @@ func NewWorkflowTaskCompletedHandler(
 		config:                     shardContext.GetConfig(),
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
-		timeSource:                 shardContext.GetTimeSource(),
 		namespaceRegistry:          shardContext.GetNamespaceRegistry(),
 		eventNotifier:              eventNotifier,
 		tokenSerializer:            tokenSerializer,
@@ -335,13 +332,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if checkWTHeartbeatTimeout {
 		// WorkflowTaskHeartbeatTimeout is a total duration for which workflow is allowed to send continuous heartbeats.
 		// Default is 30 minutes.
-		// Heartbeat duration is computed between now and OriginalScheduledTime, which is set when WT is scheduled and
+		// Heartbeat duration uses the workflow clock because OriginalScheduledTime includes skipped time.
+		// OriginalScheduledTime is set when WT is scheduled and
 		// carried over to the consequence WTs if they are heartbeat WTs.
 		// After this timeout is expired, WT is timed out (although this specific WT doesn't)
 		// and new WT will be scheduled on non-sticky task queue (see ClearStickyTaskQueue call bellow).
 		wtHeartbeatTimeoutDuration := handler.config.WorkflowTaskHeartbeatTimeout(nsName)
 		if currentWorkflowTask.OriginalScheduledTime.UnixNano() > 0 &&
-			handler.timeSource.Now().After(currentWorkflowTask.OriginalScheduledTime.Add(wtHeartbeatTimeoutDuration)) {
+			ms.Now().After(currentWorkflowTask.OriginalScheduledTime.Add(wtHeartbeatTimeoutDuration)) {
 
 			scope := handler.metricsHandler.WithTags(
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
