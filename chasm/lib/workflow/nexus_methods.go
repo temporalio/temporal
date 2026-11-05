@@ -288,7 +288,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 			blockedReason = "The circuit breaker is open."
 		} else if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && op.DestinationThrottled(ctx) {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-			blockedReason = "Requests are limited by the caller RPS throttle controller."
+			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
 
 		info := &workflowpb.PendingNexusOperationInfo{
@@ -319,7 +319,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 				blockedReason = "The circuit breaker is open."
 			} else if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && op.DestinationThrottled(ctx) {
 				state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-				blockedReason = "Requests are limited by the caller RPS throttle controller."
+				blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 			}
 
 			info.CancellationInfo = &workflowpb.NexusOperationCancellationInfo{

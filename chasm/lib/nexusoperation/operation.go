@@ -763,7 +763,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		info.BlockedReason = "The circuit breaker is open."
 	} else if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationThrottled(ctx) {
 		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-		info.BlockedReason = "Requests are limited by the caller RPS throttle controller."
+		info.BlockedReason = "Requests from this namespace to the endpoint are being rate limited."
 	}
 	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
 		o.DestinationBlocked(ctx) {
@@ -772,7 +772,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	} else if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
 		o.DestinationThrottled(ctx) {
 		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-		info.CancellationInfo.BlockedReason = "Requests are limited by the caller RPS throttle controller."
+		info.CancellationInfo.BlockedReason = "Requests from this namespace to the endpoint are being rate limited."
 	}
 
 	return info

@@ -125,7 +125,7 @@ func TestBuildPendingNexusOperationInfosCallerRPSThrottled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, infos, 1)
 	require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, infos[0].State)
-	require.Equal(t, "Requests are limited by the caller RPS throttle controller.", infos[0].BlockedReason)
+	require.Equal(t, "Requests from this namespace to the endpoint are being rate limited.", infos[0].BlockedReason)
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, infos[0].CancellationInfo.State)
-	require.Equal(t, "Requests are limited by the caller RPS throttle controller.", infos[0].CancellationInfo.BlockedReason)
+	require.Equal(t, "Requests from this namespace to the endpoint are being rate limited.", infos[0].CancellationInfo.BlockedReason)
 }

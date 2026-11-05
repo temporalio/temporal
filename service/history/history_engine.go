@@ -14,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -159,7 +160,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-		throttleState              *queues.ThrottleState
+		destinationThrottled       chasmnexus.DestinationThrottledFn
 		testHooks                  testhooks.TestHooks
 	}
 )
@@ -206,7 +207,7 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	throttleState *queues.ThrottleState,
+	destinationThrottled chasmnexus.DestinationThrottledFn,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
@@ -264,7 +265,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
-		throttleState:              throttleState,
+		destinationThrottled:       destinationThrottled,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,
@@ -569,7 +570,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
 		e.outboundQueueCBPool,
-		e.throttleState,
+		e.destinationThrottled,
 	)
 }
 

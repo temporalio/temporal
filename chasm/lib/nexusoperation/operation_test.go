@@ -628,7 +628,7 @@ func TestDescribeCallerRPSThrottled(t *testing.T) {
 		backingOff  bool
 		wantReason  string
 	}{
-		{name: "throttled", wantReason: "Requests are limited by the caller RPS throttle controller."},
+		{name: "throttled", wantReason: "Requests from this namespace to the endpoint are being rate limited."},
 		{name: "breaker takes precedence", breakerOpen: true, wantReason: "The circuit breaker is open."},
 		{name: "backing off", backingOff: true},
 	} {
