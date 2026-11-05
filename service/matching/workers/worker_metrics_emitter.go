@@ -159,57 +159,47 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 }
 
 func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
-	type taskEntry struct {
-		taskType   string
-		slots      *workerpb.WorkerSlotsInfo
-		pollerInfo *workerpb.WorkerPollerInfo
-		stickyInfo *workerpb.WorkerPollerInfo
-	}
-	entries := []taskEntry{
-		{"workflow", hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()},
-		{"activity", hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil},
-		{"nexus", hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil},
-		{"local_activity", hb.GetLocalActivitySlotsInfo(), nil, nil}, // local activities run in-process, no pollers
-	}
-
-	stats := make(map[string]wideevents.WorkerTaskTypeStats)
-	for _, te := range entries {
-		// Only include task types that have at least one source message present.
-		if te.slots == nil && te.pollerInfo == nil && te.stickyInfo == nil {
-			continue
-		}
+	// Stats are only set for the source messages present in the heartbeat.
+	taskTypeStats := func(
+		slots *workerpb.WorkerSlotsInfo,
+		pollerInfo *workerpb.WorkerPollerInfo,
+		stickyInfo *workerpb.WorkerPollerInfo,
+	) wideevents.WorkerTaskTypeStats {
 		s := wideevents.WorkerTaskTypeStats{}
-		if te.pollerInfo != nil {
-			s.CurrentPollers = new(te.pollerInfo.GetCurrentPollers())
+		if pollerInfo != nil {
+			s.CurrentPollers = new(pollerInfo.GetCurrentPollers())
+			// TODO: Use the SDK-reported poller target when available.
+			s.TargetPollers = s.CurrentPollers
 		}
-		if te.stickyInfo != nil {
-			s.CurrentStickyPollers = new(te.stickyInfo.GetCurrentPollers())
+		if stickyInfo != nil {
+			s.CurrentStickyPollers = new(stickyInfo.GetCurrentPollers())
+			// TODO: Use the SDK-reported sticky poller target when available.
+			s.TargetStickyPollers = s.CurrentStickyPollers
 		}
-		if te.slots != nil {
-			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
-			if te.slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
+		if slots != nil {
+			totalSlots := slots.GetCurrentAvailableSlots() + slots.GetCurrentUsedSlots()
+			if slots.GetCurrentAvailableSlots() < 0 { // -1 means unknown (resource-based slot suppliers)
 				totalSlots = -1
 			}
 			s.TotalSlots = new(totalSlots)
-			s.UsedSlots = new(te.slots.GetCurrentUsedSlots())
-			s.TotalProcessedTasks = new(te.slots.GetTotalProcessedTasks())
-			s.TotalFailedTasks = new(te.slots.GetTotalFailedTasks())
-			s.LastIntervalProcessedTasks = new(te.slots.GetLastIntervalProcessedTasks())
-			s.LastIntervalFailureTasks = new(te.slots.GetLastIntervalFailureTasks())
+			s.UsedSlots = new(slots.GetCurrentUsedSlots())
+			s.TotalProcessedTasks = new(slots.GetTotalProcessedTasks())
+			s.TotalFailedTasks = new(slots.GetTotalFailedTasks())
 		}
-		stats[te.taskType] = s
+		return s
 	}
 
 	wideevents.Emit(e.eventLogger, wideevents.WorkerMetricsPayload{
 		Namespace:         nsName.String(),
 		TaskQueue:         hb.GetTaskQueue(),
 		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
-		TaskTypeStats:     stats,
-		Details: map[string]any{
-			"sticky_cache_size": hb.GetCurrentStickyCacheSize(),
-			"sticky_cache_hit":  hb.GetTotalStickyCacheHit(),
-			"sticky_cache_miss": hb.GetTotalStickyCacheMiss(),
-		},
+		Workflow:          taskTypeStats(hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()),
+		Activity:          taskTypeStats(hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil),
+		Nexus:             taskTypeStats(hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil),
+		LocalActivity:     taskTypeStats(hb.GetLocalActivitySlotsInfo(), nil, nil), // local activities run in-process, no pollers
+		StickyCacheSize:   hb.GetCurrentStickyCacheSize(),
+		StickyCacheHit:    hb.GetTotalStickyCacheHit(),
+		StickyCacheMiss:   hb.GetTotalStickyCacheMiss(),
 	})
 }
 
