@@ -192,6 +192,34 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 	require.Contains(t, err.Error(), "Workflow is paused")
 }
 
+func TestApplyRequest_CountsBufferedUpdates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
+	ms.EXPECT().HasPendingWorkflowTask().Return(true).AnyTimes()
+	ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1))
+	ms.EXPECT().VisitUpdates(gomock.Any())
+	ms.EXPECT().GetUpdateOutcome(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).AnyTimes()
+
+	registry := update.NewRegistry(ms)
+	for i, id := range []string{"first", "second"} {
+		req := createUpdateRequest(id)
+		req.Request.Request.Input = &updatepb.Input{Name: "update"}
+		updater := &Updater{req: req}
+		action, err := updater.ApplyRequest(context.Background(), registry, ms)
+		require.NoError(t, err)
+		require.True(t, action.Noop)
+		require.True(t, updater.bufferedForWHN)
+		require.Equal(t, i == 0, updater.firstBufferedForWHN)
+	}
+}
+
 // An Update whose callbacks would breach the execution's limits must be rejected before it is
 // admitted and dispatched to a worker: once accepted there, its callbacks are attached without
 // further checks.
@@ -307,6 +335,7 @@ func newRunningMutableStateForCallbacks(ctrl *gomock.Controller) *historyi.MockM
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
+	ms.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
 	// Required by update.NewRegistry
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
