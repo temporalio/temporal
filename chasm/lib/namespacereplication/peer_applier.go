@@ -25,6 +25,7 @@ type PeerApplyRequest struct {
 	Operation               enumsspb.NamespaceOperation
 	Detail                  *persistencespb.NamespaceDetail
 	Shadow                  bool
+	RemovedPeer             bool
 	ShadowLegacyTaskPayload []byte
 }
 
@@ -111,6 +112,7 @@ func (a *adminClientPeerApplier) Apply(
 		ComponentBusinessId:     request.ComponentBusinessID,
 		ComponentRunId:          request.ComponentRunID,
 		AttemptCount:            request.AttemptCount,
+		RemovedPeer:             request.RemovedPeer,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err
