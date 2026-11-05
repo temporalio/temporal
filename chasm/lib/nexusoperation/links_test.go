@@ -94,6 +94,23 @@ func TestNewStandaloneOperationAttachesLinks(t *testing.T) {
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "cannot attach more than 1 links to an execution")
 	})
+
+	t.Run("EnforcesTheTotalSizeCap", func(t *testing.T) {
+		// Each link fits on its own; together they are one byte over the cap.
+		linkA, linkB := testLink("wf-1"), testLink("wf-2")
+		ctx := newLinkTestContext(map[string][]*commonpb.Link{})
+		cfg := test.NewLinksValidatorConfig()
+		cfg.TotalLinksMaxSize = func(string) int { return linkA.Size() + linkB.Size() - 1 }
+
+		_, err := newStandaloneOperation(
+			ctx,
+			newStartReq(linkA, linkB),
+			cbValidator,
+			test.NewLinksValidator(t, cfg),
+		)
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+	})
 }
 
 func TestOperationAttachLinks(t *testing.T) {
@@ -196,6 +213,7 @@ func TestOperationAttachLinks(t *testing.T) {
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "1 links already attached")
 	})
+
 	t.Run("RejectsExceedingTheTotalSizeCapWithAlreadyAttachedLinks", func(t *testing.T) {
 		existing := testLink("wf-existing")
 		ctx := newLinkTestContext(map[string][]*commonpb.Link{"req-1": {existing}})
