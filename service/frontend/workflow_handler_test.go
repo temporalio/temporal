@@ -6821,7 +6821,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
-func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_ReturnsUpdateTime() {
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Success() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
