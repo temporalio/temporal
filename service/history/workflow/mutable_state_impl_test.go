@@ -7754,6 +7754,81 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 	}
 }
 
+func TestDeleteCHASMPureTasksTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	for _, clockConfig := range []struct {
+		name    string
+		skipped time.Duration
+		enabled bool
+	}{
+		{name: "NoOffset"},
+		{name: "TimeSkippingEnabled", skipped: time.Hour, enabled: true},
+		{name: "TimeSkippingDisabledWithOffset", skipped: time.Hour},
+	} {
+		t.Run(clockConfig.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tc := range []struct {
+				name              string
+				maxScheduledTime  time.Time
+				expectedRemaining int
+			}{
+				{name: "BeforeAll", maxScheduledTime: now.Add(clockConfig.skipped), expectedRemaining: 3},
+				{name: "AtEarliest", maxScheduledTime: now.Add(clockConfig.skipped + time.Minute), expectedRemaining: 3},
+				{name: "Partial", maxScheduledTime: now.Add(clockConfig.skipped + 2*time.Minute), expectedRemaining: 2},
+				{name: "AfterAll", maxScheduledTime: now.Add(clockConfig.skipped + 4*time.Minute)},
+				{name: "DeleteAll", maxScheduledTime: tasks.MaximumKey.FireTime},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					taskBaseTime := now
+					if tc.maxScheduledTime.Equal(tasks.MaximumKey.FireTime) {
+						// Keep tasks close to the sentinel to catch an incorrectly shifted delete-all threshold.
+						taskBaseTime = tasks.MaximumKey.FireTime.Add(-10 * time.Minute)
+					}
+					timeSource := clock.NewEventTimeSource()
+					timeSource.Update(taskBaseTime.Add(clockConfig.skipped))
+					ms := &MutableStateImpl{
+						timeSource: timeSource,
+						executionInfo: &persistencespb.WorkflowExecutionInfo{
+							TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+								Config:                     &commonpb.TimeSkippingConfig{Enabled: clockConfig.enabled},
+								AccumulatedSkippedDuration: durationpb.New(clockConfig.skipped),
+							},
+						},
+						config: &configs.Config{
+							ChasmMaxInMemoryPureTasks: dynamicconfig.GetIntPropertyFn(3),
+						},
+						InsertTasks:           make(map[tasks.Category][]tasks.Task),
+						BestEffortDeleteTasks: make(map[tasks.Category][]tasks.Key),
+					}
+					var pureTasks []*tasks.ChasmTaskPure
+					for i := 3; i > 0; i-- {
+						task := &tasks.ChasmTaskPure{
+							TaskID:              int64(i),
+							VisibilityTimestamp: taskBaseTime.Add(clockConfig.skipped + time.Duration(i)*time.Minute),
+						}
+						ms.AddTasks(task)
+						pureTasks = append(pureTasks, task)
+					}
+
+					ms.DeleteCHASMPureTasks(tc.maxScheduledTime)
+
+					require.Equal(t, pureTasks[:tc.expectedRemaining], ms.chasmPureTasks)
+					expectedDeletions := make(map[tasks.Category][]tasks.Key)
+					for i := len(pureTasks) - 1; i >= tc.expectedRemaining; i-- {
+						expectedDeletions[tasks.CategoryTimer] = append(expectedDeletions[tasks.CategoryTimer], pureTasks[i].GetKey())
+					}
+					require.Equal(t, expectedDeletions, ms.BestEffortDeleteTasks)
+				})
+			}
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestCHASMNodeSize() {
 	dbState := s.buildWorkflowMutableState()
 	dbState = &persistencespb.WorkflowMutableState{
