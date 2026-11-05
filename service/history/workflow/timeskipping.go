@@ -472,17 +472,22 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		}
 	}
 
-	// components in chasm
+	// Include CHASM-owned timers in the workflow's skip target.
 	if ms.ChasmEnabled() {
-		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+		_, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
 		if err != nil {
 			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
-			ms.logger.Error("failed to check CHASM workflow time skipping eligibility", tag.Error(err))
+			ms.logger.Error("failed to find CHASM workflow time skipping target", tag.Error(err))
 			return nil
 		}
-		chasmTransition := wf.FindSkipToTarget(chasmCtx)
-		if chasmTransition.IsValid() {
-			ms.trackFutureOrReportDueTaskForWorkflow(transition, chasmTransition.GetTargetTime(), "chasm nexus skippable timer")
+		chasmTransition := ms.chasmTree.FindTimeSkippingTarget(chasmCtx)
+		if chasmTransition == nil {
+			return nil
+		}
+		if target := chasmTransition.GetTargetTime(); !target.IsZero() {
+			if ms.trackFutureOrReportDueTaskForWorkflow(transition, target, "chasm timer") {
+				return nil
+			}
 		}
 	}
 

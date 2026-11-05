@@ -22,6 +22,16 @@ func (*noopChasmTree) CloseTransaction(context.Context, bool) (chasm.NodesMutati
 	return chasm.NodesMutation{}, nil
 }
 
+func (*noopChasmTree) AbortCloseTransaction() {}
+
+func (*noopChasmTree) PrepareCloseTransaction(context.Context) error {
+	return nil
+}
+
+func (*noopChasmTree) FinishCloseTransaction(context.Context, bool) (chasm.NodesMutation, error) {
+	return chasm.NodesMutation{}, nil
+}
+
 func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
 	return chasm.NodesSnapshot{}
 }
@@ -49,6 +59,10 @@ func (*noopChasmTree) RefreshTasks() error {
 func (*noopChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {}
 
 func (*noopChasmTree) MarkNeedsTimeSkippingTaskRegenForWorkflows() {}
+
+func (*noopChasmTree) FindTimeSkippingTarget(chasm.Context) *chasm.TimeSkippingTransition {
+	return &chasm.TimeSkippingTransition{}
+}
 
 func (*noopChasmTree) IsStateDirty() bool {
 	return false
