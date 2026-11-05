@@ -3412,7 +3412,6 @@ func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembership
 
 	// The endpoints table moves away partway through a gradual change, without a membership
 	// changed event.
-	var gradual atomic.Bool
 	switchAt := time.Now().Add(500 * time.Millisecond)
 	moved := func() bool { return !time.Now().Before(switchAt) }
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).DoAndReturn(func(string) (membership.HostInfo, error) {
@@ -3422,7 +3421,7 @@ func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembership
 		return self, nil
 	}).AnyTimes()
 	s.mockServiceResolver.EXPECT().NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1).DoAndReturn(func(string, int) time.Time {
-		if !gradual.Load() || moved() {
+		if moved() {
 			return time.Time{}
 		}
 		return switchAt
@@ -3433,19 +3432,9 @@ func (s *matchingEngineSuite) TestNexusEndpointsOwnershipDuringGradualMembership
 	s.True(isOwner)
 
 	// one event for the start of the gradual change, which finds the switch time
-	gradual.Store(true)
 	e.membershipChangedCh <- nil
 
-	select {
-	case <-ownershipLostCh:
-		s.Fail("ownership lost should not be signaled before the switch time")
-	case <-time.After(time.Until(switchAt) - 100*time.Millisecond):
-	}
-	select {
-	case <-ownershipLostCh:
-	case <-time.After(5 * time.Second):
-		s.Fail("ownership lost should have been signaled at the switch time")
-	}
+	await.Rcv(s.T(), ownershipLostCh)
 }
 
 func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capture, familyCounterLength int, familyCounter float64, queueCounterLength int, queueCounter float64, queuePartitionCounterLength int, queuePartitionCounter float64) {

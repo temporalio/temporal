@@ -135,10 +135,12 @@ type (
 		update    persistence.SingleTaskQueueUserDataUpdate
 	}
 
-	// routeCheck is a time at which ownership of a loaded partition may change.
+	// routeCheck is a time at which ownership of a loaded partition, or of the Nexus endpoints
+	// table if nexus is set, may change.
 	routeCheck struct {
 		at        time.Time
 		partition tqid.Partition
+		nexus     bool
 	}
 
 	gaugeMetrics struct {
@@ -489,10 +491,6 @@ func (e *matchingEngineImpl) watchMembership() {
 	checkTimer := time.NewTimer(0)
 	checkTimer.Stop() // until we have something in the queue
 
-	// Ownership of the Nexus endpoints table can also change during a gradual membership
-	// change, so we check it at its next change time too.
-	var nexusCheckAt time.Time
-
 	for {
 		scanAll := false
 		nexusDue := false
@@ -506,9 +504,12 @@ func (e *matchingEngineImpl) watchMembership() {
 		case <-checkTimer.C:
 			now := time.Now()
 			for !checks.IsEmpty() && !checks.Peek().at.After(now) {
-				due = append(due, checks.Remove().partition)
+				if c := checks.Remove(); c.nexus {
+					nexusDue = true
+				} else {
+					due = append(due, c.partition)
+				}
 			}
-			nexusDue = !nexusCheckAt.IsZero() && !nexusCheckAt.After(now)
 		case <-e.routeChecksCh:
 			e.routeChecksLock.Lock()
 			for _, c := range e.routeChecksLoaded {
@@ -521,18 +522,19 @@ func (e *matchingEngineImpl) watchMembership() {
 		delay := e.config.MembershipUnloadDelay()
 		if delay == 0 {
 			checks = newChecks()
-			nexusCheckAt = time.Time{}
 			continue
 		}
 
-		if scanAll || nexusDue {
-			// As for partitions below, get the next change time before checking ownership.
-			nexusCheckAt = e.serviceResolver.NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1)
-			e.notifyNexusEndpointsOwnershipChange()
-		}
 		if scanAll {
 			// We're about to recompute change times for all partitions.
 			checks = newChecks()
+		}
+		if scanAll || nexusDue {
+			// As for partitions below, get the next change time before checking ownership.
+			if next := e.serviceResolver.NextLookupChange(nexusEndpointsTablePartitionRoutingKey, 1); !next.IsZero() {
+				checks.Add(routeCheck{at: next, nexus: true})
+			}
+			e.notifyNexusEndpointsOwnershipChange()
 		}
 
 		// On a membership change, check all our loaded partitions to see if we lost ownership
@@ -559,14 +561,10 @@ func (e *matchingEngineImpl) watchMembership() {
 				checks.Add(routeCheck{at: next, partition: p})
 			}
 		}
-		nextCheck := nexusCheckAt
-		if !checks.IsEmpty() && (nextCheck.IsZero() || checks.Peek().at.Before(nextCheck)) {
-			nextCheck = checks.Peek().at
-		}
-		if nextCheck.IsZero() {
+		if checks.IsEmpty() {
 			checkTimer.Stop()
 		} else {
-			checkTimer.Reset(time.Until(nextCheck) + gradualMembershipChangeBatchDelay)
+			checkTimer.Reset(time.Until(checks.Peek().at) + gradualMembershipChangeBatchDelay)
 		}
 
 		// Note that batches of this slice are retained by the unload timers below, so we can't
