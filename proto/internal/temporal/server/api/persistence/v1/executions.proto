@@ -327,6 +327,11 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+
+  // Opaque metadata that a persistence implementation can store about this record. The server
+  // never reads or sets it. The value describes the local copy of the record, so it is not
+  // replicated, and applying a replicated snapshot or mutation keeps the local value.
+  bytes persistence_metadata = 118;
 }
 
 message TimeSkippingInfo {
