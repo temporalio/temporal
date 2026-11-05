@@ -13,13 +13,11 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-// expectingTx answers the reads and row counts that updateWorkflowExecutionTx
-// checks with the values a successful update sees, and queues the statements
-// that fail the transaction otherwise, so a pass over a PipelinedTx queues every
-// statement of the update.
+// expectingTx answers the row counts that applyWorkflowMutationTx checks with
+// the values a successful update sees. The statements it queues fail the
+// transaction on any other count.
 type expectingTx struct {
 	sqlplugin.PipelinedTx
-	runID primitives.UUID
 }
 
 // updateWorkflowExecutionPipelined appends the history and runs the
@@ -35,8 +33,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if !ok || request.NewWorkflowSnapshot != nil {
 		return false, nil
 	}
-	// BypassCurrent asserts that the run is not current, and expectingTx asserts
-	// that it is.
+	// BypassCurrent checks that the run is not current, which the recorder has no
+	// statement for.
 	if request.Mode != p.UpdateWorkflowModeUpdateCurrent && request.Mode != p.UpdateWorkflowModeIgnoreCurrent {
 		return false, nil
 	}
@@ -89,27 +87,30 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 	if err := tx.ReadLockShardsWithRangeID(ctx, sqlplugin.ShardsFilter{ShardID: request.ShardID}, request.RangeID); err != nil {
 		return err
 	}
-	return m.updateWorkflowExecutionTx(ctx, &expectingTx{
-		PipelinedTx: tx,
-		runID:       primitives.MustParseUUID(request.UpdateWorkflowMutation.ExecutionState.RunId),
-	}, request)
-}
-
-func (t *expectingTx) LockCurrentExecutions(ctx context.Context, filter sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
-	filter.RunID = t.runID
-	if err := t.LockCurrentExecutionsWithRunID(ctx, filter); err != nil {
-		return nil, err
+	if request.Mode == p.UpdateWorkflowModeUpdateCurrent {
+		row, err := buildCurrentExecutionRow(request)
+		if err != nil {
+			return err
+		}
+		err = tx.LockCurrentExecutionsWithRunID(ctx, sqlplugin.CurrentExecutionsFilter{
+			ShardID:     row.ShardID,
+			NamespaceID: row.NamespaceID,
+			WorkflowID:  row.WorkflowID,
+			RunID:       primitives.MustParseUUID(request.UpdateWorkflowMutation.ExecutionState.RunId),
+			ArchetypeID: row.ArchetypeID,
+		})
+		if err != nil {
+			return err
+		}
+		if err := tx.UpdateCurrentExecutionsIfChanged(ctx, &row); err != nil {
+			return err
+		}
 	}
-	return &sqlplugin.CurrentExecutionsRow{RunID: t.runID}, nil
+	return m.applyWorkflowMutationTx(ctx, &expectingTx{PipelinedTx: tx}, request.ShardID, &request.UpdateWorkflowMutation)
 }
 
 func (t *expectingTx) UpdateExecutionsWithCondition(ctx context.Context, update *sqlplugin.ExecutionsUpdate) (sql.Result, error) {
 	_, err := t.PipelinedTx.UpdateExecutionsWithCondition(ctx, update)
-	return queuedRows(err, 1)
-}
-
-func (t *expectingTx) UpdateCurrentExecutions(ctx context.Context, row *sqlplugin.CurrentExecutionsRow) (sql.Result, error) {
-	_, err := t.PipelinedTx.UpdateCurrentExecutions(ctx, row)
 	return queuedRows(err, 1)
 }
 

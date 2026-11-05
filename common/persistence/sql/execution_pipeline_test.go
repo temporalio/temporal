@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
@@ -18,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -40,22 +44,28 @@ type (
 		updateExecutionsErr error
 		commitErr           error
 
-		begun        bool
-		historyNodes int
-		committed    bool
+		begun          bool
+		historyNodes   int
+		lockedCurrent  *sqlplugin.CurrentExecutionsFilter
+		updatedCurrent *sqlplugin.CurrentExecutionsRow
+		committed      bool
 	}
 )
 
+var pipelineTestStartTime = time.Unix(1700000000, 0).UTC()
+
 func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 	testCases := []struct {
-		name         string
-		setup        func(request *p.InternalUpdateWorkflowExecutionRequest)
-		historyNodes int
+		name           string
+		setup          func(request *p.InternalUpdateWorkflowExecutionRequest)
+		historyNodes   int
+		updatesCurrent bool
 	}{
 		{
-			name:         "update current",
-			setup:        func(*p.InternalUpdateWorkflowExecutionRequest) {},
-			historyNodes: 1,
+			name:           "update current",
+			setup:          func(*p.InternalUpdateWorkflowExecutionRequest) {},
+			historyNodes:   1,
+			updatesCurrent: true,
 		},
 		{
 			name: "ignore current",
@@ -70,7 +80,8 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 				events := *request.UpdateWorkflowNewEvents[0]
 				request.NewWorkflowNewEvents = []*p.InternalAppendHistoryNodesRequest{&events}
 			},
-			historyNodes: 2,
+			historyNodes:   2,
+			updatesCurrent: true,
 		},
 	}
 	for _, tc := range testCases {
@@ -81,6 +92,35 @@ func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
 
 			require.NoError(t, updateWithFakes(db, request))
 			require.Equal(t, tc.historyNodes, db.pipelined.historyNodes)
+			var lockedCurrent *sqlplugin.CurrentExecutionsFilter
+			var updatedCurrent *sqlplugin.CurrentExecutionsRow
+			if tc.updatesCurrent {
+				namespaceID := primitives.MustParseUUID(request.UpdateWorkflowMutation.NamespaceID)
+				runID := primitives.MustParseUUID(request.UpdateWorkflowMutation.ExecutionState.RunId)
+				lockedCurrent = &sqlplugin.CurrentExecutionsFilter{
+					ShardID:     1,
+					NamespaceID: namespaceID,
+					WorkflowID:  "workflow-id",
+					RunID:       runID,
+					ArchetypeID: chasm.WorkflowArchetypeID,
+				}
+				updatedCurrent = &sqlplugin.CurrentExecutionsRow{
+					ShardID:          1,
+					NamespaceID:      namespaceID,
+					WorkflowID:       "workflow-id",
+					RunID:            runID,
+					ArchetypeID:      chasm.WorkflowArchetypeID,
+					CreateRequestID:  "create-request-id",
+					StartTime:        &pipelineTestStartTime,
+					LastWriteVersion: 7,
+					State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+					Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					Data:             []byte("execution state"),
+					DataEncoding:     enumspb.ENCODING_TYPE_PROTO3.String(),
+				}
+			}
+			require.Equal(t, lockedCurrent, db.pipelined.lockedCurrent)
+			require.Equal(t, updatedCurrent, db.pipelined.updatedCurrent)
 			require.True(t, db.pipelined.committed)
 			require.Zero(t, db.historyNodes)
 			require.False(t, db.sequential.begun)
@@ -189,14 +229,24 @@ func newPipelineTestRequest() *p.InternalUpdateWorkflowExecutionRequest {
 		Mode:        p.UpdateWorkflowModeUpdateCurrent,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 		UpdateWorkflowMutation: p.InternalWorkflowMutation{
-			NamespaceID:        primitives.NewUUID().String(),
-			WorkflowID:         "workflow-id",
-			ExecutionState:     &persistencespb.WorkflowExecutionState{RunId: primitives.NewUUID().String()},
-			ExecutionStateBlob: &commonpb.DataBlob{},
-			ExecutionInfoBlob:  &commonpb.DataBlob{},
-			NextEventID:        11,
-			DBRecordVersion:    3,
-			Condition:          10,
+			NamespaceID: primitives.NewUUID().String(),
+			WorkflowID:  "workflow-id",
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:           primitives.NewUUID().String(),
+				CreateRequestId: "create-request-id",
+				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				StartTime:       timestamppb.New(pipelineTestStartTime),
+			},
+			ExecutionStateBlob: &commonpb.DataBlob{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         []byte("execution state"),
+			},
+			ExecutionInfoBlob: &commonpb.DataBlob{},
+			NextEventID:       11,
+			DBRecordVersion:   3,
+			Condition:         10,
+			LastWriteVersion:  7,
 		},
 		UpdateWorkflowNewEvents: []*p.InternalAppendHistoryNodesRequest{{
 			BranchInfo: &persistencespb.HistoryBranch{
@@ -271,7 +321,13 @@ func (t *fakeUpdateTx) LockCurrentExecutions(context.Context, sqlplugin.CurrentE
 	}, nil
 }
 
-func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(context.Context, sqlplugin.CurrentExecutionsFilter) error {
+func (t *fakeUpdateTx) LockCurrentExecutionsWithRunID(_ context.Context, filter sqlplugin.CurrentExecutionsFilter) error {
+	t.lockedCurrent = &filter
+	return nil
+}
+
+func (t *fakeUpdateTx) UpdateCurrentExecutionsIfChanged(_ context.Context, row *sqlplugin.CurrentExecutionsRow) error {
+	t.updatedCurrent = row
 	return nil
 }
 

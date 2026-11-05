@@ -113,28 +113,31 @@ func (t pipelinedTx) UpdateExecutionsWithCondition(
 	)
 }
 
-// UpdateCurrentExecutions updates a current execution row only when it differs.
-// A sequential transaction decides that from the row it locked, which a
+// UpdateCurrentExecutionsIfChanged updates a current execution row only when it
+// differs. A sequential transaction decides that from the row it locked, which a
 // pipeline cannot read.
-func (t pipelinedTx) UpdateCurrentExecutions(
+func (t pipelinedTx) UpdateCurrentExecutionsIfChanged(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
-) (sql.Result, error) {
+) error {
+	var err error
+
 	if err := t.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
-		return nil, err
+		return err
 	}
 
 	if row.ArchetypeID == chasm.WorkflowArchetypeID {
-		return t.NamedExecContext(ctx,
+		_, err = t.NamedExecContext(ctx,
 			updateCurrentExecutionsIfChangedQuery,
 			row,
 		)
+	} else {
+		_, err = t.NamedExecContext(ctx,
+			updateCurrentChasmExecutionsIfChangedQuery,
+			row,
+		)
 	}
-
-	return t.NamedExecContext(ctx,
-		updateCurrentChasmExecutionsIfChangedQuery,
-		row,
-	)
+	return err
 }
 
 // Commit sends the queued statements as one batch. Its errors go through

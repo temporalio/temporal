@@ -632,6 +632,19 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
+	current, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	s.Equal(&p.GetCurrentExecutionResponse{
+		StartRequestID: currentMutation.ExecutionState.CreateRequestId,
+		RunID:          s.RunID,
+		State:          currentMutation.ExecutionState.State,
+		Status:         currentMutation.ExecutionState.Status,
+	}, current)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
@@ -726,6 +739,42 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 		currentMutation.ExecutionState.RunId,
 		chasm.WorkflowArchetypeID,
 	)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_OtherRunCurrent() {
+	firstSnapshot, firstMutation, secondRunID, _, _ := s.createRunThenNewCurrentRun()
+
+	// An update of the first run, which is no longer current.
+	updateMutation, updateEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		firstMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		firstMutation.DBRecordVersion+1,
+		nil,
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *updateMutation,
+		UpdateWorkflowEvents:   updateEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	var conflictErr *p.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conflictErr)
+
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
+	s.assertCurrentRunID(secondRunID)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {

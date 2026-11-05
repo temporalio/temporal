@@ -394,38 +394,9 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 
 	case p.UpdateWorkflowModeUpdateCurrent:
-		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:     shardID,
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			ArchetypeID: request.ArchetypeID,
-			StartTime:   nil,
-		}
-
-		if newWorkflow != nil {
-			row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
-			row.State = newWorkflow.ExecutionState.State
-			row.Status = newWorkflow.ExecutionState.Status
-			row.LastWriteVersion = newWorkflow.LastWriteVersion
-			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
-			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
-			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
-			row.Data = newWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
-
-			if !bytes.Equal(namespaceID, row.NamespaceID) {
-				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
-			}
-		} else {
-			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
-			row.State = updateWorkflow.ExecutionState.State
-			row.Status = updateWorkflow.ExecutionState.Status
-			row.LastWriteVersion = updateWorkflow.LastWriteVersion
-			row.RunID = runID
-			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
-			row.Data = updateWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = updateWorkflow.ExecutionStateBlob.EncodingType.String()
-			// we still call update only to update the current record
+		row, err := buildCurrentExecutionRow(request)
+		if err != nil {
+			return err
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID, m.serializer); err != nil {
 			return err
@@ -445,6 +416,49 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 	}
 	return nil
+}
+
+// buildCurrentExecutionRow returns the current execution row that an
+// UpdateCurrent update writes.
+func buildCurrentExecutionRow(request *p.InternalUpdateWorkflowExecutionRequest) (sqlplugin.CurrentExecutionsRow, error) {
+	updateWorkflow := request.UpdateWorkflowMutation
+	newWorkflow := request.NewWorkflowSnapshot
+	namespaceID := primitives.MustParseUUID(updateWorkflow.NamespaceID)
+
+	row := sqlplugin.CurrentExecutionsRow{
+		ShardID:     request.ShardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  updateWorkflow.WorkflowID,
+		ArchetypeID: request.ArchetypeID,
+		StartTime:   nil,
+	}
+
+	if newWorkflow != nil {
+		row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
+		row.State = newWorkflow.ExecutionState.State
+		row.Status = newWorkflow.ExecutionState.Status
+		row.LastWriteVersion = newWorkflow.LastWriteVersion
+		row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
+		row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
+		row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
+		row.Data = newWorkflow.ExecutionStateBlob.Data
+		row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
+
+		if !bytes.Equal(namespaceID, row.NamespaceID) {
+			return sqlplugin.CurrentExecutionsRow{}, serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
+		}
+	} else {
+		row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
+		row.State = updateWorkflow.ExecutionState.State
+		row.Status = updateWorkflow.ExecutionState.Status
+		row.LastWriteVersion = updateWorkflow.LastWriteVersion
+		row.RunID = primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
+		row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
+		row.Data = updateWorkflow.ExecutionStateBlob.Data
+		row.DataEncoding = updateWorkflow.ExecutionStateBlob.EncodingType.String()
+		// we still call update only to update the current record
+	}
+	return row, nil
 }
 
 func (m *sqlExecutionStore) ConflictResolveWorkflowExecution(

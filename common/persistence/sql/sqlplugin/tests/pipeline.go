@@ -134,7 +134,7 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 	s.Equal(update.DBRecordVersion, stored.DBRecordVersion)
 }
 
-func (s *pipelineSuite) TestUpdateCurrentExecutions() {
+func (s *pipelineSuite) TestUpdateCurrentExecutionsIfChanged() {
 	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_fail_update() RETURNS trigger
 LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test update'; END $$`))
 	s.T().Cleanup(func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_fail_update()`)) })
@@ -153,8 +153,7 @@ LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test update'; END $$`))
 
 		written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
 			for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
-				_, err := tx.UpdateCurrentExecutions(newExecutionContext(), row)
-				s.NoError(err)
+				s.NoError(tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), row))
 			}
 		})
 		s.NoError(err)
@@ -176,8 +175,7 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update
 		s.T().Cleanup(func() { s.NoError(s.admin.Exec(fmt.Sprintf(`DROP TRIGGER pipeline_test_fail_update ON %s`, tc.table))) })
 
 		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
-			_, err := tx.UpdateCurrentExecutions(newExecutionContext(), &changed)
-			s.NoError(err)
+			s.NoError(tx.UpdateCurrentExecutionsIfChanged(newExecutionContext(), &changed))
 		})
 		s.NoError(err)
 		s.True(written)
