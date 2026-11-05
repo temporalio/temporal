@@ -56,6 +56,7 @@ func (s *activitySuite) SetupTest() {
 	)
 
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
+	s.mockMutableState.EXPECT().Now().DoAndReturn(s.mockShard.GetTimeSource().Now).AnyTimes()
 
 	s.mockNamespaceRegistry = s.mockShard.Resource.NamespaceCache
 
