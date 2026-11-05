@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -112,7 +113,7 @@ func (u *Updater) Invoke(
 	if u.bufferedInput {
 		handler := u.shardCtx.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(u.req.Request.Namespace),
-			metrics.StringTag("input_type", string(api.WHNInputTypeUpdate)),
+			metrics.StringTag("input_type", "update"),
 		)
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
 		if u.firstBufferedInput {
@@ -198,7 +199,9 @@ func (u *Updater) applyRequest(
 	startedWorkflowTask := ms.HasStartedWorkflowTask()
 	hadBufferedInput := false
 	if startedWorkflowTask {
-		hadBufferedInput = api.HasBufferedWHNInputEvent(ms) || updateReg.HasOutgoingMessages(false)
+		hadBufferedInput = ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+			return workflow.BufferedWHNInputType(event.GetEventType()) != ""
+		}) || updateReg.HasOutgoingMessages(false)
 	}
 
 	var (
@@ -230,7 +233,6 @@ func (u *Updater) applyRequest(
 			// otherwise would convert a speculative workflow task to a normal one.
 			Noop:               !eventWritten,
 			CreateWorkflowTask: false,
-			InputType:          api.WHNInputTypeUpdate,
 		}, nil
 	}
 
@@ -269,7 +271,6 @@ func (u *Updater) applyRequest(
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
 		CreateWorkflowTask: false,
-		InputType:          api.WHNInputTypeUpdate,
 	}, nil
 }
 

@@ -157,7 +157,6 @@ func recordChildWorkflowCompleted(
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
-				InputType:          api.WHNInputTypeChildWorkflowResult,
 			}, nil
 		},
 		nil,

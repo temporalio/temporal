@@ -125,7 +125,6 @@ func Invoke(
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
-				InputType:          api.WHNInputTypeActivityResult,
 			}, nil
 		},
 		nil,

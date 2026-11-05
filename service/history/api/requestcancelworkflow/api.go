@@ -85,7 +85,6 @@ func Invoke(
 
 			return &api.UpdateWorkflowAction{
 				CreateWorkflowTask: true,
-				InputType:          api.WHNInputTypeCancellationRequest,
 			}, nil
 		},
 		nil,

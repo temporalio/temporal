@@ -3,12 +3,10 @@ package api
 import (
 	"context"
 
-	historypb "go.temporal.io/api/history/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
-	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -79,7 +77,6 @@ func UpdateWorkflowWithNew(
 	}
 
 	mutableState := workflowLease.GetMutableState()
-	var bufferedInput, firstBufferedInput bool
 	if postActions.CreateWorkflowTask {
 		// Create a transfer task to schedule a workflow task only if the workflow is not paused and there is no pending workflow task.
 		if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
@@ -88,21 +85,6 @@ func UpdateWorkflowWithNew(
 				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 			); err != nil {
 				return err
-			}
-		} else if mutableState.HasPendingWorkflowTask() {
-			if mutableState.HasStartedWorkflowTask() && postActions.InputType != "" {
-				bufferedInput = true
-				bufferedInputCount := 0
-				hasSecondBufferedInput := mutableState.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
-					if isBufferedWorkflowInputEvent(event.GetEventType()) {
-						bufferedInputCount++
-					}
-					return bufferedInputCount > 1
-				})
-				firstBufferedInput = bufferedInputCount == 1 && !hasSecondBufferedInput
-				if firstBufferedInput {
-					firstBufferedInput = !workflowLease.GetContext().UpdateRegistry(ctx).HasOutgoingMessages(false)
-				}
 			}
 		}
 	}
@@ -134,17 +116,6 @@ func UpdateWorkflowWithNew(
 	if updateErr != nil {
 		return updateErr
 	}
-	if bufferedInput {
-		handler := shardContext.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
-			metrics.StringTag("input_type", string(postActions.InputType)),
-		)
-		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
-		if firstBufferedInput {
-			metrics.WorkflowHeartbeatNotificationFirstBufferedInput.With(handler).Record(1)
-		}
-	}
-
 	if postActions.AbortUpdates {
 		workflowLease.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	}
