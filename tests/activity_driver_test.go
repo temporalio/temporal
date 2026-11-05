@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestDriversRecognizeTimeoutObservedBeforeWait reproduces a race in awaitTimeout: a retryable timeout
@@ -151,6 +154,45 @@ func TestDriverContextReflectsExtension(t *testing.T) {
 				require.Equal(t, extendedDeadline, after,
 					"driver must observe the extended deadline, not the one captured at construction")
 			})
+		})
+	}
+}
+
+// Model tests supply retry-fit flags directly; this checks how the driver derives them.
+func TestActivityModelHandoffRetryFit(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                     string
+		handoffPolicy            *commonpb.RetryPolicy
+		scheduleToClose          time.Duration
+		nextRetryDelay           time.Duration
+		expectedActivityOutlives bool
+	}{
+		{
+			name: "equal delay cannot fit", scheduleToClose: time.Minute,
+			handoffPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Minute)},
+		},
+		{
+			name: "omitted handoff policy uses standard default", scheduleToClose: time.Second,
+		},
+		{
+			name: "worker delay overrides policy", scheduleToClose: time.Minute, nextRetryDelay: time.Hour,
+			handoffPolicy:            &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second)},
+			expectedActivityOutlives: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := activityConfig{
+				RetryInterval: time.Millisecond, ScheduleToClose: testCase.scheduleToClose,
+				NextRetryDelay:      testCase.nextRetryDelay,
+				AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{RetryPolicy: testCase.handoffPolicy},
+			}
+			prediction := cfg.modelConfig()
+			require.True(t, prediction.HandoffRetryOutlivesScheduleToClose)
+			require.Equal(t, testCase.expectedActivityOutlives, prediction.RetryOutlivesScheduleToClose)
 		})
 	}
 }

@@ -1490,6 +1490,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		PollerScalingDecision:               matchingResponse.PollerScalingDecision,
 		Priority:                            matchingResponse.Priority,
 		RetryPolicy:                         matchingResponse.RetryPolicy,
+		HandoffAttempt:                      matchingResponse.GetHandoffAttempt(),
+		AsyncHandoffOptions:                 matchingResponse.GetAsyncHandoffOptions(),
 		PropagatedNexusSerializationContext: matchingResponse.PropagatedNexusSerializationContext,
 	}, nil
 }

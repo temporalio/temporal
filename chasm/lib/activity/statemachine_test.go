@@ -3,6 +3,7 @@ package activity
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
@@ -368,8 +370,9 @@ func TestTransitionRescheduled(t *testing.T) {
 			}
 
 			event := rescheduleEvent{
+				retryType:     activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY,
 				retryInterval: tc.expectedRetryInterval,
-				failure:       createStartToCloseTimeoutFailure(),
+				failure:       createActivityTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
 				timeoutType:   tc.timeoutType,
 			}
 
@@ -409,6 +412,71 @@ func TestTransitionRescheduled(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("HandoffRetryValidation", func(t *testing.T) {
+		t.Parallel()
+
+		for _, testCase := range []struct {
+			name                            string
+			retryType                       activitypb.ActivityRetryType
+			withoutOptions                  bool
+			activityAttempt, handoffAttempt int32
+		}{
+			{
+				name: "no retry type", activityAttempt: 1, handoffAttempt: 1,
+			},
+			{
+				name: "unknown retry type", retryType: activitypb.ActivityRetryType(100),
+				activityAttempt: 1, handoffAttempt: 1,
+			},
+			{
+				name: "handoff retry without options", retryType: activitypb.ACTIVITY_RETRY_TYPE_HANDOFF, withoutOptions: true,
+				activityAttempt: 1, handoffAttempt: 1,
+			},
+			{
+				name: "activity attempt overflow", retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY,
+				activityAttempt: math.MaxInt32, handoffAttempt: 1,
+			},
+			{
+				name: "handoff attempt overflow", retryType: activitypb.ACTIVITY_RETRY_TYPE_HANDOFF,
+				activityAttempt: 1, handoffAttempt: math.MaxInt32,
+			},
+			{
+				name: "missing activity counter", retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY,
+				handoffAttempt: 1,
+			},
+			{
+				name: "missing handoff counter", retryType: activitypb.ACTIVITY_RETRY_TYPE_HANDOFF,
+				activityAttempt: 1,
+			},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+
+				a, ctx := newHandoffRetryTestActivity(t)
+				if testCase.withoutOptions {
+					a.AsyncHandoffOptions = nil
+				}
+
+				attempt := a.LastAttempt.Get(ctx)
+				attempt.Count = testCase.activityAttempt
+				attempt.AsyncHandoffState.Count = testCase.handoffAttempt
+				beforeState := common.CloneProto(a.ActivityState)
+				beforeAttempt := common.CloneProto(attempt)
+
+				err := TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
+					retryType:           testCase.retryType,
+					retryInterval:       time.Second,
+					retryIntervalSource: activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY,
+					failure:             &failurepb.Failure{Message: "retryable failure"},
+				})
+				require.ErrorAs(t, err, new(*serviceerror.Internal))
+				protorequire.ProtoEqual(t, beforeState, a.ActivityState)
+				protorequire.ProtoEqual(t, beforeAttempt, a.LastAttempt.Get(ctx))
+				require.Empty(t, ctx.Tasks)
+			})
+		}
+	})
 }
 
 func TestPauseUnpauseReplacesDispatch(t *testing.T) {
@@ -1263,7 +1331,7 @@ func TestDeferredResetHeartbeat(t *testing.T) {
 					Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 				}
 
-				err := tc.transition.Apply(act, ctx, rescheduleEvent{})
+				err := tc.transition.Apply(act, ctx, rescheduleEvent{retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY})
 				require.NoError(t, err)
 				require.Equal(t, tc.expectedStatus, act.Status)
 				require.Equal(t, int32(1), attemptState.Count)
@@ -1404,13 +1472,6 @@ func TestHandoffLifecycle(t *testing.T) {
 		apply              func(*Activity, chasm.MutableContext) error
 	}{
 		{
-			name:   "worker pickup",
-			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			apply: func(a *Activity, ctx chasm.MutableContext) error {
-				return TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{Stamp: 2})
-			},
-		},
-		{
 			name:   "applied reset",
 			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			apply: func(a *Activity, ctx chasm.MutableContext) error {
@@ -1423,7 +1484,7 @@ func TestHandoffLifecycle(t *testing.T) {
 			awaitingCompletion: true,
 			keepPaused:         true,
 			apply: func(a *Activity, ctx chasm.MutableContext) error {
-				return TransitionResetAttemptFailedToPaused.Apply(a, ctx, rescheduleEvent{})
+				return TransitionResetAttemptFailedToPaused.Apply(a, ctx, rescheduleEvent{retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY})
 			},
 		},
 		{
@@ -1431,7 +1492,7 @@ func TestHandoffLifecycle(t *testing.T) {
 			status:             activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 			awaitingCompletion: true,
 			apply: func(a *Activity, ctx chasm.MutableContext) error {
-				return TransitionResetAttemptFailedToScheduled.Apply(a, ctx, rescheduleEvent{})
+				return TransitionResetAttemptFailedToScheduled.Apply(a, ctx, rescheduleEvent{retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY})
 			},
 		},
 		{
@@ -1440,7 +1501,7 @@ func TestHandoffLifecycle(t *testing.T) {
 			awaitingCompletion: true,
 			retainTime:         true,
 			apply: func(a *Activity, ctx chasm.MutableContext) error {
-				return TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, rescheduleEvent{})
+				return TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, rescheduleEvent{retryType: activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY})
 			},
 		},
 	} {
@@ -1467,4 +1528,140 @@ func TestHandoffLifecycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandoffStartClocks verifies eager and Matching pickup initialize clocks, handoff retries
+// preserve the original start-to-close clock, and enabling that timeout uses the original pickup.
+// Describe and task-poll responses do not expose the start-to-close clock's start time or timer
+// generation. A controlled clock verifies these directly without timing-sensitive assertions.
+func TestHandoffStartClocks(t *testing.T) {
+	t.Parallel()
+
+	for _, eager := range []bool{false, true} {
+		for _, testCase := range []struct {
+			name  string
+			value *durationpb.Duration
+		}{
+			{name: "unset"},
+			{name: "zero", value: durationpb.New(0)},
+			{name: "positive", value: durationpb.New(time.Minute)},
+		} {
+			t.Run(fmt.Sprintf("eager=%t/%s", eager, testCase.name), func(t *testing.T) {
+				t.Parallel()
+
+				a, ctx := newHandoffRetryTestActivity(t)
+				now := ctx.Now(a)
+				ctx.HandleNow = func(chasm.Component) time.Time { return now }
+				a.StartToCloseTimeout = common.CloneProto(testCase.value)
+				a.ScheduleToCloseTimeout = nil
+				a.ScheduleToStartTimeout = nil
+				a.FirstAttemptStartedTime = nil
+				startToHandoffTimeout := a.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration()
+				attempt := a.LastAttempt.Get(ctx)
+				*attempt = activitypb.ActivityAttemptState{}
+				if eager {
+					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+					require.NoError(t, TransitionEagerStarted.Apply(a, ctx, eagerStartEvent{requestID: "start"}))
+				} else {
+					a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+					attempt.Count = 1
+					attempt.Stamp = 1
+					attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{Count: 1}
+					require.NoError(t, TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{RequestId: "start", Stamp: 1}))
+				}
+
+				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, a.GetStatus())
+				require.Equal(t, now, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
+				require.EqualValues(t, 1, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+
+				expected := []chasm.MockTask{}
+				if testCase.value.AsDuration() > 0 {
+					expected = append(expected, chasm.MockTask{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(testCase.value.AsDuration())}, Payload: &activitypb.HandoffStartToCloseTimeoutTask{Stamp: 1}})
+				}
+
+				expected = append(expected, chasm.MockTask{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(startToHandoffTimeout)}, Payload: &activitypb.StartToHandoffTimeoutTask{Stamp: 1}})
+				require.Equal(t, expected, ctx.Tasks)
+
+				// A later handoff retry pickup preserves the first pickup's start-to-close clock.
+				pickupTime := now
+				startToCloseStamp := attempt.GetAsyncHandoffState().GetStartToCloseStamp()
+				now = now.Add(10 * time.Second)
+				retryState, err := a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "handoff failed"}})
+				require.NoError(t, err)
+				require.Equal(t, enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+				now = attempt.GetDispatchTime().AsTime()
+				ctx.Tasks = nil
+				require.NoError(t, TransitionStarted.Apply(a, ctx, &historyservice.RecordActivityTaskStartedRequest{
+					RequestId: "retry-start", Stamp: attempt.GetStamp(),
+				}))
+				require.Equal(t, now, attempt.GetStartedTime().AsTime())
+				require.Equal(t, pickupTime, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
+				require.Equal(t, startToCloseStamp, attempt.GetAsyncHandoffState().GetStartToCloseStamp())
+				require.Equal(t, []chasm.MockTask{
+					{Component: a, Attributes: chasm.TaskAttributes{ScheduledTime: now.Add(startToHandoffTimeout)}, Payload: &activitypb.StartToHandoffTimeoutTask{Stamp: attempt.GetStamp()}},
+				}, ctx.Tasks)
+
+				if testCase.value.AsDuration() > 0 {
+					valid, err := newHandoffStartToCloseTimeoutTaskHandler().Validate(ctx, a,
+						chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: pickupTime.Add(testCase.value.AsDuration())}},
+						&activitypb.HandoffStartToCloseTimeoutTask{Stamp: startToCloseStamp})
+					require.NoError(t, err)
+					require.True(t, valid)
+				}
+
+				if testCase.value.AsDuration() == 0 {
+					// Enabling the timeout later uses the first pickup even if its deadline is already past.
+					before := common.CloneProto(attempt)
+					updatedTimeout := 5 * time.Second
+					now = now.Add(10 * time.Second)
+					a.StartToCloseTimeout = durationpb.New(updatedTimeout)
+					attempt.Stamp++
+					ctx.Tasks = nil
+					require.NoError(t, a.reissueRunningAttemptTimers(ctx, attempt))
+					require.Equal(t, pickupTime.Add(updatedTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
+					require.Equal(t, &activitypb.HandoffStartToCloseTimeoutTask{Stamp: before.GetAsyncHandoffState().GetStartToCloseStamp() + 1}, ctx.Tasks[0].Payload)
+					require.Equal(t, before.GetStartedStamp(), attempt.GetStartedStamp())
+				}
+			})
+		}
+	}
+}
+
+// TestHandoffUnpauseStartsFreshStartToCloseWindow verifies that pausing ends the old start-to-close
+// window and pickup after unpause starts a full new one, even after the old deadline has passed.
+// The public parity driver cannot observe the internal start time or timer generation.
+func TestHandoffUnpauseStartsFreshStartToCloseWindow(t *testing.T) {
+	t.Parallel()
+
+	a, ctx := newHandoffRetryTestActivity(t)
+	now := ctx.Now(a)
+	ctx.HandleNow = func(chasm.Component) time.Time { return now }
+	attempt := a.LastAttempt.Get(ctx)
+	originalStart := attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime()
+	originalStamp := attempt.GetAsyncHandoffState().GetStartToCloseStamp()
+
+	_, err := a.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{FrontendRequest: &workflowservice.PauseActivityExecutionRequest{}})
+	require.NoError(t, err)
+
+	_, err = a.tryReschedule(ctx, retryEvent{failure: &failurepb.Failure{Message: "submission failed"}})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, a.GetStatus())
+	require.Nil(t, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime())
+
+	// Unpause after the old timeout would have expired; pickup must get the full new window.
+	now = originalStart.Add(2 * a.GetStartToCloseTimeout().AsDuration())
+	_, err = a.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{}})
+	require.NoError(t, err)
+
+	ctx.Tasks = nil
+	_, err = a.HandleStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
+		Stamp: attempt.GetStamp(), RequestId: "unpaused-task",
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{Namespace: "test-namespace"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, now, attempt.GetAsyncHandoffState().GetStartToCloseStartedTime().AsTime())
+	require.Greater(t, attempt.GetAsyncHandoffState().GetStartToCloseStamp(), originalStamp)
+	require.Equal(t, now.Add(a.GetStartToCloseTimeout().AsDuration()), ctx.Tasks[0].Attributes.ScheduledTime)
+	require.IsType(t, &activitypb.HandoffStartToCloseTimeoutTask{}, ctx.Tasks[0].Payload)
 }

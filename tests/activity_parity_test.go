@@ -10,9 +10,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -20,10 +23,14 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type activityParityTestSuite struct {
@@ -34,8 +41,8 @@ func TestActivityParityTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &activityParityTestSuite{})
 }
 
-func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
-	env := testcore.NewEnv(t)
+func newActivityParityEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv {
+	env := testcore.NewEnv(t, opts...)
 	nsValues := func(value any) []dynamicconfig.ConstrainedValue {
 		return []dynamicconfig.ConstrainedValue{
 			{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: value},
@@ -44,6 +51,7 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
+	cluster.OverrideDynamicConfig(t, activity.StandaloneAsyncHandoffEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableActivityEagerExecution, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableEagerStart, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
@@ -573,11 +581,8 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 			})
 	})
 
-	// Paused after the retry was dispatched: the dispatched code path already nils both fields, and the
-	// pause preserves that. No field of ActivityExecutionInfo or PendingActivityInfo distinguishes this
-	// from PausedBeforeDispatch in either implementation, so the two subtests differ in the state they reach,
-	// not in what they assert.
-	s.Run("PausedAfterDispatch", func(s *activityParityTestSuite) {
+	// Once the retry is due, pause keeps both fields absent even if dispatch has not reached Matching.
+	s.Run("PausedWhenRetryDue", func(s *activityParityTestSuite) {
 		t := s.T()
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: activityShortDispatchDelay}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Pause},
 			activityInfo{
@@ -712,10 +717,17 @@ func (s *activityParityTestSuite) TestActivityCore() {
 	})
 }
 
-// parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
-// it, so a test states its claim once instead of once per implementation.
+// parityActivity is the driver contract shared by workflow and standalone activity tests.
+// TODO some of these methods will be consolidated when WFA supports handoff
 type parityActivity interface {
 	driveEvent(testing.TB, model.Event)
+	terminalOutcome(require.TestingT) activityTerminalOutcome
+	handoffInfo(require.TestingT) activityHandoffInfo
+	taskResponse() *workflowservice.PollActivityTaskQueueResponse
+	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
+	activityInfo(require.TestingT) activityInfo
+	timeoutInfo(require.TestingT) activityTimeoutInfo
+	terminalFailureInfo(require.TestingT) activityFailureInfo
 }
 
 // parityDriveOutlivingActivity drives trace through both implementations and hands each resulting
@@ -1096,4 +1108,713 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			})
 		})
 	}
+}
+
+// Handoff lifecycle tests use raw task RPCs so they do not depend on SDK handoff support.
+// WFA branches are placeholders until workflow activity handoff is implemented.
+func (s *activityParityTestSuite) TestAsyncHandoff() {
+	s.Run("RecordHandoffAndCompleteExternally", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				StartToHandoffTimeout: durationpb.New(time.Minute),
+				HandoffToCloseTimeout: durationpb.New(time.Hour),
+			},
+		}
+		trace := []model.Event{model.Poll, model.Handoff}
+
+		check := func(t *testing.T, a parityActivity) {
+			info := a.handoffInfo(t)
+			require.NotNil(t, info.handoffTime)
+			require.NotNil(t, info.options)
+			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetStartToHandoffTimeout(), info.options.GetStartToHandoffTimeout())
+			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetHandoffToCloseTimeout(), info.options.GetHandoffToCloseTimeout())
+
+			a.driveEvent(t, model.Complete)
+			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+
+			closed := a.handoffInfo(t)
+			require.False(t, closed.awaitingCompletion)
+			protorequire.ProtoEqual(t, info.handoffTime, closed.handoffTime)
+
+			// The model expects handoff after closure to return NotFound.
+			a.driveEvent(t, model.Handoff)
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: expose retained workflow handoff metadata through the API and run the shared check with newWFADriver")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	// Eager and Matching delivery use different start paths. Verify that neither
+	// adds a start-to-close or schedule-to-close timeout when only phase timeouts
+	// are configured.
+	s.Run("CompletesWithOnlyPhaseTimeouts", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			DisableStartToClose: true,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				StartToHandoffTimeout: durationpb.New(time.Minute),
+				HandoffToCloseTimeout: durationpb.New(time.Hour),
+			},
+		}
+		trace := []model.Event{model.Poll, model.Handoff}
+
+		check := func(t *testing.T, a parityActivity) {
+			task := a.taskResponse()
+			require.NotNil(t, task)
+			require.EqualValues(t, 1, task.GetAttempt())
+			require.EqualValues(t, 1, task.GetHandoffAttempt())
+			require.Zero(t, task.GetStartToCloseTimeout().AsDuration())
+			require.Zero(t, task.GetScheduleToCloseTimeout().AsDuration())
+			require.NotNil(t, task.GetAsyncHandoffOptions().GetRetryPolicy())
+			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetStartToHandoffTimeout(), task.GetAsyncHandoffOptions().GetStartToHandoffTimeout())
+			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetHandoffToCloseTimeout(), task.GetAsyncHandoffOptions().GetHandoffToCloseTimeout())
+
+			info := a.handoffInfo(t)
+			require.Zero(t, info.startToCloseTimeout)
+			require.Zero(t, info.scheduleToCloseTimeout)
+			protorequire.ProtoEqual(t, task.GetAsyncHandoffOptions(), info.options)
+
+			a.driveEvent(t, model.Complete)
+			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+			require.False(t, a.handoffInfo(t).awaitingCompletion)
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			for _, testCase := range []struct {
+				name  string
+				eager bool
+				trace []model.Event
+			}{
+				{name: "MatchingDispatch", trace: trace},
+				{name: "EagerDispatch", eager: true, trace: []model.Event{model.Handoff}},
+			} {
+				s.Run(testCase.name, func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, false))
+					caseCfg := cfg
+					caseCfg.EagerStart = testCase.eager
+					check(t, newSAADriver(t, env, caseCfg).driveTrace(t, testCase.trace))
+				})
+			}
+		})
+	})
+
+	s.Run("RepeatedHandoffPreservesTimestamp", func(s *activityParityTestSuite) {
+		for _, testCase := range []struct {
+			name    string
+			options *activitypb.AsyncHandoffOptions
+		}{
+			{
+				name: "WithHandoffOptions",
+				options: &activitypb.AsyncHandoffOptions{
+					StartToHandoffTimeout: durationpb.New(time.Minute),
+					HandoffToCloseTimeout: durationpb.New(time.Hour),
+				},
+			},
+			{name: "WithoutHandoffOptions"},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				cfg := activityConfig{AsyncHandoffOptions: testCase.options}
+				trace := []model.Event{model.Poll, model.Handoff}
+
+				check := func(t *testing.T, a parityActivity) {
+					before := a.handoffInfo(t)
+					require.NotNil(t, before.handoffTime)
+					if testCase.options == nil {
+						require.Nil(t, before.options)
+					} else {
+						require.NotNil(t, before.options)
+					}
+
+					a.driveEvent(t, model.Handoff)
+					after := a.handoffInfo(t)
+					protorequire.ProtoEqual(t, before.handoffTime, after.handoffTime)
+					protorequire.ProtoEqual(t, before.options, after.options)
+
+					a.driveEvent(t, model.Complete)
+					require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+
+					closed := a.handoffInfo(t)
+					require.False(t, closed.awaitingCompletion)
+					protorequire.ProtoEqual(t, before.handoffTime, closed.handoffTime)
+				}
+
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: support workflow handoff with and without options and run the shared check with newWFADriver")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+				})
+			})
+		}
+	})
+
+	// Without handoff options, external failure still advances the activity attempt and clears the handoff timestamp at pickup.
+	s.Run("PreservesActivityRetryBehavior", func(s *activityParityTestSuite) {
+		cfg := activityConfig{}
+		trace := []model.Event{model.Poll, model.Handoff}
+
+		check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
+			handoffTime := a.handoffInfo(t).handoffTime
+			require.NotNil(t, handoffTime)
+			previousToken := a.taskResponse().GetTaskToken()
+
+			a.driveEvent(t, model.FailRetryably)
+			protorequire.ProtoEqual(t, handoffTime, a.handoffInfo(t).handoffTime)
+
+			for _, event := range []model.Event{model.BackoffElapses, model.Poll} {
+				a.driveEvent(t, event)
+			}
+			require.Nil(t, a.handoffInfo(t).handoffTime)
+
+			// The previous attempt's task token is now stale.
+			_, err := env.FrontendClient().RespondActivityTaskHandoff(testcontext.For(t), &workflowservice.RespondActivityTaskHandoffRequest{
+				Namespace: env.Namespace().String(), TaskToken: previousToken,
+			})
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+			for _, event := range []model.Event{model.Handoff, model.Complete} {
+				a.driveEvent(t, event)
+			}
+			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: support reporting-only workflow handoff and run the shared check with newWFADriver")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, env, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	// Each trace checks server state against the model after every operation.
+	s.Run("ModelConformance", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			MaxAttempts: 5,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(activityShortDispatchDelay),
+					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
+					BackoffCoefficient: 1,
+					MaximumAttempts:    4,
+				},
+			},
+		}
+
+		for _, testCase := range []struct {
+			name  string
+			trace []model.Event
+		}{
+			{name: "submission retries then external failure", trace: []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.Handoff, model.FailRetryably}},
+			{name: "resume after submission failure", trace: []model.Event{model.Poll, model.Pause, model.FailRetryably, model.Unpause, model.BackoffElapses, model.Poll}},
+			{name: "reset after handoff", trace: []model.Event{model.Poll, model.Handoff, model.Reset, model.FailRetryably}},
+			{name: "reset on nonretryable failure", trace: []model.Event{model.Poll, model.Reset, model.FailNonRetryably}},
+			{name: "submission timeout", trace: []model.Event{model.Poll, model.StartToHandoffElapses}},
+			{name: "completion timeout", trace: []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses}},
+			{name: "submission heartbeat", trace: []model.Event{model.Poll, model.HeartbeatElapses}},
+			{name: "completion heartbeat", trace: []model.Event{model.Poll, model.Handoff, model.HeartbeatElapses}},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: workflow activity async handoff support")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					newSAADriver(t, env, cfg).driveTrace(t, testCase.trace)
+				})
+			})
+		}
+	})
+
+	// Start-to-close continues through handoff retry backoff and queue wait; expiry replaces the pending handoff retry with an activity retry.
+	s.Run("StartToCloseDuringRedispatch", func(s *activityParityTestSuite) {
+		for _, testCase := range []struct {
+			name          string
+			retryInterval time.Duration
+			trace         []model.Event
+		}{
+			{
+				name: "backoff", retryInterval: time.Minute,
+				trace: []model.Event{model.Poll, model.FailRetryably, model.StartToCloseElapses},
+			},
+			{
+				name: "matching queue wait", retryInterval: time.Second,
+				trace: []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.StartToCloseElapses},
+			},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				cfg := activityConfig{
+					StartToClose: 10 * time.Second, RetryInterval: time.Second, MaxAttempts: 2,
+					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						RetryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(testCase.retryInterval)},
+					},
+				}
+
+				check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
+					// Poll before waiting for backoff so an obsolete Matching task can expose an early pickup.
+					next := a.pollForTask(t, activityDriverTimeout)
+					require.NotNil(t, next)
+					require.EqualValues(t, 2, next.GetAttempt())
+					require.EqualValues(t, 1, next.GetHandoffAttempt())
+					require.NotNil(t, next.GetStartedTime())
+					require.NotNil(t, next.GetCurrentAttemptScheduledTime())
+					require.False(t, next.GetStartedTime().AsTime().Before(next.GetCurrentAttemptScheduledTime().AsTime()),
+						"replacement attempt started before its dispatch time")
+
+					require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, a.timeoutInfo(t).timeout)
+					require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, a.activityInfo(t).RunState)
+
+					_, err := env.FrontendClient().RespondActivityTaskCompleted(testcontext.For(t), &workflowservice.RespondActivityTaskCompletedRequest{
+						Namespace: env.Namespace().String(), TaskToken: next.GetTaskToken(), Result: payloads.EncodeString("result"),
+					})
+					require.NoError(t, err)
+					require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+				}
+
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: workflow activity async handoff support")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, env, newSAADriver(t, env, cfg).driveTrace(t, testCase.trace))
+				})
+			})
+		}
+	})
+
+	// All token-based activity RPCs must reject the previous task token even though the activity attempt is unchanged.
+	s.Run("RedispatchRejectsPreviousTaskToken", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			StartToClose: time.Hour,
+			MaxAttempts:  1,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				StartToHandoffTimeout: durationpb.New(2 * time.Minute),
+				HandoffToCloseTimeout: durationpb.New(time.Hour),
+				RetryPolicy:           &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second)},
+			},
+		}
+		trace := []model.Event{model.Poll, model.FailRetryably}
+
+		check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
+			first := a.taskResponse()
+			staleToken := first.GetTaskToken()
+			client := env.FrontendClient()
+			namespaceName := env.Namespace().String()
+
+			assertStaleToken := func() {
+				t.Helper()
+				ctx := testcontext.For(t)
+
+				_, err := client.RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
+					Namespace: namespaceName, TaskToken: staleToken,
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+				_, err = client.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+					Namespace: namespaceName, TaskToken: staleToken,
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+				_, err = client.RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: namespaceName, TaskToken: staleToken,
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+				_, err = client.RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: namespaceName, TaskToken: staleToken,
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+				_, err = client.RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+					Namespace: namespaceName, TaskToken: staleToken,
+				})
+				require.ErrorAs(t, err, new(*serviceerror.NotFound))
+			}
+
+			assertStaleToken()
+			for _, event := range []model.Event{model.BackoffElapses, model.Poll} {
+				a.driveEvent(t, event)
+			}
+			next := a.taskResponse()
+			require.Equal(t, first.GetAttempt(), next.GetAttempt())
+			require.EqualValues(t, 2, next.GetHandoffAttempt())
+
+			assertStaleToken()
+			for _, event := range []model.Event{model.Handoff, model.Complete} {
+				a.driveEvent(t, event)
+			}
+			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, env, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	s.Run("PhaseTimeoutClosesActivity", func(s *activityParityTestSuite) {
+		expected := activityTerminalOutcome{
+			status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+		}
+
+		for _, testCase := range []struct {
+			name                  string
+			startToHandoffTimeout time.Duration
+			handoffToCloseTimeout time.Duration
+			trace                 []model.Event
+			expectedTimeout       enumspb.TimeoutType
+		}{
+			{
+				name: "submission phase", startToHandoffTimeout: 5 * time.Second, handoffToCloseTimeout: 2 * time.Minute,
+				trace:           []model.Event{model.Poll, model.StartToHandoffElapses},
+				expectedTimeout: enumspb.TIMEOUT_TYPE_START_TO_HANDOFF,
+			},
+			{
+				name: "completion phase", startToHandoffTimeout: 2 * time.Minute, handoffToCloseTimeout: 5 * time.Second,
+				trace:           []model.Event{model.Poll, model.Handoff, model.HandoffToCloseElapses},
+				expectedTimeout: enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE,
+			},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				cfg := activityConfig{
+					DisableStartToClose: true,
+					MaxAttempts:         1,
+					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						StartToHandoffTimeout: durationpb.New(testCase.startToHandoffTimeout),
+						HandoffToCloseTimeout: durationpb.New(testCase.handoffToCloseTimeout),
+						RetryPolicy:           &commonpb.RetryPolicy{MaximumAttempts: 1},
+					},
+				}
+
+				check := func(t *testing.T, a parityActivity) {
+					require.Equal(t, expected, a.terminalOutcome(t))
+					require.Equal(t, activityTimeoutInfo{
+						timeout:        testCase.expectedTimeout,
+						outcomeTimeout: testCase.expectedTimeout,
+						attempt:        1,
+						terminal:       true,
+						handoffAttempt: 1,
+					}, a.timeoutInfo(t))
+					require.False(t, a.handoffInfo(t).awaitingCompletion)
+				}
+
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: workflow activity async handoff support")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, newSAADriver(t, env, cfg).driveTrace(t, testCase.trace))
+				})
+			})
+		}
+	})
+
+	// Exhausting handoff retries closes the activity with the final failure even when activity retries remain.
+	s.Run("RetryExhaustion", func(s *activityParityTestSuite) {
+		const maxHandoffAttempts int32 = 3
+		cfg := activityConfig{
+			MaxAttempts: 5,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(activityShortDispatchDelay),
+					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
+					BackoffCoefficient: 1,
+					MaximumAttempts:    maxHandoffAttempts,
+				},
+			},
+		}
+		// Earlier failures omit the payload so retaining one cannot satisfy the final-failure checks.
+		trace := []model.Event{
+			model.Poll, {Type: model.RespondFailedType}, model.BackoffElapses,
+			model.Poll, {Type: model.RespondFailedType}, model.BackoffElapses,
+			model.Poll, model.FailRetryably,
+		}
+		expected := activityTerminalOutcome{
+			status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+		}
+
+		check := func(t *testing.T, a parityActivity) {
+			require.Equal(t, expected, a.terminalOutcome(t))
+
+			info := a.terminalFailureInfo(t)
+			require.EqualValues(t, 1, info.attempt)
+			require.Equal(t, maxHandoffAttempts, info.handoffAttempt)
+
+			finalFailure := &failurepb.Failure{
+				Message: "test failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "TestFailure"},
+				},
+			}
+			protorequire.ProtoEqual(t, finalFailure, info.lastFailure)
+			protorequire.ProtoEqual(t, finalFailure, info.recordedOutcome.GetFailure())
+			protorequire.ProtoEqual(t, info.recordedOutcome, info.resultOutcome)
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: expose workflow handoff terminal failure metadata and run the shared check with newWFADriver")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	s.Run("ResetKeepsPausedAndClearsTimestamp", func(s *activityParityTestSuite) {
+		cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+		trace := []model.Event{model.Poll, model.Handoff, model.FailRetryably, model.Pause}
+
+		check := func(t *testing.T, a parityActivity) {
+			require.NotNil(t, a.handoffInfo(t).handoffTime)
+
+			a.driveEvent(t, model.ResetKeepPaused)
+			require.Nil(t, a.handoffInfo(t).handoffTime)
+
+			for _, event := range []model.Event{model.Unpause, model.Poll, model.Complete} {
+				a.driveEvent(t, event)
+			}
+			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	s.Run("PendingOperatorRequests", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			MaxAttempts: 3,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(activityShortDispatchDelay),
+					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
+					BackoffCoefficient: 1,
+					MaximumAttempts:    4,
+				},
+			},
+		}
+
+		for _, testCase := range []struct {
+			name              string
+			trace             []model.Event
+			heartbeatResponse *workflowservice.RecordActivityTaskHeartbeatResponse
+			expectedRunState  enumspb.PendingActivityState
+			finish            []model.Event
+			expectedOutcome   activityTerminalOutcome
+		}{
+			{
+				name:              "pause requested before handoff",
+				trace:             []model.Event{model.Poll, model.Pause, model.Handoff},
+				heartbeatResponse: &workflowservice.RecordActivityTaskHeartbeatResponse{ActivityPaused: true},
+				expectedRunState:  enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+				finish:            []model.Event{model.FailRetryably, model.Unpause, model.BackoffElapses, model.Poll, model.Complete},
+				expectedOutcome:   activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+			},
+			{
+				name:              "pause requested after handoff",
+				trace:             []model.Event{model.Poll, model.Handoff, model.Pause},
+				heartbeatResponse: &workflowservice.RecordActivityTaskHeartbeatResponse{ActivityPaused: true},
+				expectedRunState:  enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+				finish:            []model.Event{model.FailRetryably, model.Unpause, model.BackoffElapses, model.Poll, model.Complete},
+				expectedOutcome:   activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+			},
+			{
+				name:              "cancellation requested before handoff",
+				trace:             []model.Event{model.Poll, model.RequestCancel, model.Handoff},
+				heartbeatResponse: &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true},
+				expectedRunState:  enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
+				finish:            []model.Event{model.RespondCanceled},
+				expectedOutcome:   activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED},
+			},
+			{
+				name:              "cancellation requested after handoff",
+				trace:             []model.Event{model.Poll, model.Handoff, model.RequestCancel},
+				heartbeatResponse: &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true},
+				expectedRunState:  enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
+				finish:            []model.Event{model.RespondCanceled},
+				expectedOutcome:   activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED},
+			},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
+					// The original task token remains usable and exposes the pending operator request.
+					response, err := env.FrontendClient().RecordActivityTaskHeartbeat(testcontext.For(t), &workflowservice.RecordActivityTaskHeartbeatRequest{
+						Namespace: env.Namespace().String(), TaskToken: a.taskResponse().GetTaskToken(),
+					})
+					require.NoError(t, err)
+					protorequire.ProtoEqual(t, testCase.heartbeatResponse, response)
+
+					require.True(t, a.handoffInfo(t).awaitingCompletion)
+					require.Equal(t, testCase.expectedRunState, a.activityInfo(t).RunState)
+
+					// External failure applies the activity retry before fully pausing; cancellation is acknowledged directly.
+					for _, event := range testCase.finish {
+						a.driveEvent(t, event)
+					}
+					require.Equal(t, testCase.expectedOutcome, a.terminalOutcome(t))
+				}
+
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: workflow activity async handoff support")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, env, newSAADriver(t, env, cfg).driveTrace(t, testCase.trace))
+				})
+			})
+		}
+	})
+
+	// Schedule-to-start timeout closes the redispatched activity even when both retry policies allow more attempts.
+	s.Run("RedispatchScheduleToStartTimeout", func(s *activityParityTestSuite) {
+		cfg := activityConfig{
+			MaxAttempts:     3,
+			ScheduleToStart: 5 * time.Second,
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(activityShortDispatchDelay),
+					MaximumInterval:    durationpb.New(activityShortDispatchDelay),
+					BackoffCoefficient: 1,
+					MaximumAttempts:    4,
+				},
+			},
+		}
+		trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.ScheduleToStartElapses}
+		expected := activityTerminalOutcome{
+			status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			retryState: enumspb.RETRY_STATE_TIMEOUT,
+		}
+
+		check := func(t *testing.T, a parityActivity) {
+			require.Equal(t, expected, a.terminalOutcome(t))
+			require.Equal(t, activityTimeoutInfo{
+				timeout:        enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				outcomeTimeout: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				attempt:        1,
+				terminal:       true,
+				handoffAttempt: 2,
+			}, a.timeoutInfo(t))
+			require.False(t, a.handoffInfo(t).awaitingCompletion)
+		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			s.T().Skip("TODO: workflow activity async handoff support")
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			env := newActivityParityEnv(t)
+			check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+		})
+	})
+
+	// Whether a handoff retry fits before schedule-to-close must use the handoff policy, independently of the activity policy.
+	s.Run("RetryScheduleToClose", func(s *activityParityTestSuite) {
+		const (
+			scheduleToClose = 30 * time.Second
+			shortRetry      = time.Second
+			longRetry       = 2 * scheduleToClose
+		)
+
+		for _, testCase := range []struct {
+			name                        string
+			activityRetry, handoffRetry time.Duration
+			event                       model.Event
+			expectedStatus              enumspb.ActivityExecutionStatus
+		}{
+			{
+				name: "handoff failure cannot retry", activityRetry: shortRetry, handoffRetry: longRetry,
+				event: model.FailRetryably, expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			},
+			{
+				name: "handoff timeout cannot retry", activityRetry: shortRetry, handoffRetry: longRetry,
+				event: model.StartToHandoffElapses, expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			},
+			{
+				name: "handoff failure can retry", activityRetry: longRetry, handoffRetry: shortRetry,
+				event: model.FailRetryably, expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			},
+			{
+				name: "handoff timeout can retry", activityRetry: longRetry, handoffRetry: shortRetry,
+				event: model.StartToHandoffElapses, expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				cfg := activityConfig{
+					MaxAttempts: 3, RetryInterval: testCase.activityRetry, ScheduleToClose: scheduleToClose,
+					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						RetryPolicy: &commonpb.RetryPolicy{
+							InitialInterval:    durationpb.New(testCase.handoffRetry),
+							MaximumInterval:    durationpb.New(testCase.handoffRetry),
+							BackoffCoefficient: 1,
+							MaximumAttempts:    3,
+						},
+					},
+				}
+				trace := []model.Event{model.Poll, testCase.event}
+
+				check := func(t *testing.T, a parityActivity) {
+					if testCase.expectedStatus == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING {
+						require.False(t, a.timeoutInfo(t).terminal)
+						return
+					}
+
+					require.Equal(t, activityTerminalOutcome{
+						status: testCase.expectedStatus, retryState: enumspb.RETRY_STATE_TIMEOUT,
+					}, a.terminalOutcome(t))
+
+					if testCase.expectedStatus == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT {
+						require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, a.timeoutInfo(t).outcomeTimeout)
+					}
+				}
+
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: workflow activity async handoff support")
+				})
+
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+				})
+			})
+		}
+	})
 }

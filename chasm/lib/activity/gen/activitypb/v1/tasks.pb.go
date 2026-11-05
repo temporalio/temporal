@@ -532,6 +532,143 @@ func (*CancelCommand) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{6}
 }
 
+type HandoffStartToCloseTimeoutTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Copied from ActivityAttemptState.AsyncHandoffState.start_to_close_stamp.
+	// Used to reject stale timers after activity retries, resets, or timeout updates.
+	// Handoff retries preserve this stamp and the original start-to-close deadline.
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HandoffStartToCloseTimeoutTask) Reset() {
+	*x = HandoffStartToCloseTimeoutTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HandoffStartToCloseTimeoutTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandoffStartToCloseTimeoutTask) ProtoMessage() {}
+
+func (x *HandoffStartToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandoffStartToCloseTimeoutTask.ProtoReflect.Descriptor instead.
+func (*HandoffStartToCloseTimeoutTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *HandoffStartToCloseTimeoutTask) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
+}
+
+type StartToHandoffTimeoutTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Matches ActivityAttemptState.stamp to reject stale timeout tasks after retries or option updates.
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartToHandoffTimeoutTask) Reset() {
+	*x = StartToHandoffTimeoutTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartToHandoffTimeoutTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartToHandoffTimeoutTask) ProtoMessage() {}
+
+func (x *StartToHandoffTimeoutTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartToHandoffTimeoutTask.ProtoReflect.Descriptor instead.
+func (*StartToHandoffTimeoutTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *StartToHandoffTimeoutTask) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
+}
+
+type HandoffToCloseTimeoutTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Matches ActivityAttemptState.stamp to reject stale timeout tasks after retries or option updates.
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HandoffToCloseTimeoutTask) Reset() {
+	*x = HandoffToCloseTimeoutTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HandoffToCloseTimeoutTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandoffToCloseTimeoutTask) ProtoMessage() {}
+
+func (x *HandoffToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandoffToCloseTimeoutTask.ProtoReflect.Descriptor instead.
+func (*HandoffToCloseTimeoutTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *HandoffToCloseTimeoutTask) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
@@ -552,7 +689,13 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x19WorkerCommandDispatchTask\x12T\n" +
 	"\x06cancel\x18\x01 \x01(\v2:.temporal.server.chasm.lib.activity.proto.v1.CancelCommandH\x00R\x06cancelB\t\n" +
 	"\acommand\"\x0f\n" +
-	"\rCancelCommand*\x8c\x01\n" +
+	"\rCancelCommand\"6\n" +
+	"\x1eHandoffStartToCloseTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"1\n" +
+	"\x19StartToHandoffTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"1\n" +
+	"\x19HandoffToCloseTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp*\x8c\x01\n" +
 	"\x0eDispatchReason\x12\x1f\n" +
 	"\x1bDISPATCH_REASON_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DISPATCH_REASON_IMMEDIATE\x10\x01\x12\x1f\n" +
@@ -583,17 +726,20 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
-	(DispatchReason)(0),                // 0: temporal.server.chasm.lib.activity.proto.v1.DispatchReason
-	(StartDelayBucket)(0),              // 1: temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
-	(*ActivityDispatchTask)(nil),       // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
-	(*ScheduleToStartTimeoutTask)(nil), // 3: temporal.server.chasm.lib.activity.proto.v1.ScheduleToStartTimeoutTask
-	(*ScheduleToCloseTimeoutTask)(nil), // 4: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
-	(*StartToCloseTimeoutTask)(nil),    // 5: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
-	(*HeartbeatTimeoutTask)(nil),       // 6: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
-	(*WorkerCommandDispatchTask)(nil),  // 7: temporal.server.chasm.lib.activity.proto.v1.WorkerCommandDispatchTask
-	(*CancelCommand)(nil),              // 8: temporal.server.chasm.lib.activity.proto.v1.CancelCommand
+	(DispatchReason)(0),                    // 0: temporal.server.chasm.lib.activity.proto.v1.DispatchReason
+	(StartDelayBucket)(0),                  // 1: temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
+	(*ActivityDispatchTask)(nil),           // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
+	(*ScheduleToStartTimeoutTask)(nil),     // 3: temporal.server.chasm.lib.activity.proto.v1.ScheduleToStartTimeoutTask
+	(*ScheduleToCloseTimeoutTask)(nil),     // 4: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
+	(*StartToCloseTimeoutTask)(nil),        // 5: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
+	(*HeartbeatTimeoutTask)(nil),           // 6: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
+	(*WorkerCommandDispatchTask)(nil),      // 7: temporal.server.chasm.lib.activity.proto.v1.WorkerCommandDispatchTask
+	(*CancelCommand)(nil),                  // 8: temporal.server.chasm.lib.activity.proto.v1.CancelCommand
+	(*HandoffStartToCloseTimeoutTask)(nil), // 9: temporal.server.chasm.lib.activity.proto.v1.HandoffStartToCloseTimeoutTask
+	(*StartToHandoffTimeoutTask)(nil),      // 10: temporal.server.chasm.lib.activity.proto.v1.StartToHandoffTimeoutTask
+	(*HandoffToCloseTimeoutTask)(nil),      // 11: temporal.server.chasm.lib.activity.proto.v1.HandoffToCloseTimeoutTask
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.dispatch_reason:type_name -> temporal.server.chasm.lib.activity.proto.v1.DispatchReason
@@ -620,7 +766,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -37,6 +37,8 @@ type eagerActivityTaskData struct {
 	currentAttemptScheduledTime         *timestamppb.Timestamp
 	startedTime                         *timestamppb.Timestamp
 	attempt                             int32
+	handoffAttempt                      int32
+	asyncHandoffOptions                 *apiactivitypb.AsyncHandoffOptions
 	scheduleToCloseTimeout              *durationpb.Duration
 	startToCloseTimeout                 *durationpb.Duration
 	heartbeatTimeout                    *durationpb.Duration
@@ -59,6 +61,11 @@ func (a *Activity) eagerActivityTaskData(
 	requestData := a.RequestData.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 
+	var handoffAttempt int32
+	if a.GetAsyncHandoffOptions() != nil {
+		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+	}
+
 	// This data is used to construct the eager response after the transaction has completed, so
 	// it must not retain mutable state owned by the transaction.
 	return &eagerActivityTaskData{
@@ -74,6 +81,8 @@ func (a *Activity) eagerActivityTaskData(
 		currentAttemptScheduledTime:         common.CloneProto(a.dispatchTimeForAttempt(attempt)),
 		startedTime:                         common.CloneProto(attempt.GetStartedTime()),
 		attempt:                             attempt.GetCount(),
+		handoffAttempt:                      handoffAttempt,
+		asyncHandoffOptions:                 common.CloneProto(a.GetAsyncHandoffOptions()),
 		scheduleToCloseTimeout:              common.CloneProto(a.GetScheduleToCloseTimeout()),
 		startToCloseTimeout:                 common.CloneProto(a.GetStartToCloseTimeout()),
 		heartbeatTimeout:                    common.CloneProto(a.GetHeartbeatTimeout()),
@@ -115,6 +124,8 @@ func (d *eagerActivityTaskData) response(componentRef []byte) (*workflowservice.
 		CurrentAttemptScheduledTime:         d.currentAttemptScheduledTime,
 		StartedTime:                         d.startedTime,
 		Attempt:                             d.attempt,
+		HandoffAttempt:                      d.handoffAttempt,
+		AsyncHandoffOptions:                 d.asyncHandoffOptions,
 		ScheduleToCloseTimeout:              d.scheduleToCloseTimeout,
 		StartToCloseTimeout:                 d.startToCloseTimeout,
 		HeartbeatTimeout:                    d.heartbeatTimeout,

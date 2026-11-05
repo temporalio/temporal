@@ -266,6 +266,117 @@ func (this *CancelCommand) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type HandoffStartToCloseTimeoutTask to the protobuf v3 wire format
+func (val *HandoffStartToCloseTimeoutTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HandoffStartToCloseTimeoutTask from the protobuf v3 wire format
+func (val *HandoffStartToCloseTimeoutTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HandoffStartToCloseTimeoutTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HandoffStartToCloseTimeoutTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HandoffStartToCloseTimeoutTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HandoffStartToCloseTimeoutTask
+	switch t := that.(type) {
+	case *HandoffStartToCloseTimeoutTask:
+		that1 = t
+	case HandoffStartToCloseTimeoutTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StartToHandoffTimeoutTask to the protobuf v3 wire format
+func (val *StartToHandoffTimeoutTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StartToHandoffTimeoutTask from the protobuf v3 wire format
+func (val *StartToHandoffTimeoutTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StartToHandoffTimeoutTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StartToHandoffTimeoutTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StartToHandoffTimeoutTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StartToHandoffTimeoutTask
+	switch t := that.(type) {
+	case *StartToHandoffTimeoutTask:
+		that1 = t
+	case StartToHandoffTimeoutTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type HandoffToCloseTimeoutTask to the protobuf v3 wire format
+func (val *HandoffToCloseTimeoutTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HandoffToCloseTimeoutTask from the protobuf v3 wire format
+func (val *HandoffToCloseTimeoutTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HandoffToCloseTimeoutTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HandoffToCloseTimeoutTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HandoffToCloseTimeoutTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HandoffToCloseTimeoutTask
+	switch t := that.(type) {
+	case *HandoffToCloseTimeoutTask:
+		that1 = t
+	case HandoffToCloseTimeoutTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	DispatchReason_shorthandValue = map[string]int32{
 		"Unspecified": 0,

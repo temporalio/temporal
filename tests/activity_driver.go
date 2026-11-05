@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
@@ -37,9 +39,8 @@ import (
 // heartbeat timeout. Set a timeout explicitly in the config only to say something the trace cannot
 // — that it exists without firing, or that its exact duration is what the test is about.
 //
-// The server rejects an activity with neither start-to-close nor schedule-to-close set. The drivers
-// always send start-to-close, defaulted long enough not to fire. The other timeouts are simply
-// absent when unset.
+// Start-to-close defaults long enough not to fire unless DisableStartToClose is set.
+// The other timeouts are absent when unset.
 type activityConfig struct {
 	EagerStart             bool
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
@@ -48,12 +49,16 @@ type activityConfig struct {
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
+	AsyncHandoffOptions    *activitypb.AsyncHandoffOptions
 
 	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
 	ScheduleToClose  time.Duration // 0 = unset
 	ScheduleToStart  time.Duration // 0 = unset
 	HeartbeatTimeout time.Duration // 0 = unset
 	StartDelay       time.Duration // SAA only: WFA has no per-activity start delay
+
+	// Leaves start-to-close unset, allowing tests to rely on the handoff phase timeouts alone.
+	DisableStartToClose bool
 }
 
 // activityInput is what both SAA and WFA send, so a worker sees the same input either way.
@@ -88,11 +93,17 @@ func (c activityConfig) retryInterval() time.Duration {
 	return cmp.Or(c.RetryInterval, activityShortDispatchDelay)
 }
 func (c activityConfig) startToClose() time.Duration {
+	if c.DisableStartToClose {
+		return 0
+	}
+
 	return cmp.Or(c.StartToClose, activityLongDuration)
 }
 
 // forTrace replaces missing values in the config with appropriate values for the given trace.
 func (c activityConfig) forTrace(trace []model.Event) activityConfig {
+	c.AsyncHandoffOptions = common.CloneProto(c.AsyncHandoffOptions)
+	awaitingCompletion := false
 	for _, e := range trace {
 		switch e.Type {
 		case model.ScheduleToStartElapsesType:
@@ -102,7 +113,26 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 		case model.StartToCloseElapsesType:
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
-			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
+			usePreHandoffHeartbeat := c.AsyncHandoffOptions != nil && !awaitingCompletion
+			if usePreHandoffHeartbeat {
+				if c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration() == 0 {
+					c.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(activityShortTimeout)
+				}
+			} else {
+				c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
+			}
+		case model.StartToHandoffElapsesType:
+			if c.AsyncHandoffOptions != nil && c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration() == 0 {
+				c.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(activityShortTimeout)
+			}
+		case model.HandoffToCloseElapsesType:
+			if c.AsyncHandoffOptions != nil && c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration() == 0 {
+				c.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(activityShortTimeout)
+			}
+		case model.HandoffType:
+			awaitingCompletion = true
+		case model.PollType:
+			awaitingCompletion = false
 		case model.StartDelayElapsesType:
 			c.StartDelay = cmp.Or(c.StartDelay, activityShortDispatchDelay)
 		default: // an event that arms no window of its own
@@ -112,7 +142,7 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 }
 
 // timerDuration is how long the timer behind a timer event takes to elapse.
-func (c activityConfig) timerDuration(e model.Event) time.Duration {
+func (c activityConfig) timerDuration(e model.Event, awaitingCompletion bool) time.Duration {
 	switch e.Type {
 	case model.StartDelayElapsesType:
 		return c.StartDelay
@@ -127,7 +157,15 @@ func (c activityConfig) timerDuration(e model.Event) time.Duration {
 	case model.ScheduleToStartElapsesType:
 		return c.ScheduleToStart
 	case model.HeartbeatElapsesType:
+		usePreHandoffHeartbeat := c.AsyncHandoffOptions != nil && !awaitingCompletion
+		if usePreHandoffHeartbeat {
+			return c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration()
+		}
 		return c.HeartbeatTimeout
+	case model.StartToHandoffElapsesType:
+		return c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration()
+	case model.HandoffToCloseElapsesType:
+		return c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration()
 	default:
 		panic("unknown event type: " + e.Type.String())
 	}
@@ -147,6 +185,24 @@ type activityInfo struct {
 	LastHeartbeatDetails       []byte
 }
 
+// activityHandoffInfo is handoff metadata projected from an activity's Describe response.
+type activityHandoffInfo struct {
+	handoffTime            *timestamppb.Timestamp
+	options                *activitypb.AsyncHandoffOptions
+	awaitingCompletion     bool
+	startToCloseTimeout    time.Duration
+	scheduleToCloseTimeout time.Duration
+}
+
+// activityFailureInfo projects retained failure metadata and terminal outcomes after closure.
+type activityFailureInfo struct {
+	attempt         int32
+	handoffAttempt  int32
+	lastFailure     *failurepb.Failure
+	recordedOutcome *activitypb.ActivityExecutionOutcome
+	resultOutcome   *activitypb.ActivityExecutionOutcome
+}
+
 // activityTerminalOutcome is user-visible terminal activity state projected from SAA's
 // ActivityExecutionOutcome and WFA's workflow result.
 type activityTerminalOutcome struct {
@@ -157,20 +213,33 @@ type activityTerminalOutcome struct {
 // modelConfig is the model's view of the activity: which options are configured at all, plus the two
 // ways the options alone settle that no retry can follow. Deriving it means the two cannot disagree.
 func (c activityConfig) modelConfig() model.Config {
+	handoffRetryInterval := cmp.Or(c.AsyncHandoffOptions.GetRetryPolicy().GetInitialInterval().AsDuration(),
+		retrypolicy.DefaultDefaultRetrySettings.InitialInterval)
+
 	return model.Config{
-		InitialAttemptStarted: c.EagerStart,
-		MaxAttempts:           c.MaxAttempts,
-		HasStartDelay:         c.StartDelay > 0,
-		HasScheduleToClose:    c.ScheduleToClose > 0,
-		HasScheduleToStart:    c.ScheduleToStart > 0,
-		HasHeartbeat:          c.HeartbeatTimeout > 0,
-		NonRetryableTimeouts:  c.nonRetryableTimeouts(),
+		InitialAttemptStarted:       c.EagerStart,
+		MaxAttempts:                 c.MaxAttempts,
+		HasStartDelay:               c.StartDelay > 0,
+		HasScheduleToClose:          c.ScheduleToClose > 0,
+		HasScheduleToStart:          c.ScheduleToStart > 0,
+		HasHeartbeat:                c.HeartbeatTimeout > 0,
+		NonRetryableTimeouts:        nonRetryableTimeouts(c.NonRetryableErrorTypes),
+		AsyncHandoffOptions:         c.AsyncHandoffOptions != nil,
+		HasStartToClose:             c.startToClose() > 0,
+		HasStartToHandoff:           c.AsyncHandoffOptions.GetStartToHandoffTimeout().AsDuration() > 0,
+		HasHandoffToClose:           c.AsyncHandoffOptions.GetHandoffToCloseTimeout().AsDuration() > 0,
+		HasHandoffHeartbeat:         c.AsyncHandoffOptions.GetHeartbeatTimeout().AsDuration() > 0,
+		HandoffMaxAttempts:          c.AsyncHandoffOptions.GetRetryPolicy().GetMaximumAttempts(),
+		HandoffNonRetryableTimeouts: nonRetryableTimeouts(c.AsyncHandoffOptions.GetRetryPolicy().GetNonRetryableErrorTypes()),
+
 		// In reality, the server decides this based on how long the attempt took, and any
 		// NextRetryDelay sent by the worker. The model cannot express that. Instead it supports a
 		// fixed retry delay and the calculation here pretends that the attempt duration is zero.
 		// This will be wrong if an attempt runs long enough that the delay no longer fits.
 		RetryOutlivesScheduleToClose: c.ScheduleToClose > 0 &&
 			cmp.Or(c.NextRetryDelay, c.retryInterval()) >= c.ScheduleToClose,
+		HandoffRetryOutlivesScheduleToClose: c.AsyncHandoffOptions != nil && c.ScheduleToClose > 0 &&
+			cmp.Or(c.NextRetryDelay, handoffRetryInterval) >= c.ScheduleToClose,
 	}
 }
 
@@ -178,14 +247,15 @@ func (c activityConfig) modelConfig() model.Config {
 // according to the retry policy's NonRetryableErrorTypes. (NonRetryableErrorTypes can contain
 // arbitrary strings, matched against ApplicationFailureInfo.Type, and the names of internal timeout
 // events, prefixed by "TemporalTimeout:").
-func (c activityConfig) nonRetryableTimeouts() []model.EventType {
+func nonRetryableTimeouts(errorTypes []string) []model.EventType {
 	var nonRetryable []model.EventType
 	for _, e := range []model.Event{
 		// ScheduleToClose and ScheduleToStart are always non-retryable, so it makes no difference
 		// if the user includes them in this list.
 		model.ScheduleToStartElapses, model.ScheduleToCloseElapses, model.StartToCloseElapses, model.HeartbeatElapses,
+		model.StartToHandoffElapses, model.HandoffToCloseElapses,
 	} {
-		if slices.Contains(c.NonRetryableErrorTypes, retrypolicy.TimeoutFailureTypePrefix+timeoutType(e).String()) {
+		if slices.Contains(errorTypes, retrypolicy.TimeoutFailureTypePrefix+timeoutType(e).String()) {
 			nonRetryable = append(nonRetryable, e.Type)
 		}
 	}
@@ -216,6 +286,10 @@ func timeoutType(e model.Event) enumspb.TimeoutType {
 		return enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 	case model.HeartbeatElapsesType:
 		return enumspb.TIMEOUT_TYPE_HEARTBEAT
+	case model.StartToHandoffElapsesType:
+		return enumspb.TIMEOUT_TYPE_START_TO_HANDOFF
+	case model.HandoffToCloseElapsesType:
+		return enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE
 	default:
 		return enumspb.TIMEOUT_TYPE_UNSPECIFIED
 	}
@@ -260,7 +334,8 @@ func (m *activityModel) advance(t require.TestingT, e model.Event) model.ErrorKi
 func isTimerEvent(et model.EventType) bool {
 	switch et {
 	case model.ScheduleToStartElapsesType, model.ScheduleToCloseElapsesType, model.StartToCloseElapsesType,
-		model.HeartbeatElapsesType, model.StartDelayElapsesType, model.BackoffElapsesType:
+		model.HeartbeatElapsesType, model.StartDelayElapsesType, model.BackoffElapsesType,
+		model.StartToHandoffElapsesType, model.HandoffToCloseElapsesType:
 		return true
 	default:
 		return false
@@ -334,21 +409,29 @@ func syntheticTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure
 
 // activityTimeoutInfo is the information a driver uses to identify a timeout.
 type activityTimeoutInfo struct {
-	timeout  enumspb.TimeoutType // Timeout type currently reported; unspecified when none is reported.
-	attempt  int32               // Current attempt; advances when a retryable per-attempt timeout fires.
-	terminal bool                // Whether the activity is terminal, as every non-retrying timeout makes it.
+	timeout        enumspb.TimeoutType // Timeout type currently reported; unspecified when none is reported.
+	outcomeTimeout enumspb.TimeoutType // Terminal outcome's timeout type, independent of LastFailure.
+	attempt        int32               // Current attempt; advances on activity retries.
+	terminal       bool                // Whether the activity is terminal, as every non-retrying timeout makes it.
+	handoffAttempt int32               // Advances on handoff retries, which preserve the activity attempt.
 }
 
 // activityDriverState is the state shared by the two drivers.
 type activityDriverState struct {
-	cfg            activityConfig
-	token          []byte
-	startedAttempt int32 // attempt number returned by the last successful Poll
+	cfg                   activityConfig
+	token                 []byte
+	lastTask              *workflowservice.PollActivityTaskQueueResponse
+	startedAttempt        int32 // attempt number returned by the last successful Poll
+	startedHandoffAttempt int32
 }
 
 // driverState lets an embedded activityDriverState supply its state to drivenActivity.
 func (a *activityDriverState) driverState() *activityDriverState {
 	return a
+}
+
+func (a *activityDriverState) taskResponse() *workflowservice.PollActivityTaskQueueResponse {
+	return a.lastTask
 }
 
 // drivenActivity is what the shared event driver needs from either implementation.
@@ -368,18 +451,24 @@ type drivenActivity interface {
 // halves of the contract: the answer it gives the call, and the state it is left in.
 func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event, m *activityModel) {
 	from := m.state.Status
+	awaitingCompletion := m.state.AwaitingCompletion
 	wantReject := m.advance(t, e)
 	state := a.driverState()
 	switch {
 	case e.Type == model.PollType:
 		resp := a.pollForTask(t, activityDriverTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
+		require.Equal(t, m.state.AttemptCount, resp.GetAttempt())
+		require.Equal(t, m.state.HandoffAttempt, resp.GetHandoffAttempt())
+
 		state.token = resp.GetTaskToken()
+		state.lastTask = resp
 		state.startedAttempt = resp.GetAttempt()
+		state.startedHandoffAttempt = resp.GetHandoffAttempt()
 	case isDispatchDelayEvent(e.Type):
 		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
-		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e)+activityDriverTimerMargin))
+		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e, awaitingCompletion)+activityDriverTimerMargin))
 	default:
 		requireErrorMatches(t, e, from, wantReject, a.rpc(t, e))
 	}
@@ -387,12 +476,14 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event, m *activi
 }
 
 // activityState is the state a driver observes, reduced to what both implementations report: the run
-// state and attempt number while the activity is open, and closedness once it is not. A terminal
-// status itself is reported differently by each, so terminalOutcome checks that.
+// state, attempt counters and handoff phase while the activity is open, and closedness once it is
+// not. A terminal status itself is reported differently by each, so terminalOutcome checks that.
 type activityState struct {
-	closed   bool
-	runState enumspb.PendingActivityState
-	attempt  int32
+	closed             bool
+	runState           enumspb.PendingActivityState
+	attempt            int32
+	handoffAttempt     int32
+	awaitingCompletion bool
 }
 
 // requireStateMatches compares the state the server reports with the state model.Transition says the
@@ -403,6 +494,7 @@ func requireStateMatches(t testing.TB, a drivenActivity, e model.Event, from mod
 	want := activityState{closed: s.Status.Terminal()}
 	if !want.closed {
 		want.runState, want.attempt = expectedRunState(s), s.AttemptCount
+		want.handoffAttempt, want.awaitingCompletion = s.HandoffAttempt, s.AwaitingCompletion
 	}
 	await.Require(a.testContext(), t, func(t *await.T) {
 		t.Require().Equal(want, a.observedState(t),
@@ -417,6 +509,9 @@ func expectedRunState(s model.AbstractState) enumspb.PendingActivityState {
 	case model.Scheduled:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 	case model.Started:
+		if s.AwaitingCompletion {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
+		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case model.CancelRequested:
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
@@ -426,9 +521,12 @@ func expectedRunState(s model.AbstractState) enumspb.PendingActivityState {
 		return enumspb.PENDING_ACTIVITY_STATE_PAUSED
 	case model.ResetRequested:
 		// A reset the worker has yet to yield to is reported as the pause it carries, and otherwise
-		// as the attempt still running.
+		// as the current running phase.
 		if s.ResetKeepPaused {
 			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
+		if s.AwaitingCompletion {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
 		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	default:
@@ -474,10 +572,11 @@ func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadlin
 	var got activityTimeoutInfo
 	await.Require(a.testContext(), t, func(t *await.T) {
 		got = a.timeoutInfo(t)
-		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
+		retried := got.attempt > state.startedAttempt || got.handoffAttempt > state.startedHandoffAttempt
+		fired := got.timeout == want && (got.terminal || retried)
 		t.Require().Truef(fired,
-			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
-			e, got.timeout, got.attempt, got.terminal, want, state.startedAttempt)
+			"%s: activity reports timeout %s at attempt %d/handoff %d (terminal=%v), want %s after attempt %d/handoff %d",
+			e, got.timeout, got.attempt, got.handoffAttempt, got.terminal, want, state.startedAttempt, state.startedHandoffAttempt)
 	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 }
 

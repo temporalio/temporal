@@ -34,29 +34,40 @@ const (
 
 // AbstractState is the projection of observable internal state that the model predicts.
 type AbstractState struct {
-	Status          Status
-	AttemptCount    int32
-	Dispatchability Dispatchability
-	ResetKeepPaused bool // a deferred reset carries the pause through to the attempt it starts
+	Status             Status
+	AttemptCount       int32
+	HandoffAttempt     int32
+	AwaitingCompletion bool
+	// Tracks whether the carried start-to-close clock has started when handoff options are present.
+	HandoffStartToCloseStarted bool
+	Dispatchability            Dispatchability
+	ResetKeepPaused            bool // a deferred reset carries the pause through to the attempt it starts
 }
 
 // Config is what the model needs to know about an activity's configuration: which options are set,
 // and what their durations imply regarding retries.
 type Config struct {
 	// InitialAttemptStarted means the first attempt was delivered eagerly and is already running.
-	InitialAttemptStarted bool
-	HasScheduleToClose    bool
-	HasScheduleToStart    bool
-	HasHeartbeat          bool
-	HasStartDelay         bool
-	MaxAttempts           int32 // 0 = unlimited
+	InitialAttemptStarted       bool
+	HasScheduleToClose          bool
+	HasScheduleToStart          bool
+	HasHeartbeat                bool
+	HasStartDelay               bool
+	AsyncHandoffOptions         bool
+	HasStartToClose             bool // Used by opted-in activities; legacy traces always configure start-to-close.
+	HasStartToHandoff           bool
+	HasHandoffToClose           bool
+	HasHandoffHeartbeat         bool
+	HandoffMaxAttempts          int32
+	HandoffNonRetryableTimeouts []EventType
+	MaxAttempts                 int32 // 0 = unlimited
 
 	// NonRetryableTimeouts are the timeout elapses whose failure the retry policy refuses to retry,
 	// so that the timeout closes the activity instead of scheduling another attempt.
 	NonRetryableTimeouts []EventType
 
-	// RetryOutlivesScheduleToClose says a retry backoff would run past the schedule-to-close
-	// deadline, in which case the server will close the activity rather than retrying.
+	// RetryOutlivesScheduleToClose says an activity-policy retry backoff would reach or exceed
+	// the schedule-to-close deadline, closing the activity rather than retrying.
 	//
 	// We model this as a fixed value throughout the whole activity. This means that the model
 	// predictions may be incorrect because in reality, the server decides per retry, based on the
@@ -64,6 +75,10 @@ type Config struct {
 	// worker, and the backoff interval computed from the retry policy (BackoffCoefficient and
 	// MaxRetryInterval).
 	RetryOutlivesScheduleToClose bool
+
+	// HandoffRetryOutlivesScheduleToClose says a handoff retry's backoff would reach or exceed
+	// the schedule-to-close deadline, closing the activity rather than retrying.
+	HandoffRetryOutlivesScheduleToClose bool
 }
 
 // EventType enumerates the events a driver can realize.
@@ -96,6 +111,9 @@ const (
 	// Dispatch-delay timers elapsing. On elapse the delayed dispatch becomes available.
 	StartDelayElapsesType
 	BackoffElapsesType
+	HandoffType
+	StartToHandoffElapsesType
+	HandoffToCloseElapsesType
 )
 
 // Event carries the variant flags that affect the outcome.
@@ -128,12 +146,15 @@ const (
 	ScheduleToStartTimeoutFailureType
 	ScheduleToCloseTimeoutFailureType
 	UnknownFailureType
+	StartToHandoffTimeoutFailureType
+	HandoffToCloseTimeoutFailureType
 )
 
 // Canonical Event values for the variants frequently used in traces
 var (
 	Poll                   = Event{Type: PollType}
 	Heartbeat              = Event{Type: HeartbeatType}
+	Handoff                = Event{Type: HandoffType}
 	Complete               = Event{Type: RespondCompletedType}
 	CompleteByID           = Event{Type: RespondCompletedByIDType}
 	FailRetryably          = Event{Type: RespondFailedType, Failure: &Failure{}}
@@ -150,6 +171,8 @@ var (
 	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
 	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
 	ScheduleToStartElapses = Event{Type: ScheduleToStartElapsesType}
+	StartToHandoffElapses  = Event{Type: StartToHandoffElapsesType}
+	HandoffToCloseElapses  = Event{Type: HandoffToCloseElapsesType}
 	HeartbeatElapses       = Event{Type: HeartbeatElapsesType}
 	StartDelayElapses      = Event{Type: StartDelayElapsesType}
 	BackoffElapses         = Event{Type: BackoffElapsesType}
@@ -275,6 +298,12 @@ func (t EventType) String() string {
 		return "StartDelayElapses"
 	case BackoffElapsesType:
 		return "BackoffElapses"
+	case HandoffType:
+		return "Handoff"
+	case StartToHandoffElapsesType:
+		return "StartToHandoffElapses"
+	case HandoffToCloseElapsesType:
+		return "HandoffToCloseElapses"
 	default:
 		return fmt.Sprintf("EventType(%d)", int(t))
 	}

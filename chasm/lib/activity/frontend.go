@@ -398,6 +398,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RequestEagerExecution = false
 	}
 
+	if req.GetAsyncHandoffOptions() != nil && !h.config.StandaloneAsyncHandoffEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+	}
+
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
@@ -457,6 +461,7 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 		StartToCloseTimeout:    req.StartToCloseTimeout,
 		HeartbeatTimeout:       req.HeartbeatTimeout,
 		RetryPolicy:            req.RetryPolicy,
+		AsyncHandoffOptions:    req.AsyncHandoffOptions,
 	}
 }
 
@@ -599,6 +604,7 @@ func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req
 	req.StartToCloseTimeout = opts.StartToCloseTimeout
 	req.HeartbeatTimeout = opts.HeartbeatTimeout
 	req.RetryPolicy = opts.RetryPolicy
+	req.AsyncHandoffOptions = opts.AsyncHandoffOptions
 }
 
 func (h *frontendHandler) RespondActivityTaskHandoff(

@@ -103,7 +103,7 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 		}
 	}
 	if timeoutErr, ok := errors.AsType[*temporal.TimeoutError](a.run.Get(a.testContext(), nil)); ok {
-		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), terminal: true}
+		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), outcomeTimeout: timeoutErr.TimeoutType(), terminal: true}
 	}
 	return activityTimeoutInfo{terminal: true}
 }
@@ -227,7 +227,7 @@ func (d *wfaDriver) startEager(t *testing.T, cfg activityConfig) *wfaHandle {
 		}
 	})
 	return &wfaHandle{
-		activityDriverState: activityDriverState{cfg: cfg, token: task.GetTaskToken(), startedAttempt: task.GetAttempt()},
+		activityDriverState: activityDriverState{cfg: cfg, token: task.GetTaskToken(), lastTask: task, startedAttempt: task.GetAttempt()},
 		model:               newActivityModel(cfg),
 		d:                   d,
 		run:                 d.env.SdkClient().GetWorkflow(d.testContext(), wfID, started.GetRunId()),
@@ -491,4 +491,14 @@ func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 		return nil
 	}
 	return resp
+}
+
+func (a *wfaHandle) handoffInfo(t require.TestingT) activityHandoffInfo {
+	require.FailNow(t, "TODO: implement workflow activity handoff metadata")
+	return activityHandoffInfo{}
+}
+
+func (a *wfaHandle) terminalFailureInfo(t require.TestingT) activityFailureInfo {
+	require.FailNow(t, "TODO: implement retained workflow activity failure metadata")
+	return activityFailureInfo{}
 }

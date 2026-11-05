@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/retrypolicy"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,6 +44,7 @@ type (
 	}
 
 	rescheduleEvent struct {
+		retryType           activitypb.ActivityRetryType
 		retryInterval       time.Duration
 		retryIntervalSource activitypb.ActivityRetryIntervalSource
 		failure             *failurepb.Failure
@@ -291,14 +293,20 @@ var TransitionUnpausedWhilePauseRequested = chasm.NewTransition(
 
 // TransitionAttemptFailedWhilePauseRequested transitions PAUSE_REQUESTED → PAUSED. It is performed instead of
 // TransitionReschedule, when the activity is in PAUSE_REQUESTED and the worker yields (failure or
-// timeout) with retries remaining. The failed attempt is recorded and Count is incremented.
+// timeout) with retries remaining. The failure is recorded and the activity or handoff attempt
+// counter advances according to the selected retry policy.
 var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		return a.applyFailedAttempt(ctx, event)
+		if err := a.applyFailedAttempt(ctx, event); err != nil {
+			return err
+		}
+
+		a.clearStartToCloseState(ctx)
+		return nil
 	},
 )
 
@@ -365,6 +373,15 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	},
 )
 
+// TransitionStartToCloseExpiredWhileScheduled replaces a pending handoff retry with an activity retry.
+var TransitionStartToCloseExpiredWhileScheduled = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
+		return a.applyRescheduled(ctx, event)
+	},
+)
+
 // The methods below are transition bodies, invoked from the transitions above once the
 // source state has been validated. Do not call them from outside this file.
 
@@ -373,6 +390,7 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error
 
 	attempt.Count++
 	attempt.Stamp++
+	a.resetHandoffAttempt(ctx)
 
 	// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
 	// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
@@ -428,24 +446,16 @@ func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartE
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	// TODO: Populate LastDeploymentVersion when standalone eager start supports worker versioning.
-	startTime := attempt.GetStartedTime().AsTime()
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration())},
-		&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()})
-
-	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{ScheduledTime: startTime.Add(heartbeatTimeout)},
-			&activitypb.HeartbeatTimeoutTask{Stamp: attempt.GetStamp()})
-	}
-	return nil
+	return a.startAttemptTimers(ctx, attempt)
 }
 
 func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
 	if err := a.applyFailedAttempt(ctx, event); err != nil {
 		return err
+	}
+
+	if event.retryType == activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY {
+		a.clearStartToCloseState(ctx)
 	}
 
 	attempt := a.LastAttempt.Get(ctx)
@@ -500,28 +510,8 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 			DeploymentName: versionDirective.GetDeploymentName(),
 		}
 	}
-	startTime := attempt.GetStartedTime().AsTime()
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
-		},
-		&activitypb.StartToCloseTimeoutTask{
-			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-		})
 
-	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: startTime.Add(heartbeatTimeout),
-			},
-			&activitypb.HeartbeatTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-
-	return nil
+	return a.startAttemptTimers(ctx, attempt)
 }
 
 func (a *Activity) applyCompleted(ctx chasm.MutableContext, event completeEvent) error {
@@ -661,13 +651,9 @@ func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) e
 				fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
 				priorAttemptFailure,
 			)
-		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-			failure := createStartToCloseTimeoutFailure()
-			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
-			failure.Cause = priorAttemptFailure
-			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
-		case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-			failure := createHeartbeatTimeoutFailure()
+		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE, enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE:
+			failure := createActivityTimeoutFailure(timeoutType)
 			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
 			failure.Cause = priorAttemptFailure
 			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
@@ -678,9 +664,10 @@ func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) e
 			return err
 		}
 
+		// The timeout type identifies what expired; the retry state explains why it won't retry.
+		// Convert only attempt/phase timeouts whose retries cannot fit before schedule-to-close.
 		retryPreventedByScheduleToClose := event.retryState == enumspb.RETRY_STATE_TIMEOUT &&
-			(timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-				timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
+			retrypolicy.IsRetryableTimeout(timeoutType, nil)
 		if retryPreventedByScheduleToClose {
 			if err := a.recordScheduleToStartOrCloseTimeoutFailure(
 				ctx,
@@ -702,6 +689,7 @@ func (a *Activity) applyPaused(ctx chasm.MutableContext, event pauseEvent) error
 	a.recordPauseState(ctx, event)
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Stamp++
+	a.clearStartToCloseState(ctx)
 	return nil
 }
 
@@ -736,16 +724,28 @@ func (a *Activity) applyUnpaused(
 	return nil
 }
 
-// applyFailedAttempt mutates activity state when a worker yields with retries remaining.
+// applyFailedAttempt records the failure and advances the activity or handoff attempt counter.
+// It handles both active attempts and start-to-close expiry during handoff retry backoff or queue wait.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
-	attempt.Count++
+	nextActivityAttempt, nextHandoffAttempt, err := nextRetryCounts(a.GetAsyncHandoffOptions() != nil, event.retryType, attempt.GetCount(), attempt.GetAsyncHandoffState().GetCount())
+	if err != nil {
+		return err
+	}
+
+	attempt.Count = nextActivityAttempt
 	attempt.Stamp++
+	attempt.PendingRetryType = event.retryType
+	if a.GetAsyncHandoffOptions() != nil {
+		attempt.AsyncHandoffState.Count = nextHandoffAttempt
+	}
+
 	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)
 }
 
 func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {
 	a.clearHandoffState()
+	a.resetHandoffAttempt(ctx)
 
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
@@ -782,6 +782,7 @@ func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, eve
 	a.applyDeferredHeartbeatClear(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
+	a.resetHandoffAttempt(ctx)
 	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
 		return err
 	}
@@ -804,6 +805,7 @@ func (a *Activity) applyResetAttemptFailedToScheduled(ctx chasm.MutableContext, 
 
 	attempt.Count = 1
 	attempt.Stamp++
+	a.resetHandoffAttempt(ctx)
 
 	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, currentTime, false); err != nil {
 		return err
