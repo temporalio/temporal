@@ -144,7 +144,9 @@ func TestValidateAttachedCallbacks_NothingAttached(t *testing.T) {
 // memberVersionCache reports every version as a member of the task queue.
 type memberVersionCache struct{}
 
-func (memberVersionCache) Get(string, string, enumspb.TaskQueueType, string, string) (bool, bool, int64, bool) {
+func (memberVersionCache) Get(
+	string, string, enumspb.TaskQueueType, string, string,
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
 	return true, false, 0, true
 }
 

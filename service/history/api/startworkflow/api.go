@@ -169,29 +169,35 @@ func (s *Starter) prepare(ctx context.Context) error {
 		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
-		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
+		if reason := s.eagerStartDeniedReason(ctx); reason != "" {
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).Record(1, metrics.ReasonTag(reason))
 			request.RequestEagerExecution = false
-		} else if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
-			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
-			request.RequestEagerExecution = false
-		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) {
-			// Matching grants are best-effort. On a denial or any Matching failure, start the workflow
-			// normally instead of failing the start request.
-			if s.eagerWorkerVersionMismatch() {
-				metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-					Record(1, metrics.ReasonTag(eagerStartDeniedReasonWorkerVersionMismatch))
-				request.RequestEagerExecution = false
-			} else if !s.grantEagerWorkflowDispatch(ctx) {
-				metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
-					Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
-				request.RequestEagerExecution = false
-			}
 		}
 	}
 	return nil
+}
+
+// eagerStartDeniedReason returns why the workflow can't start eagerly, or an empty string if it can.
+func (s *Starter) eagerStartDeniedReason(ctx context.Context) metrics.ReasonString {
+	namespaceName := s.namespace.Name().String()
+	if !s.shardContext.GetConfig().EnableEagerWorkflowStart(namespaceName) {
+		return eagerStartDeniedReasonDynamicConfigDisabled
+	}
+	if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
+		return eagerStartDeniedReasonFirstWorkflowTaskBackoff
+	}
+	if !s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(namespaceName) {
+		return ""
+	}
+	if s.eagerWorkerVersionMismatch() {
+		return eagerStartDeniedReasonWorkerVersionMismatch
+	}
+	// Matching grants are best-effort. On a denial or any Matching failure, start the workflow
+	// normally instead of failing the start request.
+	if !s.grantEagerWorkflowDispatch(ctx) {
+		return eagerStartDeniedReasonDispatchNotGranted
+	}
+	return ""
 }
 
 // overrideTargetVersion returns the version the versioning override routes the first workflow task to, if any.
