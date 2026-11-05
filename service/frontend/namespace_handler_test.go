@@ -1452,7 +1452,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary() {
-	namespace := s.getRandomNamespace()
+	namespaceName := s.getRandomNamespace()
 	version := int64(100)
 	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1471,7 +1471,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary(
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:   nid,
-				Name: namespace,
+				Name: namespaceName,
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:   durationpb.New(7 * time.Hour * 24),
@@ -1492,7 +1492,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_OnlyAddBadBinary(
 	)
 
 	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace: namespaceName,
 		Config: &namespacepb.NamespaceConfig{
 			BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{
 				"bad-checksum": {Reason: "some reason", Operator: "some operator"},
