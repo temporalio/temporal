@@ -166,13 +166,14 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		stickyInfo *workerpb.WorkerPollerInfo,
 	) wideevents.WorkerTaskTypeStats {
 		s := wideevents.WorkerTaskTypeStats{}
-		// TODO: Use SDK-reported poller targets instead of current counts when available.
 		if pollerInfo != nil {
 			s.CurrentPollers = new(pollerInfo.GetCurrentPollers())
+			// TODO: Use the SDK-reported poller target when available.
 			s.TargetPollers = s.CurrentPollers
 		}
 		if stickyInfo != nil {
 			s.CurrentStickyPollers = new(stickyInfo.GetCurrentPollers())
+			// TODO: Use the SDK-reported sticky poller target when available.
 			s.TargetStickyPollers = s.CurrentStickyPollers
 		}
 		if slots != nil {
