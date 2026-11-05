@@ -463,7 +463,7 @@ func (e *matchingEngineImpl) watchMembership() {
 	}
 
 	// Partitions that have an unload scheduled, so that we don't schedule duplicate unloads
-	// when rescanning periodically.
+	// if a partition is checked again before it's unloaded.
 	var pendingLock sync.Mutex
 	pending := make(map[tqid.PartitionKey]struct{})
 	needsUnload := func(p tqid.Partition) bool {
