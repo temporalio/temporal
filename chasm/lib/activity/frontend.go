@@ -600,10 +600,23 @@ func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req
 	req.RetryPolicy = opts.RetryPolicy
 }
 
-// TODO: Implement handoff logic in next PR.
 func (h *frontendHandler) RespondActivityTaskHandoff(
-	context.Context,
-	*workflowservice.RespondActivityTaskHandoffRequest,
+	ctx context.Context,
+	req *workflowservice.RespondActivityTaskHandoffRequest,
 ) (*workflowservice.RespondActivityTaskHandoffResponse, error) {
-	return nil, serviceerror.NewUnimplemented("activity async handoff is not supported")
+	token, businessID, err := validateAndExtractHandoffRequest(req, h.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := h.client.RespondActivityTaskHandoff(ctx, &activitypb.RespondActivityTaskHandoffRequest{
+		NamespaceId:     token.GetNamespaceId(),
+		BusinessId:      businessID,
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response.GetFrontendResponse(), nil
 }

@@ -16,6 +16,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -1415,6 +1418,161 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid jitter: negative duration", invalidArgErr.Message)
 	})
+}
+
+func TestValidateAndExtractHandoffRequest(t *testing.T) {
+	t.Parallel()
+
+	validToken, err := (&tokenspb.Task{
+		NamespaceId: "namespace-id",
+		Attempt:     1,
+		WorkflowId:  "workflow-id",
+	}).Marshal()
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		name          string
+		request       *workflowservice.RespondActivityTaskHandoffRequest
+		expectedError string
+	}{
+		{
+			name:          "nil request",
+			expectedError: "task token is required",
+		},
+		{
+			name:          "missing token",
+			request:       &workflowservice.RespondActivityTaskHandoffRequest{},
+			expectedError: "task token is required",
+		},
+		{
+			name: "malformed token",
+			request: &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: []byte{0xff},
+			},
+			expectedError: "invalid activity task token",
+		},
+		{
+			name: "long identity",
+			request: &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: validToken,
+				Identity:  strings.Repeat("x", defaultMaxIDLengthLimit+1),
+			},
+			expectedError: fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit),
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := validateAndExtractHandoffRequest(testCase.request, defaultMaxIDLengthLimit)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			require.ErrorContains(t, err, testCase.expectedError)
+		})
+	}
+}
+
+func TestValidateAndExtractHandoffTaskToken(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name         string
+		mutate       func(*tokenspb.Task)
+		componentRef *persistencespb.ChasmComponentRef
+	}{
+		{name: "zero attempt", mutate: func(token *tokenspb.Task) {
+			token.Attempt = 0
+		}},
+		{name: "missing namespace", mutate: func(token *tokenspb.Task) {
+			token.NamespaceId = ""
+		}},
+		{name: "malformed reference never falls back to workflow", mutate: func(token *tokenspb.Task) {
+			token.ComponentRef = []byte{0xff}
+			token.WorkflowId = "workflow-id"
+		}},
+		{
+			name: "missing reference business ID",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				ArchetypeId: ArchetypeID,
+			},
+		},
+		{
+			name: "missing reference archetype",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+			},
+		},
+		{
+			name: "wrong reference archetype",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		{
+			name: "non-root reference",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId:   "namespace-id",
+				BusinessId:    "activity-id",
+				ArchetypeId:   ArchetypeID,
+				ComponentPath: []string{"Visibility"},
+			},
+		},
+		{
+			name: "reference namespace mismatch",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "other-namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: ArchetypeID,
+			},
+		},
+		{name: "missing routing ID", mutate: func(token *tokenspb.Task) {
+			token.ComponentRef = nil
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			componentRef := testCase.componentRef
+			if componentRef == nil {
+				componentRef = &persistencespb.ChasmComponentRef{
+					NamespaceId: "namespace-id",
+					BusinessId:  "activity-id",
+					ArchetypeId: ArchetypeID,
+				}
+			}
+			ref, err := componentRef.Marshal()
+			require.NoError(t, err)
+			token := &tokenspb.Task{NamespaceId: "namespace-id", Attempt: 1, ComponentRef: ref}
+			if testCase.mutate != nil {
+				testCase.mutate(token)
+			}
+
+			_, err = validateAndExtractHandoffTaskToken(token)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		})
+	}
+}
+
+func TestValidateAndExtractHandoffRequestUsesWorkflowID(t *testing.T) {
+	t.Parallel()
+
+	token := &tokenspb.Task{
+		NamespaceId: "namespace-id",
+		Attempt:     1,
+		WorkflowId:  "workflow-id",
+		ActivityId:  "activity-id",
+	}
+	serialized, err := token.Marshal()
+	require.NoError(t, err)
+
+	_, businessID, err := validateAndExtractHandoffRequest(&workflowservice.RespondActivityTaskHandoffRequest{
+		TaskToken:  serialized,
+		ResourceId: "activity:untrusted-id",
+	}, defaultMaxIDLengthLimit)
+	require.NoError(t, err)
+	require.Equal(t, token.GetWorkflowId(), businessID)
 }
 
 func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
