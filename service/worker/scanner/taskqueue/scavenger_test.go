@@ -194,6 +194,12 @@ func (s *ScavengerTestSuite) setupTaskMgrMocksWithErrors() {
 	s.setupTaskMgrMocks()
 }
 
+/*
+TestSingleSessionMetadataCleanup tests cleanup with a captured assignment value:
+1. Scan old queue records with either an empty backlog or one expired task.
+2. Remove expired tasks while retaining assigned sticky workflow queue metadata.
+3. Delete eligible unassigned queue records using the captured RangeID.
+*/
 // The existing scanner suite mutates package-level job limits.
 //
 //parallelize:ignore

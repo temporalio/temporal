@@ -44,8 +44,7 @@ type ShardInfo struct {
 	RangeId int64                  `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
 	Owner   string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "since" is needed here. --)
+	//     aip.dev/not-precedent: "since" is needed here. --)
 	StolenSinceRenew       int32                  `protobuf:"varint,6,opt,name=stolen_since_renew,json=stolenSinceRenew,proto3" json:"stolen_since_renew,omitempty"`
 	UpdateTime             *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	ReplicationDlqAckLevel map[string]int64       `protobuf:"bytes,13,rep,name=replication_dlq_ack_level,json=replicationDlqAckLevel,proto3" json:"replication_dlq_ack_level,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
@@ -186,15 +185,13 @@ type WorkflowExecutionInfo struct {
 	// This is carried over when buffered events are applied after workflow task failures.
 	// Used by the TemporalReportedProblems search attribute to track continuous failure count.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "since" is needed here. --)
+	//     aip.dev/not-precedent: "since" is needed here. --)
 	WorkflowTaskAttemptsSinceLastSuccess int32  `protobuf:"varint,111,opt,name=workflow_task_attempts_since_last_success,json=workflowTaskAttemptsSinceLastSuccess,proto3" json:"workflow_task_attempts_since_last_success,omitempty"`
 	CancelRequested                      bool   `protobuf:"varint,29,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
 	CancelRequestId                      string `protobuf:"bytes,32,opt,name=cancel_request_id,json=cancelRequestId,proto3" json:"cancel_request_id,omitempty"`
 	StickyTaskQueue                      string `protobuf:"bytes,33,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StickyScheduleToStartTimeout    *durationpb.Duration    `protobuf:"bytes,34,opt,name=sticky_schedule_to_start_timeout,json=stickyScheduleToStartTimeout,proto3" json:"sticky_schedule_to_start_timeout,omitempty"`
 	Attempt                         int32                   `protobuf:"varint,35,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	RetryInitialInterval            *durationpb.Duration    `protobuf:"bytes,36,opt,name=retry_initial_interval,json=retryInitialInterval,proto3" json:"retry_initial_interval,omitempty"`
@@ -277,8 +274,7 @@ type WorkflowExecutionInfo struct {
 	TransitionHistory []*VersionedTransition `protobuf:"bytes,80,rep,name=transition_history,json=transitionHistory,proto3" json:"transition_history,omitempty"`
 	// Map of state machine type to map of machine by ID.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+	//     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
 	SubStateMachinesByType map[string]*StateMachineMap `protobuf:"bytes,81,rep,name=sub_state_machines_by_type,json=subStateMachinesByType,proto3" json:"sub_state_machines_by_type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// This field is for tracking if the workflow execution timer task is created or not.
 	// We don't need this field if we always create the execution timer task when the first
@@ -307,12 +303,9 @@ type WorkflowExecutionInfo struct {
 	// NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
 	// sanitized.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
-	//
+	//     aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: This is a vector clock, not a timestamp --)
+	//     aip.dev/not-precedent: This is a vector clock, not a timestamp --)
 	TaskGenerationShardClockTimestamp             int64                         `protobuf:"varint,91,opt,name=task_generation_shard_clock_timestamp,json=taskGenerationShardClockTimestamp,proto3" json:"task_generation_shard_clock_timestamp,omitempty"`
 	WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition          `protobuf:"bytes,92,opt,name=workflow_task_last_update_versioned_transition,json=workflowTaskLastUpdateVersionedTransition,proto3" json:"workflow_task_last_update_versioned_transition,omitempty"`
 	VisibilityLastUpdateVersionedTransition       *VersionedTransition          `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3" json:"visibility_last_update_versioned_transition,omitempty"`
@@ -326,8 +319,7 @@ type WorkflowExecutionInfo struct {
 	// unversioned workers to versioned ones.
 	// Note: Deployment objects inside versioning info are immutable, never change their fields.
 	// (-- api-linter: core::0203::immutable=disabled
-	//
-	//	aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
+	//     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
 	VersioningInfo *v12.WorkflowExecutionVersioningInfo `protobuf:"bytes,98,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
 	// This is the run id when the WorkflowExecutionStarted event was written.
 	// A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
@@ -369,9 +361,8 @@ type WorkflowExecutionInfo struct {
 	LastNotifiedTargetVersion *LastNotifiedTargetVersion `protobuf:"bytes,113,opt,name=last_notified_target_version,json=lastNotifiedTargetVersion,proto3" json:"last_notified_target_version,omitempty"`
 	// The target version that the SDK previously declined to upgrade to. Inherited
 	// from a previous run via continue-as-new or retry. At CaN time, computed as:
-	//
-	//	if last_notified_target_version != nil → use that (latest signal was declined)
-	//	else → preserve existing declined value (CaN chain, never re-signaled)
+	//   if last_notified_target_version != nil → use that (latest signal was declined)
+	//   else → preserve existing declined value (CaN chain, never re-signaled)
 	//
 	// Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,114,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
@@ -1201,9 +1192,9 @@ type SessionState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Whether this session is mapped strongly to an individual worker. Exclusive sessions also remain at their assigned address.
 	ExclusiveWorker bool `protobuf:"varint,1,opt,name=exclusive_worker,json=exclusiveWorker,proto3" json:"exclusive_worker,omitempty"`
-	// Stable Matching destination, mirrored by WorkflowExecutionInfo.sticky_task_queue.
+	// Stable sticky task queue name, mirrored by WorkflowExecutionInfo.sticky_task_queue.
 	// This identifies the session across worker process replacements.
-	WorkerAddress string `protobuf:"bytes,2,opt,name=worker_address,json=workerAddress,proto3" json:"worker_address,omitempty"`
+	WorkerQueue   string `protobuf:"bytes,2,opt,name=worker_queue,json=workerQueue,proto3" json:"worker_queue,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1245,9 +1236,9 @@ func (x *SessionState) GetExclusiveWorker() bool {
 	return false
 }
 
-func (x *SessionState) GetWorkerAddress() string {
+func (x *SessionState) GetWorkerQueue() string {
 	if x != nil {
-		return x.WorkerAddress
+		return x.WorkerQueue
 	}
 	return ""
 }
@@ -1720,8 +1711,7 @@ type TransferTaskInfo struct {
 	TaskId                  int64                  `protobuf:"varint,12,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	VisibilityTime          *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
+	//     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
 	DeleteAfterClose bool `protobuf:"varint,15,opt,name=delete_after_close,json=deleteAfterClose,proto3" json:"delete_after_close,omitempty"`
 	// Types that are valid to be assigned to TaskDetails:
 	//
@@ -2899,16 +2889,13 @@ type ActivityInfo struct {
 	ActivityId            string                 `protobuf:"bytes,8,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
 	RequestId             string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,10,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,11,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StartToCloseTimeout         *durationpb.Duration   `protobuf:"bytes,12,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	HeartbeatTimeout            *durationpb.Duration   `protobuf:"bytes,13,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
 	CancelRequested             bool                   `protobuf:"varint,14,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
@@ -4163,8 +4150,7 @@ type NexusOperationInfo struct {
 	// Schedule-to-close timeout for this operation.
 	// This is the only timeout settable by a workflow.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "since" is needed here. --)
+	//     aip.dev/not-precedent: "since" is needed here. --)
 	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	// The time when the operation was scheduled.
 	ScheduledTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
@@ -4185,13 +4171,11 @@ type NexusOperationInfo struct {
 	EndpointId string `protobuf:"bytes,15,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
 	// Schedule-to-start timeout for this operation.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,16,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
 	// Start-to-close timeout for this operation.
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StartToCloseTimeout *durationpb.Duration `protobuf:"bytes,17,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	// Time the operation was started (only available for async operations).
 	StartedTime   *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
@@ -4827,8 +4811,7 @@ type Callback_Nexus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Callback URL.
 	// (-- api-linter: core::0140::uri=disabled
-	//
-	//	aip.dev/not-precedent: Not respecting aip here. --)
+	//     aip.dev/not-precedent: Not respecting aip here. --)
 	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// Header to attach to callback request.
 	Header        map[string]string `protobuf:"bytes,2,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -5218,10 +5201,10 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"`\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\\\n" +
 	"\fSessionState\x12)\n" +
-	"\x10exclusive_worker\x18\x01 \x01(\bR\x0fexclusiveWorker\x12%\n" +
-	"\x0eworker_address\x18\x02 \x01(\tR\rworkerAddress\"\xe4\x05\n" +
+	"\x10exclusive_worker\x18\x01 \x01(\bR\x0fexclusiveWorker\x12!\n" +
+	"\fworker_queue\x18\x02 \x01(\tR\vworkerQueue\"\xe4\x05\n" +
 	"\x10TimeSkippingInfo\x12B\n" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +

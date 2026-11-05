@@ -127,6 +127,12 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier, modifyRequest
 	}
 }
 
+/*
+TestRecordWorkflowTaskStartedSingleSessionRejection tests destination checks on duplicate starts:
+1. Bind the workflow to exclusive worker queue S and mark its workflow task already started.
+2. Retry the start without single-session options or with another stable identity.
+3. Reject the request as obsolete, even when the sticky queue mirror names the other identity.
+*/
 func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 	for _, tc := range []struct {
 		name, stableIdentity, stickyQueue string
@@ -139,7 +145,7 @@ func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := invoke(t, func(ms *historyi.MockMutableState) {
 				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-					SessionState:    &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"},
+					SessionState:    &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"},
 					StickyTaskQueue: tc.stickyQueue,
 				}).AnyTimes()
 				// Validate the destination even for a duplicate task-start request.

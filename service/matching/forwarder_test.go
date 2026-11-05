@@ -253,6 +253,12 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+/*
+TestForwardPollWithTargetSource tests the source sent with forwarded polls:
+1. Forward ordinary and acquisition polls from sticky and normal partitions.
+2. Verify only sticky acquisition clears the source so the client can select a normal read partition.
+3. Verify every request names the target queue and returns the received workflow task.
+*/
 func (t *ForwarderTestSuite) TestForwardPollWithTargetSource() {
 	tq := t.partition.TaskQueue()
 	normal := tq.NormalPartition(1)

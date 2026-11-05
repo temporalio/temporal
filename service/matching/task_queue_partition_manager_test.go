@@ -2967,6 +2967,12 @@ func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager(
 	return partitionMgr
 }
 
+/*
+TestSingleSessionPollRouting tests delegation to the physical queue manager:
+1. Submit single-session workflow and activity polls, plus an ordinary sticky poll.
+2. Verify the partition manager passes the original metadata to the physical queue.
+3. Return its task and preserve the caller's acquisition flag.
+*/
 func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 	for _, tc := range []struct {
 		name     string
@@ -3007,6 +3013,12 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 	}
 }
 
+/*
+TestStickyBacklogNotificationBeforeQueueInitialization tests an early backlog advertisement:
+1. Deliver a remote backlog update before the sticky queue finishes initialization.
+2. Verify notification handling waits rather than discarding the update.
+3. Finish initialization and verify the queue receives the advertised partition and priority.
+*/
 func (s *PartitionManagerTestSuite) TestStickyBacklogNotificationBeforeQueueInitialization() {
 	synctest.Test(s.T(), func(t *testing.T) {
 		tv := testvars.New(t)

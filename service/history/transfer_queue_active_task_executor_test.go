@@ -686,7 +686,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			executionInfo := mutableState.GetExecutionInfo()
 			executionInfo.StickyTaskQueue = stickyTaskQueueName
 			if tc.bound {
-				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: stickyTaskQueueName}
+				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: stickyTaskQueueName}
 			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 

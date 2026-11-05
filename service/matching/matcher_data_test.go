@@ -1164,6 +1164,12 @@ func gosched(n int) {
 	}
 }
 
+/*
+TestSingleSessionAcquisitionSkipsQuery tests that a query cannot acquire a session:
+1. Queue a standalone query and verify an acquisition poll leaves it waiting.
+2. Add a workflow task and verify the acquisition poll receives that task.
+3. Clear the acquisition flag and verify an ordinary poll can receive the query.
+*/
 func (s *MatcherDataSuite) TestSingleSessionAcquisitionSkipsQuery() {
 	query := s.newQueryTask("query")
 	s.md.tasks.Add(query)

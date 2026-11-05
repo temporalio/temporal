@@ -1133,7 +1133,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 			if bound {
 				mutableState.SetStickyTaskQueue("S", nil)
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
 			}
 			wt := addWorkflowTaskScheduledEvent(mutableState)
 			startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, mutableState.CurrentTaskQueue().GetName(), uuid.NewString())
@@ -1155,7 +1155,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 					if bound {
 						info := request.UpdateWorkflowMutation.ExecutionInfo
 						s.True(info.GetSessionState().GetExclusiveWorker())
-						s.Equal("S", info.GetSessionState().GetWorkerAddress())
+						s.Equal("S", info.GetSessionState().GetWorkerQueue())
 						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal("S", info.GetStickyTaskQueue())
 						s.Equal(taskQueueName, info.GetTaskQueue())

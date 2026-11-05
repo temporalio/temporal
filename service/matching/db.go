@@ -127,6 +127,7 @@ func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) error {
 	db.lastChange = time.Now()
 	// TODO (Shivam): Protect against a delayed scanner deleting this record using a pre-assignment
 	// snapshot with the same RangeID. Keep the range unchanged here so the writer retains its ID block.
+	// Not super urgent to fix since the probability of this happening is quite low.
 	return db.updateTaskQueueLocked(ctx, false)
 }
 

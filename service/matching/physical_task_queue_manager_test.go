@@ -257,6 +257,13 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
 }
 
+/*
+TestSingleSessionAcquisitionPoll tests acquisition through the physical queue manager:
+1. Poll an unassigned sticky queue and let the matcher forward to the normal queue.
+2. Return a workflow task, an empty response, or an RPC error, including a NoWait poll.
+3. Only a successful task acquisition records assignment; RangeID and the loaded queue stay unchanged.
+4. The poll refreshes the physical queue's idle timer.
+*/
 func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 	for _, tc := range []struct {
 		name   string
@@ -331,6 +338,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPoll() {
 	}
 }
 
+/*
+TestSingleSessionAcquisitionPollCancellation tests cancellation through the physical queue manager:
+1. Begin acquisition and block the forwarded normal-queue poll.
+2. Cancel the caller or stop the sticky queue's context.
+3. Verify the forwarded poll ends with cancellation.
+*/
 // Caller cancellation or the sticky task queue shutting down should cancel the long poll
 func (s *PhysicalTaskQueueManagerTestSuite) TestSingleSessionAcquisitionPollCancellation() {
 	for _, sourceStops := range []bool{false, true} {

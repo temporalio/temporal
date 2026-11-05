@@ -85,7 +85,7 @@ func Invoke(
 			// An unbound execution can acquire the polling session's stable identity.
 			// Once bound, every start request, including retries, must identify the same session.
 			sessionState := executionInfo.GetSessionState()
-			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetWorkerAddress()) {
+			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetWorkerQueue()) {
 				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
 
@@ -193,7 +193,7 @@ func Invoke(
 				// Bind after the task start is accepted so both changes commit in the same transaction.
 				mutableState.SetSessionState(&persistencespb.SessionState{
 					ExclusiveWorker: true,
-					WorkerAddress:   stableIdentity,
+					WorkerQueue:     stableIdentity,
 				})
 			}
 

@@ -18,6 +18,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+/*
+TestTaskManagerSingleSessionMetadata tests how queue metadata reaches the persistence store:
+1. Create and update assigned, ordinary, and activity sticky queue records.
+2. Verify metadata survives serialization and only assigned updates clear backend expiry.
+3. Reject missing required expiry values and propagate store errors.
+*/
 func TestTaskManagerSingleSessionMetadata(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"create", "update"} {

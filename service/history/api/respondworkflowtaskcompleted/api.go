@@ -220,7 +220,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	sessionState := executionInfo.GetSessionState()
 	if sessionState.GetExclusiveWorker() {
 		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
-		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetWorkerAddress() {
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetWorkerQueue() {
 			releaseLeaseWithError = false
 			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
 		}

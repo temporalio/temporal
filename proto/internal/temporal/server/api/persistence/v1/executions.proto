@@ -337,9 +337,9 @@ message WorkflowExecutionInfo {
 message SessionState {
   // Whether this session is mapped strongly to an individual worker. Exclusive sessions also remain at their assigned address.
   bool exclusive_worker = 1;
-  // Stable Matching destination, mirrored by WorkflowExecutionInfo.sticky_task_queue.
+  // Stable sticky task queue name, mirrored by WorkflowExecutionInfo.sticky_task_queue.
   // This identifies the session across worker process replacements.
-  string worker_address = 2;
+  string worker_queue = 2;
 }
 
 message TimeSkippingInfo {

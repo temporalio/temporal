@@ -1480,6 +1480,12 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 	return wfContext, serializedTaskToken
 }
 
+/*
+TestSingleSessionCompletionDestination tests sticky attributes on an exclusive workflow's completion:
+1. Start a workflow task and bind the workflow to worker queue S.
+2. Accept a completion without sticky attributes, but reject one requesting another destination.
+3. Preserve the exclusive binding and sticky destination S in both cases.
+*/
 func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestination() {
 	for _, destination := range []string{"S", "other"} {
 		s.Run(destination, func() {
@@ -1490,7 +1496,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			_, _, token := s.createSentUpdate(tv, wfContext)
 			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
 			s.Require().NoError(err)
-			ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"})
+			ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"})
 			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
 			if destination == "other" {
 				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)
@@ -1506,7 +1512,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 				s.Require().NoError(err)
 			}
 			s.True(ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
-			s.Equal("S", ms.GetExecutionInfo().GetSessionState().GetWorkerAddress())
+			s.Equal("S", ms.GetExecutionInfo().GetSessionState().GetWorkerQueue())
 			s.Equal("S", ms.GetExecutionInfo().GetStickyTaskQueue())
 		})
 	}

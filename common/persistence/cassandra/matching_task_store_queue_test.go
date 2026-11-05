@@ -8,6 +8,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+/*
+TestTaskQueueMetadataTTL tests how metadata expiry becomes a Cassandra TTL:
+1. Verify omitted expiry produces no TTL and a future expiry preserves its remaining seconds.
+2. Verify fractional seconds round up and oversized TTL values are capped.
+*/
 func TestTaskQueueMetadataTTL(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1000, 0)

@@ -6920,6 +6920,12 @@ func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
 	s.Require().NoError(err)
 }
 
+/*
+TestExclusiveWorkerSessionPolls tests the namespace gate for workflow and activity polls:
+1. Ordinary and nonexclusive polls continue while exclusive sessions are disabled.
+2. Exclusive polls are rejected before Matching when the namespace flag is off.
+3. Enabling the flag admits exclusive polls and leaves the original requests unchanged.
+*/
 func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 	singleSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"},

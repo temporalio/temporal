@@ -254,9 +254,7 @@ type TaskQueueInfo struct {
 	// can be cleared on the active table.
 	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	// Dynamic partition scaling state (root only):
-	PartitionScaleState *PartitionScaleState `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
-	// Presence records that an exclusive worker's sticky workflow queue has acquired a workflow.
-	// Retained after workflow completion and worker replacement to prevent reuse.
+	PartitionScaleState       *PartitionScaleState       `protobuf:"bytes,11,opt,name=partition_scale_state,json=partitionScaleState,proto3" json:"partition_scale_state,omitempty"`
 	ExclusiveWorkerAssignment *ExclusiveWorkerAssignment `protobuf:"bytes,12,opt,name=exclusive_worker_assignment,json=exclusiveWorkerAssignment,proto3" json:"exclusive_worker_assignment,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
@@ -376,6 +374,10 @@ func (x *TaskQueueInfo) GetExclusiveWorkerAssignment() *ExclusiveWorkerAssignmen
 	return nil
 }
 
+// Presence records that an exclusive worker's sticky workflow queue has acquired a workflow.
+// Retained after workflow completion and worker replacement to prevent reuse.
+// Note: This message may grow in the recent future to include more information such as the workflowID
+// for added optimizations.
 type ExclusiveWorkerAssignment struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -611,8 +613,7 @@ type PartitionScaleState struct {
 	// Bit field of partitions that may have backlog. Partition i is represented by:
 	// backlog_state[i/64] & (1 << i%64).
 	// (-- api-linter: core::0141::forbidden-types=disabled
-	//
-	//	aip.dev/not-precedent: This is a bit field --)
+	//     aip.dev/not-precedent: This is a bit field --)
 	BacklogState []uint64 `protobuf:"varint,4,rep,packed,name=backlog_state,json=backlogState,proto3" json:"backlog_state,omitempty"`
 	// Summary of backlog counts, 8 bits per partition (see common/number/compact8.go).
 	// This is different from backlog_state: a partition will have a 1 bit in backlog_state
@@ -625,8 +626,7 @@ type PartitionScaleState struct {
 	BacklogCap int32 `protobuf:"varint,6,opt,name=backlog_cap,json=backlogCap,proto3" json:"backlog_cap,omitempty"`
 	// Arbitrary state kept by the scaler implementation.
 	// (-- api-linter: core::0146::any=disabled
-	//
-	//	aip.dev/not-precedent: This is not public. --)
+	//     aip.dev/not-precedent: This is not public. --)
 	PrivateScalerState *anypb.Any `protobuf:"bytes,100,opt,name=private_scaler_state,json=privateScalerState,proto3" json:"private_scaler_state,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -718,8 +718,7 @@ type SimplePartitionScalerState struct {
 	// Partitions to reserve based on backlog count. This is a bitfield where a 1 means "this has
 	// gone above BacklogBase and not gone below BacklogReset".
 	// (-- api-linter: core::0141::forbidden-types=disabled
-	//
-	//	aip.dev/not-precedent: This is a bit field --)
+	//     aip.dev/not-precedent: This is a bit field --)
 	BacklogTarget []uint64 `protobuf:"varint,2,rep,packed,name=backlog_target,json=backlogTarget,proto3" json:"backlog_target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -1301,6 +1301,13 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.Empty(s.matchingEngine.partitions)
 }
 
+/*
+TestQueryWorkflowAssignedStickyWithoutPollers tests queries while the session worker is absent:
+1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
+2. Verify ordinary sticky queues return StickyWorkerUnavailable.
+3. Verify assigned queues load if needed and hold the query until a poller arrives.
+4. Poll the query, answer it, and verify the waiting caller receives the answer.
+*/
 func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
 	for _, tc := range []struct {
 		name             string
@@ -7190,6 +7197,13 @@ func (s *matchingEngineSuite) testStickyActivityRouting(versioned, mismatchedDep
 	s.Require().NotEmpty(response.GetTaskToken())
 }
 
+/*
+TestSingleSessionOfflineWorkflowAdmission tests workflow task admission without a session worker:
+1. Prepare assigned, ordinary, and missing sticky queue metadata, with queues loaded or unloaded.
+2. Add a workflow task without any poller and verify unassigned queues reject it.
+3. Verify assigned queues load if needed and persist the task only in their sticky backlog.
+4. Unload and reload the assigned queue, then verify a session poll receives the persisted task.
+*/
 func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 	for _, tc := range []struct {
 		name                      string
@@ -7268,6 +7282,11 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 	}
 }
 
+/*
+TestSingleSessionOfflineAdmissionReadFailure tests a failed assignment lookup:
+1. Make the sticky queue metadata read fail while adding a workflow task.
+2. Verify Matching returns that error without loading a partition or reporting a sync match.
+*/
 func TestSingleSessionOfflineAdmissionReadFailure(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)

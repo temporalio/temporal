@@ -228,6 +228,8 @@ func ForwardPollWithTarget(
 		// Initial session acquisition from a sticky queue partition needs an empty source to enable load balanced normal read-partition selection.
 		// Non-session based sticky pollers do not need this since they are forwarded to those task queue partitions that have advertised a backlog
 		// of tasks.
+		// TODO (Shivam): This is hacky and not the best way to do this. Come back to add a new variable that denotes if we need
+		// to load balance or not while keeping forwardedSource what it is.
 		forwardedSource = ""
 	}
 

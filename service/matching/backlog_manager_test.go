@@ -1327,6 +1327,12 @@ func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsRead
 	s.Require().Equal(1, tr.getLoadedTasks())
 }
 
+/*
+TestTaskQueueSingleSessionMetadata tests assignment metadata across repeated reloads:
+1. Create assigned and unassigned sticky workflow queues with an expiry.
+2. Reload each queue, update its ack level, and synchronize metadata three times.
+3. Preserve assignment data, including unknown fields, and omit expiry only for assigned queues.
+*/
 func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1389,6 +1395,12 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 	}
 }
 
+/*
+TestSingleSessionAssignmentPersists tests a durable assignment without a lease change:
+1. Load an unassigned sticky workflow queue and persist its assignment.
+2. Verify the assignment has no expiry and RangeID is unchanged, including when the assignment call is repeated.
+3. Reload the queue and verify its assignment is still present.
+*/
 func TestSingleSessionAssignmentPersists(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)

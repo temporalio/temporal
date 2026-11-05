@@ -23,6 +23,16 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+/*
+TestSingleSessionAcquisitionAndReplacement tests admission, routing, and replacement:
+1. Start A on the normal queue and reject a session poll while the admission flag is disabled.
+2. Enable admission, acquire A through S, and schedule an activity in A's session.
+3. Disable admission, signal A, and verify both sticky backlogs remain while both poll types are rejected.
+4. Re-enable admission and deliver the original activity and workflow tasks at attempt 1.
+5. Start B, unload S, and verify reloading S cannot acquire B while A remains running.
+6. Resume A with a replacement poller using the same stable identity S, then let a fresh S2 acquire B.
+7. Verify A keeps its original normal task queue and remains running.
+*/
 func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
@@ -181,6 +191,13 @@ func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.GetWorkflowExecutionInfo().GetStatus())
 }
 
+/*
+TestSingleSessionConcurrentAcquisition tests exclusive acquisition with concurrent polls:
+1. Start A and B on the same normal queue and wait for both tasks to reach its backlog.
+2. Release eight Matching polls together, all using the same stable identity S.
+3. Verify exactly one poll receives a workflow task and the other polls return empty.
+4. Complete the winning workflow task and let a fresh S2 acquire the other execution.
+*/
 func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
@@ -269,6 +286,13 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 	require.NoError(t, err)
 }
 
+/*
+TestSingleSessionWorkflowBacklogWithoutPollers tests offline backlog and queue reload:
+1. Acquire A through S and complete its first workflow task.
+2. Unload S and signal A without starting another poller.
+3. Verify Matching reloads S with a backlog and no pollers, with no normal backlog or recorded schedule-to-start timeout.
+4. Unload S again and poll it to resume the original workflow task at attempt 1.
+*/
 func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
@@ -361,6 +385,10 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	require.NoError(t, err)
 }
 
+/*
+TestSingleSessionAcquisitionUsesNormalPolling tests initial forwarding and subsequent sticky routing
+with and without worker-versioning (Pinned only)
+*/
 func TestSingleSessionAcquisitionUsesNormalPolling(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

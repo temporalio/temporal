@@ -51,6 +51,7 @@ type priTaskMatcher struct {
 	isExclusiveWorkerAssigned func() bool
 	assignExclusiveWorker     func() error
 
+	// Single Session Acquisition knobs
 	singleSessionAcquisitionMutex      sync.Mutex
 	singleSessionAcquisitionInProgress bool
 	singleSessionAcquisitionCV         *locks.ConditionVariableImpl
@@ -578,6 +579,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 // On success, the returned task could be a query task or a regular task
 // Returns errNoTasks when context deadline is exceeded
 func (tm *priTaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	// Assuming that session acquisition (ie for the very first time) via a WFT only. Might change this in the future.
 	if tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY &&
 		tm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
 		pollMetadata.sessionOptions.GetSingleSession() != nil {
@@ -604,8 +606,8 @@ func (tm *priTaskMatcher) pollForSingleSessionWorker(ctx context.Context, pollMe
 		return tm.poll(ctx, pollMetadata, false)
 	}
 
-	// CONSIDER(shivam): Reconcile uncertain starts after errors, cancellation, or timeouts
-	// before allowing another acquisition. Failure handling is deferred in this POC.
+	// TODO(Shivam): Reconcile uncertain starts after errors, cancellation, or timeouts
+	// before allowing another acquisition. Failure handling is deferred for now.
 	defer tm.finishSingleSessionAcquisition()
 	acquisitionMetadata := *pollMetadata
 	acquisitionMetadata.singleSessionAcquisitionInProgress = true
@@ -630,6 +632,8 @@ func (tm *priTaskMatcher) beginSingleSessionAcquisition(ctx context.Context, noW
 
 	for {
 		if tm.isExclusiveWorkerAssigned() {
+			// An exclusive worker has already acquired the workflow that is on this sticky task queue.
+			// No new acquisitions are allowed and this poller should only poll the sticky task queue.
 			return false, nil
 		}
 		if ctx.Err() != nil {
@@ -646,6 +650,8 @@ func (tm *priTaskMatcher) beginSingleSessionAcquisition(ctx context.Context, noW
 			tm.singleSessionAcquisitionCV = locks.NewConditionVariable(&tm.singleSessionAcquisitionMutex)
 		}
 		// This poller shall wait until a previous poller completes its acquisition or returns with an empty poll.
+		// Note: Calling Wait here shall release singleSessionAcquisitionMutex so that some other poller can enter
+		// this method
 		tm.singleSessionAcquisitionCV.Wait(ctx.Done())
 	}
 	if tm.partition.TaskQueue().Name() == "" {

@@ -291,7 +291,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 			var expectedSessionState *persistencespb.SessionState
 			if exclusiveWorker {
-				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
 				ms.SetSessionState(common.CloneProto(expectedSessionState))
 			}
 			wfMs := workflow.TestCloneToProto(ctx, ms)
@@ -308,7 +308,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 			s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 			protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
 			if exclusiveWorker {
-				response.GetSessionState().WorkerAddress = "other"
+				response.GetSessionState().WorkerQueue = "other"
 				response, err = s.historyEngine.GetMutableState(ctx, request)
 				s.Require().NoError(err)
 				protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
@@ -729,6 +729,12 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	s.Equal(taskqueue, contextTaskQueue)
 }
 
+/*
+TestSingleSessionQueryDoesNotFallback tests queries for a workflow bound to exclusive worker S:
+1. Load the persisted workflow binding and issue a query with a caller deadline.
+2. Send exactly one query to sticky queue S while preserving that deadline.
+3. Return the result or Matching error without retrying on the normal queue.
+*/
 func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
 	s.historyEngine.matchingClient = s.mockMatchingClient
 	s.historyEngine.rawMatchingClient = s.mockMatchingClient
@@ -753,7 +759,7 @@ func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
 			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
 			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
 			ms.SetStickyTaskQueue("S", nil)
-			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
 
