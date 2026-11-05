@@ -67,10 +67,10 @@ func TestAddStorageUsage(t *testing.T) {
 	require.Equal(t, int64(1), usage.GetMutableStateByteSeconds())
 	require.Equal(t, int64(2), usage.GetHistoryByteSeconds())
 
-	usage = addStorageUsage(
-		&persistencespb.StorageUsage{MutableStateByteSeconds: 100, HistoryByteSeconds: 200},
-		storageUsageDelta{MutableStateByteSeconds: 1500},
-	)
+	input := &persistencespb.StorageUsage{MutableStateByteSeconds: 100, HistoryByteSeconds: 200}
+	usage = addStorageUsage(input, storageUsageDelta{MutableStateByteSeconds: 1500})
 	require.Equal(t, int64(1600), usage.GetMutableStateByteSeconds())
 	require.Equal(t, int64(200), usage.GetHistoryByteSeconds())
+	// The input is not modified.
+	require.Equal(t, int64(100), input.GetMutableStateByteSeconds())
 }

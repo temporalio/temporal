@@ -10257,7 +10257,7 @@ func (s *mutableStateSuite) TestCloseTransactionAccruesStorageUsage() {
 		s.Run(tc.name, func() {
 			mutableState, ts := s.newStorageUsageTestMutableState()
 			before := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
-			msSize := mutableState.sizeAtLastClose
+			msSize := mutableState.sizeAtLastTransaction
 			s.Positive(msSize)
 
 			mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -10291,7 +10291,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_TimeSkippingOnLoad(
 	s.NoError(err)
 	mutableState.timeSource = ts
 	mutableState.wrapTimeSourceWithTimeSkipping()
-	msSize := mutableState.sizeAtLastClose
+	msSize := mutableState.sizeAtLastTransaction
 
 	// The baseline loaded from LastUpdateTime is converted back to the wall clock, so 10s accrue.
 	ts.Update(ts.Now().Add(10 * time.Second))
@@ -10307,7 +10307,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_TimeSkippingOnLoad(
 
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_PassiveKeepsOwnCounterOnSync() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
-	msSize := mutableState.sizeAtLastClose
+	msSize := mutableState.sizeAtLastTransaction
 	local := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
@@ -10359,7 +10359,7 @@ func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 	}))
 	_, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
 	s.NoError(err)
-	msSize := mutableState.sizeAtLastClose
+	msSize := mutableState.sizeAtLastTransaction
 	historySize := mutableState.GetExecutionInfo().GetExecutionStats().GetHistorySize()
 
 	// Failover: this cluster becomes active and continues from its own value on its own clock.
@@ -10375,7 +10375,7 @@ func (s *mutableStateSuite) TestStorageUsage_PassiveThenActive() {
 func (s *mutableStateSuite) TestCloseTransactionStorageUsage_StopsAtClose() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
 	before := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
-	msSize := mutableState.sizeAtLastClose
+	msSize := mutableState.sizeAtLastTransaction
 
 	// The transaction that closes the execution still accrues the interval before it.
 	ts.Update(ts.Now().Add(10 * time.Second))
@@ -10418,7 +10418,7 @@ func (s *mutableStateSuite) TestCloseTransactionStorageUsage_ClosedOnLoad() {
 
 func (s *mutableStateSuite) TestCurrentStorageUsage_Running() {
 	mutableState, ts := s.newStorageUsageTestMutableState()
-	msSize := mutableState.sizeAtLastClose
+	msSize := mutableState.sizeAtLastTransaction
 	stored := common.CloneProto(mutableState.GetExecutionInfo().GetExecutionStats().GetStorageUsage())
 
 	// No transaction since the baseline: the current value includes the 10s held since then.
