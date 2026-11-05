@@ -28,7 +28,7 @@ import (
 )
 
 func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo) (*taskqueuepb.TaskQueue, error) {
-	if ai.GetSessionOptions().GetWorkflowSession() == nil {
+	if ai.GetSessionState().GetWorkflowSession() == nil {
 		return &taskqueuepb.TaskQueue{Name: ai.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, nil
 	}
 	taskQueue := ms.CurrentTaskQueue()

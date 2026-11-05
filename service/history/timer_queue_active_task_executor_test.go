@@ -12,7 +12,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1416,7 +1415,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 				},
 			)
 			if tc.session {
-				activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+				activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
 			if !tc.missingPlacement {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
