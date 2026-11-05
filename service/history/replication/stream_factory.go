@@ -67,7 +67,6 @@ type (
 
 	streamSenderFactory struct {
 		lanePolicyFactory LaneStreamPolicyFactory
-		laneRestarts      *laneRestartTracker
 	}
 	streamReceiverFactory struct {
 		laneFeedback LaneFeedbackProvider
@@ -96,7 +95,7 @@ type (
 // the ReplicationStreamImplementation dynamic config. Lane senders get each stream's lane
 // policy from lanePolicyFactory.
 func NewStreamSenderFactory(lanePolicyFactory LaneStreamPolicyFactory) StreamSenderFactory {
-	return streamSenderFactory{lanePolicyFactory: lanePolicyFactory, laneRestarts: newLaneRestartTracker()}
+	return streamSenderFactory{lanePolicyFactory: lanePolicyFactory}
 }
 
 // NewStreamReceiverFactory returns a factory that creates the receiver implementation selected
@@ -149,7 +148,6 @@ func (f streamSenderFactory) NewStreamSender(
 			serverShardKey,
 			config,
 			f.lanePolicyFactory,
-			f.laneRestarts,
 		)
 	} else {
 		sender = NewStreamSender(

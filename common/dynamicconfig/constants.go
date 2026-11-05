@@ -3273,13 +3273,6 @@ on each lane stream receiver ack, including the Any type URL. Oversized feedback
 watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
 Changes take effect on the next ack without restarting the stream.`,
 	)
-	ReplicationLaneEvaluateErrorGrace = NewGlobalDurationSetting(
-		"history.ReplicationLaneEvaluateErrorGrace",
-		time.Minute,
-		`ReplicationLaneEvaluateErrorGrace is how long a lane stream sender keeps a lane policy's last
-answer while the policy keeps failing, before it retires all lanes. A policy can choose another
-reaction for an error by returning a LaneEvaluateError.`,
-	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,

@@ -350,7 +350,6 @@ type Config struct {
 	ReplicationStreamReceiverLanesEnabled               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderLanesEnabled                 dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderMaxLanes                     dynamicconfig.IntPropertyFn
-	ReplicationLaneEvaluateErrorGrace                   dynamicconfig.DurationPropertyFn
 	ReplicationStreamReceiverMaxLanes                   dynamicconfig.IntPropertyFn
 	ReplicationStreamReceiverLaneFeedbackMaxBytes       dynamicconfig.IntPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
@@ -709,7 +708,6 @@ func NewConfig(
 		ReplicationStreamReceiverLanesEnabled:               dynamicconfig.ReplicationStreamReceiverLanesEnabled.Get(dc),
 		ReplicationStreamSenderLanesEnabled:                 dynamicconfig.ReplicationStreamSenderLanesEnabled.Get(dc),
 		ReplicationStreamSenderMaxLanes:                     dynamicconfig.ReplicationStreamSenderMaxLanes.Get(dc),
-		ReplicationLaneEvaluateErrorGrace:                   dynamicconfig.ReplicationLaneEvaluateErrorGrace.Get(dc),
 		ReplicationStreamReceiverMaxLanes:                   dynamicconfig.ReplicationStreamReceiverMaxLanes.Get(dc),
 		ReplicationStreamReceiverLaneFeedbackMaxBytes:       dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
