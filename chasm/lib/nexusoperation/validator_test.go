@@ -37,7 +37,7 @@ func newTestValidator(t *testing.T, config *Config) *validator {
 		nil,
 		nil,
 		test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
-		newTestLinkValidator(10, 10),
+		newTestLinkValidator(t, 10, 10),
 	)
 }
 
@@ -595,7 +595,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
-			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
+			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, newTestLinkValidator(t, 10, 10))
 
 			err := v.validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {

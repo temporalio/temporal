@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1186,11 +1187,7 @@ func TestAttachLinks_SameRequestIDIsNoOp(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
@@ -1221,11 +1218,7 @@ func TestAttachLinks_RejectsClosedActivity(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
 	}
@@ -1251,11 +1244,7 @@ func TestAttachLinks_IdempotentAfterClose(t *testing.T) {
 			},
 		},
 	}
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 100 },
-		func(string) int { return 4000 },
-	)
+	validator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
 	}
@@ -1290,11 +1279,7 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 		},
 	}
 	// per-component cap = 1; activity already has 1 link, so any additional must fail.
-	validator := newLinkValidator(
-		func(string) int { return 100 },
-		func(string) int { return 1 },
-		func(string) int { return 4000 },
-	)
+	validator := newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 1 }, defaultLinkMaxSize)
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}

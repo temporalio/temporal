@@ -11,7 +11,6 @@ var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
 		ConfigProvider,
-		linkValidatorProvider,
 		newActivityDispatchTaskHandler,
 		newWorkerCommandDispatchTaskHandler,
 		newScheduleToStartTimeoutTaskHandler,
@@ -29,7 +28,6 @@ var HistoryModule = fx.Module(
 var FrontendModule = fx.Module(
 	"activity-frontend",
 	fx.Provide(ConfigProvider),
-	fx.Provide(linkValidatorProvider),
 	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),

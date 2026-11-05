@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
@@ -65,6 +66,15 @@ var (
 		return 4000
 	}
 )
+
+// newTestLinkValidator returns a links.Validator with the given limits.
+func newTestLinkValidator(t testing.TB, maxPerRequest, maxPerExecution, linkMaxSize func(string) int) commonlinks.Validator {
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerRequest = maxPerRequest
+	cfg.MaxLinksPerExecution = maxPerExecution
+	cfg.LinkMaxSize = linkMaxSize
+	return test.NewLinksValidator(t, cfg)
+}
 
 func TestValidateSuccess(t *testing.T) {
 	t.Run("StandaloneActivitySuccess", func(t *testing.T) {
@@ -467,7 +477,7 @@ func TestValidateAndPopulateStartRequestNexusSerializationContextLength(t *testi
 			t.Parallel()
 			h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, maxLength)
 			h.config.DefaultActivityRetryPolicy = getDefaultRetrySettings
-			h.linkValidator = newLinkValidator(defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize)
+			h.linkValidator = newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize)
 			req := &workflowservice.StartActivityExecutionRequest{
 				Namespace:                           defaultNamespaceID,
 				ActivityId:                          defaultActivityID,
@@ -506,12 +516,8 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 			},
-			linkValidator: newLinkValidator(
-				defaultMaxLinksPerRequest,
-				func(string) int { return 2000 },
-				defaultLinkMaxSize,
-			),
-			logger: logger,
+			linkValidator: newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
+			logger:        logger,
 		}
 		req := &workflowservice.StartActivityExecutionRequest{
 			ActivityId:          defaultActivityID,
@@ -609,12 +615,8 @@ func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *test
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		callbackValidator: callbackValidator,
-		linkValidator: newLinkValidator(
-			func(string) int { return 1 },
-			func(string) int { return 2000 },
-			defaultLinkMaxSize,
-		),
-		logger: log.NewNoopLogger(),
+		linkValidator:     newTestLinkValidator(t, func(string) int { return 1 }, func(string) int { return 2000 }, defaultLinkMaxSize),
+		logger:            log.NewNoopLogger(),
 	}
 	// The per-request limit is 1, so a single link from each source only trips the
 	// validator if both sources are forwarded.
@@ -848,12 +850,8 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 					MaxUserMetadataSummarySize: func(string) int { return testCase.summaryLimit },
 					MaxUserMetadataDetailsSize: func(string) int { return testCase.detailsLimit },
 				},
-				linkValidator: newLinkValidator(
-					defaultMaxLinksPerRequest,
-					func(string) int { return 2000 },
-					defaultLinkMaxSize,
-				),
-				logger: log.NewNoopLogger(),
+				linkValidator: newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize),
+				logger:        log.NewNoopLogger(),
 			}
 			req := &workflowservice.StartActivityExecutionRequest{
 				Namespace:           defaultNamespaceID,
