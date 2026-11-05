@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -33,6 +34,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 		systemRPS         int
 		namespaceShardRPS int
 		expectRateLimit   bool
+		expectedCause     enumspb.ResourceExhaustedCause
 		expectedScope     enumspb.ResourceExhaustedScope
 		expectedMessage   string
 	}{
@@ -53,6 +55,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			namespaceShardRPS: 100,
 			systemRPS:         100,
 			expectRateLimit:   true,
+			expectedCause:     enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			expectedMessage:   "Namespace Persistence Max QPS Reached.",
 		},
@@ -73,6 +76,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			namespaceShardRPS: 100,
 			systemRPS:         10,
 			expectRateLimit:   true,
+			expectedCause:     enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 			expectedMessage:   "System Persistence Max QPS Reached.",
 		},
@@ -93,6 +97,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			namespaceShardRPS: 10,
 			systemRPS:         100,
 			expectRateLimit:   true,
+			expectedCause:     enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT,
 			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			expectedMessage:   "Namespace Per-Shard Persistence Max QPS Reached.",
 		},
@@ -241,9 +246,9 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					if tc.expectRateLimit {
 						var resourceExhausted *serviceerror.ResourceExhausted
 						errors.As(err, &resourceExhausted)
-						assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, resourceExhausted.Cause)
-						assert.Equal(t, tc.expectedScope, resourceExhausted.Scope)
-						assert.Equal(t, tc.expectedMessage, resourceExhausted.Message)
+						require.Equal(t, tc.expectedCause, resourceExhausted.Cause)
+						require.Equal(t, tc.expectedScope, resourceExhausted.Scope)
+						require.Equal(t, tc.expectedMessage, resourceExhausted.Message)
 					} else {
 						assert.NoError(t, err)
 					}

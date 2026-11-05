@@ -32,7 +32,7 @@ var (
 		Message: "Namespace Persistence Max QPS Reached.",
 	}
 	ErrPersistenceNamespaceShardLimitExceeded = &serviceerror.ResourceExhausted{
-		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT,
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 		Message: "Namespace Per-Shard Persistence Max QPS Reached.",
 	}
