@@ -65,13 +65,12 @@ type laneStreamSender struct {
 	lanePolicyMu     sync.Mutex
 	lanePolicy       LaneStreamPolicy
 	lanePolicyClosed bool
-	laneRestarts     *laneRestartTracker
-	// The policy's last answer, and when it started failing. Only the recv loop uses them.
-	lastGoodLanes          []DesiredLane
-	hasLastGoodLanes       bool
-	lanePolicyFailingSince time.Time
-	// lanePolicyDisabled stops asking the policy until the stream restarts.
-	lanePolicyDisabled bool
+	// lanePolicyStopped is set when the stream stops. The policy is closed then, or when the
+	// call that is running returns, so that stopping never waits for the policy.
+	lanePolicyStopped atomic.Bool
+	// lanePolicyDisabled is set when the policy or one of its limiters panics. The stream
+	// then calls nothing more on the policy except Close.
+	lanePolicyDisabled atomic.Bool
 	// laneRegistry is nil when the stream does not use lanes.
 	laneRegistry *senderLaneRegistry
 	// hasPersistedLanes is whether the reader state had lanes when the stream started.
@@ -108,7 +107,6 @@ func newLaneStreamSender(
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
 	lanePolicyFactory LaneStreamPolicyFactory,
-	laneRestarts *laneRestartTracker,
 ) *laneStreamSender {
 	logger := log.With(
 		shardContext.GetLogger(),
@@ -143,7 +141,6 @@ func newLaneStreamSender(
 		ssRateLimiter:           ssRateLimiter,
 		lanesEnabledSetting:     lanesEnabledSetting,
 		lanePolicyFactory:       lanePolicyFactory,
-		laneRestarts:            laneRestarts,
 		initialLaneState:        make(chan struct{}),
 		laneLimiters:            make(map[string]LaneLimiter),
 		lanePacedAt:             make(map[string]time.Time),
@@ -169,9 +166,6 @@ func (s *laneStreamSender) Start() {
 		}
 	}
 
-	if s.laneRegistry != nil {
-		s.startLanePolicy()
-	}
 	if s.isTieredStackEnabled {
 		// High Priority sender is used for live traffic
 		// Low Priority sender is used for force replication closed workflow
@@ -248,6 +242,14 @@ func (s *laneStreamSender) recvEventLoop() (retErr error) {
 		if err != nil {
 			return NewStreamError("StreamSender failed to receive", err)
 		}
+		// Signal liveness on arrival rather than after processing, so that the liveness
+		// monitor also stops a stream whose first ack never finishes processing, for example
+		// because a lane policy call hangs.
+		select {
+		case s.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
+		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
@@ -263,11 +265,6 @@ func (s *laneStreamSender) recvEventLoop() (retErr error) {
 			return fmt.Errorf("streamSender unable to handle request: %w, taskAttr: %v", err, attr)
 		}
 
-		select {
-		case s.recvSignalChan <- struct{}{}:
-		default:
-			// signal channel is full. Continue
-		}
 	}
 	return nil
 }

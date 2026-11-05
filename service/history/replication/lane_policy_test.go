@@ -1,7 +1,6 @@
 package replication
 
 import (
-	"errors"
 	"math"
 	"testing"
 	"time"
@@ -76,10 +75,8 @@ func TestManualLaneStreamPolicy(t *testing.T) {
 			lanes, err := policy.Evaluate(LaneSignals{})
 			require.Equal(t, tc.expected, lanes)
 			if tc.expectInvalid {
-				// Waiting does not fix the config, so the policy asks to retire the lanes at once.
-				evaluateErr, ok := errors.AsType[*LaneEvaluateError](err)
-				require.True(t, ok)
-				require.Equal(t, LaneErrorRetireAll, evaluateErr.Action)
+				// The stream treats the error as an answer with no lanes.
+				require.ErrorContains(t, err, "invalid ReplicationLaneIsolation")
 			} else {
 				require.NoError(t, err)
 			}

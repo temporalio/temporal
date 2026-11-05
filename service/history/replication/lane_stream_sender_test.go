@@ -106,7 +106,6 @@ func (s *laneStreamSenderSuite) SetupTest() {
 		s.serverShardKey,
 		s.config,
 		nil,
-		newLaneRestartTracker(),
 	)
 	s.senderFlowController = NewMockSenderFlowController(s.controller)
 	s.streamSender.flowController = s.senderFlowController
@@ -1384,6 +1383,18 @@ func (s *laneStreamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamErr
 	s.Error(err)
 	s.Error(err, "rpc error")
 	s.ErrorAs(err, new(*StreamError))
+}
+
+func (s *laneStreamSenderSuite) TestRecvEventLoop_SignalsLivenessBeforeProcessing() {
+	// An ack signals liveness as it arrives, so the liveness monitor also covers an ack whose
+	// processing never finishes. Here processing fails, after the signal.
+	s.server.EXPECT().Recv().Return(&historyservice.StreamWorkflowReplicationMessagesRequest{}, nil)
+	s.Error(s.streamSender.recvEventLoop())
+	select {
+	case <-s.streamSender.recvSignalChan:
+	default:
+		s.Fail("the ack did not signal liveness")
+	}
 }
 
 func (s *laneStreamSenderSuite) TestLivenessMonitor() {

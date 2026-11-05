@@ -259,6 +259,8 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_WithoutLaneSupp
 	registry, err := newSenderLaneRegistry(950, []*persistencespb.QueueReaderLane{persistedLane})
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	// Without lane support, the stream never creates a policy.
+	s.streamSender.lanePolicyFactory = NewMockLaneStreamPolicyFactory(s.controller)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any())
 	readerID := shard.ReplicationReaderIDFromClusterShardID(int64(s.clientShardKey.ClusterID), s.clientShardKey.ShardID)
 	attr := syncReplicationState(700, 700, 900)
@@ -286,8 +288,11 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	registry, err := newSenderLaneRegistry(0, nil)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	// The stream creates its policy on the first ack, once.
+	factory := NewMockLaneStreamPolicyFactory(s.controller)
+	s.streamSender.lanePolicyFactory = factory
 	policy := NewMockLaneStreamPolicy(s.controller)
-	s.streamSender.lanePolicy = policy
+	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID}).Return(policy, nil)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(200)).AnyTimes()
 	readerID := shard.ReplicationReaderIDFromClusterShardID(int64(s.clientShardKey.ClusterID), s.clientShardKey.ShardID)
@@ -581,108 +586,138 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_FirstAckDropsRestoredLanesOve
 	s.True(s.streamSender.laneRestoreIncomplete)
 }
 
-func (s *laneStreamSenderSuite) TestEvaluateLanes_KeepsLastAnswerForGrace() {
+func (s *laneStreamSenderSuite) TestEvaluateLanes_ErrorThenRecovery() {
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy
-	s.streamSender.config.ReplicationLaneEvaluateErrorGrace = dynamicconfig.GetDurationPropertyFn(time.Minute)
-	start := time.Unix(1_000_000, 0)
 	good := []DesiredLane{{Key: namespaceLaneKey("ns-a"), Filter: namespaceLaneFilter("ns-a")}}
-	failure := errors.New("unavailable")
-
-	// Before any good answer, an error retires all lanes.
-	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, failure)
-	desired, err := s.streamSender.evaluateLanes(LaneSignals{Now: start})
-	s.NoError(err)
-	s.Nil(desired)
 
 	policy.EXPECT().Evaluate(gomock.Any()).Return(good, nil)
-	desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: start})
-	s.NoError(err)
-	s.Equal(good, desired)
-
-	// The grace starts at the first failure, and ends with the last answer retired.
-	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, failure).Times(2)
-	desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: start.Add(time.Hour)})
-	s.NoError(err)
-	s.Equal(good, desired)
-	desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: start.Add(time.Hour + time.Minute)})
-	s.NoError(err)
-	s.Nil(desired)
-
-	// A good answer ends the failure, and a policy can ask for a longer grace.
+	s.Equal(good, s.streamSender.evaluateLanes(LaneSignals{}))
+	// An error is an answer with no lanes, and the stream asks again on the next ack.
+	policy.EXPECT().Evaluate(gomock.Any()).Return(good, errors.New("unavailable"))
+	s.Nil(s.streamSender.evaluateLanes(LaneSignals{}))
 	policy.EXPECT().Evaluate(gomock.Any()).Return(good, nil)
-	_, err = s.streamSender.evaluateLanes(LaneSignals{Now: start.Add(2 * time.Hour)})
-	s.NoError(err)
-	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, &LaneEvaluateError{Err: failure, Grace: time.Hour}).Times(2)
-	desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: start.Add(2 * time.Hour)})
-	s.NoError(err)
-	s.Equal(good, desired)
-	desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: start.Add(2*time.Hour + 30*time.Minute)})
-	s.NoError(err)
-	s.Equal(good, desired)
+	s.Equal(good, s.streamSender.evaluateLanes(LaneSignals{}))
+	s.False(s.streamSender.lanePolicyDisabled.Load())
 }
 
-func (s *laneStreamSenderSuite) TestEvaluateLanes_Actions() {
-	good := []DesiredLane{{Key: namespaceLaneKey("ns-a"), Filter: namespaceLaneFilter("ns-a")}}
-	now := time.Unix(1_000_000, 0)
+func (s *laneStreamSenderSuite) TestLanePolicyPanic() {
+	logicalKey := namespaceLaneKey("ns-a")
 	for _, tc := range []struct {
-		name          string
-		action        LaneErrorAction
-		expectRestart bool
-		expectAsked   bool // whether the policy is asked again on the next ack
+		name   string
+		expect func(policy *MockLaneStreamPolicy, limiter *fakeLaneLimiter)
+		call   func()
 	}{
-		{name: "RetireAll", action: LaneErrorRetireAll, expectAsked: true},
-		{name: "NoLanes", action: LaneErrorNoLanes},
-		{name: "RestartStream", action: LaneErrorRestartStream, expectRestart: true, expectAsked: true},
+		{
+			name: "Evaluate",
+			expect: func(policy *MockLaneStreamPolicy, _ *fakeLaneLimiter) {
+				policy.EXPECT().Evaluate(gomock.Any()).Do(func(LaneSignals) { panic("evaluate") })
+			},
+			call: func() { s.Nil(s.streamSender.evaluateLanes(LaneSignals{})) },
+		},
+		{
+			name: "Limiter",
+			expect: func(policy *MockLaneStreamPolicy, _ *fakeLaneLimiter) {
+				policy.EXPECT().Limiter(namespaceLaneKey("ns-b")).Do(func(string) { panic("limiter") })
+			},
+			call: func() { s.streamSender.setRequestedLanes(map[string]struct{}{namespaceLaneKey("ns-b"): {}}) },
+		},
+		{
+			name: "LaneRetired",
+			expect: func(policy *MockLaneStreamPolicy, _ *fakeLaneLimiter) {
+				policy.EXPECT().LaneRetired(logicalKey).Do(func(string) { panic("lane retired") })
+			},
+			call: func() { s.streamSender.laneRetired(logicalKey) },
+		},
+		{
+			name: "Reserve",
+			expect: func(_ *MockLaneStreamPolicy, limiter *fakeLaneLimiter) {
+				limiter.onReserve = func() { panic("reserve") }
+			},
+			// The lane sends without its limiter.
+			call: func() { s.NoError(s.streamSender.paceLane(context.Background(), logicalKey)) },
+		},
 	} {
 		s.Run(tc.name, func() {
 			policy := NewMockLaneStreamPolicy(s.controller)
 			s.streamSender.lanePolicy = policy
-			s.streamSender.lanePolicyDisabled = false
-			s.streamSender.laneRestarts = newLaneRestartTracker()
-			policy.EXPECT().Evaluate(gomock.Any()).Return(good, nil)
-			_, err := s.streamSender.evaluateLanes(LaneSignals{Now: now})
-			s.NoError(err)
+			s.streamSender.lanePolicyClosed = false
+			s.streamSender.lanePolicyStopped.Store(false)
+			s.streamSender.lanePolicyDisabled.Store(false)
+			limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
+			s.requestLane(logicalKey, limiter)
+			tc.expect(policy, limiter)
 
-			policy.EXPECT().Evaluate(gomock.Any()).Return(nil, &LaneEvaluateError{Err: errors.New("failed"), Action: tc.action})
-			desired, err := s.streamSender.evaluateLanes(LaneSignals{Now: now})
-			s.Nil(desired)
-			if tc.expectRestart {
-				s.ErrorAs(err, new(*StreamError))
-			} else {
-				s.NoError(err)
-			}
+			tc.call()
 
-			if tc.expectAsked {
-				policy.EXPECT().Evaluate(gomock.Any()).Return(good, nil)
-			}
-			desired, err = s.streamSender.evaluateLanes(LaneSignals{Now: now})
-			s.NoError(err)
-			if tc.expectAsked {
-				s.Equal(good, desired)
-			} else {
-				s.Nil(desired)
-			}
+			// The stream calls nothing more on the policy or its limiters except Close.
+			s.True(s.streamSender.lanePolicyDisabled.Load())
+			s.Nil(s.streamSender.evaluateLanes(LaneSignals{}))
+			s.Nil(s.streamSender.laneLimiter(logicalKey))
+			s.streamSender.setRequestedLanes(map[string]struct{}{namespaceLaneKey("ns-c"): {}})
+			s.streamSender.laneRetired(logicalKey)
+			policy.EXPECT().Close()
+			s.streamSender.closeLanePolicy()
 		})
 	}
 }
 
-func (s *laneStreamSenderSuite) TestEvaluateLanes_RestartLimit() {
+func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryPanic() {
+	factory := NewMockLaneStreamPolicyFactory(s.controller)
+	s.streamSender.lanePolicyFactory = factory
+	factory.EXPECT().NewStreamPolicy(gomock.Any()).Do(func(LaneStream) { panic("factory") })
+
+	s.streamSender.startLanePolicy()
+	s.Nil(s.streamSender.lanePolicy)
+	s.Nil(s.streamSender.evaluateLanes(LaneSignals{}))
+}
+
+func (s *laneStreamSenderSuite) TestCloseLanePolicy_PanicIsRecovered() {
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy
-	now := time.Unix(1_000_000, 0)
-	restart := &LaneEvaluateError{Err: errors.New("failed"), Action: LaneErrorRestartStream}
-	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, restart).Times(laneRestartLimit + 1)
+	policy.EXPECT().Close().Do(func() { panic("close") })
 
-	for range laneRestartLimit {
-		_, err := s.streamSender.evaluateLanes(LaneSignals{Now: now})
-		s.ErrorAs(err, new(*StreamError))
+	s.streamSender.closeLanePolicy()
+	s.True(s.streamSender.lanePolicyClosed)
+}
+
+func (s *laneStreamSenderSuite) TestCloseLanePolicy_DoesNotWaitForRunningCall() {
+	policy := NewMockLaneStreamPolicy(s.controller)
+	s.streamSender.lanePolicy = policy
+	evaluating := make(chan struct{})
+	release := make(chan struct{})
+	closed := make(chan struct{})
+	policy.EXPECT().Evaluate(gomock.Any()).DoAndReturn(func(LaneSignals) ([]DesiredLane, error) {
+		close(evaluating)
+		<-release
+		return nil, nil
+	})
+	evaluated := make(chan struct{})
+	go func() {
+		defer close(evaluated)
+		s.streamSender.evaluateLanes(LaneSignals{})
+	}()
+	<-evaluating
+
+	// Stopping returns while Evaluate is still running, without closing the policy.
+	s.streamSender.closeLanePolicy()
+	select {
+	case <-closed:
+		s.Fail("the policy was closed while Evaluate was running")
+	default:
 	}
-	// One restart too many retires the lanes instead, and stops asking the policy.
-	desired, err := s.streamSender.evaluateLanes(LaneSignals{Now: now})
-	s.NoError(err)
-	s.Nil(desired)
-	s.True(s.streamSender.lanePolicyDisabled)
+
+	// The running call closes the policy when it returns.
+	policy.EXPECT().Close().Do(func() { close(closed) })
+	close(release)
+	<-evaluated
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		s.Fail("the policy was not closed after Evaluate returned")
+	}
+	// The stream calls nothing on the policy after Close.
+	s.Nil(s.streamSender.evaluateLanes(LaneSignals{}))
 }
 
 func TestLaneRetryDelay(t *testing.T) {
@@ -690,20 +725,6 @@ func TestLaneRetryDelay(t *testing.T) {
 	require.Equal(t, laneMinRetryAfter, laneRetryDelay(-time.Second))
 	require.Equal(t, 200*time.Millisecond, laneRetryDelay(200*time.Millisecond))
 	require.Equal(t, laneMaxRetryAfter, laneRetryDelay(time.Hour))
-}
-
-func TestLaneRestartTracker(t *testing.T) {
-	tracker := newLaneRestartTracker()
-	stream := LaneStream{RemoteCluster: "remote", ShardID: 1}
-	start := time.Unix(1_000_000, 0)
-	for i := range laneRestartLimit {
-		require.True(t, tracker.Allow(stream, start.Add(time.Duration(i)*time.Minute)))
-	}
-	require.False(t, tracker.Allow(stream, start.Add(5*time.Minute)))
-	// Other streams have their own count.
-	require.True(t, tracker.Allow(LaneStream{RemoteCluster: "remote", ShardID: 2}, start))
-	// Restarts older than the window no longer count.
-	require.True(t, tracker.Allow(stream, start.Add(laneRestartWindow)))
 }
 
 func (s *laneStreamSenderSuite) TestLanePolicyLifecycle() {

@@ -1,14 +1,12 @@
 package replication
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -31,6 +29,10 @@ const (
 	// laneMaxRetryAfter makes a refused lane re-check within a second whether it is still
 	// paced, so that a handover or retirement takes effect promptly.
 	laneMaxRetryAfter = time.Second
+
+	// Reasons on replication_lane_policy_failures.
+	lanePolicyFailureError metrics.ReasonString = "error"
+	lanePolicyFailurePanic metrics.ReasonString = "panic"
 )
 
 // laneSendTarget directs sendTasks to send on a lane, or to filter the default lane.
@@ -65,38 +67,91 @@ func (t *laneSendTarget) skippingOwner(task tasks.Task) string {
 	return t.laneOwner(task)
 }
 
-// startLanePolicy creates the stream's lane policy. Without one, the stream retires its lanes.
+// startLanePolicy creates the stream's lane policy. The stream does so on its first ack rather
+// than when it starts, so that the liveness monitor also covers a factory that hangs. Without
+// a policy, the stream retires its lanes.
 func (s *laneStreamSender) startLanePolicy() {
-	policy, err := s.lanePolicyFactory.NewStreamPolicy(LaneStream{
-		RemoteCluster: s.clientClusterName,
-		ShardID:       s.serverShardKey.ShardID,
-	})
+	if s.lanePolicyFactory == nil {
+		return
+	}
+	var policy LaneStreamPolicy
+	var err error
+	if !s.callLanePolicy("NewStreamPolicy", func() {
+		policy, err = s.lanePolicyFactory.NewStreamPolicy(LaneStream{
+			RemoteCluster: s.clientClusterName,
+			ShardID:       s.serverShardKey.ShardID,
+		})
+	}) {
+		return
+	}
 	if err != nil {
+		s.recordLanePolicyFailure(lanePolicyFailureError)
 		s.logger.Error("Unable to create the replication lane policy. The stream runs without lanes.", tag.Error(err))
 		return
 	}
 	s.lanePolicyMu.Lock()
-	defer s.lanePolicyMu.Unlock()
 	s.lanePolicy = policy
+	s.lanePolicyMu.Unlock()
+	s.closeLanePolicyIfStopped()
 }
 
+// closeLanePolicy closes the stream's lane policy when the stream stops. It never waits for
+// the policy: if a call is running, the policy is closed when that call returns.
 func (s *laneStreamSender) closeLanePolicy() {
-	s.lanePolicyMu.Lock()
+	s.lanePolicyStopped.Store(true)
+	s.closeLanePolicyIfStopped()
+}
+
+// closeLanePolicyIfStopped closes the lane policy if the stream has stopped and no policy call
+// is running. Whichever of Stop and a running call comes last closes the policy.
+func (s *laneStreamSender) closeLanePolicyIfStopped() {
+	if !s.lanePolicyStopped.Load() || !s.lanePolicyMu.TryLock() {
+		return
+	}
 	defer s.lanePolicyMu.Unlock()
 	if s.lanePolicy != nil && !s.lanePolicyClosed {
-		s.lanePolicy.Close()
 		s.lanePolicyClosed = true
+		s.callLanePolicy("Close", s.lanePolicy.Close)
 	}
 }
 
-// withLanePolicy calls f with the stream's lane policy, unless the stream has none or has
-// closed it.
-func (s *laneStreamSender) withLanePolicy(f func(LaneStreamPolicy)) {
+// withLanePolicy calls f with the stream's lane policy, unless the stream has none, has
+// stopped, or has disabled the policy after a panic.
+func (s *laneStreamSender) withLanePolicy(method string, f func(LaneStreamPolicy)) {
 	s.lanePolicyMu.Lock()
-	defer s.lanePolicyMu.Unlock()
-	if s.lanePolicy != nil && !s.lanePolicyClosed {
-		f(s.lanePolicy)
+	if s.lanePolicy != nil && !s.lanePolicyClosed && !s.lanePolicyStopped.Load() && !s.lanePolicyDisabled.Load() {
+		policy := s.lanePolicy
+		s.callLanePolicy(method, func() { f(policy) })
 	}
+	s.lanePolicyMu.Unlock()
+	s.closeLanePolicyIfStopped()
+}
+
+// callLanePolicy calls f, which calls the lane policy or one of its limiters, and reports
+// whether it returned without panicking. After a panic, the stream calls nothing more on the
+// policy except Close, so its lanes catch up without their limits and retire.
+func (s *laneStreamSender) callLanePolicy(method string, f func()) bool {
+	var panicErr error
+	func() {
+		defer log.CapturePanic(s.logger, &panicErr)
+		f()
+	}()
+	if panicErr == nil {
+		return true
+	}
+	s.lanePolicyDisabled.Store(true)
+	s.recordLanePolicyFailure(lanePolicyFailurePanic)
+	s.logger.Error("Replication lane policy panicked. The stream runs without lanes until it restarts.",
+		tag.NewStringTag("method", method), tag.Error(panicErr))
+	return false
+}
+
+func (s *laneStreamSender) recordLanePolicyFailure(reason metrics.ReasonString) {
+	metrics.ReplicationLanePolicyFailures.With(s.metrics).Record(
+		1,
+		metrics.ToClusterTag(s.clientClusterName),
+		metrics.ReasonTag(reason),
+	)
 }
 
 // initLaneRegistry creates the lane registry, restoring the lanes persisted for this
@@ -189,6 +244,9 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 	}
 	s.flowController.RefreshReceiverFlowControlInfo(attr)
 	if supported {
+		if first {
+			s.startLanePolicy()
+		}
 		s.laneRegistry.ObserveAcks(attr.GetLaneStates())
 		if err := s.reconcileLanes(attr, first); err != nil {
 			return err
@@ -219,10 +277,7 @@ func (s *laneStreamSender) recvLaneSyncReplicationState(attr *replicationspb.Syn
 // stream's first ack, it also drops the restored lanes beyond the receiver's lane limit.
 func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationState, first bool) error {
 	signals := s.laneSignals(attr)
-	desired, err := s.evaluateLanes(signals)
-	if err != nil {
-		return err
-	}
+	desired := s.evaluateLanes(signals)
 	if first {
 		s.dropRestoredLanesOverLimit(desired, signals.ReceiverMaxLanes)
 	}
@@ -248,77 +303,21 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 	return nil
 }
 
-// evaluateLanes returns the policy's answer for signals. When the policy fails, it reacts as
-// the error asks, by default keeping the last answer for ReplicationLaneEvaluateErrorGrace. It
-// returns an error only to restart the stream.
-func (s *laneStreamSender) evaluateLanes(signals LaneSignals) ([]DesiredLane, error) {
-	if s.lanePolicyDisabled {
-		return nil, nil
-	}
+// evaluateLanes returns the policy's answer for signals. When the stream has no answer,
+// because it has no policy or the policy failed, it returns no lanes: every lane catches up
+// without its limit and retires, and the stream asks again on the next ack.
+func (s *laneStreamSender) evaluateLanes(signals LaneSignals) []DesiredLane {
 	var desired []DesiredLane
 	var err error
-	s.withLanePolicy(func(policy LaneStreamPolicy) {
+	s.withLanePolicy("Evaluate", func(policy LaneStreamPolicy) {
 		desired, err = policy.Evaluate(signals)
 	})
-	if err == nil {
-		s.lastGoodLanes, s.hasLastGoodLanes, s.lanePolicyFailingSince = desired, true, time.Time{}
-		return desired, nil
+	if err != nil {
+		s.recordLanePolicyFailure(lanePolicyFailureError)
+		s.shardContext.GetThrottledLogger().Warn("Replication lane policy failed. Retiring its lanes until it answers.", tag.Error(err))
+		return nil
 	}
-	if s.lanePolicyFailingSince.IsZero() {
-		s.lanePolicyFailingSince = signals.Now
-	}
-	action, grace := LaneErrorKeepLastGood, s.config.ReplicationLaneEvaluateErrorGrace()
-	if evaluateErr, ok := errors.AsType[*LaneEvaluateError](err); ok {
-		action, grace = evaluateErr.Action, cmp.Or(max(evaluateErr.Grace, 0), grace)
-	}
-	logger := s.shardContext.GetThrottledLogger()
-	switch action {
-	case LaneErrorKeepLastGood:
-		if s.hasLastGoodLanes && signals.Now.Sub(s.lanePolicyFailingSince) < grace {
-			logger.Warn("Replication lane policy failed. Keeping its last answer.", tag.Error(err))
-			return s.lastGoodLanes, nil
-		}
-	case LaneErrorNoLanes:
-		logger.Error("Replication lane policy failed. Retiring all lanes until the stream restarts.", tag.Error(err))
-		s.lanePolicyDisabled = true
-		return nil, nil
-	case LaneErrorRestartStream:
-		stream := LaneStream{RemoteCluster: s.clientClusterName, ShardID: s.serverShardKey.ShardID}
-		if s.laneRestarts.Allow(stream, signals.Now) {
-			return nil, NewStreamError("Replication lane policy asked to restart the stream", err)
-		}
-		logger.Error("Replication lane policy restarted the stream too often. Retiring all lanes until the stream restarts.", tag.Error(err))
-		s.lanePolicyDisabled = true
-		return nil, nil
-	default:
-	}
-	logger.Error("Replication lane policy failed. Retiring all lanes.", tag.Error(err))
-	return nil, nil
-}
-
-// laneRestartTracker counts, for each stream, the restarts its lane policy asked for. It lives
-// as long as the history host, so the count survives the restarts.
-type laneRestartTracker struct {
-	mu       sync.Mutex
-	restarts map[LaneStream][]time.Time
-}
-
-func newLaneRestartTracker() *laneRestartTracker {
-	return &laneRestartTracker{restarts: make(map[LaneStream][]time.Time)}
-}
-
-// Allow records a restart of stream at now, unless the stream has restarted laneRestartLimit
-// times in the last laneRestartWindow.
-func (t *laneRestartTracker) Allow(stream LaneStream, now time.Time) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	recent := slices.DeleteFunc(t.restarts[stream], func(at time.Time) bool { return now.Sub(at) >= laneRestartWindow })
-	if len(recent) >= laneRestartLimit {
-		t.restarts[stream] = recent
-		return false
-	}
-	t.restarts[stream] = append(recent, now)
-	return true
+	return desired
 }
 
 // laneSignals returns the policy's inputs for a receiver ack.
@@ -487,7 +486,7 @@ func (s *laneStreamSender) setRequestedLanes(requested map[string]struct{}) {
 	s.laneStateMu.Unlock()
 	for _, key := range missing {
 		var limiter LaneLimiter
-		s.withLanePolicy(func(policy LaneStreamPolicy) {
+		s.withLanePolicy("Limiter", func(policy LaneStreamPolicy) {
 			limiter = policy.Limiter(key)
 		})
 		if limiter == nil {
@@ -508,7 +507,11 @@ func (s *laneStreamSender) lanePaced(logicalKey string) bool {
 	return requested
 }
 
+// laneLimiter returns a lane's limiter, or nil once the policy is disabled after a panic.
 func (s *laneStreamSender) laneLimiter(logicalKey string) LaneLimiter {
+	if s.lanePolicyDisabled.Load() {
+		return nil
+	}
 	s.laneStateMu.Lock()
 	defer s.laneStateMu.Unlock()
 	return s.laneLimiters[logicalKey]
@@ -526,7 +529,7 @@ func (s *laneStreamSender) laneRetired(logicalKey string) {
 	delete(s.laneLimiters, logicalKey)
 	delete(s.lanePacedAt, logicalKey)
 	s.laneStateMu.Unlock()
-	s.withLanePolicy(func(policy LaneStreamPolicy) {
+	s.withLanePolicy("LaneRetired", func(policy LaneStreamPolicy) {
 		policy.LaneRetired(logicalKey)
 	})
 }
@@ -720,7 +723,11 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 			return nil
 		}
 		now := s.shardContext.GetTimeSource().Now()
-		ok, retryAfter := limiter.Reserve(now)
+		var ok bool
+		var retryAfter time.Duration
+		if !s.callLanePolicy("Reserve", func() { ok, retryAfter = limiter.Reserve(now) }) {
+			return nil
+		}
 		if ok {
 			return nil
 		}

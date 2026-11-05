@@ -29,36 +29,14 @@ const (
 	// lanePacedWindow is how recently a lane's limiter must have refused a send for the lane
 	// to count as paced.
 	lanePacedWindow = 3 * time.Second
-	// A stream restarts at most laneRestartLimit times in laneRestartWindow because its policy
-	// asks to. After that, it retires its lanes instead, so a policy error never stops
-	// replication.
-	laneRestartLimit  = 3
-	laneRestartWindow = 10 * time.Minute
-)
-
-// LaneErrorAction is how a lane stream sender reacts to an error from LaneStreamPolicy.Evaluate.
-type LaneErrorAction int
-
-const (
-	// LaneErrorKeepLastGood keeps the policy's last answer for a grace period, then retires all
-	// lanes. It is the reaction to an error that is not a LaneEvaluateError. When the policy has
-	// not answered on this stream yet, it retires all lanes at once.
-	LaneErrorKeepLastGood LaneErrorAction = iota
-	// LaneErrorRetireAll retires all lanes, and keeps asking the policy on later acks.
-	LaneErrorRetireAll
-	// LaneErrorNoLanes retires all lanes, and stops asking the policy until the stream restarts.
-	LaneErrorNoLanes
-	// LaneErrorRestartStream restarts the stream. A stream that has restarted too often for its
-	// policy reacts as to LaneErrorNoLanes instead.
-	LaneErrorRestartStream
 )
 
 type (
 	// LaneStreamPolicyFactory creates the lane policy of each replication stream that the lane
 	// stream sender runs.
 	LaneStreamPolicyFactory interface {
-		// NewStreamPolicy is called when a stream starts. If it fails, the stream runs without
-		// lanes.
+		// NewStreamPolicy is called on a stream's first ack from a receiver that supports
+		// lanes. If it fails or panics, the stream runs without lanes until it restarts.
 		NewStreamPolicy(stream LaneStream) (LaneStreamPolicy, error)
 	}
 
@@ -71,20 +49,25 @@ type (
 
 	// LaneStreamPolicy decides the lanes of one stream. The stream never calls it from two
 	// goroutines at once, and it must answer from memory, without blocking or I/O. Whatever it
-	// answers, the stream enforces lane limits and valid, disjoint filters.
+	// answers, the stream enforces lane limits and valid, disjoint filters. If a method or one
+	// of the policy's limiters panics, the stream calls nothing more on the policy except Close,
+	// and runs without lanes until it restarts.
 	LaneStreamPolicy interface {
 		// Evaluate returns the lanes the stream should have, in priority order: when there
 		// are more than the stream allows, the first ones win. The stream calls it on each
 		// receiver ack. A lane whose key is missing from the answer catches up without a rate
 		// limit and then retires. A lane's filter is fixed when the lane is created: to change
-		// it, retire the key and use a new one.
+		// it, retire the key and use a new one. An error counts as an answer with no lanes;
+		// the stream asks again on the next ack. To keep its lanes through a short failure, a
+		// policy returns its last answer instead.
 		Evaluate(signals LaneSignals) ([]DesiredLane, error)
 		// Limiter returns the limiter that paces a lane. The stream calls it once per lane,
 		// when the lane is first desired.
 		Limiter(lane string) LaneLimiter
 		// LaneRetired reports that a lane has drained and retired.
 		LaneRetired(lane string)
-		// Close reports that the stream has ended. The stream calls no method after Close.
+		// Close reports that the stream has ended. The stream calls no method after Close. If
+		// a call is running when the stream ends, the stream calls Close when it returns.
 		Close()
 	}
 
@@ -150,15 +133,6 @@ type (
 		Reserve(now time.Time) (ok bool, retryAfter time.Duration)
 	}
 
-	// LaneEvaluateError lets a LaneStreamPolicy choose how the stream reacts to its error.
-	LaneEvaluateError struct {
-		Err    error
-		Action LaneErrorAction
-		// Grace replaces ReplicationLaneEvaluateErrorGrace for LaneErrorKeepLastGood when it is
-		// positive.
-		Grace time.Duration
-	}
-
 	manualLaneStreamPolicyFactory struct {
 		entries dynamicconfig.TypedPropertyFn[[]dynamicconfig.ReplicationLaneIsolationEntry]
 	}
@@ -209,8 +183,7 @@ func (p *manualLaneStreamPolicy) Evaluate(LaneSignals) ([]DesiredLane, error) {
 	entries := p.entries()
 	if err := validateLaneIsolationEntries(entries); err != nil {
 		p.setRates(nil)
-		// Waiting does not fix the config, so retire the lanes at once.
-		return nil, &LaneEvaluateError{Err: err, Action: LaneErrorRetireAll}
+		return nil, fmt.Errorf("invalid ReplicationLaneIsolation: %w", err)
 	}
 	var lanes []DesiredLane
 	rates := make(map[string]float64)
@@ -273,16 +246,8 @@ func validateLaneIsolationEntries(entries []dynamicconfig.ReplicationLaneIsolati
 	return nil
 }
 
-func (e *LaneEvaluateError) Error() string {
-	return e.Err.Error()
-}
-
-func (e *LaneEvaluateError) Unwrap() error {
-	return e.Err
-}
-
-func newRateLaneLimiter(rate func() float64) *rateLaneLimiter {
-	return &rateLaneLimiter{rate: rate}
+func newRateLaneLimiter(tasksPerSecond func() float64) *rateLaneLimiter {
+	return &rateLaneLimiter{rate: tasksPerSecond}
 }
 
 func (l *rateLaneLimiter) Reserve(now time.Time) (bool, time.Duration) {

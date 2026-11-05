@@ -1189,6 +1189,7 @@ var (
 	ReplicationStreamError                  = NewCounterDef("replication_stream_error")
 	ReplicationServiceError                 = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                  = NewCounterDef("replication_stream_stuck")
+	ReplicationLanePolicyFailures           = NewCounterDef("replication_lane_policy_failures")
 	ReplicationStreamImplementationSelected = NewCounterDef(
 		"replication_stream_implementation_selected",
 		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
