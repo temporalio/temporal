@@ -741,9 +741,11 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	}
 	defer func() {
 		if errors.Is(retError, consts.ErrTaskRetry) {
-			release(nil)
+			if releaseErr := release(ctx, nil); releaseErr != nil {
+				retError = releaseErr
+			}
 		} else {
-			release(retError)
+			retError = release(ctx, retError)
 		}
 	}()
 
@@ -759,10 +761,11 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	if err != nil {
 		return err
 	}
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// Release is idempotent, so safe to call even if action already released
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 	return postActionFn(ctx, timerTask, historyResendInfo, t.logger)
 }
 

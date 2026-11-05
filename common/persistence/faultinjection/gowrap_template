@@ -20,7 +20,7 @@ func new{{upFirst $decorator}} (
 }
 
 {{range $method := .Interface.Methods}}
-    {{if (and $method.AcceptsContext (gt (len $method.Params) 1)) }}
+    {{if (and $method.AcceptsContext (gt (len $method.Params) 1) (ne $method.Name "SubmitWorkflowExecutionUpdate")) }}
         {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
         func (d {{$decorator}}) {{$method.Declaration}} {

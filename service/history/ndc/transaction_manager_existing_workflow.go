@@ -112,7 +112,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		// run; if it is truly the live head of the lineage, it is reconciled by its own replication.
 		if mutableState.IsWorkflowExecutionRunning() {
 			if newWorkflow != nil {
-				newWorkflow.GetReleaseFn()(nil)
+				if releaseErr := newWorkflow.GetReleaseFn()(ctx, nil); releaseErr != nil {
+					return releaseErr
+				}
 			}
 			return serviceerror.NewInternalf(
 				"dispatchForExistingWorkflow: run %v is running but its current execution record is missing (workflow %v)",
@@ -379,7 +381,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	if currentWorkflow != nil {
 		// release lock on current workflow, since current cluster maybe the active cluster
 		//  and events maybe reapplied to current workflow
-		currentWorkflow.GetReleaseFn()(nil)
+		if releaseErr := currentWorkflow.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		currentWorkflow = nil
 	}
 
@@ -535,7 +539,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	if currentWorkflow != nil {
 		// release lock on current workflow, since current cluster maybe the active cluster
 		//  and events maybe reapplied to current workflow
-		currentWorkflow.GetReleaseFn()(nil)
+		if releaseErr := currentWorkflow.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		currentWorkflow = nil
 	}
 
@@ -565,10 +571,10 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			r.cleanupTransaction(currentWorkflow, targetWorkflow, newWorkflow, errPanic)
+			_ = r.cleanupTransaction(currentWorkflow, targetWorkflow, newWorkflow, errPanic)
 			panic(rec)
 		} else {
-			r.cleanupTransaction(currentWorkflow, targetWorkflow, newWorkflow, retError)
+			retError = r.cleanupTransaction(currentWorkflow, targetWorkflow, newWorkflow, retError)
 		}
 	}()
 
@@ -623,15 +629,16 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) cleanupTransaction(
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 	err error,
-) {
+) error {
 
 	if currentWorkflow != nil {
-		currentWorkflow.GetReleaseFn()(err)
+		err = currentWorkflow.GetReleaseFn()(context.Background(), err)
 	}
 	if targetWorkflow != nil {
-		targetWorkflow.GetReleaseFn()(err)
+		err = targetWorkflow.GetReleaseFn()(context.Background(), err)
 	}
 	if newWorkflow != nil {
-		newWorkflow.GetReleaseFn()(err)
+		err = newWorkflow.GetReleaseFn()(context.Background(), err)
 	}
+	return err
 }

@@ -405,7 +405,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	defer func() { releaseFn(retErr) }()
+	defer func() { retErr = releaseFn(ctx, retErr) }()
 	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return err

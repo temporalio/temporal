@@ -37,7 +37,7 @@ func Invoke(
 	if err != nil {
 		return err
 	}
-	defer func() { chasmLease.GetReleaseFn()(retError) }()
+	defer func() { retError = chasmLease.GetReleaseFn()(ctx, retError) }()
 
 	return chasmLease.GetContext().RefreshTasks(ctx, shardContext)
 }

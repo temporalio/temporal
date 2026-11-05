@@ -249,6 +249,20 @@ func (p *executionRetryablePersistenceClient) SetWorkflowExecution(
 	return response, err
 }
 
+func (p *executionRetryablePersistenceClient) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	var response *UpdateWorkflowExecutionResponse
+	var receipt WorkflowExecutionUpdateReceipt
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		var err error
+		response, receipt, err = p.persistence.SubmitWorkflowExecutionUpdate(ctx, request)
+		return err
+	}, p.policy, p.isRetryable)
+	return response, receipt, err
+}
+
 func (p *executionRetryablePersistenceClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,

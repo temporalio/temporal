@@ -151,10 +151,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			releaseFn(errPanic)
+			_ = releaseFn(ctx, errPanic)
 			panic(rec)
 		}
-		releaseFn(retError)
+		retError = releaseFn(ctx, retError)
 	}()
 
 	// Handle existing workflows
@@ -195,9 +195,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 				common.EmptyVersion,
 			)
 		}
-
 		// release the workflow lock here otherwise SyncHSM will deadlock
-		releaseFn(nil)
+		if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 
 		engine, err := r.shardContext.GetEngine(ctx)
 		if err != nil {
@@ -263,11 +264,17 @@ func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
 			return nil, nil, err
 		}
 		var releaseOnce sync.Once
-		return wfCtx, func(error) {
+		var releaseErr error
+		return wfCtx, func(_ context.Context, operationErr error) error {
 			releaseOnce.Do(func() {
+				releaseErr = workflow.AwaitExecutionDurability(wfCtx)
 				wfCtx.Clear()
 				wfCtx.Unlock()
+				if operationErr != nil {
+					releaseErr = operationErr
+				}
 			})
+			return releaseErr
 		}, nil
 	}
 	return r.workflowCache.GetOrCreateChasmExecution(
@@ -334,19 +341,20 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		// the apply (which mutates ms in place) and still under the workflow lock, since the apply
 		// releases via the transaction manager.
 		innerReleaseFn := releaseFn
-		releaseFn = func(err error) {
+		releaseFn = func(_ context.Context, err error) error {
 			if err == nil && appliedMS == nil && ms != nil {
 				appliedMS = ms.CloneToProto()
 			}
-			innerReleaseFn(err)
+			err = innerReleaseFn(ctx, err)
+			return err
 		}
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			releaseFn(errPanic)
+			_ = releaseFn(ctx, errPanic)
 			panic(rec)
 		}
-		releaseFn(retError)
+		retError = releaseFn(ctx, retError)
 	}()
 	if versionedTransitionArtifact.IsFirstSync {
 		// this is the first replication task for this workflow
@@ -402,7 +410,9 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
-				releaseFn(nil)
+				if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+					return releaseErr
+				}
 				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransitionArtifact.EventBatches, versionedTransitionArtifact.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
@@ -424,7 +434,9 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransitionArtifact, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
-			releaseFn(nil)
+			if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+				return releaseErr
+			}
 			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransitionArtifact.EventBatches, versionedTransitionArtifact.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:
 			return err
@@ -1892,10 +1904,10 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			newRunReleaseFn(errPanic)
+			_ = newRunReleaseFn(ctx, errPanic)
 			panic(rec)
 		}
-		newRunReleaseFn(newRunErr)
+		newRunErr = newRunReleaseFn(ctx, newRunErr)
 
 	}()
 	_, newRunErr = newRunWfContext.LoadMutableState(ctx, r.shardContext)
@@ -2014,10 +2026,10 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		}
 		defer func() {
 			if rec := recover(); rec != nil {
-				rootRunReleaseFn(errPanic)
+				_ = rootRunReleaseFn(ctx, errPanic)
 				panic(rec)
 			}
-			rootRunReleaseFn(retError)
+			retError = rootRunReleaseFn(ctx, retError)
 		}()
 	}
 

@@ -181,7 +181,7 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(err) }()
+	defer func() { err = release(ctx, err) }()
 
 	ms, err := weContext.LoadMutableState(ctx, e.shardContext)
 	if err != nil {

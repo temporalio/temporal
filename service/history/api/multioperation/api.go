@@ -203,7 +203,9 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			status := ms.GetExecutionState().Status
 			updateNexusCtx := ms.GetUpdateNexusSerializationContext(updateID)
 			nexusSerializationContext := common.CloneProto(updateNexusCtx)
-			workflowLease.GetReleaseFn()(nil)
+			if err := workflowLease.GetReleaseFn()(ctx, nil); err != nil {
+				return nil, err
+			}
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
 					RunId:   workflowKey.RunID,
@@ -231,9 +233,11 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 				return uws.updateWorkflow(ctx, workflowLease) // lease released inside
 			}
 		}
-
 		// Release before starting workflow further down.
-		workflowLease.GetReleaseFn()(nil)
+		if releaseErr := workflowLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return nil, releaseErr
+		}
+
 	}
 
 	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
@@ -325,9 +329,8 @@ func (uws *updateWithStart) updateWorkflow(
 		},
 		nil,
 	)
-
 	// Release lock here since all changes to the workflow have been completed now.
-	currentWorkflowLease.GetReleaseFn()(err)
+	err = currentWorkflowLease.GetReleaseFn()(ctx, err)
 
 	if err != nil {
 		return nil, newMultiOpError(multiOpAbortedErr, err)

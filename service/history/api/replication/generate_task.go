@@ -45,7 +45,7 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { chasmLease.GetReleaseFn()(retError) }()
+	defer func() { retError = chasmLease.GetReleaseFn()(ctx, retError) }()
 
 	mutableState := chasmLease.GetMutableState()
 	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks(request.GetTargetClusters())

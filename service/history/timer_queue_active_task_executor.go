@@ -152,14 +152,16 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
@@ -183,7 +185,9 @@ Loop:
 		}
 
 		if !mutableState.IsWorkflowExecutionRunning() {
-			release(nil) // so mutable state is not unloaded from cache
+			if releaseErr := release(ctx, nil); releaseErr != nil { // so mutable state is not unloaded from cache
+				return releaseErr
+			}
 			return consts.ErrWorkflowCompleted
 		}
 
@@ -194,7 +198,9 @@ Loop:
 	}
 
 	if !timerFired {
-		release(nil) // so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -212,18 +218,22 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -274,7 +284,9 @@ Loop:
 	}
 
 	if !updateMutableState {
-		release(nil) // so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
@@ -391,28 +403,36 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
 	workflowTask := mutableState.GetWorkflowTaskByID(task.EventID)
 	if workflowTask == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowTaskNotFound
 	}
 	if task.Stamp != workflowTask.Stamp {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrStaleReference
 	}
 
@@ -421,7 +441,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		// Check if mutable state still points to this task.
 		// Mutable state can lost speculative WT or even has another one there if, for example, workflow was evicted from cache.
 		if !mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task) {
-			release(nil) // release(nil) so that the mutable state is not unloaded from cache
+			if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so that the mutable state is not unloaded from cache
+				return releaseErr
+			}
 			return consts.ErrWorkflowTaskNotFound
 		}
 		operationMetricsTag = metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout
@@ -432,7 +454,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		}
 
 		if workflowTask.Attempt != task.ScheduleAttempt {
-			release(nil) // release(nil) so that the mutable state is not unloaded from cache
+			if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so that the mutable state is not unloaded from cache
+				return releaseErr
+			}
 			return consts.ErrWorkflowTaskNotFound
 		}
 		operationMetricsTag = metrics.TimerActiveTaskWorkflowTaskTimeoutScope
@@ -489,18 +513,22 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -530,7 +558,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -549,14 +579,16 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
@@ -564,13 +596,17 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
 
 	if !ok {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrActivityTaskNotFound
 	}
 
 	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrActivityTaskNotFound
 	}
 
@@ -584,7 +620,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			tag.FailoverVersion(activityInfo.Version),
 			tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 			tag.ScheduleAttempt(task.Attempt))
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
@@ -593,7 +631,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -605,7 +645,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// task can be paused as the result of processing activity workflow rules, so we need to check again
 	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrActivityTaskNotFound
 	}
 
@@ -617,9 +659,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
-
 	// NOTE: do not access anything related mutable state after this lock release
-	release(nil) // release earlier as we don't need the lock anymore
+	if releaseErr := release(ctx, nil); releaseErr != nil { // release earlier as we don't need the lock anymore
+		return releaseErr
+	}
 
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
@@ -667,18 +710,22 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -692,7 +739,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 
 	if !t.isValidWorkflowRunTimeoutTask(mutableState, task) {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -828,19 +877,23 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	if !t.isValidWorkflowExecutionTimeoutTask(mutableState, task) {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -868,14 +921,16 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if ms == nil {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
@@ -894,7 +949,9 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 
 	// We haven't done any work, return without committing.
 	if processedTimers == 0 {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(nil) so mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -932,14 +989,16 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
@@ -949,7 +1008,9 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -958,13 +1019,18 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	tsiUtil := workflow.NewTimeSkippingInfoUtil(tsi)
 	if !tsiUtil.IsEnabled() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+
+			// 2) match current pending fast-forward
+		}
 		return errNoTimerFired
 	}
 
-	// 2) match current pending fast-forward
 	if !tsiUtil.HasPendingFastForward() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 
@@ -985,7 +1051,9 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return errNoTimerFired
 	}
 	taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
@@ -1103,7 +1171,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(err) }()
+	defer func() { err = release(ctx, err) }()
 
 	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
 	if err != nil {
@@ -1117,11 +1185,12 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	if tree == nil {
 		return errNoChasmTree
 	}
-
 	// Now that we've loaded the CHASM tree, we can release the lock before task
 	// execution. The task's executor must do its own locking as needed, and additional
 	// mutable state validations will run at access time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return executeChasmSideEffectTask(
 		ctx,
@@ -1142,7 +1211,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(err) }()
+	defer func() { err = release(ctx, err) }()
 
 	ms, err := loadMutableStateForTimerTask(ctx, t.shardContext, wfCtx, task, t.metricsHandler, t.logger)
 	if err != nil {

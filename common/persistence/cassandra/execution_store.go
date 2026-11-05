@@ -169,3 +169,7 @@ func (d *ExecutionStore) Close() {
 		d.MutableStateTaskStore.Session.Close()
 	}
 }
+
+func (*ExecutionStore) SubmitWorkflowExecutionUpdate(context.Context, *p.InternalUpdateWorkflowExecutionRequest) (p.WorkflowExecutionUpdateReceipt, error) {
+	panic("workflow execution pipelining requires asynchronous CDS persistence") //nolint:forbidigo // Unsupported asynchronous writes must fail immediately.
+}

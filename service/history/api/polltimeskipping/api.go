@@ -100,7 +100,7 @@ func readFastForwardInfo(
 	if err != nil {
 		return nil, false, false, err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { retError = workflowLease.GetReleaseFn()(ctx, retError) }()
 
 	ms := workflowLease.GetMutableState()
 	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()

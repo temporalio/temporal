@@ -119,7 +119,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		return nil, err
 	}
 	defer func() {
-		mutableState.Release(err)
+		err = mutableState.Release(ctx, err)
 	}()
 
 	namespaceEntry := mutableState.GetNamespaceEntry()
@@ -231,7 +231,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		return err
 	}
 	defer func() {
-		mutableState.Release(err)
+		err = mutableState.Release(ctx, err)
 	}()
 
 	taskGenerator := workflow.NewTaskGenerator(
@@ -306,7 +306,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	defer func() {
 		// If we return an error, the caller will not release the mutable state, so we need to do it here.
 		if err != nil {
-			release(err)
+			err = release(ctx, err)
 		}
 		// If we don't return an error, the caller will release the mutable state, so we don't need to do it here.
 	}()

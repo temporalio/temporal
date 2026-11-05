@@ -436,7 +436,7 @@ func generateStateReplicationTask(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
@@ -628,7 +628,7 @@ func getBranchToken(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
@@ -743,7 +743,10 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
 	if len(executionInfo.TransitionHistory) == 0 {
 		isWorkflow := mutableState.IsWorkflow()
-		releaseFunc(nil)
+		if releaseErr := releaseFunc(ctx, nil); releaseErr != nil {
+			return nil, releaseErr
+		}
+
 		if !isWorkflow {
 			return nil, serviceerror.NewInternalf("chasm execution not on any versioned transition, is state-based replication enabled? execution key: %v", taskInfo.WorkflowKey)
 		}
@@ -765,7 +768,10 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		if taskInfo.FirstEventID == common.EmptyEventID && taskInfo.NextEventID == common.EmptyEventID && len(taskInfo.NewRunID) == 0 {
 			return nil, nil
 		}
-		releaseFunc(nil) // release wf lock before retrieving history events
+		if releaseErr := releaseFunc(ctx, nil); releaseErr != nil { // release wf lock before retrieving history events
+			return nil, releaseErr
+		}
+
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
 	}
 

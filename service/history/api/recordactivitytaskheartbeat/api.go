@@ -38,7 +38,7 @@ func Invoke(
 	var cancelRequested bool
 	var activityPaused bool
 	var activityReset bool
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowPipelined(
 		ctx,
 		token.Clock,
 		definition.NewWorkflowKey(
@@ -86,7 +86,6 @@ func Invoke(
 				CreateWorkflowTask: false,
 			}, nil
 		},
-		nil,
 		shard,
 		workflowConsistencyChecker,
 	)

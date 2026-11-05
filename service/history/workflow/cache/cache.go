@@ -85,7 +85,7 @@ type (
 	}
 )
 
-var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(err error) {}
+var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(_ context.Context, err error) error { return err }
 
 const (
 	cacheNotReleased int32 = 0
@@ -323,6 +323,14 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		return nil, nil, err
 	}
 
+	if execution, ok := workflowCtx.(*workflow.ContextImpl); ok {
+		if err := execution.PrepareWorkflowLease(ctx); err != nil {
+			workflowCtx.Unlock()
+			c.Release(cacheKey)
+			return nil, nil, err
+		}
+	}
+
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
@@ -368,44 +376,46 @@ func (c *cacheImpl) makeReleaseFunc(
 	forceClearContext bool,
 	handler metrics.Handler,
 	acquireTime time.Time,
-) func(error) {
+) historyi.ReleaseWorkflowContextFunc {
 
 	status := cacheNotReleased
-	return func(err error) {
-		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
-			defer func() {
-				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
-			}()
-			if rec := recover(); rec != nil {
+	return func(ctx context.Context, err error) error {
+		if recovered := recover(); recovered != nil { //nolint:revive // This function also supports direct deferred release.
+			if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 				wfContext.Clear()
 				wfContext.Unlock()
 				c.Release(cacheKey)
-				panic(rec)
-			} else {
-				if err != nil || forceClearContext {
-					// TODO see issue #668, there are certain type or errors which can bypass the clear
-					wfContext.Clear()
-					wfContext.Unlock()
-					c.Release(cacheKey)
-				} else {
-					isDirty := wfContext.IsDirty()
-					if isDirty {
-						wfContext.Clear()
-						softassert.Fail(shardContext.GetLogger(), "Cache encountered dirty mutable state transaction",
-							tag.ComponentHistoryCache,
-							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
-							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
-							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
-						)
-					}
-					wfContext.Unlock()
-					c.Release(cacheKey)
-					if isDirty {
-						panic("Cache encountered dirty mutable state transaction")
-					}
-				}
 			}
+			panic(recovered) //nolint:forbidigo // Preserve caller panic after releasing the cache entry.
 		}
+		if !atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			return err
+		}
+		if execution, ok := wfContext.(*workflow.ContextImpl); ok && execution.HasExecutionLease() {
+			metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
+			return execution.ReleaseExecutionLease(ctx, func() { c.Release(cacheKey) }, err, forceClearContext)
+		}
+		defer func() {
+			metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
+		}()
+		isDirty := false
+		if err != nil || forceClearContext {
+			wfContext.Clear()
+		} else if isDirty = wfContext.IsDirty(); isDirty {
+			wfContext.Clear()
+			softassert.Fail(shardContext.GetLogger(), "Cache encountered dirty mutable state transaction",
+				tag.ComponentHistoryCache,
+				tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
+				tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
+				tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
+			)
+		}
+		wfContext.Unlock()
+		c.Release(cacheKey)
+		if isDirty {
+			panic("Cache encountered dirty mutable state transaction") //nolint:forbidigo // Preserve the existing dirty-state invariant.
+		}
+		return err
 	}
 }
 
@@ -473,7 +483,7 @@ func GetCurrentRunID(
 	if err != nil {
 		return "", err
 	}
-	defer func() { currentRelease(retErr) }()
+	defer func() { retErr = currentRelease(ctx, retErr) }()
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,

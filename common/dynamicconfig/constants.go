@@ -1903,6 +1903,12 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
 See DynamicRateLimitingParams comments for more details.`,
 	)
+	EnableWorkflowExecutionPipelining = NewNamespaceBoolSetting(
+		"history.enableWorkflowExecutionPipelining",
+		false,
+		"Overlap workflow processing with durable CDS updates using bounded ordered submission.",
+	)
+
 	EnableBestEffortDeleteTasksOnWorkflowUpdate = NewGlobalBoolSetting(
 		"history.enableBestEffortDeleteTasksOnWorkflowUpdate",
 		false,

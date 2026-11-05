@@ -121,7 +121,7 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 		// mutable state will be at most initialized once from shard mutable state cache
 		// mutable state will usually be initialized from input token
 		ndcWorkflow.GetContext().Clear()
-		ndcWorkflow.GetReleaseFn()(retError)
+		retError = ndcWorkflow.GetReleaseFn()(ctx, retError)
 	}()
 
 	if len(eventsSlice) != 0 {
@@ -361,10 +361,10 @@ func (r *HistoryImporterImpl) commit(
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			dbNDCWorkflow.GetReleaseFn()(errPanic)
+			_ = dbNDCWorkflow.GetReleaseFn()(ctx, errPanic)
 			panic(rec)
 		} else {
-			dbNDCWorkflow.GetReleaseFn()(retError)
+			retError = dbNDCWorkflow.GetReleaseFn()(ctx, retError)
 		}
 	}()
 

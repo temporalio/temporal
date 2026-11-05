@@ -94,7 +94,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		// err will not be of type EntityNotExistsError
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := executionContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
@@ -201,7 +201,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		// err will not be of type EntityNotExistsError
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := executionContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {

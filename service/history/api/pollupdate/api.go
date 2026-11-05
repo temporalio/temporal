@@ -28,7 +28,7 @@ func Invoke(
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
 	var nexusSerializationContext *nexuspb.PropagatedSerializationContext
-	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
+	wfKey, upd, err := func() (key *definition.WorkflowKey, result *update.Update, retErr error) {
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
@@ -43,7 +43,7 @@ func Invoke(
 			return nil, nil, err
 		}
 		release := workflowLease.GetReleaseFn()
-		defer release(nil)
+		defer func() { retErr = release(ctx, retErr) }()
 		wfCtx := workflowLease.GetContext()
 		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
 		if upd != nil {

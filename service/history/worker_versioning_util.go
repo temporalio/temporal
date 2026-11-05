@@ -56,7 +56,7 @@ func updateIndependentActivityBuildId(
 	}
 
 	defer func() {
-		release(retErr)
+		retErr = release(ctx, retErr)
 	}()
 
 	var mutableState historyi.MutableState
@@ -155,11 +155,11 @@ func initializeWorkflowAssignedBuildId(
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, shardContext, weContext, transferTask, metricsHandler, logger)
 	if err != nil {
-		release(err)
+		err = release(ctx, err)
 		return err
 	}
 	defer func() {
-		release(retErr)
+		retErr = release(ctx, retErr)
 	}()
 
 	if mutableState == nil {

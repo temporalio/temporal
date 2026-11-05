@@ -11,7 +11,8 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards int32
+	EnableWorkflowExecutionPipelining dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumberOfShards                    int32
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
 	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
@@ -497,7 +498,8 @@ func NewConfig(
 	numberOfShards int32,
 ) *Config {
 	cfg := &Config{
-		NumberOfShards: numberOfShards,
+		EnableWorkflowExecutionPipelining: dynamicconfig.EnableWorkflowExecutionPipelining.Get(dc),
+		NumberOfShards:                    numberOfShards,
 
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
 		EmitReplicationLifecycleEvents:                dynamicconfig.EmitReplicationLifecycleEvents.Get(dc),

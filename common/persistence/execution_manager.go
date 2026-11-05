@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -209,17 +211,36 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}, nil
 }
 
+func (m *executionManagerImpl) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	if request == nil || request.NewWorkflowSnapshot != nil {
+		return nil, nil, serviceerror.NewInvalidArgument("workflow update submission requires a single-run request")
+	}
+	return m.updateWorkflowExecution(ctx, request, true)
+}
+
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
-) (_ *UpdateWorkflowExecutionResponse, retErr error) {
+) (*UpdateWorkflowExecutionResponse, error) {
+	response, _, err := m.updateWorkflowExecution(ctx, request, false)
+	return response, err
+}
+
+func (m *executionManagerImpl) updateWorkflowExecution(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+	asynchronous bool,
+) (_ *UpdateWorkflowExecutionResponse, _ WorkflowExecutionUpdateReceipt, retErr error) {
 
 	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
 	if newSnapshot != nil && request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
 		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -233,7 +254,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		request.UpdateWorkflowEvents,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rollback.add(updateMutation.ExecutionInfo.ExecutionStats, updateWorkflowHistoryDiff.SizeDiff)
 
@@ -248,7 +269,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			request.NewWorkflowEvents,
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
@@ -258,24 +279,24 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		updateMutation,
 		newSnapshot,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := ValidateUpdateWorkflowStateStatus(
 		updateMutation.ExecutionState.State,
 		updateMutation.ExecutionState.Status,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&updateMutation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var serializedNewWorkflowSnapshot *InternalWorkflowSnapshot
 	if newSnapshot != nil {
 		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(newSnapshot)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -295,38 +316,76 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		NewWorkflowNewEvents:    newWorkflowNewEvents,
 	}
 
-	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
-	switch err.(type) {
-	case nil:
-		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
-		m.addXDCCacheKV(updateWorkflowXDCKVs)
-		m.addXDCCacheKV(newWorkflowXDCKVs)
-		return &UpdateWorkflowExecutionResponse{
-			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
-				&newRequest.UpdateWorkflowMutation,
-				updateWorkflowHistoryDiff,
-			),
-			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
-				newRequest.NewWorkflowSnapshot,
-				newWorkflowHistoryDiff,
-			),
-		}, nil
-	case *CurrentWorkflowConditionFailedError,
-		*WorkflowConditionFailedError,
-		*WorkflowRunAlreadyExistsError,
-		*ConditionFailedError:
-		m.trimHistoryNode(
-			ctx,
-			request.ShardID,
-			updateMutation.ExecutionInfo.NamespaceId,
-			updateMutation.ExecutionInfo.WorkflowId,
-			updateMutation.ExecutionState.RunId,
-			archetypeID,
-		)
-		return nil, err
-	default:
-		return nil, err
+	response := &UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: *statusOfInternalWorkflowMutation(&newRequest.UpdateWorkflowMutation, updateWorkflowHistoryDiff),
+		NewMutableStateStats:    statusOfInternalWorkflowSnapshot(newRequest.NewWorkflowSnapshot, newWorkflowHistoryDiff),
 	}
+	shardID := request.ShardID
+	namespaceID := updateMutation.ExecutionInfo.NamespaceId
+	workflowID := updateMutation.ExecutionInfo.WorkflowId
+	runID := updateMutation.ExecutionState.RunId
+	deleteTasks := updateMutation.BestEffortDeleteTasks
+	if asynchronous {
+		deleteTasks = maps.Clone(deleteTasks)
+		for category, keys := range deleteTasks {
+			deleteTasks[category] = slices.Clone(keys)
+		}
+	}
+	complete := func(completionCtx context.Context, writeErr error) {
+		if writeErr == nil {
+			m.deleteHistoryTasks(completionCtx, shardID, deleteTasks, workflowID)
+			m.addXDCCacheKV(updateWorkflowXDCKVs)
+			m.addXDCCacheKV(newWorkflowXDCKVs)
+		}
+	}
+	if asynchronous {
+		receipt, err := m.submitWorkflowExecutionUpdate(ctx, newRequest)
+		if err != nil {
+			return nil, nil, err
+		}
+		return response, &executionUpdateReceipt{
+			WorkflowExecutionUpdateReceipt: receipt,
+			ctx:                            context.WithoutCancel(ctx),
+			complete:                       complete,
+		}, nil
+	}
+	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
+	complete(ctx, err)
+	// Retained pipelined writes prevent the reload required for trimming.
+	switch err.(type) {
+	case *CurrentWorkflowConditionFailedError, *WorkflowConditionFailedError, *WorkflowRunAlreadyExistsError, *ConditionFailedError:
+		m.trimHistoryNode(ctx, shardID, namespaceID, workflowID, runID, archetypeID)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return response, nil, nil
+}
+
+func (m *executionManagerImpl) submitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *InternalUpdateWorkflowExecutionRequest,
+) (WorkflowExecutionUpdateReceipt, error) {
+	// Serialized payloads are owned; these fields still alias the caller.
+	mutation := &request.UpdateWorkflowMutation
+	mutation.ExecutionInfo = common.CloneProto(mutation.ExecutionInfo)
+	mutation.ExecutionState = common.CloneProto(mutation.ExecutionState)
+	mutation.DeleteActivityInfos = maps.Clone(mutation.DeleteActivityInfos)
+	mutation.DeleteTimerInfos = maps.Clone(mutation.DeleteTimerInfos)
+	mutation.DeleteChildExecutionInfos = maps.Clone(mutation.DeleteChildExecutionInfos)
+	mutation.DeleteRequestCancelInfos = maps.Clone(mutation.DeleteRequestCancelInfos)
+	mutation.DeleteSignalInfos = maps.Clone(mutation.DeleteSignalInfos)
+	mutation.DeleteChasmNodes = maps.Clone(mutation.DeleteChasmNodes)
+	mutation.UpsertSignalRequestedIDs = maps.Clone(mutation.UpsertSignalRequestedIDs)
+	mutation.DeleteSignalRequestedIDs = maps.Clone(mutation.DeleteSignalRequestedIDs)
+	for path, node := range mutation.UpsertChasmNodes {
+		node.Data = common.CloneProto(node.Data)
+		mutation.UpsertChasmNodes[path] = node
+	}
+	for _, events := range request.UpdateWorkflowNewEvents {
+		events.BranchToken = slices.Clone(events.BranchToken)
+	}
+	return m.persistence.SubmitWorkflowExecutionUpdate(ctx, request)
 }
 
 // deleteHistoryTasks iterates over provided task keys and completes them when the dynamic config

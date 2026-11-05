@@ -348,9 +348,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
 			parentClock := executionInfo.ParentClock
 			childWorkflowState := mutableState.GetExecutionState().GetState().String()
-
 			// no need for mutable state anymore, release workflow lock
-			release(nil)
+			if releaseErr := release(ctx, nil); releaseErr != nil {
+				return nil, releaseErr
+			}
+
 			if resendParent {
 				// Parent and child workflows may use different namespace transition-history settings.
 				parentNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(parentNamespaceID))
@@ -541,9 +543,10 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
 		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
-
 		// no need for mutable state anymore, release workflow lock
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return nil, releaseErr
+		}
 
 		if workflowClosed && (!childStarted || !childAbandon) {
 			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
@@ -665,9 +668,11 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		case retError == consts.ErrTaskRetry,
 			errors.Is(retError, consts.ErrStaleReference),
 			errors.As(retError, &verificationErr):
-			release(nil)
+			if releaseErr := release(ctx, nil); releaseErr != nil {
+				retError = releaseErr
+			}
 		default:
-			release(retError)
+			retError = release(ctx, retError)
 		}
 	}()
 
@@ -685,10 +690,11 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	if err != nil {
 		return err
 	}
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// Release is idempotent, so safe to call even if action already released
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 	return postActionFn(ctx, taskInfo, postActionInfo, t.logger)
 }
 

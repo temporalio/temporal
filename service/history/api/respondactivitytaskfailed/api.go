@@ -49,7 +49,7 @@ func Invoke(
 	var closed bool
 	var hasTimeSkippingClockOffset bool
 	var versioningBehavior enumspb.VersioningBehavior
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowPipelined(
 		ctx,
 		token.Clock,
 		definition.NewWorkflowKey(
@@ -126,7 +126,6 @@ func Invoke(
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return postActions, nil
 		},
-		nil,
 		shard,
 		workflowConsistencyChecker,
 	)

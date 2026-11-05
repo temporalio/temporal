@@ -596,6 +596,69 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	return resp, nil
 }
 
+func (s *ContextImpl) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, persistence.WorkflowExecutionUpdateReceipt, error) {
+	entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return nil, nil, err
+	}
+	s.wLock()
+	if err := ctx.Err(); err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	if err := s.errorByState(); err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	if err := s.errorByNamespaceStateLocked(entry.Name(), request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId); err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	track, err := s.taskKeyManager.setAndTrackTaskKeys(request.UpdateWorkflowMutation.Tasks)
+	if err != nil {
+		s.wUnlock()
+		return nil, nil, err
+	}
+	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
+	request.RangeID = s.getRangeIDLocked()
+	s.wUnlock()
+	response, receipt, err := s.executionManager.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		track(&persistence.InvalidPersistenceRequestError{Msg: err.Error()})
+		return nil, nil, err
+	}
+	return response, &workflowUpdateReceipt{WorkflowExecutionUpdateReceipt: receipt, shard: s, rangeID: request.RangeID, complete: track}, nil
+}
+
+type workflowUpdateReceipt struct {
+	persistence.WorkflowExecutionUpdateReceipt
+	shard    *ContextImpl
+	rangeID  int64
+	complete func(error)
+	once     sync.Once
+	err      error
+}
+
+func (r *workflowUpdateReceipt) Wait(ctx context.Context) error {
+	err := r.WorkflowExecutionUpdateReceipt.Wait(ctx)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	r.once.Do(func() {
+		r.complete(err)
+		r.err = r.shard.handleWriteError(r.rangeID, err)
+	})
+	return r.err
+}
+
+func (r *workflowUpdateReceipt) Release() {
+	_ = r.Wait(context.Background())
+	r.WorkflowExecutionUpdateReceipt.Release()
+}
+
 func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,

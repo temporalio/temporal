@@ -306,7 +306,7 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 	defer func() {
-		creationParams.workflowLease.GetReleaseFn()(retError)
+		retError = creationParams.workflowLease.GetReleaseFn()(ctx, retError)
 	}()
 
 	currentExecutionLock, err := s.lockCurrentWorkflowExecution(ctx)
@@ -314,7 +314,7 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 	defer func() {
-		currentExecutionLock(retError)
+		retError = currentExecutionLock(ctx, retError)
 	}()
 
 	err = s.createBrandNew(ctx, creationParams)
@@ -670,7 +670,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		s.workflowConsistencyChecker,
 	)
 	if workflowLease != nil {
-		workflowLease.GetReleaseFn()(err)
+		err = workflowLease.GetReleaseFn()(ctx, err)
 	}
 
 	switch err {
@@ -791,7 +791,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 	if err != nil {
 		return nil, err
 	}
-	defer func() { releaseFn(retErr) }()
+	defer func() { retErr = releaseFn(ctx, retErr) }()
 
 	ms, err := workflowContext.LoadMutableState(ctx, s.shardContext)
 	if err != nil {

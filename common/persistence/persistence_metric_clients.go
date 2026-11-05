@@ -290,6 +290,13 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 	return p.persistence.SetWorkflowExecution(ctx, request)
 }
 
+func (p *executionPersistenceClient) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	return p.persistence.SubmitWorkflowExecutionUpdate(ctx, request)
+}
+
 func (p *executionPersistenceClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,

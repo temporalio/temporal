@@ -215,7 +215,7 @@ func (e *ChasmEngine) startExecution(
 		return chasm.StartExecutionResult{}, err
 	}
 	defer func() {
-		currentExecutionReleaseFn(retErr)
+		retErr = currentExecutionReleaseFn(ctx, retErr)
 	}()
 
 	newExecutionParams, err := e.createNewExecution(
@@ -304,7 +304,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	switch err.(type) {
 	case nil:
 		defer func() {
-			executionLease.GetReleaseFn()(retError)
+			retError = executionLease.GetReleaseFn()(ctx, retError)
 		}()
 
 		if executionLease.GetMutableState().IsWorkflowExecutionRunning() {
@@ -488,7 +488,7 @@ func (e *ChasmEngine) startAndUpdateExecution(
 		return chasm.ExecutionKey{}, nil, false, err
 	}
 	defer func() {
-		currentExecutionReleaseFn(retErr)
+		retErr = currentExecutionReleaseFn(ctx, retErr)
 	}()
 
 	newExecutionParams, err := e.createNewExecutionWithUpdate(
@@ -566,12 +566,15 @@ func (e *ChasmEngine) updateComponent(
 	// When a request ID has already been recorded, we know this is a retry of a successful call, so
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
 	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
-		executionLease.GetReleaseFn()(nil)
+		if releaseErr := executionLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return nil, releaseErr
+		}
+
 		return nil, chasm.ErrRequestIDAlreadyUsed
 	}
 
 	defer func() {
-		executionLease.GetReleaseFn()(retError)
+		retError = executionLease.GetReleaseFn()(ctx, retError)
 	}()
 
 	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID)
@@ -598,7 +601,7 @@ func (e *ChasmEngine) deleteExecution(
 		return err
 	}
 	defer func() {
-		executionLease.GetReleaseFn()(retError)
+		retError = executionLease.GetReleaseFn()(ctx, retError)
 	}()
 
 	mutableState := executionLease.GetMutableState()
@@ -684,7 +687,7 @@ func (e *ChasmEngine) readComponent(
 	defer func() {
 		// Always release the lease with nil error since this is a read only operation
 		// So even if it fails, we don't need to clear and reload mutable state.
-		executionLease.GetReleaseFn()(nil)
+		_ = executionLease.GetReleaseFn()(ctx, nil)
 	}()
 
 	chasmTree, err := chasmTreeFromMutableState(e.logger, executionLease.GetMutableState())
@@ -744,12 +747,16 @@ func (e *ChasmEngine) pollComponent(
 		}
 	}()
 
-	checkPredicateOrSubscribe := func() ([]byte, error) {
+	checkPredicateOrSubscribe := func() (result []byte, retErr error) {
 		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 		if err != nil {
 			return nil, err
 		}
-		defer executionLease.GetReleaseFn()(nil) //nolint:revive
+		defer func() {
+			if err := executionLease.GetReleaseFn()(ctx, nil); retErr == nil {
+				retErr = err
+			}
+		}()
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 		if err != nil {
@@ -1280,7 +1287,10 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	if predicateErr != nil {
-		executionLease.GetReleaseFn()(nil)
+		if releaseErr := executionLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return nil, nil, releaseErr
+		}
+
 		return nil, nil, predicateErr
 	}
 
@@ -1313,13 +1323,17 @@ func (e *ChasmEngine) getExecutionLease(
 				"stale state after mutable state reload, could due to force namespace failover or data loss",
 				tag.Error(err),
 			)
+			if releaseErr := executionLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+				return nil, nil, releaseErr
+			}
 
-			executionLease.GetReleaseFn()(nil)
 			return nil, nil, serviceerror.NewUnavailablef("stale state, please retry")
 		}
-
 		// Stale reference case is already handled above.
-		executionLease.GetReleaseFn()(nil)
+		if releaseErr := executionLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return nil, nil, releaseErr
+		}
+
 		return nil, nil, softassert.UnexpectedInternalErr(
 			logger,
 			"Unexpected stale reference in final execution staleness check",

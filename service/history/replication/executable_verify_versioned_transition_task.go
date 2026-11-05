@@ -316,7 +316,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err

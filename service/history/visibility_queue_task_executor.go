@@ -143,7 +143,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
@@ -171,11 +171,12 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 		mutableState.GetExecutionInfo().Memo,
 		mutableState.GetExecutionInfo().SearchAttributes,
 	)
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(
 		ctx,
@@ -202,7 +203,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
@@ -219,11 +220,12 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		mutableState.GetExecutionInfo().Memo,
 		mutableState.GetExecutionInfo().SearchAttributes,
 	)
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return t.visibilityMgr.UpsertWorkflowExecution(
 		ctx,
@@ -250,7 +252,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
@@ -280,11 +282,12 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(nil)
+	if releaseErr := release(parentCtx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	err = t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
 	if err != nil {
@@ -362,7 +365,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
@@ -491,7 +494,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	applyChasmOverriddenSystemFields(requestBase, systemOverrides)
 
 	if mutableState.IsWorkflowExecutionRunning() {
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return t.visibilityMgr.UpsertWorkflowExecution(
 			ctx,
 			&manager.UpsertWorkflowExecutionRequest{
@@ -504,8 +509,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
-
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
 }
 
@@ -693,7 +699,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {

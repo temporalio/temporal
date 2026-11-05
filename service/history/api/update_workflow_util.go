@@ -8,8 +8,29 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
+
+// GetAndUpdateWorkflowPipelined requires actions to publish results only after lease release.
+func GetAndUpdateWorkflowPipelined(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	workflowKey definition.WorkflowKey,
+	action UpdateWorkflowActionFunc,
+	shard historyi.ShardContext,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+) error {
+	return GetAndUpdateWorkflowWithNew(
+		workflow.WithExecutionPipelining(ctx),
+		reqClock,
+		workflowKey,
+		action,
+		nil,
+		shard,
+		workflowConsistencyChecker,
+	)
+}
 
 func GetAndUpdateWorkflowWithNew(
 	ctx context.Context,
@@ -29,7 +50,7 @@ func GetAndUpdateWorkflowWithNew(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { retError = workflowLease.GetReleaseFn()(ctx, retError) }()
 
 	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
 }
@@ -54,7 +75,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { retError = workflowLease.GetReleaseFn()(ctx, retError) }()
 
 	return UpdateWorkflowWithNew(shardContext, ctx, workflowLease, action, newWorkflowFn)
 }

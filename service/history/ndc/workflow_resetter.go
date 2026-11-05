@@ -254,7 +254,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err != nil {
 		return err
 	}
-	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
+	defer func() { retError = resetWorkflow.GetReleaseFn()(ctx, retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
@@ -795,7 +795,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			if err != nil {
 				return 0, nil, err
 			}
-			defer func() { release(retError) }()
+			defer func() { retError = release(ctx, retError) }()
 		}
 
 		mutableState, err := wfCtx.LoadMutableState(ctx, r.shardContext)

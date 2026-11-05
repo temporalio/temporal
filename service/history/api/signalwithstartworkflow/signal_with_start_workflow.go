@@ -374,7 +374,9 @@ func signalWorkflow(
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		// Release clean state with nil so Invoke's deferred release does not clear and reload it.
-		workflowLease.GetReleaseFn()(nil)
+		if releaseErr := workflowLease.GetReleaseFn()(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 		return err
 	}
 

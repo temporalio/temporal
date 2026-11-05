@@ -32,7 +32,7 @@ func Invoke(
 	// Capture the currently-running workflow's runID from mutableState via our closure,
 	// in case the caller didn't pin the signal to a specific runID.
 	var runID string
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowPipelined(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -63,7 +63,10 @@ func Invoke(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state
-				releaseFn(nil)
+				if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+					return nil, releaseErr
+				}
+
 				return nil, consts.ErrWorkflowCompleted
 			}
 
@@ -75,7 +78,10 @@ func Invoke(
 				request.GetHeader().Size(),
 				"SignalWorkflowExecution",
 			); err != nil {
-				releaseFn(nil)
+				if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+					return nil, releaseErr
+				}
+
 				return nil, err
 			}
 
@@ -89,7 +95,10 @@ func Invoke(
 				parentRunID := executionInfo.ParentRunId
 				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
 					externalWorkflowExecution.GetRunId() != parentRunID {
-					releaseFn(nil)
+					if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+						return nil, releaseErr
+					}
+
 					return nil, consts.ErrWorkflowParent
 				}
 			}
@@ -115,7 +124,6 @@ func Invoke(
 				CreateWorkflowTask: createWorkflowTask,
 			}, nil
 		},
-		nil,
 		shard,
 		workflowConsistencyChecker,
 	)

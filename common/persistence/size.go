@@ -325,3 +325,45 @@ func statusOfInternalWorkflowSnapshot(
 		ChasmTotalSize: chasmTotalSize,
 	}
 }
+
+// WorkflowExecutionUpdateSize estimates retained payload bytes for a prepared workflow update.
+func WorkflowExecutionUpdateSize(request *InternalUpdateWorkflowExecutionRequest) int {
+	mutation := &request.UpdateWorkflowMutation
+	size := statusOfInternalWorkflowMutation(mutation, &HistoryStatistics{}).TotalSize
+	size += len(mutation.NamespaceID) + len(mutation.WorkflowID) + len(mutation.RunID)
+	// Notifications retain another copy of the typed execution metadata.
+	size += 2 * (mutation.ExecutionInfo.Size() + mutation.ExecutionState.Size())
+	size += mutation.Checksum.Size()
+	for _, records := range mutation.Tasks {
+		for _, record := range records {
+			size += record.Blob.Size() + 32
+		}
+	}
+	size += WorkflowExecutionHistorySize(request.UpdateWorkflowNewEvents)
+	size += WorkflowExecutionSnapshotSize(request.NewWorkflowSnapshot)
+	size += WorkflowExecutionHistorySize(request.NewWorkflowNewEvents)
+	return size
+}
+
+func WorkflowExecutionSnapshotSize(snapshot *InternalWorkflowSnapshot) int {
+	if snapshot == nil {
+		return 0
+	}
+	size := statusOfInternalWorkflowSnapshot(snapshot, &HistoryStatistics{}).TotalSize
+	size += 2 * (snapshot.ExecutionInfo.Size() + snapshot.ExecutionState.Size())
+	for _, records := range snapshot.Tasks {
+		for _, record := range records {
+			size += record.Blob.Size() + 32
+		}
+	}
+	return size
+}
+
+func WorkflowExecutionHistorySize(events []*InternalAppendHistoryNodesRequest) int {
+	size := 0
+	for _, batch := range events {
+		size += len(batch.BranchToken) + len(batch.Info)
+		size += batch.BranchInfo.Size() + batch.TreeInfo.Size() + batch.Node.Events.Size() + 32
+	}
+	return size
+}

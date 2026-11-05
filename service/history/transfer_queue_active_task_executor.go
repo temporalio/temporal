@@ -197,7 +197,7 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(err) }()
+	defer func() { err = release(ctx, err) }()
 
 	ms, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
@@ -211,11 +211,12 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	if tree == nil {
 		return errNoChasmTree
 	}
-
 	// Now that we've loaded the CHASM tree, we can release the lock before task
 	// execution. The task's executor must do its own locking as needed, and additional
 	// mutable state validations will run at access time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return executeChasmSideEffectTask(
 		ctx,
@@ -242,25 +243,31 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrActivityTaskNotFound
 	}
 
 	if ai.Stamp != task.Stamp || ai.Paused {
-		release(nil)                    // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr // release(ctx, nil) so that the mutable state is not unloaded from cache
+		}
 		return consts.ErrStaleReference // drop the task
 	}
 
@@ -270,18 +277,21 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
-
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return t.pushActivity(ctx, task, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
@@ -297,7 +307,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, transferTask, t.metricHandler, t.logger)
 	if err != nil {
@@ -312,7 +322,9 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 	if transferTask.Stamp != workflowTask.Stamp {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrStaleReference
 	}
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
@@ -330,11 +342,12 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
-
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	err = t.pushWorkflowTask(
 		ctx,
@@ -384,7 +397,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
@@ -443,11 +456,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-
 	// NOTE: do not access anything related mutable state after this lock release.
 	// Release lock immediately since mutable state is not needed
 	// and the rest of logic is RPC calls, which can take time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
@@ -521,7 +535,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
@@ -647,14 +661,16 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if err := release(ctx, nil); err != nil {
+			return err
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
@@ -671,7 +687,9 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -803,10 +821,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	signalRequestID := signalInfo.GetRequestId()
-
 	// release the weContext lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(retError)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
 	_, err = t.historyRawClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId:       targetNamespaceID.String(),
@@ -827,20 +846,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
 	if !ok {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		if releaseErr := release(ctx, nil); releaseErr != nil { // release(ctx, nil) so that the mutable state is not unloaded from cache
+			return releaseErr
+		}
 		return consts.ErrChildExecutionNotFound
 	}
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
@@ -904,7 +927,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// NOTE: do not access anything related mutable state after this lock release
 		// release the context lock since we no longer need mutable state and
 		// the rest of logic is making RPC call, which takes time.
-		release(nil)
+		if releaseErr := release(ctx, nil); releaseErr != nil {
+			return releaseErr
+		}
 
 		parentClock, err := t.shardContext.NewVectorClock()
 		if err != nil {
@@ -1084,7 +1109,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			// NOTE: do not access anything related mutable state after this lock release
 			// release the context lock since we no longer need mutable state and
 			// the rest of logic is making RPC call, which takes time.
-			release(nil)
+			if releaseErr := release(ctx, nil); releaseErr != nil {
+				return releaseErr
+			}
 
 			parentClock, err := t.shardContext.NewVectorClock()
 			if err != nil {
@@ -1188,11 +1215,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
-
 	// NOTE: do not access anything related mutable state after this lock is released.
 	// Release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
-	release(nil)
+	if releaseErr := release(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 	parentClock, err := t.shardContext.NewVectorClock()
 	if err != nil {
 		return err
@@ -1312,7 +1340,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	if err != nil {
 		return "", "", err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	childsParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
@@ -1338,7 +1366,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	defer func() { currentRelease(retError) }()
+	defer func() { retError = currentRelease(ctx, retError) }()
 
 	currentMutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, currentContext, task, t.metricHandler, t.logger)
 	if err != nil {
@@ -1429,7 +1457,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		if err != nil {
 			return err
 		}
-		defer func() { baseRelease(retError) }()
+		defer func() { retError = baseRelease(ctx, retError) }()
 		baseMutableState, err = loadMutableStateForTransferTask(ctx, t.shardContext, baseContext, task, t.metricHandler, t.logger)
 		if err != nil {
 			return err

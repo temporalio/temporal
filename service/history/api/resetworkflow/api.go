@@ -68,7 +68,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { baseWorkflowLease.GetReleaseFn()(retError) }()
+	defer func() { retError = baseWorkflowLease.GetReleaseFn()(ctx, retError) }()
 
 	baseMutableState := baseWorkflowLease.GetMutableState()
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
@@ -118,7 +118,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
+		defer func() { retError = currentWorkflowLease.GetReleaseFn()(ctx, retError) }()
 	}
 
 	// dedup by requestID

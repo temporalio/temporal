@@ -51,13 +51,19 @@ func Invoke(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state
-				releaseFn(nil)
+				if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+					return nil, releaseErr
+				}
+
 				return nil, consts.ErrWorkflowCompleted
 			}
 
 			// Ensure that the workflow is already paused
 			if mutableState.GetExecutionState().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
-				releaseFn(nil)
+				if releaseErr := releaseFn(ctx, nil); releaseErr != nil {
+					return nil, releaseErr
+				}
+
 				return nil, serviceerror.NewFailedPrecondition("workflow is not paused.")
 			}
 

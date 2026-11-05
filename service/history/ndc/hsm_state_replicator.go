@@ -79,7 +79,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := workflowContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {

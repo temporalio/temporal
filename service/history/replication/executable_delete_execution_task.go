@@ -236,7 +236,7 @@ func (e *ExecutableDeleteExecutionTask) getLastWriteVersion(
 	if err != nil {
 		return common.EmptyVersion, err
 	}
-	defer func() { release(retError) }()
+	defer func() { retError = release(ctx, retError) }()
 
 	mutableState, err := workflowContext.LoadMutableState(ctx, shardContext)
 	if err != nil {

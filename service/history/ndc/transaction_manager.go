@@ -224,10 +224,10 @@ func (r *transactionMgrImpl) BackfillWorkflow(
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			targetWorkflow.GetReleaseFn()(errPanic)
+			_ = targetWorkflow.GetReleaseFn()(ctx, errPanic)
 			panic(rec)
 		} else {
-			targetWorkflow.GetReleaseFn()(retError)
+			retError = targetWorkflow.GetReleaseFn()(ctx, retError)
 		}
 	}()
 
@@ -489,7 +489,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	ms, err := weContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
 		// no matter what error happen, we need to retry
-		release(err)
+		err = release(ctx, err)
 		return nil, err
 	}
 	return NewWorkflow(r.clusterMetadata, weContext, ms, release), nil

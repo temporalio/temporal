@@ -48,7 +48,7 @@ func Invoke(
 	var fabricateStartedEvent bool
 	var hasTimeSkippingClockOffset bool
 	var versioningBehavior enumspb.VersioningBehavior
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowPipelined(
 		ctx,
 		token.Clock,
 		definition.NewWorkflowKey(
@@ -127,7 +127,6 @@ func Invoke(
 				CreateWorkflowTask: true,
 			}, nil
 		},
-		nil,
 		shard,
 		workflowConsistencyChecker,
 	)

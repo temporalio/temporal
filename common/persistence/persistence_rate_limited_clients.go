@@ -309,6 +309,16 @@ func (p *executionRateLimitedPersistenceClient) SetWorkflowExecution(
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) SubmitWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, WorkflowExecutionUpdateReceipt, error) {
+	if err := allow(ctx, "UpdateWorkflowExecution", request.ShardID, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return nil, nil, err
+	}
+	return p.persistence.SubmitWorkflowExecutionUpdate(ctx, request)
+}
+
 func (p *executionRateLimitedPersistenceClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,

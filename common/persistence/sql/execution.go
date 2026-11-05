@@ -760,3 +760,7 @@ func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.T
 	startTime := state.StartTime.AsTime()
 	return &startTime
 }
+
+func (*sqlExecutionStore) SubmitWorkflowExecutionUpdate(context.Context, *p.InternalUpdateWorkflowExecutionRequest) (p.WorkflowExecutionUpdateReceipt, error) {
+	panic("workflow execution pipelining requires asynchronous CDS persistence") //nolint:forbidigo // Unsupported asynchronous writes must fail immediately.
+}

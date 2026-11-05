@@ -196,8 +196,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				errForRelease = clearStickyErr
 			}
 		}
-
-		workflowLease.GetReleaseFn()(errForRelease)
+		if releaseErr := workflowLease.GetReleaseFn()(ctx, errForRelease); retError == nil {
+			retError = releaseErr
+		}
 	}()
 
 	if !ms.IsWorkflowExecutionRunning() ||

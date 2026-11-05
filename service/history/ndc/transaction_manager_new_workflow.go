@@ -224,10 +224,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
-
 	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
+	if releaseErr := currentWorkflow.GetReleaseFn()(ctx, nil); releaseErr != nil {
+		return releaseErr
+	}
 
 	return r.persistBypassCurrent(ctx, targetWorkflow, targetWorkflowPolicy)
 }
@@ -348,10 +349,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			r.cleanupTransaction(currentWorkflow, targetWorkflow, errPanic)
+			_ = r.cleanupTransaction(currentWorkflow, targetWorkflow, errPanic)
 			panic(rec)
 		} else {
-			r.cleanupTransaction(currentWorkflow, targetWorkflow, retError)
+			retError = r.cleanupTransaction(currentWorkflow, targetWorkflow, retError)
 		}
 	}()
 
@@ -392,12 +393,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	err error,
-) {
+) error {
 
 	if currentWorkflow != nil {
-		currentWorkflow.GetReleaseFn()(err)
+		err = currentWorkflow.GetReleaseFn()(context.Background(), err)
 	}
 	if targetWorkflow != nil {
-		targetWorkflow.GetReleaseFn()(err)
+		err = targetWorkflow.GetReleaseFn()(context.Background(), err)
 	}
+	return err
 }

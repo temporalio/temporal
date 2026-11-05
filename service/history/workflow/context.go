@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -51,6 +53,8 @@ type (
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
 		updateRegistry update.Registry
+		pipeline       *executionPipeline
+		namespaceName  string
 
 		// taskCompletionBuffer holds the intermediate pages of an in-progress
 		// pagination of RespondWorkflowTaskCompleted requests; nil when no
@@ -161,7 +165,15 @@ func (c *ContextImpl) Lock(
 	ctx context.Context,
 	lockPriority locks.Priority,
 ) error {
-	return c.lock.Acquire(ctx, lockPriority, 1)
+	if err := c.lock.Acquire(ctx, lockPriority, 1); err != nil {
+		return err
+	}
+	if p := c.pipeline; p != nil && p.tail != nil && p.tail.Ready() {
+		if _, err := p.tail.Get(context.Background()); err != nil {
+			c.Clear()
+		}
+	}
+	return nil
 }
 
 func (c *ContextImpl) Unlock() {
@@ -176,6 +188,7 @@ func (c *ContextImpl) IsDirty() bool {
 }
 
 func (c *ContextImpl) Clear() {
+	c.closeExecutionPipeline()
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
@@ -432,6 +445,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 	if err != nil {
 		return nil, err
 	}
+	c.namespaceName = namespaceEntry.Name().String()
 
 	if c.MutableState == nil {
 		response, err := getWorkflowExecution(ctx, shardContext, &persistence.GetWorkflowExecutionRequest{
@@ -491,6 +505,9 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 	}
 	c.archetypeID = mutableStateArchetypeID
 
+	if err := c.PrepareWorkflowLease(ctx); err != nil {
+		return nil, err
+	}
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
 	if err != nil {
 		return nil, err
@@ -617,6 +634,17 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 	currentTransactionPolicy *historyi.TransactionPolicy,
 ) (retError error) {
+
+	if err := AwaitExecutionDurability(c); err != nil {
+		return err
+	}
+	for _, execution := range []historyi.WorkflowContext{newContext, currentContext} {
+		if execution != nil {
+			if err := AwaitExecutionDurability(execution); err != nil {
+				return err
+			}
+		}
+	}
 
 	defer func() {
 		if retError != nil {
@@ -938,6 +966,16 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		}()
 	}
 
+	if newMutableState != nil || updateMode != persistence.UpdateWorkflowModeUpdateCurrent {
+		if err := AwaitExecutionDurability(c); err != nil {
+			return err
+		}
+		if newContext != nil {
+			if err := AwaitExecutionDurability(newContext); err != nil {
+				return err
+			}
+		}
+	}
 	if err := c.prepareMutableStateTransaction(
 		shardContext,
 		newContext,
@@ -956,6 +994,9 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	)
 	if err != nil {
 		return err
+	}
+	if c.pipeline != nil && c.pipeline.active && newMutableState == nil && updateMode == persistence.UpdateWorkflowModeUpdateCurrent {
+		return c.submitWorkflowExecutionUpdate(ctx, shardContext, updateMode, payload)
 	}
 	return c.executeWorkflowTransaction(
 		ctx,
@@ -1115,6 +1156,10 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	shardContext historyi.ShardContext,
 	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
+	if err := AwaitExecutionDurability(c); err != nil {
+		return err
+	}
+
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -1720,4 +1765,187 @@ func MutableStateFailoverVersion(
 		return nil
 	}
 	return new(mutableState.GetCurrentVersion())
+}
+
+type executionPipeliningKey struct{}
+
+// WithExecutionPipelining requires callers to publish their results only after releasing the lease.
+func WithExecutionPipelining(ctx context.Context) context.Context {
+	return context.WithValue(ctx, executionPipeliningKey{}, true)
+}
+
+type executionPipeline struct {
+	active bool
+	writes []executionWrite
+	tail   future.Future[struct{}]
+}
+
+type executionWrite struct {
+	receipt persistence.WorkflowExecutionUpdateReceipt
+	publish func() error
+}
+
+func (c *ContextImpl) PrepareWorkflowLease(ctx context.Context) error {
+	if c.MutableState == nil || c.HasExecutionLease() {
+		return nil
+	}
+	enabled := c.config != nil && c.config.EnableWorkflowExecutionPipelining != nil && c.namespaceName != "" && c.config.EnableWorkflowExecutionPipelining(c.namespaceName)
+	if !enabled || ctx.Value(executionPipeliningKey{}) == nil {
+		if err := AwaitExecutionDurability(c); err != nil {
+			c.Clear()
+			return err
+		}
+		return nil
+	}
+	if c.pipeline == nil {
+		c.pipeline = &executionPipeline{}
+	}
+	c.pipeline.active = true
+	return nil
+}
+
+func finishExecutionWrites(previous future.Future[struct{}], writes []executionWrite, completion *future.FutureImpl[struct{}]) error {
+	var previousErr, writeErr error
+	if previous != nil {
+		_, previousErr = previous.Get(context.Background())
+	}
+	for _, write := range writes {
+		err := write.receipt.Wait(context.Background())
+		if err == nil {
+			err = write.publish()
+		}
+		if writeErr == nil {
+			writeErr = err
+		}
+		write.receipt.Release()
+	}
+	chainErr := previousErr
+	if chainErr == nil {
+		chainErr = writeErr
+	}
+	completion.Set(struct{}{}, chainErr)
+	if len(writes) == 0 {
+		return previousErr
+	}
+	return writeErr
+}
+
+func (c *ContextImpl) closeExecutionPipeline() {
+	_ = AwaitExecutionDurability(c)
+	c.pipeline = nil
+}
+
+func (c *ContextImpl) HasExecutionLease() bool {
+	return c.pipeline != nil && c.pipeline.active
+}
+
+func (c *ContextImpl) ReleaseExecutionLease(ctx context.Context, releasePin func(), operationErr error, forceClear bool) error {
+	if c.IsDirty() && operationErr == nil {
+		operationErr = serviceerror.NewInternal("workflow pipeline encountered unaccepted mutable-state changes")
+	}
+	if operationErr != nil || forceClear {
+		waitErr := AwaitExecutionDurability(c)
+		c.Clear()
+		c.Unlock()
+		releasePin()
+		if operationErr != nil {
+			return operationErr
+		}
+		if waitErr != nil {
+			return waitErr
+		}
+		return ctx.Err()
+	}
+	p := c.pipeline
+	previous, writes := p.tail, p.writes
+	completion := future.NewFuture[struct{}]()
+	p.active, p.writes, p.tail = false, nil, completion
+	c.Unlock()
+	defer releasePin()
+	if err := finishExecutionWrites(previous, writes, completion); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+func AwaitExecutionDurability(execution historyi.WorkflowContext) error {
+	c, ok := execution.(*ContextImpl)
+	if !ok || c.pipeline == nil {
+		return nil
+	}
+	p := c.pipeline
+	if len(p.writes) != 0 {
+		previous, writes := p.tail, p.writes
+		completion := future.NewFuture[struct{}]()
+		p.writes, p.tail = nil, completion
+		_ = finishExecutionWrites(previous, writes, completion)
+	}
+	if p.tail != nil {
+		_, err := p.tail.Get(context.Background())
+		return err
+	}
+	return nil
+}
+
+func (c *ContextImpl) submitWorkflowExecutionUpdate(ctx context.Context, shard historyi.ShardContext, mode persistence.UpdateWorkflowMode, payload *ExecutionTransactionPayload) error {
+	engine, err := shard.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+	notification := &persistence.WorkflowMutation{
+		NextEventID:      payload.ExecutionMutation.NextEventID,
+		UpsertChasmNodes: common.CloneProtoMap(payload.ExecutionMutation.UpsertChasmNodes),
+		DeleteChasmNodes: maps.Clone(payload.ExecutionMutation.DeleteChasmNodes),
+		Tasks:            make(map[tasks.Category][]tasks.Task, len(payload.ExecutionMutation.Tasks)),
+	}
+	serializer := shard.GetPayloadSerializer()
+	for category, group := range payload.ExecutionMutation.Tasks {
+		for _, task := range group {
+			blob, err := serializer.SerializeTask(task)
+			if err != nil {
+				return err
+			}
+			cloned, err := serializer.DeserializeTask(category, blob)
+			if err != nil {
+				return err
+			}
+			notification.Tasks[category] = append(notification.Tasks[category], cloned)
+		}
+	}
+	request := &persistence.UpdateWorkflowExecutionRequest{
+		ShardID: shard.GetShardID(), Mode: mode, ArchetypeID: c.archetypeID,
+		UpdateWorkflowMutation: *payload.ExecutionMutation, UpdateWorkflowEvents: payload.ExecutionEvents,
+	}
+	response, receipt, err := shard.SubmitWorkflowExecutionUpdate(ctx, request)
+	if err != nil {
+		return err
+	}
+	notification.ExecutionInfo = common.CloneProto(payload.ExecutionMutation.ExecutionInfo)
+	notification.ExecutionState = common.CloneProto(payload.ExecutionMutation.ExecutionState)
+	for category, group := range payload.ExecutionMutation.Tasks {
+		for i, task := range group {
+			notification.Tasks[category][i].SetTaskID(task.GetTaskID())
+			notification.Tasks[category][i].SetVisibilityTime(task.GetVisibilityTime())
+		}
+	}
+	stats := response.UpdateMutableStateStats
+	namespaceEntry := c.MutableState.GetNamespaceEntry()
+	archetypeID := c.archetypeID
+	currentVersion := c.MutableState.GetCurrentVersion()
+	stateTag := namespaceState(shard.GetClusterMetadata(), &currentVersion)
+	completion := mutationToCompletionMetric(stateTag, notification, payload.ExecutionEvents, c.MutableState.IsWorkflow())
+	transitionCount := notification.ExecutionInfo.StateTransitionCount
+	state := notification.ExecutionState.State
+	historySize := int(notification.ExecutionInfo.GetExecutionStats().GetHistorySize())
+	historyCount := int(notification.NextEventID - 1)
+	c.pipeline.writes = append(c.pipeline.writes, executionWrite{receipt: receipt, publish: func() error {
+		NotifyOnExecutionMutation(engine, archetypeID, notification)
+		notificationErr := NotifyNewHistoryMutationEvent(engine, notification)
+		emitMutationMetrics(shard, namespaceEntry, archetypeID, &stats, nil)
+		emitCompletionMetrics(shard, namespaceEntry, completion)
+		metrics.StateTransitionCount.With(c.metricsHandler).Record(transitionCount, metrics.NamespaceTag(namespaceEntry.Name().String()), metrics.NamespaceStateTag(stateTag))
+		emitWorkflowHistoryStats(c.metricsHandler, namespaceEntry.Name(), state, historySize, historyCount)
+		return notificationErr
+	}})
+	return nil
 }
