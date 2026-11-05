@@ -10,12 +10,16 @@ import (
 type TaskQueue struct {
 	chasm.UnimplementedComponent
 	*taskqueuepb.TaskQueueState
-	UserData chasm.Field[*UserData]
+	UserData   chasm.Field[*UserData]
+	Visibility chasm.Field[*chasm.Visibility]
 }
 
 // NewTaskQueue creates a task queue family without user data.
-func NewTaskQueue() *TaskQueue {
-	return &TaskQueue{TaskQueueState: &taskqueuepb.TaskQueueState{}}
+func NewTaskQueue(ctx chasm.MutableContext) *TaskQueue {
+	return &TaskQueue{
+		TaskQueueState: &taskqueuepb.TaskQueueState{},
+		Visibility:     chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
+	}
 }
 
 func (t *TaskQueue) LifecycleState(chasm.Context) chasm.LifecycleState {

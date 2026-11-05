@@ -74,7 +74,7 @@ func (h *handler) UpsertTaskQueueUserData(
 			ctx,
 			key,
 			func(mutableContext chasm.MutableContext, _ *taskqueuepb.UpsertTaskQueueUserDataRequest) (*TaskQueue, error) {
-				taskQueue := NewTaskQueue()
+				taskQueue := NewTaskQueue(mutableContext)
 				taskQueue.UserData = chasm.NewComponentField(mutableContext, NewUserData(mutableContext, req))
 				return taskQueue, nil
 			},
