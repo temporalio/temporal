@@ -194,6 +194,15 @@ func (h *operationInvocationTaskHandler) Execute(
 
 	if h.config.EnableOutboundTaskThrottleController() && h.config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
+			if !commonnexus.IsCallerRPSFailure(args.lastAttemptFailure) {
+				failure, _, err := callErrorToFailure(callErr)
+				if err != nil {
+					return err
+				}
+				if _, _, err := chasm.UpdateComponent(ctx, opRef, (*Operation).recordCallerRPSFailure, failure); err != nil {
+					return err
+				}
+			}
 			return retryErr
 		}
 	}

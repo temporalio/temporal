@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -1999,6 +2000,27 @@ func TestOutboundTasksTaggedAsCallerOutbound(t *testing.T) {
 	}
 }
 
+type callerRPSRecordingEnv struct {
+	fakeEnv
+	writeErr error
+	writes   int
+}
+
+func (e *callerRPSRecordingEnv) Access(
+	ctx context.Context,
+	ref hsm.Ref,
+	accessType hsm.AccessType,
+	accessor func(*hsm.Node) error,
+) error {
+	if accessType == hsm.AccessWrite {
+		e.writes++
+		if e.writeErr != nil {
+			return e.writeErr
+		}
+	}
+	return e.fakeEnv.Access(ctx, ref, accessType, accessor)
+}
+
 func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{"start", "cancel"} {
@@ -2019,12 +2041,15 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 					Message: "caller rate limit exceeded",
 				}
+				remoteErr := commonnexus.ConvertGRPCError(resourceErr, true)
 				registry := newRegistry(t)
 				event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{})
 				backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 				node := newOperationNode(t, backend, event)
 				operation, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
+				var state proto.Message = operation.NexusOperationInfo
+				operation.LastAttemptFailure = &failurepb.Failure{Message: "previous failure"}
 				var task hsm.Task = nexusoperations.InvocationTask{EndpointName: "endpoint"}
 				if method == "cancel" {
 					_, err = nexusoperations.TransitionStarted.Apply(operation, nexusoperations.EventStarted{
@@ -2035,6 +2060,10 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					require.NoError(t, err)
 					node, err = node.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 					require.NoError(t, err)
+					cancellation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+					require.NoError(t, err)
+					cancellation.LastAttemptFailure = &failurepb.Failure{Message: "previous failure"}
+					state = cancellation.NexusOperationCancellationInfo
 					task = nexusoperations.CancelationTask{EndpointName: "endpoint"}
 				}
 				endpoint := &persistencespb.NexusEndpointEntry{
@@ -2046,10 +2075,14 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 						}},
 					}},
 				}
+				calls := 1
+				if enabled {
+					calls = 4
+				}
 				namespaces := namespace.NewMockRegistry(gomock.NewController(t))
 				namespaces.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 					namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "caller"}, nil, false, nil, 0), nil,
-				)
+				).Times(calls)
 				require.NoError(t, nexusoperations.RegisterExecutor(registry, nexusoperations.TaskExecutorOptions{
 					Config: &nexusoperations.Config{
 						CallbackURLTemplate:                  dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
@@ -2074,15 +2107,26 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 						return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 							BaseURL: "http://nexus.test", Service: "service", Serializer: commonnexus.PayloadSerializer,
 							HTTPCaller: func(*http.Request) (*http.Response, error) {
-								return nil, commonnexus.ConvertGRPCError(resourceErr, true)
+								return nil, remoteErr
 							},
 						})
 					},
 				}))
-				err = registry.ExecuteImmediateTask(t.Context(), fakeEnv{node}, hsm.Ref{
-					WorkflowKey:     definition.NewWorkflowKey("ns-id", "workflow", "run"),
-					StateMachineRef: &persistencespb.StateMachineRef{},
-				}, task)
+				env := &callerRPSRecordingEnv{fakeEnv: fakeEnv{node}}
+				execute := func() error {
+					return registry.ExecuteImmediateTask(t.Context(), env, hsm.Ref{
+						WorkflowKey:     definition.NewWorkflowKey("ns-id", "workflow", "run"),
+						StateMachineRef: &persistencespb.StateMachineRef{},
+					}, task)
+				}
+				if enabled {
+					snapshot := proto.Clone(state)
+					env.writeErr = serviceerror.NewUnavailable("persistence unavailable")
+					require.ErrorIs(t, execute(), env.writeErr)
+					protorequire.ProtoEqual(t, snapshot, state)
+					env.writeErr = nil
+				}
+				err = execute()
 				if enabled {
 					require.Equal(t, resourceErr, err)
 				} else {
@@ -2094,7 +2138,9 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					if enabled {
 						require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, operation.State())
 						require.Nil(t, operation.NextAttemptScheduleTime)
-						require.Nil(t, operation.LastAttemptFailure)
+						require.True(t, commonnexus.IsCallerRPSFailure(operation.LastAttemptFailure))
+						require.NotNil(t, operation.LastAttemptCompleteTime)
+						require.Zero(t, operation.Attempt)
 					} else {
 						require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, operation.State())
 						require.NotNil(t, operation.NextAttemptScheduleTime)
@@ -2106,11 +2152,37 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					if enabled {
 						require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancellation.State())
 						require.Nil(t, cancellation.NextAttemptScheduleTime)
-						require.Nil(t, cancellation.LastAttemptFailure)
+						require.True(t, commonnexus.IsCallerRPSFailure(cancellation.LastAttemptFailure))
+						require.NotNil(t, cancellation.LastAttemptCompleteTime)
+						require.Zero(t, cancellation.Attempt)
 					} else {
 						require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancellation.State())
 						require.NotNil(t, cancellation.NextAttemptScheduleTime)
 						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					}
+				}
+				if enabled {
+					snapshot := proto.Clone(state)
+					require.Equal(t, 2, env.writes)
+					resourceErr.Message = "another caller RPS rejection"
+					remoteErr = commonnexus.ConvertGRPCError(resourceErr, true)
+					require.Equal(t, resourceErr, execute())
+					protorequire.ProtoEqual(t, snapshot, state)
+					require.Equal(t, 2, env.writes)
+					remoteErr = nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "handler unavailable")
+					var destinationDown *queueserrors.DestinationDownError
+					require.ErrorAs(t, execute(), &destinationDown)
+					require.NoError(t, destinationDown.Unwrap())
+					if method == "start" {
+						require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, operation.State())
+						require.NotNil(t, operation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeInternal), operation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+					} else {
+						cancellation, err := hsm.MachineData[nexusoperations.Cancelation](node)
+						require.NoError(t, err)
+						require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancellation.State())
+						require.NotNil(t, cancellation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeInternal), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 					}
 				}
 			})

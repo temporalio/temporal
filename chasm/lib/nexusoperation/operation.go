@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/metrics"
@@ -395,7 +396,22 @@ func (o *Operation) loadStartArgs(
 		header:                 maps.Clone(invocationData.Header),
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
+		lastAttemptFailure:     common.CloneProto(o.LastAttemptFailure),
 	}, nil
+}
+
+func (o *Operation) recordCallerRPSFailure(
+	ctx chasm.MutableContext,
+	failure *failurepb.Failure,
+) (chasm.NoValue, error) {
+	if o.Status != nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+		return nil, chasm.ErrInvalidTransition
+	}
+	if !commonnexus.IsCallerRPSFailure(o.LastAttemptFailure) {
+		o.LastAttemptFailure = failure
+		o.LastAttemptCompleteTime = timestamppb.New(ctx.Now(o))
+	}
+	return nil, nil
 }
 
 // saveInvocationResultInput is the input to the Operation.saveInvocationResult method used in UpdateComponent.
@@ -693,6 +709,20 @@ func (o *Operation) DestinationBlocked(ctx chasm.Context) bool {
 	return opCtx.DestinationBlocked(ctx.ExecutionKey().NamespaceID, o.Endpoint)
 }
 
+// BlockedReason describes why a pending invocation or cancellation is waiting.
+func (o *Operation) BlockedReason(
+	ctx chasm.Context,
+	failure *failurepb.Failure,
+) string {
+	if o.DestinationBlocked(ctx) {
+		return "The circuit breaker is open."
+	}
+	if commonnexus.IsCallerRPSFailure(failure) {
+		return "Waiting to retry after exceeding the caller RPS limit."
+	}
+	return ""
+}
+
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {
 	requestData := o.RequestData.Get(ctx)
 	key := ctx.ExecutionKey()
@@ -749,15 +779,17 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		}
 	}
 
-	// If the Nexus operation is SCHEDULED, check the circuit breaker and upgrade it to BLOCKED if applicable.
-	if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationBlocked(ctx) {
-		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-		info.BlockedReason = "The circuit breaker is open."
+	if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED {
+		if reason := o.BlockedReason(ctx, o.LastAttemptFailure); reason != "" {
+			info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			info.BlockedReason = reason
+		}
 	}
-	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
-		o.DestinationBlocked(ctx) {
-		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-		info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED {
+		if reason := o.BlockedReason(ctx, info.CancellationInfo.LastAttemptFailure); reason != "" {
+			info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			info.CancellationInfo.BlockedReason = reason
+		}
 	}
 
 	return info

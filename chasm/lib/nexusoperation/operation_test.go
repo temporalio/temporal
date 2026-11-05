@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -618,4 +620,60 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 	info.GetSearchAttributes().GetIndexedFields()["injected"] = payload.EncodeString("x")
 	require.NotContains(t, op.Visibility.Get(ctx).CustomSearchAttributes(ctx), "injected",
 		"DescribeNexusOperation response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestDescribeCallerRPSLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		backingOff  bool
+		breakerOpen bool
+		wantReason  string
+	}{
+		{name: "caller RPS rejection", wantReason: "Waiting to retry after exceeding the caller RPS limit."},
+		{name: "backing off", backingOff: true},
+		{name: "breaker takes precedence", breakerOpen: true, wantReason: "The circuit breaker is open."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := newCallbackTestContext()
+			ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				DestinationBlocked: func(string, string) bool { return tc.breakerOpen },
+			})
+			op := newTestOperation()
+			op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+			op.Endpoint = "endpoint"
+			nf, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(commonnexus.ConvertGRPCError(&serviceerror.ResourceExhausted{
+				Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+				Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			}, true))
+			require.NoError(t, err)
+			op.LastAttemptFailure, err = commonnexus.NexusFailureToTemporalFailure(nf)
+			require.NoError(t, err)
+			cancellation := newCancellation(&nexusoperationpb.CancellationState{
+				Status:             nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+				LastAttemptFailure: op.LastAttemptFailure,
+			})
+			if tc.backingOff {
+				op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
+				cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF
+			}
+			op.Cancellation = chasm.NewComponentField(ctx, cancellation)
+			op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+			op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+			status, cancellationStatus := op.Status, cancellation.Status
+			info := op.buildExecutionInfo(ctx)
+			wantState, wantCancelState := PendingOperationState(op.Status), CancellationAPIState(cancellation.Status)
+			if tc.wantReason != "" {
+				wantState = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+				wantCancelState = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			}
+			require.Equal(t, wantState, info.State)
+			require.Equal(t, wantCancelState, info.CancellationInfo.State)
+			require.Equal(t, tc.wantReason, info.BlockedReason)
+			require.Equal(t, tc.wantReason, info.CancellationInfo.BlockedReason)
+			require.Equal(t, status, op.Status)
+			require.Equal(t, cancellationStatus, cancellation.Status)
+		})
+	}
 }

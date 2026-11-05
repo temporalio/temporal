@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
@@ -663,8 +664,12 @@ func buildPendingNexusOperationInfo(
 			Destination: op.Endpoint,
 		})
 		if cb.State() != gobreaker.StateClosed {
-			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if commonnexus.IsCallerRPSFailure(op.LastAttemptFailure) {
+			blockedReason = "Waiting to retry after exceeding the caller RPS limit."
+		}
+		if blockedReason != "" {
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 		}
 	}
 
@@ -724,8 +729,12 @@ func buildNexusOperationCancellationInfo(
 			Destination: op.Endpoint,
 		})
 		if cb.State() != gobreaker.StateClosed {
-			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if commonnexus.IsCallerRPSFailure(cancelation.LastAttemptFailure) {
+			blockedReason = "Waiting to retry after exceeding the caller RPS limit."
+		}
+		if blockedReason != "" {
+			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 		}
 	}
 

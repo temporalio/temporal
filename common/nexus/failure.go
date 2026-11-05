@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/payloads"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -492,6 +493,28 @@ func CallerRPSRetry(err error) error {
 		return nil
 	}
 	return &serviceerror.ResourceExhausted{Cause: details.Cause, Scope: details.Scope, Message: cause.Failure.Message}
+}
+
+// IsCallerRPSFailure reports whether a persisted failure records a retryable
+// Nexus caller RPS rejection.
+func IsCallerRPSFailure(failure *failurepb.Failure) bool {
+	info := failure.GetNexusHandlerFailureInfo()
+	if info.GetType() != string(nexus.HandlerErrorTypeResourceExhausted) ||
+		info.GetRetryBehavior() == enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE {
+		return false
+	}
+	causeInfo := failure.GetCause().GetApplicationFailureInfo()
+	if causeInfo.GetType() != "NexusFailure" {
+		return false
+	}
+	var cause nexus.Failure
+	if err := payloads.Decode(causeInfo.GetDetails(), &cause); err != nil {
+		return false
+	}
+	return CallerRPSRetry(&nexus.HandlerError{
+		Type:  nexus.HandlerErrorTypeResourceExhausted,
+		Cause: &nexus.FailureError{Failure: cause},
+	}) != nil
 }
 
 func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {

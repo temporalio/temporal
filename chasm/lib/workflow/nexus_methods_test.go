@@ -8,10 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -100,5 +102,53 @@ func TestBuildPendingNexusOperationInfos_CircuitBreaker(t *testing.T) {
 				require.Equal(t, expectedCalls, calls)
 			})
 		}
+	}
+}
+
+func TestBuildPendingNexusOperationInfosCallerRPSLimit(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"start", "cancel"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			tcx := newTestContext(t, defaultConfig)
+			_, key := scheduleOperation(t, tcx)
+			op := tcx.wf.Operations[key].Get(tcx.chasmCtx)
+			nf, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(commonnexus.ConvertGRPCError(&serviceerror.ResourceExhausted{
+				Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+				Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			}, true))
+			require.NoError(t, err)
+			failure, err := commonnexus.NexusFailureToTemporalFailure(nf)
+			require.NoError(t, err)
+			if method == "cancel" {
+				applyStartedEvent(t, tcx, key, time.Now())
+				err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
+					Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+						RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{ScheduledEventId: key},
+					},
+				}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+				require.NoError(t, err)
+				cancel := op.Cancellation.Get(tcx.chasmCtx)
+				cancel.LastAttemptFailure = failure
+			} else {
+				op.LastAttemptFailure = failure
+			}
+			tcx.chasmCtx.GoCtx = context.WithValue(context.Background(), nexusoperation.OperationContextKey, &nexusoperation.OperationContext{
+				DestinationBlocked: func(string, string) bool { return false },
+			})
+			infos, err := tcx.wf.BuildPendingNexusOperationInfos(tcx.chasmCtx)
+			require.NoError(t, err)
+			require.Len(t, infos, 1)
+			if method == "start" {
+				require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, infos[0].State)
+				require.Equal(t, "Waiting to retry after exceeding the caller RPS limit.", infos[0].BlockedReason)
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
+			} else {
+				require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, infos[0].State)
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, infos[0].CancellationInfo.State)
+				require.Equal(t, "Waiting to retry after exceeding the caller RPS limit.", infos[0].CancellationInfo.BlockedReason)
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, op.Cancellation.Get(tcx.chasmCtx).Status)
+			}
+		})
 	}
 }
