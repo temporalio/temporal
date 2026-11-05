@@ -202,3 +202,228 @@ func TestPossible(t *testing.T) {
 		})
 	}
 }
+
+func TestHandoffRetryFitPolicySelection(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                                        string
+		handedOff                                   bool
+		activityRetryOutlives, handoffRetryOutlives bool
+		event                                       Event
+		expected                                    AbstractState
+	}{
+		{
+			name: "start-to-close before handoff uses activity policy", activityRetryOutlives: true,
+			event:    StartToCloseElapses,
+			expected: AbstractState{Status: TimedOut, AttemptCount: 1, HandoffAttempt: 1},
+		},
+		{
+			name: "completion timeout uses activity policy", handedOff: true, handoffRetryOutlives: true,
+			event:    HandoffToCloseElapses,
+			expected: AbstractState{Status: Scheduled, AttemptCount: 2, HandoffAttempt: 1, Dispatchability: BackoffPending},
+		},
+		{
+			name: "reported start-to-close before handoff uses handoff policy", handoffRetryOutlives: true,
+			event:    Event{Type: RespondFailedType, Failure: &Failure{Type: StartToCloseTimeoutFailureType}},
+			expected: AbstractState{Status: Failed, AttemptCount: 1, HandoffAttempt: 1},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := Config{
+				InitialAttemptStarted: true, AsyncHandoffOptions: true,
+				HasStartToClose: true, HasHandoffToClose: true, HasScheduleToClose: true,
+				MaxAttempts: 3, HandoffMaxAttempts: 3,
+				RetryOutlivesScheduleToClose:        testCase.activityRetryOutlives,
+				HandoffRetryOutlivesScheduleToClose: testCase.handoffRetryOutlives,
+			}
+			state := Initial(cfg)
+			if testCase.handedOff {
+				state = Transition(cfg, state, Handoff).Next
+			}
+
+			require.Equal(t, Outcome{Next: testCase.expected}, Transition(cfg, state, testCase.event))
+		})
+	}
+}
+
+func TestHandoffTimerEligibility(t *testing.T) {
+	t.Parallel()
+
+	enabled := Config{
+		AsyncHandoffOptions: true, HasStartToClose: true,
+		HasStartToHandoff: true, HasHandoffToClose: true,
+	}
+	phaseOnly := enabled
+	phaseOnly.HasStartToClose = false
+	noPhaseTimeouts := Config{AsyncHandoffOptions: true, HasStartToClose: true}
+	postHeartbeatOnly := Config{AsyncHandoffOptions: true, HasStartToClose: true, HasHeartbeat: true}
+	preHeartbeatOnly := Config{AsyncHandoffOptions: true, HasStartToClose: true, HasHandoffHeartbeat: true}
+	for _, testCase := range []struct {
+		name  string
+		cfg   Config
+		trace []Event
+		event Event
+	}{
+		{
+			name: "submission clock stops at handoff", cfg: enabled, trace: []Event{Poll, Handoff},
+			event: StartToHandoffElapses,
+		},
+		{
+			name: "completion clock starts at handoff", cfg: enabled, trace: []Event{Poll},
+			event: HandoffToCloseElapses,
+		},
+		{
+			name: "submission timeout disabled", cfg: noPhaseTimeouts, trace: []Event{Poll},
+			event: StartToHandoffElapses,
+		},
+		{
+			name: "submission heartbeat does not inherit completion heartbeat", cfg: postHeartbeatOnly, trace: []Event{Poll},
+			event: HeartbeatElapses,
+		},
+		{
+			name: "completion heartbeat does not inherit submission heartbeat", cfg: preHeartbeatOnly, trace: []Event{Poll, Handoff},
+			event: HeartbeatElapses,
+		},
+		{
+			name: "phase-only activity has no start-to-close timeout", cfg: phaseOnly, trace: []Event{Poll},
+			event: StartToCloseElapses,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := Initial(testCase.cfg)
+			for _, event := range testCase.trace {
+				out := Transition(testCase.cfg, state, event)
+				require.Equal(t, NoError, out.Reject)
+				require.False(t, out.ImpossibleTimeWindowElapse)
+				state = out.Next
+			}
+
+			require.Equal(t, Outcome{Next: state, ImpossibleTimeWindowElapse: true},
+				Transition(testCase.cfg, state, testCase.event))
+		})
+	}
+}
+
+func TestHandoffStartToCloseLifecycle(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{AsyncHandoffOptions: true, HasStartToClose: true}
+	t.Run("pause stops the clock until the next pickup", func(t *testing.T) {
+		t.Parallel()
+
+		state := Initial(cfg)
+		for _, step := range []struct {
+			event   Event
+			started bool
+		}{
+			{event: Poll, started: true},
+			{event: Pause, started: true},
+			{event: FailRetryably, started: false},
+			{event: Unpause, started: false},
+			{event: BackoffElapses, started: false},
+			{event: Poll, started: true},
+		} {
+			out := Transition(cfg, state, step.event)
+			require.Equal(t, NoError, out.Reject)
+			require.False(t, out.ImpossibleTimeWindowElapse)
+			require.Equal(t, step.started, out.Next.HandoffStartToCloseStarted, "after %s", step.event.Type)
+			state = out.Next
+		}
+	})
+
+	for _, testCase := range []struct {
+		name     string
+		trace    []Event
+		expected AbstractState
+	}{
+		{
+			name:  "submission retry preserves the clock",
+			trace: []Event{Poll, FailRetryably},
+			expected: AbstractState{
+				Status: Scheduled, AttemptCount: 1, HandoffAttempt: 2,
+				Dispatchability: BackoffPending, HandoffStartToCloseStarted: true,
+			},
+		},
+		{
+			name:     "deferred reset clears the clock and completion phase",
+			trace:    []Event{Poll, Handoff, FailRetryably, BackoffElapses, Poll, Handoff, Reset, FailRetryably},
+			expected: AbstractState{Status: Scheduled, AttemptCount: 1, HandoffAttempt: 1},
+		},
+		{
+			name:     "reset during handoff backoff clears the clock",
+			trace:    []Event{Poll, FailRetryably, Reset},
+			expected: AbstractState{Status: Scheduled, AttemptCount: 1, HandoffAttempt: 1},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			out := Outcome{Next: Initial(cfg)}
+			for _, event := range testCase.trace {
+				out = Transition(cfg, out.Next, event)
+				require.Equal(t, NoError, out.Reject)
+				require.False(t, out.ImpossibleTimeWindowElapse)
+			}
+
+			require.Equal(t, Outcome{Next: testCase.expected}, out)
+		})
+	}
+}
+
+func TestHandoffRetryPolicySelection(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                    string
+		handedOff               bool
+		activityMax, handoffMax int32
+		handoffExclusions       []EventType
+		event                   Event
+		expected                AbstractState
+	}{
+		{
+			name: "handoff retry limit is exhausted", activityMax: 3, handoffMax: 1,
+			event:    FailRetryably,
+			expected: AbstractState{Status: Failed, AttemptCount: 1, HandoffAttempt: 1},
+		},
+		{
+			name: "activity retry limit is exhausted", handedOff: true, activityMax: 1, handoffMax: 3,
+			event:    FailRetryably,
+			expected: AbstractState{Status: Failed, AttemptCount: 1, HandoffAttempt: 1},
+		},
+		{
+			name: "submission heartbeat uses handoff exclusions", handoffExclusions: []EventType{HeartbeatElapsesType},
+			event:    HeartbeatElapses,
+			expected: AbstractState{Status: TimedOut, AttemptCount: 1, HandoffAttempt: 1},
+		},
+		{
+			name: "completion heartbeat ignores handoff exclusions", handedOff: true, handoffExclusions: []EventType{HeartbeatElapsesType},
+			event:    HeartbeatElapses,
+			expected: AbstractState{Status: Scheduled, AttemptCount: 2, HandoffAttempt: 1, Dispatchability: BackoffPending},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := Config{
+				InitialAttemptStarted: true, AsyncHandoffOptions: true, HasStartToClose: true,
+				HasHeartbeat: true, HasHandoffHeartbeat: true,
+				MaxAttempts: testCase.activityMax, HandoffMaxAttempts: testCase.handoffMax,
+				HandoffNonRetryableTimeouts: testCase.handoffExclusions,
+			}
+			state := Initial(cfg)
+			if testCase.handedOff {
+				out := Transition(cfg, state, Handoff)
+				require.Equal(t, NoError, out.Reject)
+				state = out.Next
+			}
+
+			require.Equal(t, Outcome{Next: testCase.expected}, Transition(cfg, state, testCase.event))
+		})
+	}
+}

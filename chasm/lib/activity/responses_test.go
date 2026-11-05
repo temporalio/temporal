@@ -101,6 +101,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	startToCloseTimeout := durationpb.New(2 * time.Minute)
 	heartbeatTimeout := durationpb.New(3 * time.Minute)
 	retryPolicy := &commonpb.RetryPolicy{MaximumAttempts: 2}
+	handoffOptions := &apiactivitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}
 	priority := &commonpb.Priority{PriorityKey: 1}
 	propagatedNexusSerializationContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
 
@@ -113,13 +114,15 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 			StartToCloseTimeout:    startToCloseTimeout,
 			HeartbeatTimeout:       heartbeatTimeout,
 			RetryPolicy:            retryPolicy,
+			AsyncHandoffOptions:    handoffOptions,
 			Priority:               priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count:          1,
-			StartRequestId: "request-id",
-			StartedTime:    startedTime,
-			DispatchTime:   dispatchTime,
+			Count:             1,
+			AsyncHandoffState: &activitypb.ActivityAttemptState_AsyncHandoffState{Count: 1},
+			StartRequestId:    "request-id",
+			StartedTime:       startedTime,
+			DispatchTime:      dispatchTime,
 		}),
 		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{Details: heartbeatDetails}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -148,6 +151,8 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	startToCloseTimeout.Seconds++
 	heartbeatTimeout.Seconds++
 	retryPolicy.MaximumAttempts++
+	handoffOptions.StartToHandoffTimeout.Seconds++
+	activity.LastAttempt.Get(ctx).AsyncHandoffState.Count++
 	priority.PriorityKey++
 	propagatedNexusSerializationContext.Endpoint = "changed-endpoint"
 
@@ -164,6 +169,8 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	require.Equal(t, int64(2*time.Minute/time.Second), response.GetStartToCloseTimeout().GetSeconds())
 	require.Equal(t, int64(3*time.Minute/time.Second), response.GetHeartbeatTimeout().GetSeconds())
 	require.EqualValues(t, 2, response.GetRetryPolicy().GetMaximumAttempts())
+	require.EqualValues(t, 1, response.GetHandoffAttempt())
+	protorequire.ProtoEqual(t, &apiactivitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, response.GetAsyncHandoffOptions())
 	require.EqualValues(t, 1, response.GetPriority().GetPriorityKey())
 	require.Equal(t, "endpoint", response.GetPropagatedNexusSerializationContext().GetEndpoint())
 }

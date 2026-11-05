@@ -4,6 +4,7 @@ package temporal.server.api.matchingservice.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -150,6 +151,10 @@ message PollActivityTaskQueueResponse {
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 21;
+  // Handoff attempt within the activity attempt. Zero when handoff options are absent.
+  int32 handoff_attempt = 22;
+  // Normalized handoff options for this activity task.
+  temporal.api.activity.v1.AsyncHandoffOptions async_handoff_options = 23;
 }
 
 message AddWorkflowTaskRequest {

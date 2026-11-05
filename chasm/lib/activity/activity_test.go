@@ -3,12 +3,14 @@ package activity
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -20,6 +22,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
@@ -1098,6 +1101,11 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(20 * time.Second),
 		StartToCloseTimeout:    durationpb.New(10 * time.Second),
+		AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{
+			StartToHandoffTimeout: durationpb.New(10 * time.Second),
+			HandoffToCloseTimeout: durationpb.New(8 * time.Second),
+			RetryPolicy:           common.CloneProto(defaultRetryPolicy),
+		},
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(10 * time.Second),
 			BackoffCoefficient: 2,
@@ -1110,10 +1118,15 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 	})
 	require.NoError(t, err)
 
+	original := common.CloneProto(activity.GetOriginalOptions())
+	// Mutate a nested field to verify current options don't share memory with the original snapshot.
+	activity.AsyncHandoffOptions.StartToHandoffTimeout.Seconds++
+
 	err = activity.mergeActivityOptions(&workflowservice.UpdateActivityExecutionOptionsRequest{
 		ActivityId: "act",
 		ActivityOptions: &apiactivitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{Name: "updated-task-queue"},
+			StartToCloseTimeout: durationpb.New(5 * time.Second),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "updated-task-queue"},
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(time.Second),
 			},
@@ -1123,6 +1136,7 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
 			"task_queue.name",
+			"start_to_close_timeout",
 			"retry_policy.initial_interval",
 			"priority.fairness_key",
 		}},
@@ -1130,6 +1144,8 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 	require.NoError(t, err)
 
 	originalOptions := activity.GetOriginalOptions()
+	protorequire.ProtoEqual(t, original, originalOptions)
+	require.Equal(t, 5*time.Second, activity.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration())
 	require.Equal(t, "original-task-queue", originalOptions.GetTaskQueue().GetName())
 	require.Equal(t, 10*time.Second, originalOptions.GetRetryPolicy().GetInitialInterval().AsDuration())
 	require.Equal(t, "original-fairness-key", originalOptions.GetPriority().GetFairnessKey())
@@ -1444,6 +1460,78 @@ func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
 			require.Nil(t, result)
 			require.False(t, act.GetAwaitingCompletion())
 			require.Nil(t, act.GetAsyncHandoffTime())
+		})
+	}
+}
+
+// A missing stamp must not bypass task freshness checks when handoff retries reuse the attempt number.
+func TestActivityTaskTokenRequiresStampWithHandoffOptions(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                string
+		missingTokenStamp   bool
+		missingStartedStamp bool
+	}{
+		{name: "missing token stamp", missingTokenStamp: true},
+		{name: "missing pickup stamp", missingStartedStamp: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, ctx := newHandoffRetryTestActivity(t)
+			attempt := a.LastAttempt.Get(ctx)
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id", BusinessId: "test-activity"}).Marshal()
+			require.NoError(t, err)
+
+			token := &tokenspb.Task{Attempt: attempt.GetCount(), ActivityAttemptStamp: attempt.GetStartedStamp(), ComponentRef: ref}
+			if testCase.missingTokenStamp {
+				token.ActivityAttemptStamp = 0
+			}
+
+			if testCase.missingStartedStamp {
+				attempt.StartedStamp = 0
+			}
+
+			err = a.validateActivityTaskToken(ctx, token, "test-namespace-id", false)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+		})
+	}
+}
+
+func TestReportedTimeoutDoesNotConvertToScheduleToClose(t *testing.T) {
+	t.Parallel()
+
+	for _, handedOff := range []bool{false, true} {
+		t.Run(fmt.Sprintf("handedOff=%t", handedOff), func(t *testing.T) {
+			t.Parallel()
+
+			a, ctx := newHandoffRetryTestActivity(t)
+			a.AwaitingCompletion = handedOff
+			// Prevent another retry without firing a server timeout; the reported failure must remain unchanged.
+			a.ScheduleToCloseTimeout = durationpb.New(ctx.Now(a).Sub(a.GetScheduleTime().AsTime()) + time.Second)
+			timeoutType := enumspb.TIMEOUT_TYPE_START_TO_HANDOFF
+			if handedOff {
+				timeoutType = enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE
+			}
+
+			failure := createActivityTimeoutFailure(timeoutType)
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id", BusinessId: "test-activity"}).Marshal()
+			require.NoError(t, err)
+
+			// External by-ID reporters can supply timeout failures; they are not authoritative server timers.
+			_, err = a.HandleFailed(ctx, RespondFailedEvent{
+				Token: &tokenspb.Task{Attempt: ByIDTokenAttempt, ComponentRef: ref},
+				Request: &historyservice.RespondActivityTaskFailedRequest{
+					NamespaceId:   "test-namespace-id",
+					FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{Failure: failure},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, a.GetStatus())
+			require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, a.Outcome.Get(ctx).GetRetryState())
+			protorequire.ProtoEqual(t, failure, a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure())
+			require.Empty(t, ctx.Tasks)
 		})
 	}
 }

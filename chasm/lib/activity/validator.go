@@ -42,15 +42,19 @@ func ValidateAndNormalizeStandaloneActivity(
 		return err
 	}
 
-	return validateAndNormalizeActivityAttributes(
-		activityID,
-		activityType,
-		getDefaultActivityRetrySettings,
-		maxIDLengthLimit,
-		namespaceName,
-		options,
-		priority,
-		durationpb.New(0))
+	if err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority); err != nil {
+		return err
+	}
+
+	if options.GetAsyncHandoffOptions() != nil {
+		// TODO: Reuse shared handoff timeout validation for opted-in workflow activities when WFA
+		// async handoff is supported, preserving workflow-specific limits.
+		defaults := getDefaultActivityRetrySettings(namespaceName.String())
+		return validateAndNormalizeHandoffOptions(options, &defaults)
+	}
+
+	return validateAndNormalizeTimeouts(activityID, activityType, durationpb.New(0), options)
 }
 
 // ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
@@ -101,6 +105,22 @@ func validateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
+	if err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeTimeouts(activityID, activityType, runTimeout, options)
+}
+
+func validateActivityAttributes(
+	activityID, activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceName namespace.Name,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+) error {
 	if activityID == "" {
 		return serviceerror.NewInvalidArgument("activityId is not set")
 	}
@@ -125,10 +145,7 @@ func validateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
-	return validateAndNormalizeTimeouts(activityID,
-		activityType,
-		runTimeout,
-		options)
+	return nil
 }
 
 func validatePropagatedNexusSerializationContext(nexusContext *nexuspb.PropagatedSerializationContext, maxIDLengthLimit int) error {
@@ -243,8 +260,12 @@ func validateOriginalOptionsRestorable(original *activitypb.ActivityOptions) err
 	if original.GetTaskQueue().GetName() == "" {
 		return serviceerror.NewInvalidArgument("cannot restore original options: no original task queue was recorded for this activity")
 	}
-	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 && original.GetStartToCloseTimeout().AsDuration() <= 0 {
-		return serviceerror.NewInvalidArgument("cannot restore original options: no original schedule-to-close or start-to-close timeout was recorded for this activity")
+
+	noPhaseCoverage := original.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration() <= 0 ||
+		original.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration() <= 0
+	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
+		original.GetStartToCloseTimeout().AsDuration() <= 0 && noPhaseCoverage {
+		return serviceerror.NewInvalidArgument("cannot restore original options: a positive schedule-to-close or start-to-close timeout, or both handoff phase timeouts, is required")
 	}
 	return nil
 }
@@ -914,4 +935,86 @@ func validateAndExtractHandoffTaskToken(token *tokenspb.Task) (string, error) {
 	}
 
 	return businessID, nil
+}
+
+// validateAndNormalizeHandoffOptions normalizes opted-in options in place. Callers clone first and
+// apply any workflow-specific outer bounds before calling. Start-to-close stays disabled when
+// unset, including when schedule-to-close is positive. Phase-only coverage need not bound queue wait.
+// A nil retryDefaults preserves the stored policy; creation and policy edits supply defaults.
+// Invalid user options return InvalidArgument. A nil projection is a caller error; legacy absence is a no-op.
+func validateAndNormalizeHandoffOptions(options *activitypb.ActivityOptions, retryDefaults *retrypolicy.DefaultRetrySettings) error {
+	if options == nil {
+		return serviceerror.NewInternal("activity options projection is nil")
+	}
+
+	if options.GetAsyncHandoffOptions() == nil {
+		return nil
+	}
+
+	handoff := options.GetAsyncHandoffOptions()
+	for _, timeout := range []struct {
+		name  string
+		value *durationpb.Duration
+	}{
+		{name: "ScheduleToCloseTimeout", value: options.ScheduleToCloseTimeout},
+		{name: "ScheduleToStartTimeout", value: options.ScheduleToStartTimeout},
+		{name: "StartToCloseTimeout", value: options.StartToCloseTimeout},
+		{name: "HeartbeatTimeout", value: options.HeartbeatTimeout},
+		{name: "AsyncHandoffOptions.StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{name: "AsyncHandoffOptions.HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{name: "AsyncHandoffOptions.HeartbeatTimeout", value: handoff.HeartbeatTimeout},
+	} {
+		if err := timestamp.ValidateAndCapProtoDuration(timeout.value); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid %s: %v", timeout.name, err)
+		}
+	}
+
+	if options.GetStartToCloseTimeout().AsDuration() <= 0 && options.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
+		(handoff.GetStartToHandoffTimeout().AsDuration() <= 0 || handoff.GetHandoffToCloseTimeout().AsDuration() <= 0) {
+		return serviceerror.NewInvalidArgument("a positive start-to-close or schedule-to-close timeout, or both handoff phase timeouts, is required")
+	}
+
+	if retryDefaults != nil {
+		if handoff.RetryPolicy == nil {
+			handoff.RetryPolicy = &commonpb.RetryPolicy{}
+		}
+
+		retrypolicy.EnsureDefaults(handoff.RetryPolicy, *retryDefaults)
+	}
+
+	if err := retrypolicy.Validate(handoff.RetryPolicy); err != nil {
+		return err
+	}
+
+	options.StartToCloseTimeout = capPositive(options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	if options.GetScheduleToCloseTimeout().AsDuration() > 0 {
+		if options.GetScheduleToStartTimeout().AsDuration() <= 0 {
+			options.ScheduleToStartTimeout = durationpb.New(options.ScheduleToCloseTimeout.AsDuration())
+		} else {
+			options.ScheduleToStartTimeout = capPositive(options.ScheduleToStartTimeout, options.ScheduleToCloseTimeout)
+		}
+	}
+
+	handoff.StartToHandoffTimeout = capPositive(handoff.StartToHandoffTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	handoff.HandoffToCloseTimeout = capPositive(handoff.HandoffToCloseTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+
+	handoff.HeartbeatTimeout = capPositive(handoff.HeartbeatTimeout, handoff.StartToHandoffTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	options.HeartbeatTimeout = capPositive(options.HeartbeatTimeout, handoff.HandoffToCloseTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+
+	return nil
+}
+
+func capPositive(value *durationpb.Duration, bounds ...*durationpb.Duration) *durationpb.Duration {
+	if value.AsDuration() <= 0 {
+		return value
+	}
+
+	result := value.AsDuration()
+	for _, bound := range bounds {
+		if limit := bound.AsDuration(); limit > 0 && limit < result {
+			result = limit
+		}
+	}
+
+	return durationpb.New(result)
 }
