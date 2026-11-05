@@ -536,7 +536,7 @@ func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollM
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 	// Keyed on worker instance rather than identity, because a fleet commonly shares one
 	// configured identity and fair-share has to tell its members apart.
-	c.pollerShares.record(pollMetadata.workerInstanceKey, pollMetadata.pollerScalingInfo)
+	c.pollerShares.record(pollMetadata.workerInstanceKey, pollMetadata.pollerPoolInfo)
 }
 
 func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity, workerInstanceKey string) {

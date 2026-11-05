@@ -11,8 +11,8 @@ import (
 
 const testShareBand = 1.2
 
-func report(target int32) *taskqueuepb.PollerScalingInfo {
-	return &taskqueuepb.PollerScalingInfo{PollerTarget: target}
+func report(target int32) *taskqueuepb.PollerPoolInfo {
+	return &taskqueuepb.PollerPoolInfo{TargetPollers: target}
 }
 
 func newTestShareTracker(ttl time.Duration) (*pollerShareTracker, *clock.EventTimeSource) {

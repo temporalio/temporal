@@ -54,14 +54,14 @@ func newPollerShareTracker(ttl time.Duration, timeSource clock.TimeSource) *poll
 //
 // Keyed on worker instance rather than poller identity because a fleet commonly shares one
 // configured identity, and fairness has to tell its members apart.
-func (t *pollerShareTracker) record(workerInstanceKey string, info *taskqueuepb.PollerScalingInfo) {
-	if t == nil || workerInstanceKey == "" || info.GetPollerTarget() <= 0 {
+func (t *pollerShareTracker) record(workerInstanceKey string, info *taskqueuepb.PollerPoolInfo) {
+	if t == nil || workerInstanceKey == "" || info.GetTargetPollers() <= 0 {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.reports[workerInstanceKey] = pollerShareReport{
-		target:   int64(info.GetPollerTarget()),
+		target:   int64(info.GetTargetPollers()),
 		reported: t.timeSource.Now(),
 	}
 }

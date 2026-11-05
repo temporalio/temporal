@@ -122,10 +122,10 @@ type (
 		localPollStartTime        time.Time
 		workerInstanceKey         string
 		workerControlTaskQueue    string
-		// pollerScalingInfo is the poller pool state the worker reported on this poll --
+		// pollerPoolInfo is the poller pool state the worker reported on this poll --
 		// its current poller target. Used to spread scaling suggestions evenly across a
 		// fleet. nil for SDKs that don't report it.
-		pollerScalingInfo *taskqueuepb.PollerScalingInfo
+		pollerPoolInfo *taskqueuepb.PollerPoolInfo
 	}
 
 	userDataUpdate struct {
@@ -823,7 +823,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
-			pollerScalingInfo:         request.PollerScalingInfo,
+			pollerPoolInfo:            request.PollerPoolInfo,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1101,7 +1101,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
-			pollerScalingInfo:         request.PollerScalingInfo,
+			pollerPoolInfo:            request.PollerPoolInfo,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
