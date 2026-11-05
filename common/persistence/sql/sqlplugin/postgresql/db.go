@@ -39,9 +39,9 @@ type db struct {
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
 	pipe   *pipeline
-	// pipelining is whether the DB pipelines, as the first connection a
-	// BeginPipelinedTx takes decides. Every connection of a DB shares the settings
-	// that decide it.
+	// pipelining is whether the DB pipelines. The first connection a
+	// BeginPipelinedTx takes decides the exec mode, which every connection of a DB
+	// shares, and any connection that is not pgx's decides unsupported.
 	pipelining atomic.Int32
 }
 

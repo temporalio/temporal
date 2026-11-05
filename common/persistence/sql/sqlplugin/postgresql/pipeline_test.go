@@ -6,6 +6,7 @@ import (
 	sqldriver "database/sql/driver"
 	"io"
 	"net"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,13 @@ type (
 	otherDriverConn struct {
 		sqldriver.Conn
 	}
+
+	// switchingConnector connects with pgx first and with another driver after,
+	// as a custom SQL.Connect can once the handle rebuilds the pool.
+	switchingConnector struct {
+		pgx       sqldriver.Connector
+		connected atomic.Bool
+	}
 )
 
 // The first connection decides that the DB pipelines.
@@ -51,6 +59,20 @@ func TestBeginPipelinedTx_OtherDriverConnectionUnsupported(t *testing.T) {
 	sqlDB, err := pdb.handle.DB()
 	require.NoError(t, err)
 	require.Zero(t, sqlDB.Stats().InUse)
+}
+
+// Every connection is checked, as a rebuilt pool can connect with another driver.
+func TestBeginPipelinedTx_LaterOtherDriverConnectionUnsupported(t *testing.T) {
+	t.Parallel()
+	pdb := newPipelineTestDB(t, &switchingConnector{pgx: stdlib.GetConnector(*fakeServerConfig(t, serveFake))})
+
+	tx, err := pdb.BeginPipelinedTx(context.Background())
+	require.NoError(t, err)
+	// tx holds the pgx connection, so the pool connects again.
+	_, err = pdb.BeginPipelinedTx(context.Background())
+	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
+	require.Equal(t, pipeliningUnsupported, pdb.pipelining.Load())
+	require.NoError(t, tx.Rollback())
 }
 
 // A DB that rejected a connection rejects later transactions without taking one.
@@ -207,4 +229,15 @@ func (c otherDriverConnector) Driver() sqldriver.Driver {
 
 func (otherDriverConn) Close() error {
 	return nil
+}
+
+func (c *switchingConnector) Connect(ctx context.Context) (sqldriver.Conn, error) {
+	if c.connected.Swap(true) {
+		return otherDriverConn{}, nil
+	}
+	return c.pgx.Connect(ctx)
+}
+
+func (c *switchingConnector) Driver() sqldriver.Driver {
+	return c.pgx.Driver()
 }

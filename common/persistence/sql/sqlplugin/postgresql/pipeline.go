@@ -55,8 +55,8 @@ var (
 )
 
 // BeginPipelinedTx takes the connection Commit sends the batch on from the pool.
-// The first connection decides whether the DB pipelines: unless it is a pgx
-// connection in extended protocol, this and every later call return
+// It checks that every connection is a pgx connection, and the first one
+// decides the exec mode. Once a check fails, this and every later call return
 // ErrPipelineUnsupported, the later ones without taking a connection.
 func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
 	if pdb.pipelining.Load() == pipeliningUnsupported {
@@ -70,23 +70,28 @@ func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, err
 	if err != nil {
 		return nil, pdb.handle.ConvertError(err)
 	}
-	if pdb.pipelining.Load() == pipeliningUnchecked {
-		err = conn.Raw(func(driverConn any) error {
-			// A custom SQL.Connect can return another driver's connections. Simple
-			// protocol sends the batch as one query, which Postgres logs whole, values
-			// included, when a check fails.
-			pgxConn, ok := driverConn.(*stdlib.Conn)
-			if !ok || pgxConn.Conn().Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol {
+	err = conn.Raw(func(driverConn any) error {
+		// A custom SQL.Connect can return another driver's connections, also after
+		// the handle rebuilds the pool.
+		pgxConn, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			pdb.pipelining.Store(pipeliningUnsupported)
+			return sqlplugin.ErrPipelineUnsupported
+		}
+		if pdb.pipelining.Load() == pipeliningUnchecked {
+			// Simple protocol sends the batch as one query, which Postgres logs whole,
+			// values included, when a check fails.
+			if pgxConn.Conn().Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol {
 				pdb.pipelining.Store(pipeliningUnsupported)
 				return sqlplugin.ErrPipelineUnsupported
 			}
 			pdb.pipelining.Store(pipeliningSupported)
-			return nil
-		})
-		if err != nil {
-			_ = conn.Close()
-			return nil, err
 		}
+		return nil
+	})
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
 	}
 	tx := newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, nil, pdb.logger)
 	tx.pipe = &pipeline{ctx: ctx, db: sqlDB, conn: conn}
@@ -218,7 +223,7 @@ func (p *pipeline) check(checkErr error, query string, args ...any) {
 func (p *pipeline) sendOnConn() error {
 	defer func() { _ = p.conn.Close() }()
 	return p.conn.Raw(func(driverConn any) error {
-		// BeginPipelinedTx checked that the DB's connections are pgx's.
+		// BeginPipelinedTx checked that this is a pgx connection.
 		return p.send(driverConn.(*stdlib.Conn).Conn())
 	})
 }
