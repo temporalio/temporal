@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"maps"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -13,14 +12,17 @@ import (
 	"go.temporal.io/server/common/wideevents"
 )
 
-func (adh *AdminHandler) authoritativeNamespaceMutationObservation(
+// observeAuthoritativeNamespaceMutation reports the final result of one
+// authoritative ApplyNamespaceMutation RPC.
+func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
 	request *adminservice.ApplyNamespaceMutationRequest,
 	task *replicationspb.NamespaceTaskAttributes,
 	outcome string,
 	applyErr error,
 	startTime time.Time,
-	details map[string]any,
-) nsreplication.CHASMAuthoritativeApplyObservation {
+) {
+	var telemetryPanic error
+	defer log.CapturePanic(adh.logger, &telemetryPanic)
 	observation := nsreplication.CHASMAuthoritativeApplyObservation{
 		Task:                task,
 		Stage:               nsreplication.CHASMApplyStageReceive,
@@ -32,41 +34,14 @@ func (adh *AdminHandler) authoritativeNamespaceMutationObservation(
 		AttemptCount:        int(request.GetAttemptCount()),
 		Duration:            time.Since(startTime),
 		Error:               applyErr,
-		Details:             maps.Clone(details),
 	}
 	applyNamespaceMutationAttribution(request, &observation)
-	return observation
-}
-
-func (adh *AdminHandler) recordAuthoritativeNamespaceMutation(
-	request *adminservice.ApplyNamespaceMutationRequest,
-	task *replicationspb.NamespaceTaskAttributes,
-	outcome string,
-	applyErr error,
-	startTime time.Time,
-	details map[string]any,
-) {
-	var telemetryPanic error
-	defer log.CapturePanic(adh.logger, &telemetryPanic)
-	nsreplication.RecordCHASMAuthoritativeApply(
-		adh.metricsHandler,
-		adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details),
-	)
-}
-
-func (adh *AdminHandler) observeAuthoritativeNamespaceMutation(
-	request *adminservice.ApplyNamespaceMutationRequest,
-	task *replicationspb.NamespaceTaskAttributes,
-	outcome string,
-	applyErr error,
-	startTime time.Time,
-	details map[string]any,
-) {
-	var telemetryPanic error
-	defer log.CapturePanic(adh.logger, &telemetryPanic)
-	observation := adh.authoritativeNamespaceMutationObservation(request, task, outcome, applyErr, startTime, details)
 	nsreplication.RecordCHASMAuthoritativeApply(adh.metricsHandler, observation)
-	if adh.config != nil &&
+	// The executor emits successful receiver outcomes, including no-ops,
+	// with pre-mutation state and persistence requests when applicable.
+	// The RPC handler emits failures and records the final RPC metric.
+	if applyErr != nil &&
+		adh.config != nil &&
 		adh.config.EmitNamespaceLifecycleEvents != nil &&
 		adh.config.EmitNamespaceLifecycleEvents() {
 		nsreplication.EmitCHASMAuthoritativeApply(adh.eventLogger, observation)
