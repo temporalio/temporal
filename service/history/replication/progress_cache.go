@@ -56,7 +56,8 @@ func NewProgressCache(
 ) ProgressCache {
 	maxSize := config.ReplicationProgressCacheMaxSize()
 	opts := &cache.Options{
-		TTL: config.ReplicationProgressCacheTTL(),
+		TTL:     config.ReplicationProgressCacheTTL(),
+		MaxSize: config.ReplicationProgressCacheMaxSize,
 	}
 	return &progressCacheImpl{
 		cache: cache.NewWithMetrics(maxSize, opts, handler.WithTags(metrics.CacheTypeTag(metrics.ReplicationProgressCacheTypeTagValue))),

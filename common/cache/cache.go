@@ -44,6 +44,11 @@ type StoppableCache interface {
 
 // Options control the behavior of the cache.
 type Options struct {
+	// MaxSize overrides the constructor's capacity when set. It is evaluated at construction
+	// and on each Get or Put. Nonpositive values disable caching. The function must be
+	// safe for concurrent calls and must not call back into this cache.
+	MaxSize func() int
+
 	// TTL controls the time-to-live for a given cache entry.  Cache entries that
 	// are older than the TTL will not be returned.
 	TTL time.Duration

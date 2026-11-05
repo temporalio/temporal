@@ -34,6 +34,7 @@ type (
 		byAccess        *list.List
 		byKey           map[any]*list.Element
 		maxSize         int
+		maxSizeFn       func() int
 		currSize        int
 		pinnedSize      int
 		onPut           func(val any)
@@ -159,6 +160,10 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 		timeSource = clock.NewRealTimeSource()
 	}
 
+	if opts.MaxSize != nil {
+		maxSize = max(0, opts.MaxSize())
+	}
+
 	metrics.CacheSize.With(handler).Record(float64(maxSize))
 	metrics.CacheTtl.With(handler).Record(opts.TTL)
 	c := &lru{
@@ -166,6 +171,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 		byKey:           make(map[any]*list.Element),
 		ttl:             opts.TTL,
 		maxSize:         maxSize,
+		maxSizeFn:       opts.MaxSize,
 		currSize:        0,
 		pin:             opts.Pin,
 		onPut:           opts.OnPut,
@@ -188,11 +194,12 @@ func NewLRU(maxSize int, handler metrics.Handler) StoppableCache {
 
 // Get retrieves the value stored under the given key
 func (c *lru) Get(key any) any {
-	if c.maxSize == 0 { //
-		return nil
-	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
+	c.refreshMaxSize()
+	if c.maxSize == 0 {
+		return nil
+	}
 
 	element := c.byKey[key]
 	if element == nil {
@@ -240,9 +247,6 @@ func (c *lru) PutIfNotExist(key any, value any) (any, error) {
 
 // Delete deletes a key, value pair associated with a key
 func (c *lru) Delete(key any) {
-	if c.maxSize == 0 {
-		return
-	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -254,7 +258,7 @@ func (c *lru) Delete(key any) {
 
 // Release decrements the ref count of a pinned element.
 func (c *lru) Release(key any) {
-	if c.maxSize == 0 || !c.pin {
+	if !c.pin {
 		return
 	}
 	c.mut.Lock()
@@ -294,16 +298,16 @@ func (c *lru) Size() int {
 // Put puts a new value associated with a given key, returning the existing value (if present)
 // allowUpdate flag is used to control overwrite behavior if the value exists.
 func (c *lru) putInternal(key any, value any, allowUpdate bool) (any, error) {
+	newEntrySize := getSize(value)
+	c.mut.Lock()
+	defer c.mut.Unlock()
+	c.refreshMaxSize()
 	if c.maxSize == 0 {
 		return nil, nil
 	}
-	newEntrySize := getSize(value)
 	if newEntrySize > c.maxSize {
 		return nil, ErrCacheItemTooLarge
 	}
-
-	c.mut.Lock()
-	defer c.mut.Unlock()
 
 	elt := c.byKey[key]
 	// If the entry exists, check if it has expired or update the value
@@ -371,6 +375,21 @@ func (c *lru) putInternal(key any, value any, allowUpdate bool) (any, error) {
 	}
 
 	return nil, nil
+}
+
+// refreshMaxSize applies capacity changes without replacing entries or refreshing their TTL.
+// The caller must hold c.mut.
+func (c *lru) refreshMaxSize() {
+	if c.maxSizeFn == nil {
+		return
+	}
+	maxSize := max(0, c.maxSizeFn())
+	if maxSize == c.maxSize {
+		return
+	}
+	c.maxSize = maxSize
+	metrics.CacheSize.With(c.metricsHandler).Record(float64(maxSize))
+	c.tryEvictUntilCacheSizeUnderLimit()
 }
 
 func (c *lru) calculateNewCacheSize(newEntrySize int, existingEntrySize int) int {

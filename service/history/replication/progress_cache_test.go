@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -11,10 +12,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -239,4 +243,30 @@ func TestProgressCacheUsesDistinctMetricsTag(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected cache_size metric with cache_type tag")
+}
+
+func TestProgressCacheAppliesDynamicSize(t *testing.T) {
+	t.Parallel()
+	logger := log.NewNoopLogger()
+	client := dynamicconfig.NewMemoryClient()
+	dc := dynamicconfig.NewCollection(client, logger)
+	transitions := []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, TransitionCount: 1}}
+	entrySize := (&ReplicationProgress{versionedTransitions: [][]*persistencespb.VersionedTransition{transitions}}).CacheSize()
+	t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, entrySize))
+	config := &configs.Config{
+		ReplicationProgressCacheMaxSize: dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
+		ReplicationProgressCacheTTL:     func() time.Duration { return time.Hour },
+	}
+	c := NewProgressCache(config, logger, metrics.NoopMetricsHandler)
+	require.NoError(t, c.Update("a", 1, transitions, nil))
+	require.NotNil(t, c.Get("a", 1))
+
+	t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, 2*entrySize))
+	require.NoError(t, c.Update("b", 1, transitions, nil))
+	require.NotNil(t, c.Get("a", 1), "growing the cache must preserve cached progress")
+	require.NotNil(t, c.Get("b", 1))
+
+	t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, entrySize))
+	require.NotNil(t, c.Get("b", 1))
+	require.Nil(t, c.Get("a", 1), "shrinking must evict the least recently used progress")
 }
