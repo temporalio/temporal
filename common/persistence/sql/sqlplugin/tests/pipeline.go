@@ -286,7 +286,7 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit
 	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_commit ON history_node`)) }()
 
 	written, err := s.commit(shardID, func(sqlplugin.PipelinedTx) {})
-	s.Error(err)
+	s.ErrorContains(err, "pipeline test commit failure")
 	s.False(written)
 }
 

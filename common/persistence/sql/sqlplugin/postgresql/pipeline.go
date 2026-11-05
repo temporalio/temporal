@@ -3,7 +3,6 @@ package postgresql
 import (
 	"context"
 	"database/sql"
-	sqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 
@@ -50,8 +49,11 @@ var (
 
 // BeginPipelinedTx takes the connection Commit sends the batch on from the pool.
 // It returns ErrPipelineUnsupported unless that is a pgx connection in extended
-// protocol.
+// protocol, and after the first rejection without taking a connection.
 func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
+	if pdb.pipelineUnsupported.Load() {
+		return nil, sqlplugin.ErrPipelineUnsupported
+	}
 	sqlDB, err := pdb.handle.DB()
 	if err != nil {
 		return nil, err
@@ -69,6 +71,7 @@ func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, err
 		// included, when a check fails.
 		pgxConn, ok := driverConn.(*stdlib.Conn)
 		if !ok || pgxConn.Conn().Config().DefaultQueryExecMode == pgx.QueryExecModeSimpleProtocol {
+			pdb.pipelineUnsupported.Store(true)
 			return sqlplugin.ErrPipelineUnsupported
 		}
 		return nil
@@ -206,34 +209,17 @@ func (p *pipeline) check(checkErr error, query string, args ...any) {
 // sendOnConn sends the batch on the connection and returns it to the pool.
 func (p *pipeline) sendOnConn() error {
 	defer func() { _ = p.conn.Close() }()
-
-	var err error
-	rawErr := p.conn.Raw(func(driverConn any) error {
-		var notWritten bool
+	return p.conn.Raw(func(driverConn any) error {
 		// BeginPipelinedTx checked that this is a pgx connection.
-		notWritten, err = p.send(driverConn.(*stdlib.Conn).Conn())
-		if err != nil && !notWritten {
-			// The connection can be left mid-batch, so database/sql must close it
-			// instead of pooling it.
-			return sqldriver.ErrBadConn
-		}
-		return nil
+		return p.send(driverConn.(*stdlib.Conn).Conn())
 	})
-	if err == nil {
-		err = rawErr
-	}
-	return err
 }
 
-// send runs the queued statements as one batch, and reports whether nothing
-// was written next to its error. pgx runs a batch without transaction control
-// statements as one implicit transaction, which Postgres commits after the last
-// statement. A statement error means Postgres skipped the rest and rolled the
-// transaction back, so nothing was written, as with an error pgx marks safe to
-// retry. An error after every statement succeeded comes from the commit, which
-// may have happened. A check statement fails with a division by zero, which send
-// wraps in the statement's checkErr.
-func (p *pipeline) send(conn *pgx.Conn) (notWritten bool, err error) {
+// send runs the queued statements as one batch. pgx runs a batch without
+// transaction control statements as one implicit transaction, which Postgres
+// commits after the last statement. A check statement fails with a division by
+// zero, which send wraps in the statement's checkErr.
+func (p *pipeline) send(conn *pgx.Conn) error {
 	batch := &pgx.Batch{}
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
@@ -242,15 +228,13 @@ func (p *pipeline) send(conn *pgx.Conn) (notWritten bool, err error) {
 	for _, s := range p.statements {
 		if _, err := results.Exec(); err != nil {
 			_ = results.Close()
-			pgErr, rejected := errors.AsType[*pgconn.PgError](err)
-			notWritten := rejected || pgconn.SafeToRetry(err)
-			if rejected && pgErr.Code == divisionByZeroCode && s.checkErr != nil {
-				err = fmt.Errorf("%w: %w", s.checkErr, err)
+			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == divisionByZeroCode && s.checkErr != nil {
+				return fmt.Errorf("%w: %w", s.checkErr, err)
 			}
-			return notWritten, err
+			return err
 		}
 	}
-	return false, results.Close()
+	return results.Close()
 }
 
 func (p *pipeline) Rebind(query string) string {

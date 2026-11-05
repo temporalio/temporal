@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
@@ -38,6 +39,9 @@ type db struct {
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
 	pipe   *pipeline
+	// pipelineUnsupported is set once a connection rejects a pipelined
+	// transaction. Every connection of a DB shares the settings that decide it.
+	pipelineUnsupported atomic.Bool
 }
 
 var _ sqlplugin.DB = (*db)(nil)

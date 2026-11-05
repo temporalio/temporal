@@ -84,8 +84,8 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 	suite.Run(p.T(), s)
 }
 
-// beginTxCounter counts the transactions begun on a DB, which it otherwise
-// passes through, pipelined transactions included.
+// beginTxCounter counts the sequential transactions begun on a DB and passes
+// pipelined ones through.
 type beginTxCounter struct {
 	sqlplugin.DB
 	count atomic.Int64

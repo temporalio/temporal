@@ -53,6 +53,21 @@ func TestBeginPipelinedTx_OtherDriverConnectionUnsupported(t *testing.T) {
 	require.Zero(t, sqlDB.Stats().InUse)
 }
 
+// A DB that rejected a connection rejects later transactions without taking one.
+func TestBeginPipelinedTx_SimpleProtocolUnsupported(t *testing.T) {
+	t.Parallel()
+	config := fakeServerConfig(t, serveFake)
+	config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	pdb := newPipelineTestDB(t, stdlib.GetConnector(*config))
+
+	_, err := pdb.BeginPipelinedTx(context.Background())
+	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = pdb.BeginPipelinedTx(ctx)
+	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
+}
+
 // A pipelined transaction holds a pooled connection from Begin until Rollback.
 func TestRollback_ReleasesConnection(t *testing.T) {
 	t.Parallel()
@@ -93,8 +108,7 @@ func TestSend_CheckFailure(t *testing.T) {
 				statements: []pipelinedStatement{{sql: "SELECT 1", checkErr: tc.checkErr}},
 			}
 
-			notWritten, err := p.send(conn)
-			require.True(t, notWritten)
+			err = p.send(conn)
 			var pgErr *pgconn.PgError
 			require.ErrorAs(t, err, &pgErr)
 			require.Equal(t, tc.code, pgErr.Code)
@@ -105,18 +119,6 @@ func TestSend_CheckFailure(t *testing.T) {
 			}
 		})
 	}
-}
-
-// A batch whose context is done before pgx sends it writes nothing.
-func TestSend_CanceledContextNotWritten(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	p := &pipeline{ctx: ctx, statements: []pipelinedStatement{{sql: "SELECT 1"}}}
-
-	notWritten, err := p.send(connectToFakeServer(t))
-	require.True(t, notWritten)
-	require.ErrorIs(t, err, context.Canceled)
 }
 
 // newPipelineTestDB returns a pgx plugin DB whose pool connects with connector.
@@ -132,15 +134,6 @@ func newPipelineTestDB(t *testing.T, connector sqldriver.Connector) *db {
 	)
 	t.Cleanup(handle.Close)
 	return newDB(sqlplugin.DbKindMain, "temporal", &driver.PGXDriver{}, handle, nil, log.NewNoopLogger())
-}
-
-// connectToFakeServer connects pgx to an in-process server that completes the
-// startup handshake and then discards what it receives.
-func connectToFakeServer(t *testing.T) *pgx.Conn {
-	conn, err := pgx.ConnectConfig(context.Background(), fakeServerConfig(t, serveFake))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-	return conn
 }
 
 // fakeServerConfig returns a pgx config whose connections go to an in-process
