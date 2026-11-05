@@ -166,7 +166,7 @@ func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb 
 		stickyInfo *workerpb.WorkerPollerInfo,
 	) wideevents.WorkerTaskTypeStats {
 		s := wideevents.WorkerTaskTypeStats{}
-		// Use current pollers until SDK heartbeats report poller targets.
+		// TODO: Use SDK-reported poller targets instead of current counts when available.
 		if pollerInfo != nil {
 			s.CurrentPollers = new(pollerInfo.GetCurrentPollers())
 			s.TargetPollers = s.CurrentPollers
