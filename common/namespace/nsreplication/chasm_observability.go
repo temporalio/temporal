@@ -115,7 +115,7 @@ func EmitCHASMAuthoritativeApply(
 	}
 
 	wideevents.EmitNamespaceReplicationLifecycle(eventLogger, wideevents.NamespaceReplicationLifecycleInput{
-		Phase:                        wideevents.NamespaceReplicationProcessed,
+		Phase:                        chasmAuthoritativePhase(observation.Stage),
 		Outcome:                      wideevents.NamespaceReplicationOutcome(observation.Outcome),
 		EventData:                    eventData,
 		SourceCluster:                observation.SourceCluster,
@@ -124,6 +124,20 @@ func EmitCHASMAuthoritativeApply(
 		Error:                        observation.Error,
 		EmitOnTaskSerializationError: true,
 	})
+}
+
+// chasmAuthoritativePhase keeps processed for receiver observations, matching
+// legacy receivers. Source-side local and component observations use their own
+// phases so they are not counted as receiver processing.
+func chasmAuthoritativePhase(stage string) wideevents.NamespaceReplicationPhase {
+	switch stage {
+	case CHASMApplyStageLocal:
+		return wideevents.NamespaceReplicationLocalApply
+	case CHASMApplyStageComponent:
+		return wideevents.NamespaceReplicationCompleted
+	default:
+		return wideevents.NamespaceReplicationProcessed
+	}
 }
 
 // CHASMAuthoritativeApplyEventData returns lifecycle event data enriched with

@@ -1048,7 +1048,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 ) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
-	startTime := time.Now() // nolint:forbidigo // Wall-clock time measures only receiver latency.
+	startTime := time.Now()
 	defer log.CapturePanic(adh.logger, &retError)
 	var payloadTask, legacyTask *replicationspb.NamespaceTaskAttributes
 	var comparisonPanic error
@@ -1115,9 +1115,10 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
 					return c.GetClusterName() == adh.clusterMetadata.GetCurrentClusterName()
 				}) {
-				return nil, serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+				err := serviceerror.NewInvalidArgument("removed_peer requires an update whose cluster list excludes the receiver")
+				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
+				return nil, err
 			}
-			ctx = nsreplication.WithRemovedPeerDelivery(ctx)
 		}
 		// Absorb transient Unavailable errors, including cell-wide metadata CAS
 		// contention and an UPDATE losing a missing-row CREATE race to an older
@@ -1130,20 +1131,23 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithBackoffCoefficient(2).
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
-			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
+			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
+				Admission: nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer()},
+			})
 		}, policy, func(err error) bool {
 			_, retryable := errors.AsType[*serviceerror.Unavailable](err)
 			return retryable
 		})
 		if err != nil {
-			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, nil)
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 			return nil, err
 		}
 		wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 		if err != nil {
+			adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime)
 			return nil, err
 		}
-		adh.recordAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
+		adh.observeAuthoritativeNamespaceMutation(request, payloadTask, authoritativeReceiveOutcome(outcome), nil, startTime)
 		return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 	}
 	// Compare the byte payloads after decoding with the same schema. The typed

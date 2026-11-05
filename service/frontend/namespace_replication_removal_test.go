@@ -14,29 +14,22 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 )
 
 type rejectRemovalAdmitter struct{}
 
-func (rejectRemovalAdmitter) Admit(context.Context, string, *replicationspb.NamespaceTaskAttributes) bool {
+func (rejectRemovalAdmitter) Admit(context.Context, string, *replicationspb.NamespaceTaskAttributes, nsreplication.AdmissionOptions) bool {
 	return false
-}
-
-// delegatingRemovalAdmitter models a custom policy that adds its own routing
-// logic, then falls back to the default admission rules with the original
-// context. Removal intent must survive that delegation.
-type delegatingRemovalAdmitter struct {
-	delegate nsreplication.NamespaceReplicationAdmitter
-}
-
-func (a delegatingRemovalAdmitter) Admit(ctx context.Context, currentCluster string, task *replicationspb.NamespaceTaskAttributes) bool {
-	return a.delegate.Admit(ctx, currentCluster, task)
 }
 
 func removalTestTask(removed bool) *replicationspb.NamespaceTaskAttributes {
@@ -61,13 +54,12 @@ func removalTestTask(removed bool) *replicationspb.NamespaceTaskAttributes {
 func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name            string
-		removalFirst    bool
-		createRace      bool
-		updateConflict  bool
-		commitTimeout   bool
-		customReject    bool
-		delegateDefault bool
+		name           string
+		removalFirst   bool
+		createRace     bool
+		updateConflict bool
+		commitTimeout  bool
+		customReject   bool
 	}{
 		{name: "removal before addition", removalFirst: true},
 		{name: "addition before removal"},
@@ -75,7 +67,6 @@ func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T)
 		{name: "notification counter contention", updateConflict: true},
 		{name: "write commits before timeout", commitTimeout: true},
 		{name: "custom policy still rejects", removalFirst: true, customReject: true},
-		{name: "custom policy delegates default removal admission", removalFirst: true, delegateDefault: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -128,8 +119,6 @@ func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T)
 			admitter := nsreplication.NewDefaultAdmitter()
 			if tc.customReject {
 				admitter = rejectRemovalAdmitter{}
-			} else if tc.delegateDefault {
-				admitter = delegatingRemovalAdmitter{delegate: admitter}
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters,
 				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellC", metadata, nsreplication.NewNoopDataMerger(), admitter, log.NewNoopLogger(), testhooks.TestHooks{}),
@@ -187,7 +176,12 @@ func TestRemovedPeerIntentValidation(t *testing.T) {
 			clusters.EXPECT().GetCurrentClusterName().Return("cellC").AnyTimes()
 			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 			executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
-			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor}
+			mh := metricstest.NewCaptureHandler()
+			capture := mh.StartCapture()
+			defer mh.StopCapture(capture)
+			events := &captureRemoteClusterEventLogger{}
+			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
+				metricsHandler: mh, eventLogger: events, config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)}}
 			task := removalTestTask(true)
 			if tc.mutate != nil {
 				tc.mutate(task)
@@ -197,6 +191,19 @@ func TestRemovedPeerIntentValidation(t *testing.T) {
 			_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{NamespaceTaskPayload: payload, ShadowLegacyTaskPayload: payload, RemovedPeer: true, Shadow: tc.shadow})
 			var invalid *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalid)
+			recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+			if tc.shadow {
+				require.Empty(t, recordings)
+				return
+			}
+			// The source records this as a terminal peer failure; the receiver must too.
+			require.Len(t, recordings, 1)
+			require.Equal(t, nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
+			require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
+			attrs, details := remoteClusterEventValues(t, events.records)
+			require.Equal(t, string(wideevents.NamespaceReplicationProcessed), attrs["phase"])
+			require.Equal(t, nsreplication.CHASMApplyStageReceive, details["apply_stage"])
+			require.Equal(t, err.Error(), details["error"])
 		})
 	}
 }

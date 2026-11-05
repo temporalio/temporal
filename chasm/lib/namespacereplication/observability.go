@@ -11,16 +11,6 @@ import (
 	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 )
 
-func stateTransitionOutcome(successOutcome string, stateUpdated bool, transitionErr error) string {
-	if transitionErr != nil {
-		return nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
-	}
-	if !stateUpdated {
-		return nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped
-	}
-	return successOutcome
-}
-
 type componentTerminalObservation struct {
 	shadowCompletion  *shadowCompletionRecord
 	status            namespacereplicationpb.ComponentStatus
@@ -30,11 +20,14 @@ type componentTerminalObservation struct {
 	peerOutcomeCounts map[string]int
 	peerCount         int
 	peerAttemptCount  int
+	startedAt         time.Time
+	terminalAt        time.Time
 }
 
 func newComponentTerminalObservation(
 	c *NamespaceMutationComponent,
 	status namespacereplicationpb.ComponentStatus,
+	terminalAt time.Time,
 ) *componentTerminalObservation {
 	observation := &componentTerminalObservation{
 		status:            status,
@@ -43,6 +36,10 @@ func newComponentTerminalObservation(
 		peerAttemptCounts: make(map[string]int, len(c.GetPeerApply())),
 		peerOutcomeCounts: make(map[string]int),
 		peerCount:         len(c.GetPeerApply()),
+		terminalAt:        terminalAt,
+	}
+	if started := c.GetStartedAt(); started != nil && started.CheckValid() == nil {
+		observation.startedAt = started.AsTime()
 	}
 	for peerName, peer := range c.GetPeerApply() {
 		observation.peerOutcomes[peerName] = peer.GetOutcome().String()
@@ -75,6 +72,18 @@ func emitComponentTerminal(
 	} else if terminal.peerOutcomeCounts[namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String()] > 0 {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeCompletedWithFailures
 	}
+	details := map[string]any{
+		"component_status":    terminal.status.String(),
+		"local_apply_outcome": terminal.localOutcome.String(),
+		"peer_count":          terminal.peerCount,
+		"peer_attempt_count":  terminal.peerAttemptCount,
+		"peer_outcomes":       terminal.peerOutcomes,
+		"peer_attempt_counts": terminal.peerAttemptCounts,
+		"peer_outcome_counts": terminal.peerOutcomeCounts,
+	}
+	if !terminal.startedAt.IsZero() {
+		details["end_to_end_duration_ms"] = max(terminal.terminalAt.Sub(terminal.startedAt), 0).Milliseconds()
+	}
 	nsreplicationcommon.EmitCHASMAuthoritativeApply(
 		eventLogger,
 		nsreplicationcommon.CHASMAuthoritativeApplyObservation{
@@ -85,116 +94,57 @@ func emitComponentTerminal(
 			ComponentBusinessID: ref.BusinessID,
 			ComponentRunID:      ref.RunID,
 			Error:               terminalErr,
-			Details: map[string]any{
-				"component_status":    terminal.status.String(),
-				"local_apply_outcome": terminal.localOutcome.String(),
-				"peer_count":          terminal.peerCount,
-				"peer_attempt_count":  terminal.peerAttemptCount,
-				"peer_outcomes":       terminal.peerOutcomes,
-				"peer_attempt_counts": terminal.peerAttemptCounts,
-				"peer_outcome_counts": terminal.peerOutcomeCounts,
-			},
+			Details:             details,
 		},
 	)
 }
 
-func (h *applyLocalTaskHandler) observeLocalApplyResult(
+// observeLocal reports one local apply attempt. Every attempt records a
+// local-stage metric. Attempts that resolve the local stage or fail to save
+// also emit a local_apply event; scheduled retries and stale attempts do not.
+func (h *applyLocalTaskHandler) observeLocal(
 	ref chasm.ComponentRef,
 	task *replicationspb.NamespaceTaskAttributes,
-	recorded localApplyRecord,
-	applyErr error,
-	recordErr error,
+	attemptCount int,
 	startTime time.Time,
-) {
-	if recordErr != nil {
-		h.observeLocalApply(
-			ref,
-			task,
-			nsreplicationcommon.CHASMApplyOutcomeStateTransitionError,
-			recordErr,
-			startTime,
-			map[string]any{"apply_error": applyErr.Error()},
-		)
-		return
-	}
-	h.observeLocalApply(
-		ref,
-		task,
-		stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeTerminalError, recorded.stateUpdated, nil),
-		applyErr,
-		startTime,
-		map[string]any{"error_type": classifyLocalErr(applyErr)},
-	)
-}
-
-func (h *applyLocalTaskHandler) observeLocalApply(
-	ref chasm.ComponentRef,
-	task *replicationspb.NamespaceTaskAttributes,
-	outcome string,
-	applyErr error,
-	startTime time.Time,
-	details map[string]any,
+	result *localApplyResult,
 ) {
 	var telemetryPanic error
 	defer log.CapturePanic(h.logger, &telemetryPanic)
-	observation := nsreplicationcommon.CHASMAuthoritativeApplyObservation{
-		Task:                task,
-		Stage:               nsreplicationcommon.CHASMApplyStageLocal,
-		Outcome:             outcome,
-		SourceCluster:       h.currentCluster,
-		TargetCluster:       h.currentCluster,
-		ComponentBusinessID: ref.BusinessID,
-		ComponentRunID:      ref.RunID,
-		Duration:            time.Since(startTime),
-		Error:               applyErr,
-		Details:             details,
-	}
-	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
-	if outcome != nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped && h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
-		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
-	}
-}
 
-func (h *applyLocalTaskHandler) observeLocalRetry(
-	ref chasm.ComponentRef,
-	task *replicationspb.NamespaceTaskAttributes,
-	recorded localRetryRecord,
-	retryErr error,
-	saveErr error,
-	startTime time.Time,
-) {
-	var telemetryPanic error
-	defer log.CapturePanic(h.logger, &telemetryPanic)
-	outcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
-	observationErr := retryErr
-	retryScheduled := saveErr == nil && recorded.retryScheduled
-	details := map[string]any{
-		"retry_scheduled": retryScheduled,
-		"retry_exhausted": saveErr == nil && recorded.stateUpdated && recorded.retryExhausted,
+	outcome, observationErr, record := result.outcome, result.err, result.record
+	details := result.details
+	if details == nil {
+		details = make(map[string]any)
 	}
-	if saveErr != nil {
-		outcome = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
-		observationErr = saveErr
-		if recorded.retryScheduled {
+	if result.saveErr != nil {
+		// The record describes a state update that was not saved.
+		outcome, observationErr, record = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError, result.saveErr, localRecord{}
+		if result.err != nil {
+			details["apply_error"] = result.err.Error()
+		}
+		if result.record.retryScheduled {
 			details["retry_requested"] = true
 		}
-		details["apply_error"] = retryErr.Error()
-	} else if recorded.stateUpdated {
-		persistedOutcome := namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING
-		if recorded.retryExhausted {
-			outcome = nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
-			persistedOutcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE
-		}
-		details["persisted_local_outcome"] = persistedOutcome.String()
-	} else {
+	} else if !record.stateUpdated {
 		outcome = nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped
-		details["state_update_skipped"] = true
+	}
+	if result.retry {
+		details["retry_scheduled"] = record.retryScheduled
+		details["retry_exhausted"] = record.retryExhausted
+		if record.stateUpdated {
+			persistedOutcome := namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING
+			if record.retryExhausted {
+				persistedOutcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE
+			}
+			details["persisted_local_outcome"] = persistedOutcome.String()
+		}
 	}
 
 	var pendingAge *time.Duration
 	pendingAgeThresholdExceeded := false
-	if retryScheduled && !recorded.firstAttemptAt.IsZero() {
-		age := max(recorded.recordedAt.Sub(recorded.firstAttemptAt), 0)
+	if record.retryScheduled && !record.firstAttemptAt.IsZero() {
+		age := max(record.recordedAt.Sub(record.firstAttemptAt), 0)
 		pendingAge = &age
 		pendingAgeThresholdExceeded = age >= pendingAlertThreshold
 	}
@@ -206,7 +156,7 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 		TargetCluster:               h.currentCluster,
 		ComponentBusinessID:         ref.BusinessID,
 		ComponentRunID:              ref.RunID,
-		AttemptCount:                recorded.attemptCount,
+		AttemptCount:                attemptCount,
 		Duration:                    time.Since(startTime),
 		PendingAge:                  pendingAge,
 		PendingAgeThresholdExceeded: pendingAgeThresholdExceeded,
@@ -214,8 +164,10 @@ func (h *applyLocalTaskHandler) observeLocalRetry(
 		Details:                     details,
 	}
 	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
-	if (saveErr != nil || (recorded.stateUpdated && !recorded.retryScheduled)) &&
-		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
+	if outcome == nsreplicationcommon.CHASMApplyOutcomeStateUpdateSkipped || record.retryScheduled {
+		return
+	}
+	if h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
 		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
 	}
 }

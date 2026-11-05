@@ -583,7 +583,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Nil(err)
 	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
@@ -659,7 +659,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{})
 	s.Require().NoError(err)
 	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
@@ -779,7 +779,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask, MutationApplyOptions{})
 	s.Nil(err)
 	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)

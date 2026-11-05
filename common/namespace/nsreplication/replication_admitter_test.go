@@ -32,25 +32,25 @@ func TestDefaultAdmitter_Admit(t *testing.T) {
 	}
 
 	t.Run("cluster in list is admitted", func(t *testing.T) {
-		require.True(t, admitter.Admit(ctx, "cluster-a", build("cluster-a", "cluster-b")))
+		require.True(t, admitter.Admit(ctx, "cluster-a", build("cluster-a", "cluster-b"), AdmissionOptions{}))
 	})
 
 	t.Run("cluster not in list is rejected", func(t *testing.T) {
-		require.False(t, admitter.Admit(ctx, "cluster-c", build("cluster-a", "cluster-b")))
+		require.False(t, admitter.Admit(ctx, "cluster-c", build("cluster-a", "cluster-b"), AdmissionOptions{}))
 	})
 
 	t.Run("empty cluster list is rejected", func(t *testing.T) {
-		require.False(t, admitter.Admit(ctx, "cluster-a", build()))
+		require.False(t, admitter.Admit(ctx, "cluster-a", build(), AdmissionOptions{}))
 	})
 
 	t.Run("nil replication config is rejected", func(t *testing.T) {
 		// GetReplicationConfig is nil-safe via proto getters; admitter must not panic.
-		require.False(t, admitter.Admit(ctx, "cluster-a", &replicationspb.NamespaceTaskAttributes{}))
+		require.False(t, admitter.Admit(ctx, "cluster-a", &replicationspb.NamespaceTaskAttributes{}, AdmissionOptions{}))
 	})
 
 	t.Run("empty current-cluster name never matches", func(t *testing.T) {
 		// Defensive: a caller passing "" should never be admitted even if "" somehow slipped into the list.
-		require.False(t, admitter.Admit(ctx, "", build("cluster-a", "cluster-b")))
+		require.False(t, admitter.Admit(ctx, "", build("cluster-a", "cluster-b"), AdmissionOptions{}))
 	})
 }
 
@@ -60,26 +60,29 @@ func TestDefaultAdmitterExplicitRemoval(t *testing.T) {
 	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_UPDATE
 	task.ReplicationConfig.Clusters = []*replicationpb.ClusterReplicationConfig{{ClusterName: "cluster-other"}}
 	admitter := NewDefaultAdmitter()
-	require.False(t, admitter.Admit(t.Context(), "cluster-local", task), "ordinary delivery retains legacy admission")
-	ctx := WithRemovedPeerDelivery(t.Context())
-	require.True(t, admitter.Admit(ctx, "cluster-local", task))
-	require.False(t, admitter.Admit(ctx, "", task))
+	require.False(t, admitter.Admit(t.Context(), "cluster-local", task, AdmissionOptions{}), "ordinary delivery retains legacy admission")
+	options := AdmissionOptions{RemovedPeer: true}
+	require.True(t, admitter.Admit(t.Context(), "cluster-local", task, options))
+	require.False(t, admitter.Admit(t.Context(), "", task, options))
 	task.NamespaceOperation = enumsspb.NAMESPACE_OPERATION_CREATE
-	require.False(t, admitter.Admit(ctx, "cluster-local", task))
+	require.False(t, admitter.Admit(t.Context(), "cluster-local", task, options))
 }
 
 // stubAdmitter is a deterministic admitter used by shouldProcessTask tests.
 type stubAdmitter struct {
-	admit  bool
-	called int
+	admit   bool
+	called  int
+	options AdmissionOptions
 }
 
 func (s *stubAdmitter) Admit(
-	context.Context,
-	string,
-	*replicationspb.NamespaceTaskAttributes,
+	_ context.Context,
+	_ string,
+	_ *replicationspb.NamespaceTaskAttributes,
+	options AdmissionOptions,
 ) bool {
 	s.called++
+	s.options = options
 	return s.admit
 }
 
@@ -119,10 +122,13 @@ func TestShouldProcessTask_ConsultsAdmitterOnNamespaceNotFound(t *testing.T) {
 	cases := []struct {
 		name         string
 		admitterSays bool
+		options      AdmissionOptions
 		wantProcess  bool
 	}{
-		{"admitter accepts", true, true},
-		{"admitter rejects", false, false},
+		{name: "admitter accepts", admitterSays: true, wantProcess: true},
+		{name: "admitter rejects", admitterSays: false},
+		{name: "custom admitter sees removal intent", admitterSays: true, options: AdmissionOptions{RemovedPeer: true}, wantProcess: true},
+		{name: "custom admitter rejects removal", options: AdmissionOptions{RemovedPeer: true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,11 +136,12 @@ func TestShouldProcessTask_ConsultsAdmitterOnNamespaceNotFound(t *testing.T) {
 			exec, mockMgr := newExecutorForAdmitterTest(t, admitter)
 			expectNotFound(mockMgr)
 
-			shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest())
+			shouldProcess, err := exec.shouldProcessTask(t.Context(), newTaskForAdmitterTest(), tc.options)
 
 			require.NoError(t, err)
 			require.Equal(t, tc.wantProcess, shouldProcess)
 			require.Equal(t, 1, admitter.called)
+			require.Equal(t, tc.options, admitter.options)
 		})
 	}
 }
@@ -154,7 +161,7 @@ func TestShouldProcessTask_SkipsAdmitterWhenNamespaceExists(t *testing.T) {
 		}, nil,
 	).Times(1)
 
-	shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest())
+	shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest(), AdmissionOptions{})
 
 	require.NoError(t, err)
 	require.True(t, shouldProcess)
@@ -169,7 +176,7 @@ func TestShouldProcessTask_PropagatesUnknownGetNamespaceError(t *testing.T) {
 	boom := serviceerror.NewUnavailable("boom")
 	mockMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, boom).Times(1)
 
-	shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest())
+	shouldProcess, err := exec.shouldProcessTask(context.Background(), newTaskForAdmitterTest(), AdmissionOptions{})
 
 	require.ErrorIs(t, err, boom)
 	require.False(t, shouldProcess)
