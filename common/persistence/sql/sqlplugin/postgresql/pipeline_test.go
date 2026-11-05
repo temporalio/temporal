@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -23,28 +22,29 @@ import (
 )
 
 type (
-	// otherDriverConnector reports driver and connects with connections that are
-	// not pgx's, as a custom SQL.Connect can.
-	otherDriverConnector struct {
-		driver sqldriver.Driver
-	}
+	// otherDriverConnector connects with connections that are not pgx's, as a
+	// custom SQL.Connect can.
+	otherDriverConnector struct{}
 
 	otherDriverConn struct {
 		sqldriver.Conn
 	}
 )
 
-func TestBeginPipelinedTx_OtherDriverUnsupported(t *testing.T) {
+// The first connection decides that the DB pipelines.
+func TestBeginPipelinedTx_Supported(t *testing.T) {
 	t.Parallel()
-	pdb := newPipelineTestDB(t, otherDriverConnector{driver: &pq.Driver{}})
+	pdb := newPipelineTestDB(t, stdlib.GetConnector(*fakeServerConfig(t, serveFake)))
 
-	_, err := pdb.BeginPipelinedTx(context.Background())
-	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
+	tx, err := pdb.BeginPipelinedTx(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	require.Equal(t, pipeliningSupported, pdb.pipelining.Load())
 }
 
 func TestBeginPipelinedTx_OtherDriverConnectionUnsupported(t *testing.T) {
 	t.Parallel()
-	pdb := newPipelineTestDB(t, otherDriverConnector{driver: stdlib.GetDefaultDriver()})
+	pdb := newPipelineTestDB(t, otherDriverConnector{})
 
 	_, err := pdb.BeginPipelinedTx(context.Background())
 	require.ErrorIs(t, err, sqlplugin.ErrPipelineUnsupported)
@@ -202,7 +202,7 @@ func (c otherDriverConnector) Connect(context.Context) (sqldriver.Conn, error) {
 }
 
 func (c otherDriverConnector) Driver() sqldriver.Driver {
-	return c.driver
+	return stdlib.GetDefaultDriver()
 }
 
 func (otherDriverConn) Close() error {

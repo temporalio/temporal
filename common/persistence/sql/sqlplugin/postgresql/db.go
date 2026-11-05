@@ -39,9 +39,10 @@ type db struct {
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
 	pipe   *pipeline
-	// pipelineUnsupported is set once a connection rejects a pipelined
-	// transaction. Every connection of a DB shares the settings that decide it.
-	pipelineUnsupported atomic.Bool
+	// pipelining is whether the DB pipelines, as the first connection a
+	// BeginPipelinedTx takes decides. Every connection of a DB shares the settings
+	// that decide it.
+	pipelining atomic.Int32
 }
 
 var _ sqlplugin.DB = (*db)(nil)
