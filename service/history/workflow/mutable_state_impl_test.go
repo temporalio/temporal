@@ -2520,6 +2520,10 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}}
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
+	mutableState.executionInfo.LastBranchTime = timestamppb.Now()
+	mutableState.executionInfo.LastSupersedeTime = timestamppb.Now()
+	mutableState.executionInfo.LastSupersededRunId = "superseded-run"
+	mutableState.executionInfo.LastOrphanedOperationsTime = timestamppb.Now()
 	mutableState.executionInfo.PersistenceMetadata = []byte("persistence-metadata")
 
 	stateMachineDef := hsmtest.NewDefinition("test")
@@ -2538,6 +2542,10 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
+	s.Nil(sanitizedMutableState.executionInfo.LastBranchTime)
+	s.Nil(sanitizedMutableState.executionInfo.LastSupersedeTime)
+	s.Empty(sanitizedMutableState.executionInfo.LastSupersededRunId)
+	s.Nil(sanitizedMutableState.executionInfo.LastOrphanedOperationsTime)
 	s.Nil(sanitizedMutableState.executionInfo.PersistenceMetadata)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
@@ -10207,4 +10215,176 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
+}
+
+func (s *mutableStateSuite) TestRecordHistoryBranch() {
+	testCases := []struct {
+		name             string
+		state            enumsspb.WorkflowExecutionState
+		status           enumspb.WorkflowExecutionStatus
+		expectVisibility func(visibilityTasks []tasks.Task)
+	}{
+		{
+			name:   "running run upserts visibility",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Len(visibilityTasks, 1)
+				s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+			},
+		},
+		{
+			name:   "closed run re-records close visibility at the close version",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Len(visibilityTasks, 1)
+				closeTask, ok := visibilityTasks[0].(*tasks.CloseExecutionVisibilityTask)
+				s.True(ok)
+				s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID), closeTask.Version)
+			},
+		},
+		{
+			name:   "zombie run has no visibility record to update",
+			state:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			expectVisibility: func(visibilityTasks []tasks.Task) {
+				s.Empty(visibilityTasks)
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			dbState := s.buildWorkflowMutableState()
+			dbState.ExecutionState.State = tc.state
+			dbState.ExecutionState.Status = tc.status
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			before := s.mockShard.GetTimeSource().Now()
+			s.NoError(ms.RecordHistoryBranch())
+			s.WithinRange(ms.GetExecutionInfo().GetLastBranchTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+			tc.expectVisibility(s.closeTransactionVisibilityTasks(ms))
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestSyncExecutionInfo_KeepsLocalConflictResolutionState() {
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	localBranchTime := timestamppb.New(time.Unix(1700000000, 0))
+	localSupersedeTime := timestamppb.New(time.Unix(1700000001, 0))
+	localOrphanedTime := timestamppb.New(time.Unix(1700000002, 0))
+	current := &persistencespb.WorkflowExecutionInfo{
+		LastBranchTime:             localBranchTime,
+		LastSupersedeTime:          localSupersedeTime,
+		LastSupersededRunId:        "local-superseded-run",
+		LastOrphanedOperationsTime: localOrphanedTime,
+	}
+	// The source's conflict resolution is its own, so its values must never replace the local ones.
+	incoming := &persistencespb.WorkflowExecutionInfo{
+		LastBranchTime:             timestamppb.New(time.Unix(1800000000, 0)),
+		LastSupersedeTime:          timestamppb.New(time.Unix(1800000001, 0)),
+		LastSupersededRunId:        "source-superseded-run",
+		LastOrphanedOperationsTime: timestamppb.New(time.Unix(1800000002, 0)),
+		WorkflowTypeName:           "synced",
+	}
+
+	for _, includeFinal := range []bool{false, true} {
+		s.NoError(ms.syncExecutionInfo(current, incoming, includeFinal))
+		s.Equal("synced", current.WorkflowTypeName)
+		s.Equal(localBranchTime, current.LastBranchTime)
+		s.Equal(localSupersedeTime, current.LastSupersedeTime)
+		s.Equal("local-superseded-run", current.LastSupersededRunId)
+		s.Equal(localOrphanedTime, current.LastOrphanedOperationsTime)
+	}
+}
+
+func (s *mutableStateSuite) TestRecordRunSuperseded() {
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordRunSuperseded("superseded-run"))
+	s.WithinRange(ms.GetExecutionInfo().GetLastSupersedeTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+	s.Equal("superseded-run", ms.GetExecutionInfo().GetLastSupersededRunId())
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+}
+
+func (s *mutableStateSuite) TestRecordConflictResolution_NonWorkflowIsNoop() {
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
+	s.NoError(err)
+	// Workflow visibility tasks would overwrite another archetype's CHASM record.
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+	ms.chasmTree = mockChasmTree
+
+	s.NoError(ms.RecordHistoryBranch())
+	s.NoError(ms.RecordRunSuperseded("superseded-run"))
+	s.NoError(ms.RecordOrphanedOperations())
+	s.Nil(ms.GetExecutionInfo().GetLastBranchTime())
+	s.Nil(ms.GetExecutionInfo().GetLastSupersedeTime())
+	s.Empty(ms.GetExecutionInfo().GetLastSupersededRunId())
+	s.Nil(ms.GetExecutionInfo().GetLastOrphanedOperationsTime())
+	s.Empty(ms.InsertTasks[tasks.CategoryVisibility])
+}
+
+func (s *mutableStateSuite) TestRecordOrphanedOperations() {
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordOrphanedOperations())
+	s.WithinRange(ms.GetExecutionInfo().GetLastOrphanedOperationsTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+}
+
+// closeTransactionVisibilityTasks closes the transaction, which is when conflict-resolution
+// visibility updates are generated, and returns its visibility tasks.
+func (s *mutableStateSuite) closeTransactionVisibilityTasks(ms *MutableStateImpl) []tasks.Task {
+	mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+	s.NoError(err)
+	return mutation.Tasks[tasks.CategoryVisibility]
+}
+
+func (s *mutableStateSuite) TestRecordHistoryBranch_VisibilityFollowsAppliedSnapshot() {
+	// The local, losing branch is closed when the branch is recorded; the replicated snapshot that
+	// follows makes the run running again. Visibility must be re-recorded for the running run.
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	dbState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.NoError(ms.RecordHistoryBranch())
+	s.NoError(ms.RecordOrphanedOperations())
+	snapshot := s.buildWorkflowMutableState()
+	s.NoError(ms.ApplySnapshot(snapshot))
+
+	visibilityTasks := s.closeTransactionVisibilityTasks(ms)
+	s.Len(visibilityTasks, 1)
+	s.IsType(&tasks.UpsertExecutionVisibilityTask{}, visibilityTasks[0])
+	s.NotNil(ms.GetExecutionInfo().GetLastBranchTime())
+	s.NotNil(ms.GetExecutionInfo().GetLastOrphanedOperationsTime())
+}
+
+func (s *mutableStateSuite) TestRecordHistoryBranch_IgnoresTimeSkipping() {
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(30 * 24 * time.Hour),
+	}
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	ms.wrapTimeSourceWithTimeSkipping()
+	s.True(ms.timeSource.Now().After(s.mockShard.GetTimeSource().Now().Add(29 * 24 * time.Hour)))
+
+	before := s.mockShard.GetTimeSource().Now()
+	s.NoError(ms.RecordHistoryBranch())
+	s.WithinRange(ms.GetExecutionInfo().GetLastBranchTime().AsTime(), before, s.mockShard.GetTimeSource().Now())
 }

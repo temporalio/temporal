@@ -332,6 +332,23 @@ message WorkflowExecutionInfo {
   // never reads or sets it. The value describes the local copy of the record, so it is not
   // replicated, and applying a replicated snapshot or mutation keeps the local value.
   bytes persistence_metadata = 118;
+
+  // Time this cluster last created or switched to a history branch for this run during conflict
+  // resolution. Branches are cluster-local, so this is never synced from another cluster.
+  // Surfaced in visibility as the TemporalLastBranchTime search attribute.
+  google.protobuf.Timestamp last_branch_time = 119;
+
+  // Time conflict resolution on this cluster last superseded another run of this workflow ID with
+  // this run, terminating it or turning it into a zombie. Cluster-local like last_branch_time.
+  // Surfaced in visibility as the TemporalLastSupersedeTime search attribute.
+  google.protobuf.Timestamp last_supersede_time = 120;
+  // Run ID of the run last superseded by this one. Set together with last_supersede_time.
+  string last_superseded_run_id = 121;
+  // Time conflict resolution on this cluster last found operations started on a non-current branch
+  // of this run that run independently of it, such as child workflows. The run will never record
+  // their results. Cluster-local like last_branch_time.
+  // Surfaced in visibility as the TemporalLastOrphanedOperationsTime search attribute.
+  google.protobuf.Timestamp last_orphaned_operations_time = 122;
 }
 
 message TimeSkippingInfo {

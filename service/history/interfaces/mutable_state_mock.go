@@ -3448,6 +3448,20 @@ func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
 }
 
+// RecordHistoryBranch mocks base method.
+func (m *MockMutableState) RecordHistoryBranch() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordHistoryBranch")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordHistoryBranch indicates an expected call of RecordHistoryBranch.
+func (mr *MockMutableStateMockRecorder) RecordHistoryBranch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordHistoryBranch", reflect.TypeOf((*MockMutableState)(nil).RecordHistoryBranch))
+}
+
 // RecordLastActivityCompleteTime mocks base method.
 func (m *MockMutableState) RecordLastActivityCompleteTime(ai *persistence.ActivityInfo) {
 	m.ctrl.T.Helper()
@@ -3458,6 +3472,34 @@ func (m *MockMutableState) RecordLastActivityCompleteTime(ai *persistence.Activi
 func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
+}
+
+// RecordOrphanedOperations mocks base method.
+func (m *MockMutableState) RecordOrphanedOperations() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordOrphanedOperations")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordOrphanedOperations indicates an expected call of RecordOrphanedOperations.
+func (mr *MockMutableStateMockRecorder) RecordOrphanedOperations() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordOrphanedOperations", reflect.TypeOf((*MockMutableState)(nil).RecordOrphanedOperations))
+}
+
+// RecordRunSuperseded mocks base method.
+func (m *MockMutableState) RecordRunSuperseded(supersededRunID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordRunSuperseded", supersededRunID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordRunSuperseded indicates an expected call of RecordRunSuperseded.
+func (mr *MockMutableStateMockRecorder) RecordRunSuperseded(supersededRunID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordRunSuperseded", reflect.TypeOf((*MockMutableState)(nil).RecordRunSuperseded), supersededRunID)
 }
 
 // RecordTimeSkippingTransition mocks base method.

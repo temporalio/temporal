@@ -2261,6 +2261,8 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	}).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: forkedBranchToken,
 	}, nil)
+	mockMutableState.EXPECT().RecordHistoryBranch().Return(nil).Times(1)
+	mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).AnyTimes()
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	newRunBranch, err := s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
@@ -2387,6 +2389,7 @@ func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
 	mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: s.runID}).AnyTimes()
 	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
+	mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
@@ -2394,6 +2397,8 @@ func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
 	)).AnyTimes()
 	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
 	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().RecordHistoryBranch().Return(nil).Times(1)
+	mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil).AnyTimes()
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	for _, event := range appendEvents {
 		mockMutableState.EXPECT().AddReapplyCandidateEvent(&historyEventMatcher{expected: event}).Times(1)
@@ -2609,6 +2614,9 @@ func (s *workflowReplicatorSuite) TestApplySnapshotHistorySwitchKeepsParentVerif
 	mutableState.EXPECT().IsWorkflow().Return(true)
 	mutableState.EXPECT().SetHistoryBuilder(gomock.Any())
 	mutableState.EXPECT().GetPendingChildIds().Return(nil)
+	// Switching to the existing source branch is a branch, with no pending children orphaned.
+	mutableState.EXPECT().RecordHistoryBranch().Return(nil)
+	mutableState.EXPECT().GetPendingChildExecutionInfos().Return(nil)
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(
 		&persistence.ReadHistoryBranchByBatchResponse{TransactionIDs: []int64{1}}, nil,
 	)

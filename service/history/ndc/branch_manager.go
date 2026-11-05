@@ -222,6 +222,9 @@ func (r *BranchMgrImpl) createNewBranch(
 	if branchChanged {
 		return 0, serviceerror.NewInvalidArgument("BranchMgr encountered branch change during conflict resolution")
 	}
+	if err := r.mutableState.RecordHistoryBranch(); err != nil {
+		return 0, err
+	}
 
 	return newIndex, nil
 }

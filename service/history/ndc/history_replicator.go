@@ -678,6 +678,12 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 	if err = versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionHistoryItem); err != nil {
 		return err
 	}
+	if startsOperation(task.getEvents()) {
+		// Operations started on a non-current branch are orphaned.
+		if err := mutableState.RecordOrphanedOperations(); err != nil {
+			return err
+		}
+	}
 
 	transactionIDs, err := r.shardContext.GenerateTaskIDs(len(task.getEvents()))
 	if err != nil {
@@ -873,4 +879,21 @@ func (r *HistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shardContext.GetConfig().StandbyClusterDelay())
 	r.shardContext.SetCurrentTime(clusterName, now)
+}
+
+// operationStartEventTypes start operations that run independently of the workflow, matching
+// the kinds checked by hasOrphanedOperations.
+var operationStartEventTypes = map[enumspb.EventType]struct{}{
+	enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED: {},
+}
+
+func startsOperation(eventBatches [][]*historypb.HistoryEvent) bool {
+	for _, events := range eventBatches {
+		for _, event := range events {
+			if _, ok := operationStartEventTypes[event.GetEventType()]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }

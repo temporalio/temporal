@@ -10,11 +10,13 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -184,6 +186,62 @@ func (r *WorkflowImpl) SuppressBy(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
 	return historyi.TransactionPolicyPassive, err
+}
+
+// recordSupersede stamps winner with loser's run ID when suppression ended a running loser.
+// Suppressing a closed or zombie run changes nothing, so callers pass whether loser was running.
+func recordSupersede(winner Workflow, loser Workflow, loserWasRunning bool) error {
+	if !loserWasRunning {
+		return nil
+	}
+	loserRunID := loser.GetMutableState().GetExecutionState().GetRunId()
+	// Defensive: a run never supersedes itself. Callers already skip successors that existed before
+	// this transaction, the one way the two could match.
+	if loserRunID == winner.GetMutableState().GetExecutionState().GetRunId() {
+		return nil
+	}
+	return winner.GetMutableState().RecordRunSuperseded(loserRunID)
+}
+
+// persistLocalState writes a cluster-local change to a workflow that is not otherwise part of the
+// replication transaction. Passive, so nothing is replicated.
+func persistLocalState(ctx context.Context, shardContext historyi.ShardContext, wf Workflow) error {
+	if wf.GetMutableState().IsWorkflowExecutionRunning() {
+		return wf.GetContext().UpdateWorkflowExecutionAsPassive(ctx, shardContext)
+	}
+	return wf.GetContext().SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
+}
+
+// hasOrphanedOperations reports whether a pending operation that runs independently of the
+// workflow was started off the given branch, so making it current leaves the operation without a
+// caller to record its result. Each kind of such operation adds its check here.
+func hasOrphanedOperations(mutableState historyi.MutableState, branch *historyspb.VersionHistory) bool {
+	return hasOrphanedChildren(mutableState, branch)
+}
+
+func hasOrphanedChildren(mutableState historyi.MutableState, branch *historyspb.VersionHistory) bool {
+	for initiatedID, child := range mutableState.GetPendingChildExecutionInfos() {
+		if !versionhistory.ContainsVersionHistoryItem(
+			branch,
+			versionhistory.NewVersionHistoryItem(initiatedID, child.GetVersion()),
+		) {
+			return true
+		}
+	}
+	return false
+}
+
+// terminatedByVersionConflict reports whether the run was terminated by conflict resolution on the
+// cluster that wrote it, i.e. it was already superseded there before reaching this cluster.
+func terminatedByVersionConflict(ctx context.Context, mutableState historyi.MutableState) bool {
+	if mutableState.GetExecutionState().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+		return false
+	}
+	event, err := mutableState.GetCompletionEvent(ctx)
+	if err != nil {
+		return false
+	}
+	return event.GetWorkflowExecutionTerminatedEventAttributes().GetReason() == common.FailureReasonWorkflowTerminationDueToVersionConflict
 }
 
 func (r *WorkflowImpl) FlushBufferedEvents() error {

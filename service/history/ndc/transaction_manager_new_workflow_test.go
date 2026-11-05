@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -532,6 +533,8 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	// Already closed, and not by a version conflict, so the current run records no supersede.
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -703,6 +706,8 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -718,6 +723,83 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(currentReleaseCalled)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_NonWorkflowRecordsNoSupersede() {
+	// Other archetypes are not stamped: workflow visibility tasks would overwrite their CHASM record.
+	archetypeID := chasm.ArchetypeID(1234)
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	currentRunID := "other random runID"
+
+	targetReleaseCalled := false
+	currentReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMockWorkflow(s.controller)
+	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
+	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: namespaceID.String(),
+			WorkflowId:  workflowID,
+		},
+	}
+	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
+		Events: []*historypb.HistoryEvent{{
+			EventId: common.FirstEventID + rand.Int63(),
+		}},
+	}}
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
+		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
+	)
+	targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, archetypeID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, archetypeID).Return(currentWorkflow, nil)
+
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	currentMutableState := historyi.NewMockMutableState(s.controller)
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().IsWorkflow().Return(false).AnyTimes()
+
+	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		persistence.CreateWorkflowModeBypassCurrent,
+		"",
+		int64(0),
+		targetMutableState,
+		targetWorkflowSnapshot,
+		targetWorkflowEventsSeq,
+		gomock.Any(),
+	).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, archetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -783,6 +865,8 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -854,6 +938,8 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.expectCurrentSupersedes(currentWorkflow, targetRunID)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -872,6 +958,70 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_ArrivesTerminated() {
+	for _, tc := range []struct {
+		name       string
+		reason     string
+		superseded bool
+	}{
+		// Superseded on the cluster that wrote it, before it was replicated here.
+		{name: "terminated by version conflict", reason: common.FailureReasonWorkflowTerminationDueToVersionConflict, superseded: true},
+		{name: "terminated by a user", reason: "user request", superseded: false},
+	} {
+		s.Run(tc.name, func() {
+			ctx := context.Background()
+			namespaceID := namespace.ID("some random namespace ID")
+			workflowID := "some random workflow ID"
+			targetRunID := "some random run ID"
+			currentRunID := "other random runID"
+
+			targetWorkflow := NewMockWorkflow(s.controller)
+			targetContext := historyi.NewMockWorkflowContext(s.controller)
+			targetMutableState := historyi.NewMockMutableState(s.controller)
+			targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+			targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+			targetWorkflow.EXPECT().GetReleaseFn().Return(func(error) {}).AnyTimes()
+			currentWorkflow := NewMockWorkflow(s.controller)
+			currentWorkflow.EXPECT().GetReleaseFn().Return(func(error) {}).AnyTimes()
+
+			targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId: namespaceID.String(),
+				WorkflowId:  workflowID,
+			}).AnyTimes()
+			targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				RunId:  targetRunID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			}).AnyTimes()
+			targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+			targetMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(&historypb.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+					WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{Reason: tc.reason},
+				},
+			}, nil)
+			targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
+			targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(
+				&persistence.WorkflowSnapshot{}, nil, nil,
+			)
+
+			s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
+			s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(currentWorkflow, nil)
+			targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, nil)
+			targetWorkflow.EXPECT().SuppressBy(currentWorkflow, gomock.Any()).Return(historyi.TransactionPolicyPassive, nil)
+			if tc.superseded {
+				s.expectCurrentSupersedes(currentWorkflow, targetRunID)
+			}
+			targetContext.EXPECT().CreateWorkflowExecution(
+				gomock.Any(), s.mockShard, persistence.CreateWorkflowModeBypassCurrent, "", int64(0),
+				targetMutableState, gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(nil)
+
+			s.NoError(s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow))
+		})
+	}
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressCurrentAndCreateAsCurrent() {
@@ -917,6 +1067,9 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 	currentWorkflowPolicy := historyi.TransactionPolicyActive
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow, gomock.Any()).Return(currentWorkflowPolicy, nil)
 	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: currentRunID}).AnyTimes()
+	// The target becomes current, so it records the run it superseded.
+	targetMutableState.EXPECT().RecordRunSuperseded(currentRunID).Return(nil)
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -932,4 +1085,18 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
+}
+
+// expectCurrentSupersedes expects the current run to record the target run that suppression turned
+// into a zombie, and to be persisted on its own since it is not part of the zombie transaction.
+func (s *transactionMgrForNewWorkflowSuite) expectCurrentSupersedes(currentWorkflow *MockWorkflow, targetRunID string) {
+	currentContext := historyi.NewMockWorkflowContext(s.controller)
+	currentMutableState := historyi.NewMockMutableState(s.controller)
+	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
+	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
+	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "current run ID"}).AnyTimes()
+	currentMutableState.EXPECT().RecordRunSuperseded(targetRunID).Return(nil)
+	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	currentContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 }

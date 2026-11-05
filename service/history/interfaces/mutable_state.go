@@ -314,6 +314,21 @@ type (
 		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
+		// The Record methods below are no-ops for non-workflow executions. Their visibility update is
+		// generated when the transaction closes, from the final execution state; see
+		// generateLocalStateVisibilityTask.
+
+		// RecordHistoryBranch stamps LastBranchTime and marks a visibility update for transaction
+		// close. Called when conflict resolution creates or switches to a history branch.
+		RecordHistoryBranch() error
+		// RecordRunSuperseded stamps LastSupersedeTime and LastSupersededRunId and marks a visibility
+		// update for transaction close. Called when conflict resolution supersedes another run of
+		// this workflow ID with this one.
+		RecordRunSuperseded(supersededRunID string) error
+		// RecordOrphanedOperations stamps LastOrphanedOperationsTime and marks a visibility update for
+		// transaction close. Called when conflict resolution leaves operations, such as child
+		// workflows, started on a non-current branch.
+		RecordOrphanedOperations() error
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 		RefreshExpirationTimeoutTask(ctx context.Context) error

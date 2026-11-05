@@ -11,11 +11,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -354,4 +356,67 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.Equal(historyi.TransactionPolicyPassive, policy)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.Status)
+}
+
+func TestHasOrphanedOperations(t *testing.T) {
+	t.Parallel()
+
+	// The branch being switched to shares events up to 5@1, then continues at version 2.
+	branch := versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(5, 1),
+		versionhistory.NewVersionHistoryItem(9, 2),
+	})
+	testCases := []struct {
+		name     string
+		children map[int64]*persistencespb.ChildExecutionInfo
+		expected bool
+	}{
+		{name: "no children"},
+		{name: "initiated before the fork point", children: map[int64]*persistencespb.ChildExecutionInfo{4: {Version: 1}}},
+		{name: "initiated on the new branch", children: map[int64]*persistencespb.ChildExecutionInfo{7: {Version: 2}}},
+		{name: "initiated after the fork point", children: map[int64]*persistencespb.ChildExecutionInfo{7: {Version: 1}}, expected: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mutableState := historyi.NewMockMutableState(gomock.NewController(t))
+			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(tc.children)
+			require.Equal(t, tc.expected, hasOrphanedOperations(mutableState, branch))
+		})
+	}
+}
+
+func TestRecordSupersede(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		loserRunID      string
+		loserWasRunning bool
+		expectRecorded  bool
+	}{
+		{name: "running loser", loserRunID: "loser", loserWasRunning: true, expectRecorded: true},
+		{name: "loser already closed", loserRunID: "loser"},
+		// E.g. a successor that a resend already made current.
+		{name: "loser is the winner", loserRunID: "winner", loserWasRunning: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			winnerMutableState := historyi.NewMockMutableState(controller)
+			winnerMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "winner"}).AnyTimes()
+			loserMutableState := historyi.NewMockMutableState(controller)
+			loserMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: tc.loserRunID}).AnyTimes()
+			winner := NewMockWorkflow(controller)
+			winner.EXPECT().GetMutableState().Return(winnerMutableState).AnyTimes()
+			loser := NewMockWorkflow(controller)
+			loser.EXPECT().GetMutableState().Return(loserMutableState).AnyTimes()
+			if tc.expectRecorded {
+				winnerMutableState.EXPECT().RecordRunSuperseded(tc.loserRunID).Return(nil)
+			}
+
+			require.NoError(t, recordSupersede(winner, loser, tc.loserWasRunning))
+		})
+	}
 }
