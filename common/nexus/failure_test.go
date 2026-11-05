@@ -405,73 +405,61 @@ func TestCallerRPSLimitWireRoundTrip(t *testing.T) {
 				header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 			}
 			_, err = client.StartOperation(t.Context(), "operation", "input", nexus.StartOperationOptions{Header: header})
-			retryErr := CallerRPSRetry(err)
 			require.Equal(t, &serviceerror.ResourceExhausted{
 				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
 				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 				Message: tc.message,
-			}, retryErr)
+			}, CallerRPSRetry(err))
 		})
 	}
 }
 
-func TestCallerRPSLimitClassification(t *testing.T) {
+func TestConvertGRPCErrorResourceExhausted(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		cause enumspb.ResourceExhaustedCause
 		scope enumspb.ResourceExhaustedScope
-		want  bool
 	}{
-		{"caller", enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, true},
-		{"system caller", enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, false},
-		{"aps", enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, false},
-		{"rps", enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, false},
+		{"other cause", enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE},
+		{"other scope", enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := ConvertGRPCError(&serviceerror.ResourceExhausted{Cause: tc.cause, Scope: tc.scope}, false)
-			require.Equal(t, tc.want, CallerRPSRetry(err) != nil)
-			if !tc.want {
-				require.Equal(t, &nexus.HandlerError{
-					Type:    nexus.HandlerErrorTypeResourceExhausted,
-					Message: "resource exhausted",
-				}, err)
-			}
+			require.Equal(t, &nexus.HandlerError{Type: nexus.HandlerErrorTypeResourceExhausted, Message: "resource exhausted"}, err)
 		})
 	}
-	require.NoError(t, CallerRPSRetry(nexus.NewHandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, "caller rate limit exceeded")))
-	callerErr := ConvertGRPCError(&serviceerror.ResourceExhausted{
-		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
-		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-	}, false)
-	require.NoError(t, CallerRPSRetry(&nexus.OperationError{State: nexus.OperationStateFailed, Cause: callerErr}))
-	var handlerErr *nexus.HandlerError
-	require.ErrorAs(t, callerErr, &handlerErr)
-	handlerErr.RetryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
-	require.NoError(t, CallerRPSRetry(handlerErr))
 }
 
-func TestCallerRPSRetryUnrecognizedCause(t *testing.T) {
+func TestCallerRPSRetryIgnoresOtherErrors(t *testing.T) {
 	t.Parallel()
+	handlerError := func(failureType, details string) *nexus.HandlerError {
+		return &nexus.HandlerError{
+			Type: nexus.HandlerErrorTypeResourceExhausted,
+			Cause: &nexus.FailureError{Failure: nexus.Failure{
+				Metadata: map[string]string{"type": failureType}, Details: []byte(details),
+			}},
+		}
+	}
+	callerDetails := `{"cause":"RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT","scope":"RESOURCE_EXHAUSTED_SCOPE_NAMESPACE"}`
+	nonRetryable := handlerError(resourceExhaustedFailureTypeString, callerDetails)
+	nonRetryable.RetryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 	for _, tc := range []struct {
-		name        string
-		failureType string
-		details     string
+		name string
+		err  error
 	}{
-		{"unknown type", "custom.ResourceExhaustedFailure", `{"cause":"RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT","scope":"RESOURCE_EXHAUSTED_SCOPE_NAMESPACE"}`},
-		{"malformed details", resourceExhaustedFailureTypeString, `{"cause":true}`},
+		{"untyped rejection", nexus.NewHandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, "caller rate limit exceeded")},
+		{"operation failure", &nexus.OperationError{State: nexus.OperationStateFailed, Cause: handlerError(resourceExhaustedFailureTypeString, callerDetails)}},
+		{"non-retryable", nonRetryable},
+		{"unknown type", handlerError("custom.ResourceExhaustedFailure", callerDetails)},
+		{"malformed details", handlerError(resourceExhaustedFailureTypeString, `{"cause":true}`)},
+		{"wrong cause", handlerError(resourceExhaustedFailureTypeString, `{"cause":"RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT","scope":"RESOURCE_EXHAUSTED_SCOPE_NAMESPACE"}`)},
+		{"wrong scope", handlerError(resourceExhaustedFailureTypeString, `{"cause":"RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT","scope":"RESOURCE_EXHAUSTED_SCOPE_SYSTEM"}`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := &nexus.HandlerError{
-				Type: nexus.HandlerErrorTypeResourceExhausted,
-				Cause: &nexus.FailureError{Failure: nexus.Failure{
-					Metadata: map[string]string{"type": tc.failureType},
-					Details:  []byte(tc.details),
-				}},
-			}
-			require.NoError(t, CallerRPSRetry(err))
+			require.NoError(t, CallerRPSRetry(tc.err))
 		})
 	}
 }
