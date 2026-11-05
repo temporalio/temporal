@@ -326,6 +326,21 @@ func TestUpdateWorkflowExecutionPipelined_CheckFailed(t *testing.T) {
 	}
 }
 
+// A malformed history branch returns the parse error, as the sequential path
+// does, before any transaction begins.
+func TestUpdateWorkflowExecutionPipelined_MalformedBranch(t *testing.T) {
+	t.Parallel()
+	request := newPipelineTestRequest()
+	db := newFakePipelineDB(request)
+	request.UpdateWorkflowNewEvents[0].BranchInfo.TreeId = "not-a-uuid"
+	_, parseErr := primitives.ParseUUID("not-a-uuid")
+
+	require.Equal(t, parseErr, updateWithFakes(db, request))
+	require.False(t, db.pipelined.begun)
+	require.Zero(t, db.historyNodes)
+	require.False(t, db.sequential.begun)
+}
+
 // A recording error writes nothing, so it returns the connection and the error.
 func TestUpdateWorkflowExecutionPipelined_RecordErrorRollsBack(t *testing.T) {
 	t.Parallel()

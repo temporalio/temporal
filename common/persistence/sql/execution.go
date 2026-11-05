@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -335,18 +336,23 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
-	if handled, err := m.updateWorkflowExecutionPipelined(ctx, request); handled {
+	// Both paths append the history from these rows.
+	newEvents := slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents)
+	nodeRows := make([]*sqlplugin.HistoryNodeRow, len(newEvents))
+	for i, req := range newEvents {
+		nodeRow, err := historyNodeRow(req)
+		if err != nil {
+			return err
+		}
+		nodeRows[i] = nodeRow
+	}
+	if handled, err := m.updateWorkflowExecutionPipelined(ctx, request, newEvents, nodeRows); handled {
 		return err
 	}
 
 	// first append history
-	for _, req := range request.UpdateWorkflowNewEvents {
-		if err := m.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
-	}
-	for _, req := range request.NewWorkflowNewEvents {
-		if err := m.AppendHistoryNodes(ctx, req); err != nil {
+	for i, req := range newEvents {
+		if err := m.appendHistoryNodes(ctx, req, nodeRows[i]); err != nil {
 			return err
 		}
 	}

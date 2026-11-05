@@ -29,9 +29,17 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 	if err != nil {
 		return err
 	}
+	return m.appendHistoryNodes(ctx, request, nodeRow)
+}
 
+// appendHistoryNodes appends nodeRow, the row historyNodeRow builds from request.
+func (m *sqlExecutionStore) appendHistoryNodes(
+	ctx context.Context,
+	request *p.InternalAppendHistoryNodesRequest,
+	nodeRow *sqlplugin.HistoryNodeRow,
+) error {
 	if !request.IsNewBranch {
-		_, err = m.DB.InsertIntoHistoryNode(ctx, nodeRow)
+		_, err := m.DB.InsertIntoHistoryNode(ctx, nodeRow)
 		switch err {
 		case nil:
 			return nil

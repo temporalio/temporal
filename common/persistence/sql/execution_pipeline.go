@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"slices"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
@@ -23,11 +22,14 @@ type expectingTx struct {
 
 // updateWorkflowExecutionPipelined appends the history and runs the
 // UpdateWorkflowExecution transaction in one round trip when the plugin
-// supports it. It returns false when the request or the plugin's connection
-// needs the sequential path, before anything is sent.
+// supports it. newEvents are the request's new events and nodeRows their history
+// node rows. It returns false when the request or the plugin's connection needs
+// the sequential path, before anything is sent.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
+	newEvents []*p.InternalAppendHistoryNodesRequest,
+	nodeRows []*sqlplugin.HistoryNodeRow,
 ) (bool, error) {
 	pipeliner, ok := m.DB.(sqlplugin.TxPipeliner)
 	if !ok || request.NewWorkflowSnapshot != nil {
@@ -38,7 +40,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	if request.Mode != p.UpdateWorkflowModeUpdateCurrent && request.Mode != p.UpdateWorkflowModeIgnoreCurrent {
 		return false, nil
 	}
-	newEvents := slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents)
 	for _, req := range newEvents {
 		// A new branch also inserts its history_tree row in its own transaction.
 		if req.IsNewBranch {
@@ -66,7 +67,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 			}
 		}
 	}()
-	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
+	if err := m.recordUpdateWorkflowExecution(ctx, tx, request, nodeRows); err != nil {
 		return true, convertTxError("UpdateWorkflowExecution", err)
 	}
 	sent = true
@@ -109,12 +110,9 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 	ctx context.Context,
 	tx sqlplugin.PipelinedTx,
 	request *p.InternalUpdateWorkflowExecutionRequest,
+	nodeRows []*sqlplugin.HistoryNodeRow,
 ) error {
-	for _, req := range slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents) {
-		nodeRow, err := historyNodeRow(req)
-		if err != nil {
-			return err
-		}
+	for _, nodeRow := range nodeRows {
 		if _, err := tx.InsertIntoHistoryNode(ctx, nodeRow); err != nil {
 			return err
 		}
