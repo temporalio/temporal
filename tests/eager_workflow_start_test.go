@@ -368,6 +368,24 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenWorkerVersi
 	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
 }
 
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenWorkerVersionDiffersFromOverride() {
+	env := &VersioningTestEnv{TestEnv: s.newBacklogEnv()}
+	tv := env.Tv().WithTaskQueue(s.defaultTaskQueue().GetName())
+	env.updateTaskQueueDeploymentData(s, tv, false, 0, false, 0, tqTypeWf)
+
+	// The queue has no backlog, so Matching would grant this. Only the version mismatch denies it.
+	response := s.startEagerWorkflow(env.TestEnv, &workflowservice.StartWorkflowExecutionRequest{
+		EagerWorkerDeploymentOptions: tv.WithBuildIDNumber(2).WorkerDeploymentOptions(true),
+		VersioningOverride: &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		}},
+	})
+	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+}
+
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDoesNotReturnDispatchedTask() {
 	for _, crossRunDedup := range []bool{false, true} {
 		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {
