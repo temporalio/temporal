@@ -28,7 +28,7 @@ type (
 	ThrottleKey struct {
 		Cause         enumspb.ResourceExhaustedCause
 		NamespaceName namespace.Name
-		ShardID       int32
+		ShardID       int
 	}
 
 	ThrottleState struct {

@@ -435,7 +435,7 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 		ctx,
 		currentClusterName,
 		currentClusterName,
-		int(e.shardID()),
+		e.shardID(),
 		e.GetTask(),
 		e.lastActiveness,
 	)
@@ -938,10 +938,10 @@ func (e *executableImpl) reportThrottle(
 	e.throttleState.ReportThrottled(key, metered)
 }
 
-func (e *executableImpl) shardID() int32 {
+func (e *executableImpl) shardID() int {
 	currentClusterName := e.clusterMetadata.GetCurrentClusterName()
 	numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
-	return int32(tasks.GetShardIDForTask(e.Task, int(numShards)))
+	return tasks.GetShardIDForTask(e.Task, int(numShards))
 }
 
 func (e *executableImpl) clearThrottle() {

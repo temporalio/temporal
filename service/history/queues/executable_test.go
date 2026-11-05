@@ -1820,7 +1820,7 @@ func (s *executableSuite) TestHandleErr_ShardThrottleKeyCarriesShardID() {
 
 	s.Error(executable.HandleErr(throttleErr))
 	expected := queues.NewThrottleKey(throttleErr.Cause, tests.Namespace)
-	expected.ShardID = int32(tasks.GetShardIDForTask(executable.GetTask(), 1))
+	expected.ShardID = tasks.GetShardIDForTask(executable.GetTask(), 1)
 	s.NotZero(expected.ShardID)
 	s.Equal(expected, queues.ThrottleKeyOf(executable))
 }
