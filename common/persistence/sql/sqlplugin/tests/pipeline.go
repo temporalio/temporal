@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql"
@@ -133,45 +135,53 @@ func (s *pipelineSuite) TestUpdateExecutionsWithCondition() {
 }
 
 func (s *pipelineSuite) TestUpdateCurrentExecutions() {
-	current, _ := s.insertExecution(chasm.WorkflowArchetypeID)
-	changed := current
-	changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	changed.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-
-	written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
-		for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
-			_, err := tx.UpdateCurrentExecutions(newExecutionContext(), row)
-			s.NoError(err)
-		}
-	})
-	s.NoError(err)
-	s.True(written)
-
-	stored, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), sqlplugin.CurrentExecutionsFilter{
-		ShardID:     current.ShardID,
-		NamespaceID: current.NamespaceID,
-		WorkflowID:  current.WorkflowID,
-		ArchetypeID: current.ArchetypeID,
-	})
-	s.NoError(err)
-	s.Equal(changed.State, stored.State)
-	s.Equal(changed.Status, stored.Status)
-
-	// A row that would not change is not updated at all.
 	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_fail_update() RETURNS trigger
 LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test update'; END $$`))
-	defer func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_fail_update()`)) }()
-	s.NoError(s.admin.Exec(fmt.Sprintf(`CREATE TRIGGER pipeline_test_fail_update
-AFTER UPDATE ON current_executions
-FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update()`, current.ShardID)))
-	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_fail_update ON current_executions`)) }()
+	s.T().Cleanup(func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_fail_update()`)) })
 
-	written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
-		_, err := tx.UpdateCurrentExecutions(newExecutionContext(), &changed)
+	for _, tc := range []struct {
+		archetypeID chasm.ArchetypeID
+		table       string
+	}{
+		{archetypeID: chasm.WorkflowArchetypeID, table: "current_executions"},
+		{archetypeID: math.MaxUint32, table: "current_chasm_executions"},
+	} {
+		current, _ := s.insertExecution(tc.archetypeID)
+		changed := current
+		changed.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		changed.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+		written, err := s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+			for _, row := range []*sqlplugin.CurrentExecutionsRow{&current, &changed} {
+				_, err := tx.UpdateCurrentExecutions(newExecutionContext(), row)
+				s.NoError(err)
+			}
+		})
 		s.NoError(err)
-	})
-	s.NoError(err)
-	s.True(written)
+		s.True(written)
+
+		stored, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), sqlplugin.CurrentExecutionsFilter{
+			ShardID:     current.ShardID,
+			NamespaceID: current.NamespaceID,
+			WorkflowID:  current.WorkflowID,
+			ArchetypeID: current.ArchetypeID,
+		})
+		s.NoError(err)
+		s.Equal(&changed, stored)
+
+		// A row that would not change is not updated at all.
+		s.NoError(s.admin.Exec(fmt.Sprintf(`CREATE TRIGGER pipeline_test_fail_update
+AFTER UPDATE ON %s
+FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_update()`, tc.table, current.ShardID)))
+		s.T().Cleanup(func() { s.NoError(s.admin.Exec(fmt.Sprintf(`DROP TRIGGER pipeline_test_fail_update ON %s`, tc.table))) })
+
+		written, err = s.commit(current.ShardID, func(tx sqlplugin.PipelinedTx) {
+			_, err := tx.UpdateCurrentExecutions(newExecutionContext(), &changed)
+			s.NoError(err)
+		})
+		s.NoError(err)
+		s.True(written)
+	}
 }
 
 func (s *pipelineSuite) TestDuplicateInsert() {
@@ -264,6 +274,43 @@ FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_fail_commit
 	s.False(written)
 }
 
+// A rejection that calls for a new connection pool refreshes the pool, as the
+// same error from a sequential transaction does.
+func (s *pipelineSuite) TestRejectionRefreshesPool() {
+	shardID := rand.Int31()
+	s.NoError(s.admin.Exec(`CREATE FUNCTION pipeline_test_read_only() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pipeline test read only' USING ERRCODE = '25006'; END $$`))
+	defer func() { s.NoError(s.admin.Exec(`DROP FUNCTION pipeline_test_read_only()`)) }()
+	s.NoError(s.admin.Exec(fmt.Sprintf(`CREATE TRIGGER pipeline_test_read_only
+BEFORE INSERT ON history_node
+FOR EACH ROW WHEN (NEW.shard_id = %d) EXECUTE FUNCTION pipeline_test_read_only()`, shardID)))
+	defer func() { s.NoError(s.admin.Exec(`DROP TRIGGER pipeline_test_read_only ON history_node`)) }()
+
+	tx := s.beginPipelinedTx(newExecutionContext())
+	_, err := tx.InsertIntoHistoryNode(newExecutionContext(), &sqlplugin.HistoryNodeRow{
+		ShardID:      shardID,
+		TreeID:       primitives.NewUUID(),
+		BranchID:     primitives.NewUUID(),
+		NodeID:       rand.Int63(),
+		PrevTxnID:    rand.Int63(),
+		TxnID:        rand.Int63(),
+		Data:         shuffle.Bytes(testHistoryNodeData),
+		DataEncoding: testHistoryNodeEncoding,
+	})
+	s.NoError(err)
+	err = tx.Commit()
+	s.ErrorIs(err, sqlplugin.ErrPipelineNotWritten)
+	var unavailable *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailable)
+	s.Equal("database connection lost: ERROR: pipeline test read only (SQLSTATE 25006)", unavailable.Message)
+
+	// The handle reopens the pool at most once a second.
+	await.RequireTrue(s.T(), func() bool {
+		_, err := s.store.SelectFromShards(newExecutionContext(), sqlplugin.ShardsFilter{ShardID: shardID})
+		return !errors.Is(err, sqlplugin.DatabaseUnavailableError)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 // commit queues a history node, then the statements queue adds, and commits.
 // It returns whether the history node was written and the Commit error.
 func (s *pipelineSuite) commit(shardID int32, queue func(tx sqlplugin.PipelinedTx)) (bool, error) {
@@ -334,7 +381,7 @@ func (s *pipelineSuite) insertExecution(archetypeID chasm.ArchetypeID) (
 	namespaceID := primitives.NewUUID()
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
-	startTime := time.Now().UTC()
+	startTime := time.Now().UTC().Truncate(time.Microsecond)
 
 	current := sqlplugin.CurrentExecutionsRow{
 		ShardID:          shardID,

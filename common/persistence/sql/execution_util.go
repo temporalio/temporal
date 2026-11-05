@@ -950,6 +950,8 @@ func assertRunIDAndUpdateCurrentExecution(
 	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
+		// The pipelined update (execution_pipeline.go) checks only the run ID, in
+		// SQL. A check on another field of currentRow needs a SQL counterpart there.
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
 			if err != nil {

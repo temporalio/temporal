@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"slices"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -24,18 +24,23 @@ type expectingTx struct {
 
 // updateWorkflowExecutionPipelined appends the history and runs the
 // UpdateWorkflowExecution transaction in one round trip when the plugin
-// supports it. It returns false when nothing was written and the caller must
-// run the sequential path, which returns today's errors when the database
-// rejected the pipelined transaction.
+// supports it. It returns false when nothing was written. The caller then runs
+// the sequential path, which returns its own error for a request the database
+// rejected.
 func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) (bool, error) {
 	pipeliner, ok := m.DB.(sqlplugin.TxPipeliner)
-	if !ok || request.Mode != p.UpdateWorkflowModeUpdateCurrent || request.NewWorkflowSnapshot != nil {
+	if !ok || request.NewWorkflowSnapshot != nil {
 		return false, nil
 	}
-	for _, req := range request.UpdateWorkflowNewEvents {
+	// BypassCurrent asserts that the run is not current, and expectingTx asserts
+	// that it is.
+	if request.Mode != p.UpdateWorkflowModeUpdateCurrent && request.Mode != p.UpdateWorkflowModeIgnoreCurrent {
+		return false, nil
+	}
+	for _, req := range slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents) {
 		// A new branch also inserts its history_tree row in its own transaction.
 		if req.IsNewBranch {
 			return false, nil
@@ -47,7 +52,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionPipelined(
 		return false, nil
 	}
 	if err != nil {
-		return true, serviceerror.NewUnavailablef("UpdateWorkflowExecution failed. Failed to start transaction. Error: %v", err)
+		return true, convertSQLError("UpdateWorkflowExecution", "failed to start transaction", err)
 	}
 	if err := m.recordUpdateWorkflowExecution(ctx, tx, request); err != nil {
 		m.logger.Warn("UpdateWorkflowExecution pipeline recording failed", tag.ShardID(request.ShardID), tag.Error(err))
@@ -72,7 +77,7 @@ func (m *sqlExecutionStore) recordUpdateWorkflowExecution(
 	tx sqlplugin.PipelinedTx,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
-	for _, req := range request.UpdateWorkflowNewEvents {
+	for _, req := range slices.Concat(request.UpdateWorkflowNewEvents, request.NewWorkflowNewEvents) {
 		nodeRow, err := historyNodeRow(req)
 		if err != nil {
 			return err

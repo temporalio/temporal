@@ -604,6 +604,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		tasks.CategoryTimer:    {&tasks.UserTimerTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
 		tasks.CategoryArchival: {&tasks.ArchiveExecutionTask{WorkflowKey: workflowKey, TaskID: rand.Int63(), VisibilityTimestamp: now}},
 	}
+	// A buffered event on every run, so the buffered-event insert reaches the
+	// BeginTxCount check below.
+	currentMutation.ClearBufferedEvents = false
+	currentMutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent(newSnapshot.NextEventID, rand.Int63())}
 	var beginTxCount int64
 	if s.BeginTxCount != nil {
 		beginTxCount = s.BeginTxCount()
@@ -652,6 +656,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
 		newSnapshot.DBRecordVersion+1,
 		nil, // No branch token for CHASM
 	)
+	var beginTxCount int64
+	if s.BeginTxCount != nil {
+		beginTxCount = s.BeginTxCount()
+	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -666,6 +674,9 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
 		NewWorkflowEvents:   nil,
 	})
 	s.NoError(err)
+	if s.BeginTxCount != nil {
+		s.Equal(beginTxCount, s.BeginTxCount(), "the update ran sequentially instead of pipelined")
+	}
 
 	s.AssertMSEqualWithDB(archetypeID, newSnapshot, currentMutation)
 }
@@ -1373,6 +1384,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
 		newSnapshot.DBRecordVersion+1,
 		branchToken,
 	)
+	var beginTxCount int64
+	if s.BeginTxCount != nil {
+		beginTxCount = s.BeginTxCount()
+	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -1387,6 +1402,9 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
 		NewWorkflowEvents:   nil,
 	})
 	s.NoError(err)
+	if s.BeginTxCount != nil {
+		s.Equal(beginTxCount, s.BeginTxCount(), "the update ran sequentially instead of pipelined")
+	}
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1445,6 +1463,10 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		nonCurrentSnapshot.DBRecordVersion+1,
 		nonCurrentBranchToken,
 	)
+	var beginTxCount int64
+	if s.BeginTxCount != nil {
+		beginTxCount = s.BeginTxCount()
+	}
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -1459,6 +1481,9 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		NewWorkflowEvents:   nil,
 	})
 	s.NoError(err)
+	if s.BeginTxCount != nil {
+		s.Equal(beginTxCount, s.BeginTxCount(), "the update ran sequentially instead of pipelined")
+	}
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, nonCurrentSnapshot, nonCurrentMutation)
 	s.AssertHEEqualWithDB(nonCurrentBranchToken, nonCurrentEvents)

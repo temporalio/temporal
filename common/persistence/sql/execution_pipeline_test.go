@@ -31,8 +31,8 @@ type (
 		historyNodes      int
 	}
 
-	// fakeUpdateTx answers the calls of a minimal UpdateCurrent update the way a
-	// successful update sees them.
+	// fakeUpdateTx answers the calls of a minimal update the way a successful
+	// update sees them.
 	fakeUpdateTx struct {
 		sqlplugin.PipelinedTx
 		request *p.InternalUpdateWorkflowExecutionRequest
@@ -47,14 +47,45 @@ type (
 )
 
 func TestUpdateWorkflowExecutionPipelined_Committed(t *testing.T) {
-	request := newPipelineTestRequest()
-	db := newFakePipelineDB(request)
+	testCases := []struct {
+		name         string
+		setup        func(request *p.InternalUpdateWorkflowExecutionRequest)
+		historyNodes int
+	}{
+		{
+			name:         "update current",
+			setup:        func(*p.InternalUpdateWorkflowExecutionRequest) {},
+			historyNodes: 1,
+		},
+		{
+			name: "ignore current",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest) {
+				request.Mode = p.UpdateWorkflowModeIgnoreCurrent
+			},
+			historyNodes: 1,
+		},
+		{
+			name: "new workflow events",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest) {
+				events := *request.UpdateWorkflowNewEvents[0]
+				request.NewWorkflowNewEvents = []*p.InternalAppendHistoryNodesRequest{&events}
+			},
+			historyNodes: 2,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPipelineTestRequest()
+			db := newFakePipelineDB(request)
+			tc.setup(request)
 
-	require.NoError(t, updateWithFakes(db, request))
-	require.Equal(t, 1, db.pipelined.historyNodes)
-	require.True(t, db.pipelined.committed)
-	require.Zero(t, db.historyNodes)
-	require.False(t, db.sequential.begun)
+			require.NoError(t, updateWithFakes(db, request))
+			require.Equal(t, tc.historyNodes, db.pipelined.historyNodes)
+			require.True(t, db.pipelined.committed)
+			require.Zero(t, db.historyNodes)
+			require.False(t, db.sequential.begun)
+		})
+	}
 }
 
 func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
@@ -84,9 +115,17 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 			},
 		},
 		{
-			name: "not update current",
+			name: "new workflow events new branch",
 			setup: func(request *p.InternalUpdateWorkflowExecutionRequest, _ *fakePipelineDB) {
-				request.Mode = p.UpdateWorkflowModeIgnoreCurrent
+				events := *request.UpdateWorkflowNewEvents[0]
+				events.IsNewBranch = true
+				request.NewWorkflowNewEvents = []*p.InternalAppendHistoryNodesRequest{&events}
+			},
+		},
+		{
+			name: "bypass current",
+			setup: func(request *p.InternalUpdateWorkflowExecutionRequest, _ *fakePipelineDB) {
+				request.Mode = p.UpdateWorkflowModeBypassCurrent
 			},
 		},
 		{
@@ -111,7 +150,7 @@ func TestUpdateWorkflowExecutionPipelined_RunsSequential(t *testing.T) {
 			require.NoError(t, updateWithFakes(db, request))
 			require.Equal(t, tc.pipelinedBegun, db.pipelined.begun)
 			require.False(t, db.pipelined.committed)
-			require.Equal(t, 1, db.historyNodes+db.sequential.historyNodes)
+			require.Equal(t, len(request.UpdateWorkflowNewEvents)+len(request.NewWorkflowNewEvents), db.historyNodes+db.sequential.historyNodes)
 			require.True(t, db.sequential.committed)
 		})
 	}
@@ -138,7 +177,7 @@ func TestUpdateWorkflowExecutionPipelined_BeginErrorIsUnavailable(t *testing.T) 
 	err := updateWithFakes(db, request)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
-	require.Equal(t, "UpdateWorkflowExecution failed. Failed to start transaction. Error: connection refused", unavailable.Message)
+	require.Equal(t, "UpdateWorkflowExecution: failed to start transaction: connection refused", unavailable.Message)
 	require.Zero(t, db.historyNodes)
 	require.False(t, db.sequential.begun)
 }
@@ -224,6 +263,9 @@ func (t *fakeUpdateTx) ReadLockShardsWithRangeID(context.Context, sqlplugin.Shar
 }
 
 func (t *fakeUpdateTx) LockCurrentExecutions(context.Context, sqlplugin.CurrentExecutionsFilter) (*sqlplugin.CurrentExecutionsRow, error) {
+	if t.request.Mode == p.UpdateWorkflowModeBypassCurrent {
+		return nil, sql.ErrNoRows
+	}
 	return &sqlplugin.CurrentExecutionsRow{
 		RunID: primitives.MustParseUUID(t.request.UpdateWorkflowMutation.ExecutionState.RunId),
 	}, nil

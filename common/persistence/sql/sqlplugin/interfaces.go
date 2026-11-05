@@ -116,8 +116,10 @@ type (
 	// prepared them. Its reads return no results, so the checks a caller would make
 	// on them are statements that fail the transaction instead, and its
 	// UpdateExecutionsWithCondition fails the transaction when it updates no row.
-	// Commit returns ErrPipelineNotWritten when nothing it queued was written. Any
-	// other Commit error leaves the outcome unknown.
+	// Its UpdateCurrentExecutions writes the row only when it differs, as the
+	// sequential update does. Commit returns ErrPipelineNotWritten only when
+	// nothing it queued was written. Any other Commit error leaves the outcome
+	// unknown.
 	PipelinedTx interface {
 		Tx
 		HistoryExecutionConditionalUpdater

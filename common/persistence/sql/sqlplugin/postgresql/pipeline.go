@@ -13,7 +13,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 )
 
 type (
@@ -43,15 +42,15 @@ var (
 	_ sqlplugin.PipelinedTx = pipelinedTx{}
 )
 
-// BeginPipelinedTx returns ErrPipelineUnsupported unless the plugin uses pgx,
-// since Commit sends the batch through a pgx connection.
+// BeginPipelinedTx returns ErrPipelineUnsupported unless the pool connects with
+// pgx, since Commit sends the batch through a pgx connection.
 func (pdb *db) BeginPipelinedTx(ctx context.Context) (sqlplugin.PipelinedTx, error) {
-	if _, ok := pdb.dbDriver.(*driver.PGXDriver); !ok {
-		return nil, sqlplugin.ErrPipelineUnsupported
-	}
 	sqlDB, err := pdb.handle.DB()
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := sqlDB.Driver().(*stdlib.Driver); !ok {
+		return nil, sqlplugin.ErrPipelineUnsupported
 	}
 	tx := newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, nil, pdb.logger)
 	tx.pipe = &pipeline{ctx: ctx, db: sqlDB}
@@ -139,35 +138,15 @@ func (t pipelinedTx) UpdateCurrentExecutions(
 }
 
 // Commit sends the queued statements as one batch. Its errors go through
-// ConvertError, as BeginTx's do.
+// ConvertError, as BeginTx's do, and wrap ErrPipelineNotWritten when nothing was
+// written.
 func (t pipelinedTx) Commit() error {
-	p := t.pipe
-	conn, err := p.db.Conn(p.ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, t.handle.ConvertError(err))
+	notWritten, err := t.pipe.sendOnPooledConn()
+	err = t.handle.ConvertError(err)
+	if notWritten {
+		return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, err)
 	}
-	defer func() { _ = conn.Close() }()
-
-	var sendErr error
-	rawErr := conn.Raw(func(driverConn any) error {
-		c, ok := driverConn.(*stdlib.Conn)
-		if !ok {
-			// A custom SQL.Connect can return another driver's connections.
-			sendErr = fmt.Errorf("%w: %T is not a pgx connection", sqlplugin.ErrPipelineNotWritten, driverConn)
-			return nil
-		}
-		sendErr = p.send(c.Conn())
-		if sendErr != nil && !errors.Is(sendErr, sqlplugin.ErrPipelineNotWritten) {
-			// The connection can be left mid-batch, so database/sql must close it
-			// instead of pooling it.
-			return sqldriver.ErrBadConn
-		}
-		return nil
-	})
-	if sendErr == nil {
-		sendErr = rawErr
-	}
-	return t.handle.ConvertError(sendErr)
+	return err
 }
 
 // Rollback drops the queued statements, which were never sent.
@@ -176,17 +155,48 @@ func (t pipelinedTx) Rollback() error {
 	return nil
 }
 
-// send runs the queued statements as one batch. pgx runs a batch without
-// transaction control statements as one implicit transaction, which Postgres
-// commits after the last statement. A statement error means Postgres skipped
-// the rest and rolled the transaction back, so nothing was written, as with an
-// error pgx reports before it sent anything. An error after every statement
-// succeeded comes from the commit, which may have happened.
+// sendOnPooledConn sends the batch on a connection from the pool, and reports
+// whether nothing was written next to its error.
+func (p *pipeline) sendOnPooledConn() (notWritten bool, err error) {
+	conn, err := p.db.Conn(p.ctx)
+	if err != nil {
+		return true, err
+	}
+	defer func() { _ = conn.Close() }()
+
+	rawErr := conn.Raw(func(driverConn any) error {
+		c, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			// A custom SQL.Connect can return another driver's connections.
+			notWritten, err = true, fmt.Errorf("%T is not a pgx connection", driverConn)
+			return nil
+		}
+		notWritten, err = p.send(c.Conn())
+		if err != nil && !notWritten {
+			// The connection can be left mid-batch, so database/sql must close it
+			// instead of pooling it.
+			return sqldriver.ErrBadConn
+		}
+		return nil
+	})
+	if err == nil {
+		err = rawErr
+	}
+	return notWritten, err
+}
+
+// send runs the queued statements as one batch, and reports whether nothing
+// was written next to its error. pgx runs a batch without transaction control
+// statements as one implicit transaction, which Postgres commits after the last
+// statement. A statement error means Postgres skipped the rest and rolled the
+// transaction back, so nothing was written, as with an error pgx marks safe to
+// retry. An error after every statement succeeded comes from the commit, which
+// may have happened.
 //
 // In simple protocol the batch is one multi-statement query, and Postgres
 // reports a commit error as the last statement's result. A trailing statement
 // that cannot fail on its own keeps that error apart from the statements'.
-func (p *pipeline) send(conn *pgx.Conn) error {
+func (p *pipeline) send(conn *pgx.Conn) (notWritten bool, err error) {
 	batch := &pgx.Batch{}
 	for _, s := range p.statements {
 		batch.Queue(s.sql, s.args...)
@@ -196,17 +206,15 @@ func (p *pipeline) send(conn *pgx.Conn) error {
 	for range p.statements {
 		if _, err := results.Exec(); err != nil {
 			_ = results.Close()
-			if _, ok := errors.AsType[*pgconn.PgError](err); ok || pgconn.SafeToRetry(err) {
-				return fmt.Errorf("%w: %w", sqlplugin.ErrPipelineNotWritten, err)
-			}
-			return err
+			_, rejected := errors.AsType[*pgconn.PgError](err)
+			return rejected || pgconn.SafeToRetry(err), err
 		}
 	}
 	if _, err := results.Exec(); err != nil {
 		_ = results.Close()
-		return err
+		return false, err
 	}
-	return results.Close()
+	return false, results.Close()
 }
 
 func (p *pipeline) Rebind(query string) string {
