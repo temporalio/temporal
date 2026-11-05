@@ -10,7 +10,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var _ chasm.Component = (*Cancellation)(nil)
@@ -69,6 +72,7 @@ type cancelArgs struct {
 	startToCloseTimeout    time.Duration
 	headers                map[string]string
 	payload                *commonpb.Payload
+	lastAttemptFailure     *failurepb.Failure
 }
 
 func (c *Cancellation) onCompleted(ctx chasm.MutableContext) error {
@@ -125,7 +129,22 @@ func (c *Cancellation) loadArgs(
 		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
 		headers:                maps.Clone(invocationData.Header),
 		payload:                invocationData.Input,
+		lastAttemptFailure:     common.CloneProto(c.LastAttemptFailure),
 	}, nil
+}
+
+func (c *Cancellation) recordCallerRPSFailure(
+	ctx chasm.MutableContext,
+	failure *failurepb.Failure,
+) (chasm.NoValue, error) {
+	if c.Status != nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
+		return nil, chasm.ErrInvalidTransition
+	}
+	if !commonnexus.IsCallerRPSFailure(c.LastAttemptFailure) {
+		c.LastAttemptFailure = failure
+		c.LastAttemptCompleteTime = timestamppb.New(ctx.Now(c))
+	}
+	return nil, nil
 }
 
 // saveCancellationResultInput is the input to the Cancellation.saveResult method.

@@ -9,6 +9,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -38,6 +39,7 @@ type startArgs struct {
 	payload                *commonpb.Payload
 	nexusLinks             []nexus.Link
 	serializedRef          []byte
+	lastAttemptFailure     *failurepb.Failure
 }
 
 // invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.

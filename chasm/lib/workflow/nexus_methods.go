@@ -283,9 +283,11 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 		}
 
 		blockedReason := ""
-		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && op.DestinationBlocked(ctx) {
-			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
-			blockedReason = "The circuit breaker is open."
+		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED {
+			blockedReason = op.BlockedReason(ctx, op.LastAttemptFailure)
+			if blockedReason != "" {
+				state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			}
 		}
 
 		info := &workflowpb.PendingNexusOperationInfo{
@@ -311,9 +313,11 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 			state := nexusoperation.CancellationAPIState(cancel.Status)
 			blockedReason := ""
 
-			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && op.DestinationBlocked(ctx) {
-				state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-				blockedReason = "The circuit breaker is open."
+			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED {
+				blockedReason = op.BlockedReason(ctx, cancel.LastAttemptFailure)
+				if blockedReason != "" {
+					state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+				}
 			}
 
 			info.CancellationInfo = &workflowpb.NexusOperationCancellationInfo{

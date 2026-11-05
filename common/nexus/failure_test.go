@@ -410,6 +410,11 @@ func TestCallerRPSLimitWireRoundTrip(t *testing.T) {
 				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 				Message: tc.message,
 			}, CallerRPSRetry(err))
+			nexusFailure, convertErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(err)
+			require.NoError(t, convertErr)
+			failure, convertErr := NexusFailureToTemporalFailure(nexusFailure)
+			require.NoError(t, convertErr)
+			require.True(t, IsCallerRPSFailure(failure))
 		})
 	}
 }
@@ -460,6 +465,11 @@ func TestCallerRPSRetryIgnoresOtherErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.NoError(t, CallerRPSRetry(tc.err))
+			nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(tc.err)
+			require.NoError(t, err)
+			failure, err := NexusFailureToTemporalFailure(nexusFailure)
+			require.NoError(t, err)
+			require.False(t, IsCallerRPSFailure(failure))
 		})
 	}
 }

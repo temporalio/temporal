@@ -1389,6 +1389,7 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 					Message: "caller rate limit exceeded",
 				}
+				remoteErr := commonnexus.ConvertGRPCError(resourceErr, true)
 				endpoint := &persistencespb.NexusEndpointEntry{
 					Id: "endpoint-id",
 					Endpoint: &persistencespb.NexusEndpoint{Spec: &persistencespb.NexusEndpointSpec{
@@ -1406,13 +1407,14 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 						BaseURL: "http://nexus.test", Service: "service",
 						Serializer: commonnexus.PayloadSerializer,
 						HTTPCaller: func(*http.Request) (*http.Response, error) {
-							return nil, commonnexus.ConvertGRPCError(resourceErr, true)
+							return nil, remoteErr
 						},
 					})
 				}
 				op := NewOperation(&nexusoperationpb.OperationState{
-					Status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-					Endpoint: "endpoint", EndpointId: "endpoint-id", Service: "service", Operation: "operation",
+					Status:             nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+					LastAttemptFailure: &failurepb.Failure{Message: "previous failure"},
+					Endpoint:           "endpoint", EndpointId: "endpoint-id", Service: "service", Operation: "operation",
 					RequestId: "request-id", Attempt: 1, OperationToken: "token", ScheduledTime: timestamppb.Now(),
 				})
 				var err error
@@ -1420,15 +1422,43 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					env := newInvocationTaskTestEnv(t, op, InvocationData{Input: mustToPayload(t, "input")}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
 					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
 					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
-					env.setupReadComponent()
-					if !enabled {
-						env.setupUpdateComponent()
+					if enabled {
+						env.handler.namespaceRegistry.(*namespace.MockRegistry).EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
+							namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil,
+						).Times(3)
+						snapshot := proto.Clone(op.OperationState)
+						persistErr := serviceerror.NewUnavailable("persistence unavailable")
+						env.setupReadComponent()
+						env.mockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, persistErr)
+						require.ErrorIs(t, env.execute(&nexusoperationpb.InvocationTask{Attempt: 1}), persistErr)
+						protorequire.ProtoEqual(t, snapshot, op.OperationState)
 					}
+					env.setupReadComponent()
+					env.setupUpdateComponent()
 					err = env.execute(&nexusoperationpb.InvocationTask{Attempt: 1})
 					if enabled {
+						require.Equal(t, resourceErr, err)
 						require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 						require.Nil(t, op.NextAttemptScheduleTime)
 						require.Equal(t, int32(1), op.Attempt)
+						require.True(t, commonnexus.IsCallerRPSFailure(op.LastAttemptFailure))
+						require.NotNil(t, op.LastAttemptCompleteTime)
+						firstFailure := proto.Clone(op.OperationState)
+						env.timeSource.Advance(time.Second)
+						env.setupReadComponent()
+						resourceErr.Message = "another caller RPS rejection"
+						remoteErr = commonnexus.ConvertGRPCError(resourceErr, true)
+						require.Equal(t, resourceErr, env.execute(&nexusoperationpb.InvocationTask{Attempt: 1}))
+						protorequire.ProtoEqual(t, firstFailure, op.OperationState)
+						remoteErr = nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "handler unavailable")
+						env.setupReadComponent()
+						env.setupUpdateComponent()
+						var destinationDown *queueserrors.DestinationDownError
+						require.ErrorAs(t, env.execute(&nexusoperationpb.InvocationTask{Attempt: 1}), &destinationDown)
+						require.NoError(t, destinationDown.Unwrap())
+						require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+						require.NotNil(t, op.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 					} else {
 						require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 						require.NotNil(t, op.NextAttemptScheduleTime)
@@ -1436,28 +1466,54 @@ func TestCallerRPSLimitRetriesInQueue(t *testing.T) {
 					}
 				} else {
 					op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
-					cancellation := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, Attempt: 1})
+					cancellation := newCancellation(&nexusoperationpb.CancellationState{Status: nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, Attempt: 1, LastAttemptFailure: &failurepb.Failure{Message: "previous failure"}})
 					env := newCancellationTaskTestEnv(t, op, cancellation, InvocationData{}, registry, provider, metrics.NoopMetricsHandler, time.Hour)
 					env.handler.config.EnableOutboundTaskThrottleController = dynamicconfig.GetBoolPropertyFn(tc.outboundEnabled)
 					env.handler.config.TaskThrottleControllerSettings = dynamicconfig.GetTypedPropertyFn(dynamicconfig.TaskThrottleControllerSettings{Enabled: tc.controllerEnabled})
-					env.setupReadComponent()
-					if !enabled {
-						env.setupUpdateComponent()
+					if enabled {
+						env.handler.namespaceRegistry.(*namespace.MockRegistry).EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
+							namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil,
+						).Times(3)
+						snapshot := proto.Clone(cancellation.CancellationState)
+						persistErr := serviceerror.NewUnavailable("persistence unavailable")
+						env.setupReadComponent()
+						env.mockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, persistErr)
+						require.ErrorIs(t, env.execute(&nexusoperationpb.CancellationTask{Attempt: 1}), persistErr)
+						protorequire.ProtoEqual(t, snapshot, cancellation.CancellationState)
 					}
+					env.setupReadComponent()
+					env.setupUpdateComponent()
 					err = env.execute(&nexusoperationpb.CancellationTask{Attempt: 1})
 					if enabled {
+						require.Equal(t, resourceErr, err)
 						require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, cancellation.Status)
 						require.Nil(t, cancellation.NextAttemptScheduleTime)
 						require.Equal(t, int32(1), cancellation.Attempt)
+						require.True(t, commonnexus.IsCallerRPSFailure(cancellation.LastAttemptFailure))
+						require.NotNil(t, cancellation.LastAttemptCompleteTime)
+						firstFailure := proto.Clone(cancellation.CancellationState)
+						env.timeSource.Advance(time.Second)
+						env.setupReadComponent()
+						resourceErr.Message = "another caller RPS rejection"
+						remoteErr = commonnexus.ConvertGRPCError(resourceErr, true)
+						require.Equal(t, resourceErr, env.execute(&nexusoperationpb.CancellationTask{Attempt: 1}))
+						protorequire.ProtoEqual(t, firstFailure, cancellation.CancellationState)
+						remoteErr = nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "handler unavailable")
+						env.setupReadComponent()
+						env.setupUpdateComponent()
+						var destinationDown *queueserrors.DestinationDownError
+						require.ErrorAs(t, env.execute(&nexusoperationpb.CancellationTask{Attempt: 1}), &destinationDown)
+						require.NoError(t, destinationDown.Unwrap())
+						require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, cancellation.Status)
+						require.NotNil(t, cancellation.NextAttemptScheduleTime)
+						require.Equal(t, string(nexus.HandlerErrorTypeInternal), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 					} else {
 						require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, cancellation.Status)
 						require.NotNil(t, cancellation.NextAttemptScheduleTime)
 						require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), cancellation.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 					}
 				}
-				if enabled {
-					require.Equal(t, resourceErr, err)
-				} else {
+				if !enabled {
 					var destinationDown *queueserrors.DestinationDownError
 					require.ErrorAs(t, err, &destinationDown)
 					require.NoError(t, destinationDown.Unwrap())

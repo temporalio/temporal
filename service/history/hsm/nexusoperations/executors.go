@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type operationTimeoutBelowMinError struct {
@@ -338,6 +339,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
+			if !commonnexus.IsCallerRPSFailure(args.lastAttemptFailure) {
+				if err := e.recordStartCallerRPSFailure(ctx, env, ref, callErr); err != nil {
+					return err
+				}
+			}
 			return retryErr
 		}
 	}
@@ -365,6 +371,7 @@ type startArgs struct {
 	payload                  *commonpb.Payload
 	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
+	lastAttemptFailure       *failurepb.Failure
 }
 
 func (e taskExecutor) loadOperationArgs(
@@ -380,6 +387,7 @@ func (e taskExecutor) loadOperationArgs(
 			return err
 		}
 
+		args.lastAttemptFailure = common.CloneProto(operation.LastAttemptFailure)
 		args.endpointName = operation.Endpoint
 		args.endpointID = operation.EndpointId
 		args.service = operation.Service
@@ -412,6 +420,54 @@ func (e taskExecutor) loadOperationArgs(
 		return nil
 	})
 	return
+}
+
+func (e taskExecutor) recordStartCallerRPSFailure(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	callErr error,
+) error {
+	failure, err := callErrToFailure(callErr, true)
+	if err != nil {
+		return err
+	}
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := hsm.ValidateState[enumsspb.NexusOperationState, Operation](node, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(node, func(state Operation) (hsm.TransitionOutput, error) {
+			if !commonnexus.IsCallerRPSFailure(state.LastAttemptFailure) {
+				state.LastAttemptFailure = failure
+				state.LastAttemptCompleteTime = timestamppb.New(env.Now())
+			}
+			return hsm.TransitionOutput{}, nil
+		})
+	})
+}
+
+func (e taskExecutor) recordCancelationCallerRPSFailure(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	callErr error,
+) error {
+	failure, err := callErrToFailure(callErr, true)
+	if err != nil {
+		return err
+	}
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		if err := hsm.ValidateState[enumspb.NexusOperationCancellationState, Cancelation](node, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED); err != nil {
+			return err
+		}
+		return hsm.MachineTransition(node, func(state Cancelation) (hsm.TransitionOutput, error) {
+			if !commonnexus.IsCallerRPSFailure(state.LastAttemptFailure) {
+				state.LastAttemptFailure = failure
+				state.LastAttemptCompleteTime = timestamppb.New(env.Now())
+			}
+			return hsm.TransitionOutput{}, nil
+		})
+	})
 }
 
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
@@ -806,6 +862,11 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	if e.Config.EnableOutboundTaskThrottleController() && e.Config.TaskThrottleControllerSettings().Enabled {
 		if retryErr := commonnexus.CallerRPSRetry(callErr); retryErr != nil {
+			if !commonnexus.IsCallerRPSFailure(args.lastAttemptFailure) {
+				if err := e.recordCancelationCallerRPSFailure(ctx, env, ref, callErr); err != nil {
+					return err
+				}
+			}
 			return retryErr
 		}
 	}
@@ -828,6 +889,7 @@ type cancelArgs struct {
 	scheduledEventID                                               int64
 	headers                                                        map[string]string
 	payload                                                        *commonpb.Payload
+	lastAttemptFailure                                             *failurepb.Failure
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -843,6 +905,11 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
 		}
 
+		cancelation, err := hsm.MachineData[Cancelation](n)
+		if err != nil {
+			return err
+		}
+		args.lastAttemptFailure = common.CloneProto(cancelation.LastAttemptFailure)
 		args.service = op.Service
 		args.operation = op.Operation
 		args.token = op.OperationToken
