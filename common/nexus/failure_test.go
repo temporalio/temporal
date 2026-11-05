@@ -409,7 +409,7 @@ func TestCallerRPSLimitWireRoundTrip(t *testing.T) {
 				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
 				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 				Message: tc.message,
-			}, CallerRPSRetry(err))
+			}, CallerRPSLimitError(err))
 		})
 	}
 }
@@ -432,7 +432,7 @@ func TestConvertGRPCErrorResourceExhausted(t *testing.T) {
 	}
 }
 
-func TestCallerRPSRetryIgnoresOtherErrors(t *testing.T) {
+func TestCallerRPSLimitErrorIgnoresOtherErrors(t *testing.T) {
 	t.Parallel()
 	handlerError := func(failureType, details string) *nexus.HandlerError {
 		return &nexus.HandlerError{
@@ -459,7 +459,7 @@ func TestCallerRPSRetryIgnoresOtherErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, CallerRPSRetry(tc.err))
+			require.NoError(t, CallerRPSLimitError(tc.err))
 		})
 	}
 }

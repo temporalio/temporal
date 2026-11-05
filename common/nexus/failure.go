@@ -470,9 +470,9 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	return err
 }
 
-// CallerRPSRetry returns a ResourceExhausted error for a retryable namespace-scoped
-// Nexus caller RPS rejection, or nil for other errors.
-func CallerRPSRetry(err error) error {
+// CallerRPSLimitError returns a ResourceExhausted error for a retryable
+// namespace-scoped Nexus caller RPS rejection, or nil for other errors.
+func CallerRPSLimitError(err error) error {
 	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return nil
 	}
