@@ -1796,9 +1796,15 @@ func (s *streamBasedReplicationTestSuite) TestLaneRateChange() {
 func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
 	workflowIDs, stopSlowLane := s.startLaneBacklog()
 	defer stopSlowLane()
+	var reverts []func()
+	defer func() {
+		for _, revert := range reverts {
+			revert()
+		}
+	}()
 	for _, c := range s.clusters {
 		invalid := []dynamicconfig.ReplicationLaneIsolationEntry{{NamespaceID: s.namespaceID, TasksPerSecond: 1000}}
-		defer c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, invalid)()
+		reverts = append(reverts, c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, invalid))
 	}
 	s.requireWorkflowsReplicated(workflowIDs)
 	await.Require(context.Background(), s.T(), func(t *await.T) {
