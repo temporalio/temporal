@@ -3246,7 +3246,7 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
 		"history.ReplicationProgressCacheMaxSize",
 		128000,
-		`ReplicationProgressCacheMaxSize is the maximum accounted payload size in bytes of the replication progress cache per history host. Changes apply on the next cache read or write without a restart`,
+		`ReplicationProgressCacheMaxSize is the maximum accounted payload size in bytes of the replication progress cache per history host. Changes recreate the cache on the next read or write without a restart, discarding cached progress`,
 	)
 	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
 		"history.ReplicationProgressCacheTTL",

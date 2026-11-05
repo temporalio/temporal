@@ -10,6 +10,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -32,8 +33,12 @@ type (
 	}
 
 	progressCacheImpl struct {
-		cacheLock sync.RWMutex
-		cache     cache.Cache
+		cacheLock      sync.Mutex
+		cache          cache.Cache
+		maxSize        int
+		maxSizeFn      dynamicconfig.IntPropertyFn
+		cacheOptions   cache.Options
+		metricsHandler metrics.Handler
 	}
 
 	ReplicationProgress struct {
@@ -54,14 +59,26 @@ func NewProgressCache(
 	logger log.Logger,
 	handler metrics.Handler,
 ) ProgressCache {
-	maxSize := config.ReplicationProgressCacheMaxSize()
-	opts := &cache.Options{
-		TTL:     config.ReplicationProgressCacheTTL(),
-		MaxSize: config.ReplicationProgressCacheMaxSize,
+	c := &progressCacheImpl{
+		maxSizeFn:      config.ReplicationProgressCacheMaxSize,
+		cacheOptions:   cache.Options{TTL: config.ReplicationProgressCacheTTL()},
+		metricsHandler: handler.WithTags(metrics.CacheTypeTag(metrics.ReplicationProgressCacheTypeTagValue)),
 	}
-	return &progressCacheImpl{
-		cache: cache.NewWithMetrics(maxSize, opts, handler.WithTags(metrics.CacheTypeTag(metrics.ReplicationProgressCacheTypeTagValue))),
+	c.refreshCache()
+	return c
+}
+
+// refreshCache replaces the cache when its configured capacity changes. Cached progress
+// is discarded, so receivers may need to fetch history while the new cache warms up.
+// The caller must hold cacheLock after construction.
+func (c *progressCacheImpl) refreshCache() {
+	maxSize := max(0, c.maxSizeFn())
+	if c.cache != nil && maxSize == c.maxSize {
+		return
 	}
+	c.cache = cache.NewWithMetrics(maxSize, &c.cacheOptions, c.metricsHandler)
+	c.maxSize = maxSize
+	metrics.CacheUsage.With(c.metricsHandler).Record(0)
 }
 
 func (c *progressCacheImpl) Get(
@@ -69,8 +86,9 @@ func (c *progressCacheImpl) Get(
 	targetClusterID int32,
 ) *ReplicationProgress {
 	cacheKey := makeCacheKey(runID, targetClusterID)
-	c.cacheLock.RLock()
-	defer c.cacheLock.RUnlock()
+	c.cacheLock.Lock()
+	defer c.cacheLock.Unlock()
+	c.refreshCache()
 
 	progress, ok := c.cache.Get(cacheKey).(*ReplicationProgress)
 	if !ok {
@@ -158,6 +176,7 @@ func (c *progressCacheImpl) Update(
 	cacheKey := makeCacheKey(runID, targetClusterID)
 	c.cacheLock.Lock()
 	defer c.cacheLock.Unlock()
+	c.refreshCache()
 
 	// Get hands out the cached progress without holding the lock while callers read it, so never mutate a cached
 	// progress in place. Update a copy and swap it in instead. The inner slices are never mutated once stored, so
