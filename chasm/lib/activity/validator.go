@@ -42,8 +42,9 @@ func ValidateAndNormalizeStandaloneActivity(
 		return err
 	}
 
-	if err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
-		maxIDLengthLimit, namespaceName, options, priority); err != nil {
+	err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority)
+	if err != nil {
 		return err
 	}
 
@@ -105,8 +106,9 @@ func validateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
-	if err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
-		maxIDLengthLimit, namespaceName, options, priority); err != nil {
+	err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority)
+	if err != nil {
 		return err
 	}
 
