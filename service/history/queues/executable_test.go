@@ -1806,6 +1806,25 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
 }
 
+func (s *executableSuite) TestHandleErr_ShardThrottleKeyCarriesShardID() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace per-shard persistence limit reached",
+	}
+
+	s.Error(executable.HandleErr(throttleErr))
+	expected := queues.NewThrottleKey(throttleErr.Cause, tests.Namespace)
+	expected.ShardID = tasks.GetShardIDForTask(executable.GetTask(), 1)
+	s.NotZero(expected.ShardID)
+	s.Equal(expected, queues.ThrottleKeyOf(executable))
+}
+
 func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {

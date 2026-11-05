@@ -105,6 +105,7 @@ func TestIsControllerInput(t *testing.T) {
 	}{
 		{name: "aps at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: ns, want: true},
 		{name: "persistence at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: ns, want: true},
+		{name: "shard persistence at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, scope: ns, want: true},
 
 		{name: "aps at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: system},
 		{name: "persistence at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: system},
@@ -380,6 +381,22 @@ func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 
 	require.InEpsilon(t, 85.0, throttleRate(state, namespaceKey), 1e-9)
 	require.Zero(t, throttleRate(state, otherCause))
+	require.Equal(t, 1, throttleLen(state))
+}
+
+func TestThrottleState_ShardsAreIndependent(t *testing.T) {
+	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
+
+	shard1 := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT, "ns-1")
+	shard1.ShardID = 1
+	shard2 := shard1
+	shard2.ShardID = 2
+
+	reportThrottle(state, shard1, true)
+	closeWindow(state, timeSource, shard1)
+
+	require.InEpsilon(t, 85.0, throttleRate(state, shard1), 1e-9)
+	require.Zero(t, throttleRate(state, shard2))
 	require.Equal(t, 1, throttleLen(state))
 }
 

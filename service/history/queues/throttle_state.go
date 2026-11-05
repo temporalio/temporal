@@ -23,9 +23,12 @@ type (
 	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
 	// rescheduler offers the one bucket to classes in priority order, which needs it shared.
 	// It carries the namespace name because that is what the limiters key their budgets on.
+	// ShardID is set only for budgets the limiter keys per shard, and is zero otherwise so
+	// that every shard on the host shares the namespace-wide bucket.
 	ThrottleKey struct {
 		Cause         enumspb.ResourceExhaustedCause
 		NamespaceName namespace.Name
+		ShardID       int
 	}
 
 	ThrottleState struct {
@@ -73,7 +76,8 @@ func IsControllerInput(
 		return false
 	}
 	return cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT ||
-		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT ||
+		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_SHARD_PERSISTENCE_LIMIT
 }
 
 func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceName namespace.Name) ThrottleKey {
