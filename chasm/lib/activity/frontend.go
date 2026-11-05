@@ -36,6 +36,7 @@ type FrontendHandler interface {
 	UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error)
 	ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error)
 	UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error)
+	RespondActivityTaskHandoff(context.Context, *workflowservice.RespondActivityTaskHandoffRequest) (*workflowservice.RespondActivityTaskHandoffResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
 
@@ -598,4 +599,12 @@ func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req
 	req.StartToCloseTimeout = opts.StartToCloseTimeout
 	req.HeartbeatTimeout = opts.HeartbeatTimeout
 	req.RetryPolicy = opts.RetryPolicy
+}
+
+// TODO: Implement handoff logic in next PR.
+func (h *frontendHandler) RespondActivityTaskHandoff(
+	context.Context,
+	*workflowservice.RespondActivityTaskHandoffRequest,
+) (*workflowservice.RespondActivityTaskHandoffResponse, error) {
+	return nil, serviceerror.NewUnimplemented("activity async handoff is not supported")
 }

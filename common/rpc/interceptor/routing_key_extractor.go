@@ -90,6 +90,22 @@ func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespa
 			}
 		}
 
+	case PatternActivityTaskToken:
+		if getter, ok := req.(taskTokenGetter); ok {
+			token, err := e.serializer.Deserialize(getter.GetTaskToken())
+			if err != nil {
+				return namespace.RoutingKey{}
+			}
+			if len(token.GetComponentRef()) > 0 {
+				ref, err := e.serializer.DeserializeChasmComponentRef(token.GetComponentRef())
+				if err != nil || ref.GetBusinessId() == "" || ref.GetNamespaceId() == "" {
+					return namespace.RoutingKey{}
+				}
+				return namespace.RoutingKey{ID: ref.GetBusinessId()}
+			}
+			return namespace.RoutingKey{ID: token.GetWorkflowId()}
+		}
+
 	case PatternTaskToken:
 		if getter, ok := req.(taskTokenGetter); ok {
 			if tokenBytes := getter.GetTaskToken(); len(tokenBytes) > 0 {
