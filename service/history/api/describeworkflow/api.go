@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -65,6 +66,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	throttleState *queues.ThrottleState,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -361,6 +363,7 @@ func Invoke(
 		executionInfo,
 		executionState,
 		outboundQueueCBPool,
+		throttleState,
 		shard.GetLogger(),
 	)
 	if err != nil {
@@ -592,8 +595,10 @@ func buildPendingNexusOperationInfosFromHSM(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	throttleState *queues.ThrottleState,
 	logger log.Logger,
 ) ([]*workflowpb.PendingNexusOperationInfo, error) {
+	namespaceName := mutableState.GetNamespaceEntry().Name()
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
 	result := make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
@@ -610,7 +615,7 @@ func buildPendingNexusOperationInfosFromHSM(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, throttleState)
 		if err != nil {
 			logger.Error(
 				"failed to build Nexus operation info while building describe response",
@@ -633,9 +638,11 @@ func buildPendingNexusOperationInfosFromHSM(
 
 func buildPendingNexusOperationInfo(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	throttleState *queues.ThrottleState,
 ) (*workflowpb.PendingNexusOperationInfo, error) {
 	var state enumspb.PendingNexusOperationState
 	switch op.State() {
@@ -665,10 +672,17 @@ func buildPendingNexusOperationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if throttleState.IsThrottled(queues.ThrottleKey{
+			Cause:         enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+			NamespaceName: namespaceName,
+			Destination:   op.Endpoint,
+		}) {
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			blockedReason = "Requests are limited by the caller RPS throttle controller."
 		}
 	}
 
-	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op, outboundQueueCBPool)
+	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, throttleState)
 	if err != nil {
 		return nil, err
 	}
@@ -703,9 +717,11 @@ func buildPendingNexusOperationInfo(
 
 func buildNexusOperationCancellationInfo(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	throttleState *queues.ThrottleState,
 ) (*workflowpb.NexusOperationCancellationInfo, error) {
 	cancelation, err := op.Cancelation(node)
 	if err != nil {
@@ -726,6 +742,13 @@ func buildNexusOperationCancellationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if throttleState.IsThrottled(queues.ThrottleKey{
+			Cause:         enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT,
+			NamespaceName: namespaceName,
+			Destination:   op.Endpoint,
+		}) {
+			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			blockedReason = "Requests are limited by the caller RPS throttle controller."
 		}
 	}
 

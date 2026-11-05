@@ -102,6 +102,11 @@ func (s *ThrottleState) Enabled() bool {
 	return s != nil && s.settings().Enabled
 }
 
+// IsThrottled reports whether the enabled controller tracks the budget.
+func (s *ThrottleState) IsThrottled(key ThrottleKey) bool {
+	return s.Enabled() && s.peek(key) != nil
+}
+
 func (s *ThrottleState) Admit(key ThrottleKey) (allowed, metered bool) {
 	if !s.Enabled() {
 		return true, false

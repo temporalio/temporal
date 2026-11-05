@@ -159,6 +159,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		throttleState              *queues.ThrottleState
 		testHooks                  testhooks.TestHooks
 	}
 )
@@ -205,6 +206,7 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	throttleState *queues.ThrottleState,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
@@ -262,6 +264,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
+		throttleState:              throttleState,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionCache:               versionCache,
@@ -566,6 +569,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
 		e.outboundQueueCBPool,
+		e.throttleState,
 	)
 }
 

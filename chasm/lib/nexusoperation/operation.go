@@ -693,6 +693,14 @@ func (o *Operation) DestinationBlocked(ctx chasm.Context) bool {
 	return opCtx.DestinationBlocked(ctx.ExecutionKey().NamespaceID, o.Endpoint)
 }
 
+// DestinationThrottled reports whether the caller RPS budget is holding this operation.
+func (o *Operation) DestinationThrottled(ctx chasm.Context) bool {
+	//nolint:revive // unchecked-type-assertion: intentional panic on missing context value
+	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
+	return opCtx.DestinationThrottled != nil &&
+		opCtx.DestinationThrottled(ctx.NamespaceEntry().Name(), taskDestination(o.Endpoint))
+}
+
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {
 	requestData := o.RequestData.Get(ctx)
 	key := ctx.ExecutionKey()
@@ -753,11 +761,18 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationBlocked(ctx) {
 		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 		info.BlockedReason = "The circuit breaker is open."
+	} else if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && o.DestinationThrottled(ctx) {
+		info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+		info.BlockedReason = "Requests are limited by the caller RPS throttle controller."
 	}
 	if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
 		o.DestinationBlocked(ctx) {
 		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 		info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+	} else if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
+		o.DestinationThrottled(ctx) {
+		info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+		info.CancellationInfo.BlockedReason = "Requests are limited by the caller RPS throttle controller."
 	}
 
 	return info

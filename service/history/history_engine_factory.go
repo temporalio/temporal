@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -50,6 +51,7 @@ type (
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		ChasmWorkflowRegistry           *chasmworkflow.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		ThrottleState                   *queues.ThrottleState
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
@@ -93,6 +95,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.CommandHandlerRegistry,
 		f.ChasmWorkflowRegistry,
 		f.OutboundQueueCBPool,
+		f.ThrottleState,
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,

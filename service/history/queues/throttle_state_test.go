@@ -669,3 +669,15 @@ func TestThrottleState_ZeroFloorCannotStallAClass(t *testing.T) {
 		"a configured floor below one release per second must not be honoured")
 	require.True(t, admitOK(state, key), "a floored class must still release")
 }
+
+func TestThrottleStateIsThrottled(t *testing.T) {
+	t.Parallel()
+	key := ThrottleKey{Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT, NamespaceName: "caller", Destination: "endpoint"}
+	require.False(t, (*ThrottleState)(nil).IsThrottled(key))
+	state, _ := newTestThrottleState(defaultThrottleOverrides())
+	require.False(t, state.IsThrottled(key))
+	require.True(t, admitOK(state, key))
+	require.True(t, state.IsThrottled(key))
+	overrideThrottleSetting(state, func(s *dynamicconfig.TaskThrottleControllerSettings) { s.Enabled = false })
+	require.False(t, state.IsThrottled(key))
+}
