@@ -12,11 +12,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -247,48 +249,56 @@ func TestProgressCacheUsesDistinctMetricsTag(t *testing.T) {
 
 func TestProgressCacheAppliesDynamicSize(t *testing.T) {
 	t.Parallel()
-	for _, operation := range []string{"get", "update"} {
-		t.Run(operation, func(t *testing.T) {
-			t.Parallel()
-			logger := log.NewNoopLogger()
-			client := dynamicconfig.NewMemoryClient()
-			dc := dynamicconfig.NewCollection(client, logger)
-			transitions := []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, TransitionCount: 1}}
-			entrySize := (&ReplicationProgress{versionedTransitions: [][]*persistencespb.VersionedTransition{transitions}}).CacheSize()
-			t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, entrySize))
-			config := &configs.Config{
-				ReplicationProgressCacheMaxSize: dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
-				ReplicationProgressCacheTTL:     func() time.Duration { return time.Hour },
-			}
-			handler := metricstest.NewCaptureHandler()
-			capture := handler.StartCapture()
-			c := NewProgressCache(config, logger, handler)
-			require.NoError(t, c.Update("a", 1, transitions, nil))
-			require.NotNil(t, c.Get("a", 1))
+	logger := log.NewNoopLogger()
+	client := dynamicconfig.NewMemoryClient()
+	dc := dynamicconfig.NewCollection(client, logger)
+	transitions := []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, TransitionCount: 1}}
+	entrySize := (&ReplicationProgress{versionedTransitions: [][]*persistencespb.VersionedTransition{transitions}}).CacheSize()
+	t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, entrySize))
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	c := NewProgressCache(&configs.Config{
+		ReplicationProgressCacheMaxSize: dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
+		ReplicationProgressCacheTTL:     func() time.Duration { return time.Hour },
+	}, logger, handler).(*progressCacheImpl)
+	timeSource := clock.NewEventTimeSource()
+	c.timeSource = timeSource
+	c.Start()
+	t.Cleanup(c.Stop)
 
-			for _, size := range []int{2 * entrySize, entrySize, 0, entrySize} {
-				t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, size))
-				if operation == "get" {
-					require.Nil(t, c.Get("a", 1), "a size change must discard cached progress")
-				} else {
-					require.NoError(t, c.Update("b", 1, transitions, nil))
-					require.Nil(t, c.Get("a", 1), "update must apply a size change before reading old progress")
-				}
-				recordings := capture.SnapshotMetric(metrics.CacheUsage.Name())
-				if operation == "get" || size == 0 {
-					require.InDelta(t, float64(0), recordings[len(recordings)-1].Value, 0)
-				}
-				recordings = capture.SnapshotMetric(metrics.CacheSize.Name())
-				require.InDelta(t, float64(size), recordings[len(recordings)-1].Value, 0)
-				require.NoError(t, c.Update("a", 1, transitions, nil))
-				if size == 0 {
-					require.Nil(t, c.Get("a", 1))
-				} else {
-					require.NotNil(t, c.Get("a", 1), "an unchanged size must preserve progress")
-				}
-			}
-		})
+	waitForTimer := func() {
+		await.RequireTrue(t, func() bool { return timeSource.NumTimers() == 1 }, time.Second, time.Millisecond)
 	}
+	waitForTimer()
+	for i, size := range []int{2 * entrySize, entrySize, 0, entrySize} {
+		require.NoError(t, c.Update("a", 1, transitions, nil))
+		t.Cleanup(client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, size))
+		if i != 3 {
+			require.NotNil(t, c.Get("a", 1), "reads must not apply capacity changes before the background check")
+		}
+		timeSource.Advance(time.Minute)
+		await.RequireTrue(t, func() bool {
+			return len(capture.SnapshotMetric(metrics.CacheSize.Name())) == i+2
+		}, time.Second, time.Millisecond)
+		waitForTimer()
+		require.Nil(t, c.Get("a", 1), "a size change must discard cached progress")
+		recordings := capture.SnapshotMetric(metrics.CacheSize.Name())
+		require.InDelta(t, float64(size), recordings[len(recordings)-1].Value, 0)
+		recordings = capture.SnapshotMetric(metrics.CacheUsage.Name())
+		require.InDelta(t, float64(0), recordings[len(recordings)-1].Value, 0)
+
+		require.NoError(t, c.Update("a", 1, transitions, nil))
+		timeSource.Advance(time.Minute)
+		waitForTimer()
+		if size == 0 {
+			require.Nil(t, c.Get("a", 1))
+		} else {
+			require.NotNil(t, c.Get("a", 1), "an unchanged size must preserve progress")
+		}
+		require.Len(t, capture.SnapshotMetric(metrics.CacheSize.Name()), i+2)
+	}
+	c.Stop()
+	require.Zero(t, timeSource.NumTimers(), "shutdown must stop the background timer")
 }
 
 func TestProgressCacheConcurrentReplacement(t *testing.T) {
@@ -298,14 +308,14 @@ func TestProgressCacheConcurrentReplacement(t *testing.T) {
 	c := NewProgressCache(&configs.Config{
 		ReplicationProgressCacheMaxSize: dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:     func() time.Duration { return time.Hour },
-	}, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	}, log.NewNoopLogger(), metrics.NoopMetricsHandler).(*progressCacheImpl)
 	transitions := []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 1, TransitionCount: 1}}
 	var wg sync.WaitGroup
 	errors := make(chan error, 1)
 	wg.Go(func() {
 		for i := range 100 {
 			undo := client.OverrideSetting(dynamicconfig.ReplicationProgressCacheMaxSize, 128000+i)
-			c.Get("a", 1)
+			c.refreshCache()
 			undo()
 		}
 	})
@@ -323,6 +333,7 @@ func TestProgressCacheConcurrentReplacement(t *testing.T) {
 	for err := range errors {
 		require.NoError(t, err)
 	}
+	c.refreshCache()
 	require.NoError(t, c.Update("a", 1, transitions, nil))
 	require.NotNil(t, c.Get("a", 1))
 }
