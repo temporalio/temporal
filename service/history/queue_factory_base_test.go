@@ -127,7 +127,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	serializer := serialization.NewSerializer()
 	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
-		unusedDependencies{},
+		unusedDependencies{TimeSource: clock.NewRealTimeSource()},
 		cfg,
 		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),

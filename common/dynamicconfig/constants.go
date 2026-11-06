@@ -17,6 +17,7 @@ import (
 const (
 	NamespaceReplicationTransportModeLegacy = "legacy"
 	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
 )
 
 var (
@@ -86,9 +87,11 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 	)
 	NamespaceReplicationTransportMode = NewGlobalTypedSettingWithConverter(
 		"system.namespaceReplicationTransportMode",
-		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow}),
+		convertStringEnum([]string{NamespaceReplicationTransportModeLegacy, NamespaceReplicationTransportModeShadow, NamespaceReplicationTransportModeCHASM}),
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
+		`NamespaceReplicationTransportMode selects the outgoing namespace replication transport: legacy, shadow, or chasm.
+Enable chasm only after compatible frontend/history binaries and authoritative replication observability are deployed on every participating cluster.
+Changing this setting does not disable incoming authoritative deliveries or stop existing CHASM executions.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",
@@ -1256,6 +1259,11 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
+	FrontendBlockOldVersioningPollers = NewNamespaceBoolSetting(
+		"frontend.blockOldVersioningPollers",
+		false,
+		`FrontendBlockOldVersioningPollers prevents workers using deprecated worker versioning options from polling.`,
+	)
 
 	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
 		"frontend.deleteNamespaceUseChasmDeleteExecution",
@@ -1610,6 +1618,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingEnableTaskQueueUserDataRevisionMerge = NewNamespaceBoolSetting(
+		"matching.enableTaskQueueUserDataRevisionMerge",
+		true,
+		`When enabled, merges incoming and current worker deployment data by revision when needed to preserve delayed updates.
+When disabled, always uses the deployment snapshot selected by the parent clock without merging.`,
+	)
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
@@ -1734,7 +1748,14 @@ an optional feature and also requires a metrics collection system that can handl
 	MatchingEnableWorkerMetricsEvents = NewNamespaceBoolSetting(
 		"matching.enableWorkerMetricsEvents",
 		false,
-		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events on every heartbeat.`,
+		`MatchingEnableWorkerMetricsEvents controls whether to emit worker_metrics wide events from worker heartbeats.`,
+	)
+	MatchingWorkerMetricsEventInterval = NewNamespaceDurationSetting(
+		"matching.workerMetricsEventInterval",
+		5*time.Minute,
+		`Minimum interval for emitting worker_metrics events for each worker instance.
+Emitting these events can be expensive. The server controls their emission frequency independently
+of the user-configured SDK heartbeat interval.`,
 	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
@@ -1918,6 +1939,13 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableHistoryNodeTransactionIDValidation = NewGlobalBoolSetting(
+		"history.enableHistoryNodeTransactionIDValidation",
+		false,
+		`EnableHistoryNodeTransactionIDValidation rejects appending a history node whose transaction ID is not greater than
+		the previous node transaction ID, after asserting shard ownership. Enable it only with a persistence store that
+		implements AssertShardOwnership. This is a safety mechanism and will be removed in the future.`,
 	)
 	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
 		"history.enableWorkflowTaskCompletionPagination",
@@ -2204,6 +2232,15 @@ The actual count is calculated as base * (multiplier ^ level)`,
 		3.0,
 		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
+	)
+
+	TaskThrottleController = NewGlobalTypedSetting(
+		"history.taskThrottleController",
+		DefaultTaskThrottleControllerSettings,
+		`TaskThrottleController tunes host level pacing of history task retries that a namespace
+APS or persistence rate limiter refused. Unset fields keep their defaults.
+Fields: Enabled, MinRate, MaxRate, InitialRate, KeyTTL, Beta, IncreaseRatio, LossThreshold,
+Window, MaxKeys. See TaskThrottleControllerSettings comments for details.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -2761,14 +2798,31 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
 		"history.maximumRequestIDsPerExecution",
 		25,
-		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
-execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM start request IDs retained in the execution state
+per execution; the oldest are swept beyond this limit. Set to 0 to disable the count cap. Update request IDs are
+kept in the CHASM request IDs data node and capped by history.maximumRequestIDsInChasmDataNode instead.`,
+	)
+	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
+		"history.enableChasmRequestIDDataNode",
+		false,
+		`EnableChasmRequestIDDataNode enables recording request IDs in CHASM updates in the request IDs data node.`,
+	)
+	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
+		"history.maximumRequestIDsInChasmDataNode",
+		50,
+		`MaximumRequestIDsInChasmDataNode is the maximum number of update request IDs retained per execution in
+the CHASM request IDs data node, for UpdateComponent idempotency. Once it is exceeded, the oldest are
+dropped until half this many remain, so at least half of it is always kept. It can be higher than
+history.maximumRequestIDsPerExecution because the node is only written when an ID is added. Set to 0 to disable
+the count cap.`,
 	)
 	RequestIDMaxAge = NewNamespaceDurationSetting(
 		"history.requestIDMaxAge",
 		7*24*time.Hour,
-		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
-UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID used for idempotency. In the
+execution state (start request IDs), older request IDs are swept when a new one is added. In the CHASM request IDs
+data node (update request IDs), older request IDs are no longer treated as duplicates, and are dropped first when
+the node is trimmed. Set to 0 to disable age-based expiry.`,
 	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
@@ -3070,8 +3124,7 @@ a low priority workflow lock before subsequent stream sender conversion attempts
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
-		`HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
-Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.`,
+		`HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.`,
 	)
 	HistoryTaskDLQUnexpectedErrorAttempts = NewGlobalIntSetting(
 		"history.TaskDLQUnexpectedErrorAttempts",
@@ -3199,7 +3252,7 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
 		"history.ReplicationProgressCacheMaxSize",
 		128000,
-		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+		`ReplicationProgressCacheMaxSize is the maximum accounted payload size in bytes of the replication progress cache per history host. The size is checked every minute. Changes recreate the cache without a restart, discarding cached progress`,
 	)
 	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
 		"history.ReplicationProgressCacheTTL",

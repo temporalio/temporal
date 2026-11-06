@@ -37,11 +37,6 @@ import (
 )
 
 const (
-	// PersistenceName is an alias of esconfig.PersistenceName.
-	//
-	// Deprecated: use esconfig.PersistenceName.
-	PersistenceName = esconfig.PersistenceName
-
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
@@ -68,6 +63,9 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []any
+		// QueryTime is the reference time used to resolve NOW() in the query. It is set on the
+		// first page so that all pages of the same query use the same time.
+		QueryTime *time.Time
 	}
 
 	esQueryParams struct {
@@ -409,7 +407,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil, p.QueryTime)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -454,7 +452,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.PageSize), chasmMapper, p.QueryTime)
 }
 
 func (s *VisibilityStore) CountChasmExecutions(
@@ -643,15 +641,26 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
 	queryConverter *query.QueryConverter[elastic.Query],
 ) (*client.SearchParameters, error) {
+	pageToken, err := s.deserializePageToken(params.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+	queryConverter.WithQueryTime(queryTime)
+
 	queryParams, err := s.convertQuery(params.NamespaceID, queryConverter, params.Query)
 	if err != nil {
 		return nil, err
 	}
 
 	searchParams := &client.SearchParameters{
-		Index:    s.index,
-		PageSize: params.PageSize,
-		Query:    queryParams.Query,
+		Index:     s.index,
+		PageSize:  params.PageSize,
+		Query:     queryParams.Query,
+		QueryTime: queryTime,
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -678,10 +687,6 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 		return nil, err
 	}
 
-	pageToken, err := s.deserializePageToken(params.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
 	err = s.processPageToken(searchParams, pageToken, params.NamespaceName)
 	if err != nil {
 		return nil, err
@@ -859,6 +864,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	pageSize int,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	queryTime time.Time,
 ) (*store.InternalListExecutionsResponse, error) {
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
 		return &store.InternalListExecutionsResponse{}, nil
@@ -885,6 +891,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
+			QueryTime:   &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -1585,7 +1592,7 @@ func (s *VisibilityStore) AdminListExecutions(
 		)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.GetPageSize()), nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, int(request.GetPageSize()), nil, p.QueryTime)
 }
 
 // AdminCountExecutions implements [store.AdminVisibilityStore].

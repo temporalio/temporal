@@ -146,6 +146,8 @@ var (
 		},
 	}
 	emptyOptions = &workflowpb.WorkflowExecutionOptions{}
+
+	localPersistenceMetadata = []byte("local-persistence-metadata")
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -2518,6 +2520,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}}
 	mutableState.executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusCreated
 	mutableState.executionInfo.TaskGenerationShardClockTimestamp = 1000
+	mutableState.executionInfo.PersistenceMetadata = []byte("persistence-metadata")
 
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
@@ -2535,6 +2538,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	}
 	s.Equal(int32(TimerTaskStatusNone), sanitizedMutableState.executionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Zero(sanitizedMutableState.executionInfo.TaskGenerationShardClockTimestamp)
+	s.Nil(sanitizedMutableState.executionInfo.PersistenceMetadata)
 	err = sanitizedMutableState.HSM().Walk(func(node *hsm.Node) error {
 		if node.Parent != nil {
 			s.Equal(int64(1), node.InternalRepr().TransitionCount)
@@ -6127,6 +6131,7 @@ func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.
 	proto.Merge(state.ExecutionState, &persistencespb.WorkflowExecutionState{
 		State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 	})
+	state.ExecutionInfo.PersistenceMetadata = localPersistenceMetadata
 
 	state.ActivityInfos[90].TimerTaskStatus = TimerTaskStatusCreated
 	state.TimerInfos["25"].ExpiryTime = timestamp.TimeNowPtrUtcAddDuration(time.Hour)
@@ -6617,6 +6622,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			s.True(isTimeSkippingTimeSource)
 
 			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
 	}
@@ -6861,6 +6867,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
 			s.True(isTimeSkippingTimeSource)
 			s.verifyMutableState(currentMS, targetMS, originMS)
+			s.Equal(localPersistenceMetadata, currentMS.GetExecutionInfo().PersistenceMetadata)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
 	}
@@ -7695,7 +7702,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	s.Len(s.mutableState.chasmPureTasks, 2)
 }
 
-func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
+func (s *mutableStateSuite) TestDeletePhysicalCHASMPureTasks() {
 	now := s.mockShard.GetTimeSource().Now()
 
 	testCases := []struct {
@@ -7735,7 +7742,7 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			}
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
-			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
+			s.mutableState.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime)
 
 			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
 			for _, task := range s.mutableState.chasmPureTasks {
@@ -7743,6 +7750,81 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			}
 
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
+		})
+	}
+}
+
+func TestDeletePhysicalCHASMPureTasksTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	for _, clockConfig := range []struct {
+		name    string
+		skipped time.Duration
+		enabled bool
+	}{
+		{name: "NoOffset"},
+		{name: "TimeSkippingEnabled", skipped: time.Hour, enabled: true},
+		{name: "TimeSkippingDisabledWithOffset", skipped: time.Hour},
+	} {
+		t.Run(clockConfig.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tc := range []struct {
+				name              string
+				maxScheduledTime  time.Time
+				expectedRemaining int
+			}{
+				{name: "BeforeAll", maxScheduledTime: now.Add(clockConfig.skipped), expectedRemaining: 3},
+				{name: "AtEarliest", maxScheduledTime: now.Add(clockConfig.skipped + time.Minute), expectedRemaining: 3},
+				{name: "Partial", maxScheduledTime: now.Add(clockConfig.skipped + 2*time.Minute), expectedRemaining: 2},
+				{name: "AfterAll", maxScheduledTime: now.Add(clockConfig.skipped + 4*time.Minute)},
+				{name: "DeleteAll", maxScheduledTime: tasks.MaximumKey.FireTime},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					taskBaseTime := now
+					if tc.maxScheduledTime.Equal(tasks.MaximumKey.FireTime) {
+						// Keep tasks close to the sentinel to catch an incorrectly shifted delete-all threshold.
+						taskBaseTime = tasks.MaximumKey.FireTime.Add(-10 * time.Minute)
+					}
+					timeSource := clock.NewEventTimeSource()
+					timeSource.Update(taskBaseTime.Add(clockConfig.skipped))
+					ms := &MutableStateImpl{
+						timeSource: timeSource,
+						executionInfo: &persistencespb.WorkflowExecutionInfo{
+							TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+								Config:                     &commonpb.TimeSkippingConfig{Enabled: clockConfig.enabled},
+								AccumulatedSkippedDuration: durationpb.New(clockConfig.skipped),
+							},
+						},
+						config: &configs.Config{
+							ChasmMaxInMemoryPureTasks: dynamicconfig.GetIntPropertyFn(3),
+						},
+						InsertTasks:           make(map[tasks.Category][]tasks.Task),
+						BestEffortDeleteTasks: make(map[tasks.Category][]tasks.Key),
+					}
+					var pureTasks []*tasks.ChasmTaskPure
+					for i := 3; i > 0; i-- {
+						task := &tasks.ChasmTaskPure{
+							TaskID:              int64(i),
+							VisibilityTimestamp: taskBaseTime.Add(clockConfig.skipped + time.Duration(i)*time.Minute),
+						}
+						ms.AddTasks(task)
+						pureTasks = append(pureTasks, task)
+					}
+
+					ms.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime)
+
+					require.Equal(t, pureTasks[:tc.expectedRemaining], ms.chasmPureTasks)
+					expectedDeletions := make(map[tasks.Category][]tasks.Key)
+					for i := len(pureTasks) - 1; i >= tc.expectedRemaining; i-- {
+						expectedDeletions[tasks.CategoryTimer] = append(expectedDeletions[tasks.CategoryTimer], pureTasks[i].GetKey())
+					}
+					require.Equal(t, expectedDeletions, ms.BestEffortDeleteTasks)
+				})
+			}
 		})
 	}
 }

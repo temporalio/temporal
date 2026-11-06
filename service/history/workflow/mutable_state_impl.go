@@ -7576,10 +7576,18 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	return insertTasks
 }
 
-func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
-	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+// DeletePhysicalCHASMPureTasks records cached physical CHASM pure tasks strictly before
+// maxLogicalScheduledTime for best-effort deletion. The threshold uses logical time and is
+// converted to the physical time used by the History task queue before comparing task timestamps.
+// The delete-all sentinel, tasks.MaximumKey.FireTime, is not converted.
+func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
+	maxPhysicalScheduledTime := maxLogicalScheduledTime
+	if !maxLogicalScheduledTime.Equal(tasks.MaximumKey.FireTime) {
+		maxPhysicalScheduledTime = ms.ToRealTimeWithCurrentOffset(maxLogicalScheduledTime)
+	}
 
-		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+		if !task.GetVisibilityTime().Before(maxPhysicalScheduledTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
 		}
@@ -7590,8 +7598,7 @@ func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
 		)
 	}
 
-	// If we reach here, all tasks have visibility time before maxScheduledTime
-	// and need to be deleted.
+	// All cached tasks have visibility times before maxPhysicalScheduledTime and are marked for deletion.
 	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 
@@ -9842,6 +9849,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.StateMachineTimers,
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
+			&info.PersistenceMetadata,
 		}
 		if !isSnapshot {
 			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
