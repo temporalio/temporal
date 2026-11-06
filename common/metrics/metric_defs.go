@@ -1835,7 +1835,7 @@ var (
 	// Worker Versioning
 	WorkerDeploymentLimitExceeded = NewCounterDef(
 		"worker_deployment_limit_exceeded",
-		WithDescription("Worker deployment requests rejected by a limit. limit_type is task_queues (per version), versions (per deployment), or deployments (per namespace)."),
+		WithDescription("Worker deployment requests rejected by a limit. limit_type is task_queues (per version), versions (per deployment), versions_per_task_queue, or deployments (per namespace)."),
 	)
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")

@@ -714,6 +714,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	limit := c.config.MaxVersionsInTaskQueue()
 	// Using > instead of >= to give the Deployment a chance to delete some old versions if MatchingMaxVersionsInDeployment is also reached.
 	if worker_versioning.CountDeploymentVersions(deploymentData) > limit {
+		metrics.WorkerDeploymentLimitExceeded.With(c.partitionMgr.engine.metricsHandler).Record(1,
+			metrics.NamespaceTag(namespaceEntry.Name().String()), metrics.StringTag("limit_type", "versions_per_task_queue"))
 		// Before retrying the error, hold the poller for some time so it does not retry immediately
 		// Parallel polls are already serialized using the lock.
 		time.Sleep(backoff)
