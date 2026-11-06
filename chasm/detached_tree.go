@@ -279,7 +279,7 @@ func (b *readOnlyNodeBackend) AddTasks(...tasks.Task) {
 	b.unsupported("AddTasks")
 }
 
-func (b *readOnlyNodeBackend) DeletePhysicalCHASMPureTasks(time.Time, bool) {
+func (b *readOnlyNodeBackend) DeletePhysicalCHASMPureTasks(time.Time) {
 	b.unsupported("DeletePhysicalCHASMPureTasks")
 }
 

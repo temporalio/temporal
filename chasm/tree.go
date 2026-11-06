@@ -225,7 +225,7 @@ type (
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
-		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time, isPhysicalTime bool)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -2573,12 +2573,12 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	archetypeID ArchetypeID,
 ) error {
 	if firstPureTask == nil {
-		n.backend.DeletePhysicalCHASMPureTasks(tasks.MaximumKey.FireTime, true)
+		n.backend.DeletePhysicalCHASMPureTasks(tasks.MaximumKey.FireTime)
 		return nil
 	}
 
 	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
-	n.backend.DeletePhysicalCHASMPureTasks(firstPureTaskScheduledTime, false)
+	n.backend.DeletePhysicalCHASMPureTasks(firstPureTaskScheduledTime)
 
 	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil

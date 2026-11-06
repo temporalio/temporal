@@ -7579,10 +7579,10 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 // DeletePhysicalCHASMPureTasks records cached physical CHASM pure tasks strictly before
 // maxLogicalScheduledTime for best-effort deletion. The threshold uses logical time and is
 // converted to the physical time used by the History task queue before comparing task timestamps.
-// When isPhysicalTime is true, the threshold is already physical time and is not converted.
-func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time, isPhysicalTime bool) {
+// The delete-all sentinel, tasks.MaximumKey.FireTime, is not converted.
+func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time) {
 	maxPhysicalScheduledTime := maxLogicalScheduledTime
-	if !isPhysicalTime {
+	if !maxLogicalScheduledTime.Equal(tasks.MaximumKey.FireTime) {
 		maxPhysicalScheduledTime = ms.ToRealTimeWithCurrentOffset(maxLogicalScheduledTime)
 	}
 

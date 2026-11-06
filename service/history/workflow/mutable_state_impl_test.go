@@ -7742,7 +7742,7 @@ func (s *mutableStateSuite) TestDeletePhysicalCHASMPureTasks() {
 			}
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
-			s.mutableState.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime, true)
+			s.mutableState.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime)
 
 			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
 			for _, task := range s.mutableState.chasmPureTasks {
@@ -7773,17 +7773,13 @@ func TestDeletePhysicalCHASMPureTasksTimeSkipping(t *testing.T) {
 			for _, tc := range []struct {
 				name              string
 				maxScheduledTime  time.Time
-				isPhysicalTime    bool
 				expectedRemaining int
 			}{
 				{name: "BeforeAll", maxScheduledTime: now.Add(clockConfig.skipped), expectedRemaining: 3},
 				{name: "AtEarliest", maxScheduledTime: now.Add(clockConfig.skipped + time.Minute), expectedRemaining: 3},
 				{name: "Partial", maxScheduledTime: now.Add(clockConfig.skipped + 2*time.Minute), expectedRemaining: 2},
 				{name: "AfterAll", maxScheduledTime: now.Add(clockConfig.skipped + 4*time.Minute)},
-				{name: "PhysicalAtEarliest", maxScheduledTime: now.Add(time.Minute), isPhysicalTime: true, expectedRemaining: 3},
-				{name: "PhysicalPartial", maxScheduledTime: now.Add(2 * time.Minute), isPhysicalTime: true, expectedRemaining: 2},
-				{name: "PhysicalAfterAll", maxScheduledTime: now.Add(4 * time.Minute), isPhysicalTime: true},
-				{name: "DeleteAll", maxScheduledTime: tasks.MaximumKey.FireTime, isPhysicalTime: true},
+				{name: "DeleteAll", maxScheduledTime: tasks.MaximumKey.FireTime},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
@@ -7819,7 +7815,7 @@ func TestDeletePhysicalCHASMPureTasksTimeSkipping(t *testing.T) {
 						pureTasks = append(pureTasks, task)
 					}
 
-					ms.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime, tc.isPhysicalTime)
+					ms.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime)
 
 					require.Equal(t, pureTasks[:tc.expectedRemaining], ms.chasmPureTasks)
 					expectedDeletions := make(map[tasks.Category][]tasks.Key)
