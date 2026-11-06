@@ -187,7 +187,12 @@ func (e *taskExecutorImpl) handleActivityTask(
 		switch resendErr.(type) {
 		case *serviceerror.NotFound:
 			// workflow is not found in source cluster, cleanup workflow in target cluster
-			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+			cleanupErr := e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+			if _, isNotFound := cleanupErr.(*serviceerror.NotFound); isNotFound {
+				// the target cluster has nothing to clean up either
+				return nil
+			}
+			return cleanupErr
 		case nil:
 			// no-op
 		default:

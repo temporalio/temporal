@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	resendMissingEventMessage  = "Resend missed sync activity events"
-	resendHigherVersionMessage = "Resend sync activity events due to a higher version received"
+	resendMissingEventMessage    = "Resend missed sync activity events"
+	resendHigherVersionMessage   = "Resend sync activity events due to a higher version received"
+	resendMissingWorkflowMessage = "Resend sync activity events due to a missing workflow"
 )
 
 type (
@@ -100,10 +101,8 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// this can happen if the workflow start event and this sync activity task are out of order
-			// or the target workflow is long gone
-			// the safe solution to this is to throw away the sync activity task
-			// or otherwise, worker attempt will exceed limit and put this message to DLQ
-			return nil
+			// or the target workflow is long gone; a resend from the source cluster handles both cases
+			return newWorkflowNotFoundRetryReplication(namespaceID, request.WorkflowId, request.RunId)
 		}
 		return err
 	}
@@ -207,13 +206,8 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// this can happen if the workflow start event and this sync activity task are out of order
-			// or the target workflow is long gone
-			// the safe solution to this is to throw away the sync activity task
-			// or otherwise, worker attempt will exceed limit and put this message to DLQ
-
-			// TODO: this should return serviceerrors.NewRetryReplication to trigger a resend
-			// resend logic will handle not found case and drop the task.
-			return nil
+			// or the target workflow is long gone; a resend from the source cluster handles both cases
+			return newWorkflowNotFoundRetryReplication(namespaceID, request.WorkflowId, request.RunId)
 		}
 		return err
 	}
@@ -262,6 +256,23 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		nil, // no new workflow
 		historyi.TransactionPolicyPassive,
 		nil,
+	)
+}
+
+func newWorkflowNotFoundRetryReplication(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+) error {
+	return serviceerrors.NewRetryReplication(
+		resendMissingWorkflowMessage,
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
 	)
 }
 
