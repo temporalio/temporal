@@ -21,6 +21,9 @@ const (
 
 	lockShardQry     = `SELECT range_id FROM shards WHERE shard_id = $1 FOR UPDATE`
 	readLockShardQry = `SELECT range_id FROM shards WHERE shard_id = $1 FOR SHARE`
+	// readLockShardWithRangeIDQry divides by the matching row count, so a range ID
+	// mismatch fails the statement.
+	readLockShardWithRangeIDQry = `/* fails when the shard has another range ID */ SELECT 1/count(*) FROM (` + readLockShardQry + `) AS s WHERE range_id = $2`
 )
 
 // InsertIntoShards inserts one or more rows into shards table

@@ -25,31 +25,21 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
-	branchInfo := request.BranchInfo
-	node := request.Node
-
-	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
+	nodeRow, err := historyNodeRow(request)
 	if err != nil {
 		return err
 	}
-	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
-	if err != nil {
-		return err
-	}
+	return m.appendHistoryNodes(ctx, request, nodeRow)
+}
 
-	nodeRow := &sqlplugin.HistoryNodeRow{
-		TreeID:       treeIDBytes,
-		BranchID:     branchIDBytes,
-		NodeID:       node.NodeID,
-		PrevTxnID:    node.PrevTransactionID,
-		TxnID:        node.TransactionID,
-		Data:         node.Events.Data,
-		DataEncoding: node.Events.EncodingType.String(),
-		ShardID:      request.ShardID,
-	}
-
+// appendHistoryNodes appends nodeRow, the row historyNodeRow builds from request.
+func (m *sqlExecutionStore) appendHistoryNodes(
+	ctx context.Context,
+	request *p.InternalAppendHistoryNodesRequest,
+	nodeRow *sqlplugin.HistoryNodeRow,
+) error {
 	if !request.IsNewBranch {
-		_, err = m.DB.InsertIntoHistoryNode(ctx, nodeRow)
+		_, err := m.DB.InsertIntoHistoryNode(ctx, nodeRow)
 		switch err {
 		case nil:
 			return nil
@@ -68,8 +58,8 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 	treeInfoBlob := request.TreeInfo
 	treeRow := &sqlplugin.HistoryTreeRow{
 		ShardID:      request.ShardID,
-		TreeID:       treeIDBytes,
-		BranchID:     branchIDBytes,
+		TreeID:       nodeRow.TreeID,
+		BranchID:     nodeRow.BranchID,
 		Data:         treeInfoBlob.Data,
 		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
@@ -106,6 +96,32 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			return serviceerror.NewUnavailablef("AppendHistoryNodes: %v", err)
 		}
 	})
+}
+
+// historyNodeRow builds the history_node row an append request inserts.
+func historyNodeRow(request *p.InternalAppendHistoryNodesRequest) (*sqlplugin.HistoryNodeRow, error) {
+	branchInfo := request.BranchInfo
+	node := request.Node
+
+	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
+	if err != nil {
+		return nil, err
+	}
+	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlplugin.HistoryNodeRow{
+		TreeID:       treeIDBytes,
+		BranchID:     branchIDBytes,
+		NodeID:       node.NodeID,
+		PrevTxnID:    node.PrevTransactionID,
+		TxnID:        node.TransactionID,
+		Data:         node.Events.Data,
+		DataEncoding: node.Events.EncodingType.String(),
+		ShardID:      request.ShardID,
+	}, nil
 }
 
 func (m *sqlExecutionStore) DeleteHistoryNodes(

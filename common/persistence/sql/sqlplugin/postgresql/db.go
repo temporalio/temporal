@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
@@ -37,6 +38,11 @@ type db struct {
 
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
+	pipe   *pipeline
+	// pipelining is whether the DB pipelines. The first connection a
+	// BeginPipelinedTx takes decides the exec mode, which every connection of a DB
+	// shares, and any connection that is not pgx's decides unsupported.
+	pipelining atomic.Int32
 }
 
 var _ sqlplugin.DB = (*db)(nil)
@@ -64,6 +70,9 @@ func newDB(
 }
 
 func (pdb *db) conn() sqlplugin.Conn {
+	if pdb.pipe != nil {
+		return pdb.pipe
+	}
 	if pdb.tx != nil {
 		return pdb.tx
 	}
