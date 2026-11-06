@@ -2258,6 +2258,59 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	s.Error(err, "workflow task heartbeat timeout")
 }
 
+func (s *engineSuite) TestWorkflowTaskHeartbeatTimeoutWithTimeSkipping() {
+	for _, tc := range []struct {
+		name        string
+		skipped     time.Duration
+		elapsed     time.Duration
+		wantTimeout bool
+	}{
+		{name: "NoOffsetWithinLimit", elapsed: time.Minute},
+		{name: "NoOffsetExpired", elapsed: time.Hour, wantTimeout: true},
+		{name: "RetainedOffsetWithinLimit", skipped: 24 * time.Hour, elapsed: time.Minute},
+		{name: "RetainedOffsetExpired", skipped: 24 * time.Hour, elapsed: time.Hour, wantTimeout: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			we := commonpb.WorkflowExecution{WorkflowId: tc.name, RunId: tests.RunID}
+			ms := workflow.TestLocalMutableState(s.mockShard, s.eventsCache,
+				tests.LocalNamespaceEntry, we.WorkflowId, we.RunId, log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &we, "workflowType", "taskQueue", nil,
+				100*time.Second, 50*time.Second, 200*time.Second, "worker")
+			wt := addWorkflowTaskScheduledEvent(ms)
+			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "taskQueue", "worker")
+			state := workflow.TestCloneToProto(t.Context(), ms)
+			// The offset remains part of the execution clock after time skipping is disabled.
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(tc.skipped),
+			}
+			state.ExecutionInfo.WorkflowTaskOriginalScheduledTime = timestamppb.New(
+				s.mockShard.GetTimeSource().Now().Add(tc.skipped).Add(-tc.elapsed))
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: state}, nil)
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				tests.UpdateWorkflowExecutionResponse, nil)
+
+			token, err := (&tokenspb.Task{
+				NamespaceId: tests.NamespaceID.String(), WorkflowId: we.WorkflowId, RunId: we.RunId,
+				ScheduledEventId: wt.ScheduledEventID, Attempt: 1,
+			}).Marshal()
+			require.NoError(t, err)
+			_, err = s.historyEngine.RespondWorkflowTaskCompleted(t.Context(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken: token, Identity: "worker", ForceCreateNewWorkflowTask: true,
+				},
+			})
+			if tc.wantTimeout {
+				require.ErrorContains(t, err, "workflow task heartbeat timeout")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout() {
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
