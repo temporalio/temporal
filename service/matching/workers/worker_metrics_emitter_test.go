@@ -545,6 +545,12 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		WorkflowStickyPollerInfo: &workerpb.WorkerPollerInfo{
 			CurrentPollers: 2,
 		},
+		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 0,
+		},
+		NexusPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 4,
+		},
 		CurrentStickyCacheSize: 100,
 		TotalStickyCacheHit:    500,
 		TotalStickyCacheMiss:   20,
@@ -553,6 +559,7 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 
 	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
 	// The last-interval task counts are not exported.
+	// Targets mirror current pollers, including a reported zero.
 	require.Equal(t, map[string]any{
 		"namespace":                       "ns",
 		"task_queue":                      "my-queue",
@@ -560,7 +567,13 @@ func TestEmitWorkerMetricsEvent(t *testing.T) {
 		"workflow_total_slots":            int64(10),
 		"workflow_used_slots":             int64(2),
 		"workflow_current_pollers":        int64(3),
+		"workflow_target_pollers":         int64(3),
 		"workflow_current_sticky_pollers": int64(2),
+		"workflow_target_sticky_pollers":  int64(2),
+		"activity_current_pollers":        int64(0),
+		"activity_target_pollers":         int64(0),
+		"nexus_current_pollers":           int64(4),
+		"nexus_target_pollers":            int64(4),
 		"workflow_total_processed_tasks":  int64(1000),
 		"workflow_total_failed_tasks":     int64(10),
 		"sticky_cache_size":               int64(100),
@@ -636,6 +649,7 @@ func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
 		"task_queue":               "",
 		"worker_instance_key":      "w1",
 		"activity_current_pollers": int64(5),
+		"activity_target_pollers":  int64(5),
 		"sticky_cache_size":        int64(0),
 		"sticky_cache_hit":         int64(0),
 		"sticky_cache_miss":        int64(0),
