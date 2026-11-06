@@ -65,6 +65,8 @@ type laneStreamSender struct {
 	lanePolicyMu     sync.Mutex
 	lanePolicy       LaneStreamPolicy
 	lanePolicyClosed bool
+	// laneReconcileMu keeps key reuse and its policy callbacks ordered with retirement.
+	laneReconcileMu sync.Mutex
 	// lanePolicyStopped is set when the stream stops. The policy is closed then, or when the
 	// call that is running returns, so that stopping never waits for the policy.
 	lanePolicyStopped atomic.Bool
@@ -90,8 +92,8 @@ type laneStreamSender struct {
 	// requestedLanes are the lanes in the policy's latest answer.
 	requestedLanes map[string]struct{}
 	laneLimiters   map[string]LaneLimiter
-	// lanePacedAt is when each lane's limiter last refused a send.
-	lanePacedAt   map[string]time.Time
+	// laneRefusedAt is when each lane's limiter last refused a send.
+	laneRefusedAt map[string]time.Time
 	laneLoopsOnce sync.Once
 }
 
@@ -143,7 +145,7 @@ func newLaneStreamSender(
 		lanePolicyFactory:       lanePolicyFactory,
 		initialLaneState:        make(chan struct{}),
 		laneLimiters:            make(map[string]LaneLimiter),
-		lanePacedAt:             make(map[string]time.Time),
+		laneRefusedAt:           make(map[string]time.Time),
 	}
 	// Lanes split HIGH priority traffic, so they require the tiered stack.
 	if lanesEnabledSetting && tieredStackEnabled && lanePolicyFactory != nil {
