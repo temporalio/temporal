@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -19,6 +20,7 @@ type recoveryCase struct {
 	catchupWindow  time.Duration // 0: newCatchupArgs' 365d
 	startedRunning bool          // started workflows never complete
 	perRun         time.Duration // time that passes between consecutive runs
+	jitter         time.Duration // the spec's jitter
 }
 
 // recoveryResult totals what the chained runs did.
@@ -38,6 +40,9 @@ func (c recoveryCase) args(t *testing.T) *schedulespb.StartScheduleArgs {
 	}
 	if c.catchupWindow > 0 {
 		args.Schedule.Policies.CatchupWindow = durationpb.New(c.catchupWindow)
+	}
+	if c.jitter > 0 {
+		args.Schedule.Spec.Jitter = durationpb.New(c.jitter)
 	}
 	return args
 }
@@ -60,7 +65,10 @@ func runRecovery(t *testing.T, c recoveryCase) recoveryResult {
 		args = r.next
 		after := args.State.LastProcessedTime.AsTime()
 		require.True(t, after.After(before), "run %d made no progress (LastProcessedTime %s)", res.runs, after)
-		if !after.Before(now) {
+		// Caught up: the run didn't stop for the chunk limit. (With jitter, LastProcessedTime
+		// can stay just before now, behind a match that isn't due yet.)
+		if len(r.metrics[metrics.ScheduleCatchupChunked.Name()]) == 0 {
+			require.False(t, after.Before(now.Add(-c.jitter)), "run %d stopped short of now-jitter", res.runs)
 			break
 		}
 		require.Less(t, res.runs, maxRuns, "catch-up did not converge: LastProcessedTime %s, now %s", after, now)
@@ -114,6 +122,15 @@ func TestChunkedCatchupRecoveryMatchesPreV15(t *testing.T) {
 			cases = append(cases, recoveryCase{gap: gap, chunk: chunk, overlap: p, startedRunning: running})
 		}
 	}
+	// Jittered specs: the shortcuts skip to now-jitter, then walk the rest.
+	for _, p := range policies {
+		for _, running := range []bool{false, true} {
+			cases = append(cases, recoveryCase{gap: gap, chunk: chunk, overlap: p, startedRunning: running, jitter: 500 * time.Millisecond})
+		}
+	}
+	// Jitter longer than the interval: every match is jittered by up to 1s, but the
+	// shortcuts can only skip to now-10s.
+	cases = append(cases, recoveryCase{gap: gap, chunk: chunk, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, jitter: 10 * time.Second})
 	// Mostly catchup-window misses, which are walked in chunks before the first start.
 	cases = append(cases, recoveryCase{gap: gap, chunk: chunk, catchupWindow: time.Hour})
 
@@ -123,6 +140,9 @@ func TestChunkedCatchupRecoveryMatchesPreV15(t *testing.T) {
 			name += "/actions-keep-running"
 		} else {
 			name += "/actions-complete"
+		}
+		if c.jitter > 0 {
+			name = "jitter-" + c.jitter.String() + "/" + name
 		}
 		if c.catchupWindow > 0 {
 			name = "1h-catchup-window"
