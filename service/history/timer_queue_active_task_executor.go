@@ -610,6 +610,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	taskQueue, err := workflow.ActivityTaskQueue(mutableState, activityInfo)
 	if err != nil {
+		// TODO (Shivam): Recover placement if a workflow task timeout cleared stickiness after
+		// activity scheduling. Returning this error keeps retrying the timer task without dispatch.
+		// TODO (Shivam): Also, ensure if this error is going to fail the activity retry timer task.
 		return err
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)

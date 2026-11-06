@@ -28,14 +28,16 @@ import (
 )
 
 func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo) (*taskqueuepb.TaskQueue, error) {
-	if ai.GetSessionOptions().GetWorkflowSession() == nil {
+	if ai.GetSessionState().GetWorkflowSession() == nil {
 		return &taskqueuepb.TaskQueue{Name: ai.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, nil
 	}
 	taskQueue := ms.CurrentTaskQueue()
 	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY || taskQueue.GetName() == "" {
 		// TODO (Shivam): Recover placement when a workflow task timeout clears stickiness after
 		// activity scheduling. This error makes the transfer or activity retry timer task retry
-		// without dispatching to the normal queue.
+		// without dispatching to the normal queue. This can happen in the case of general session's
+		// but not in the case of exclusive worker based sessions since in those, those WFT's do not
+		// clear stickiness ever.
 		return nil, consts.ErrDependencyTaskNotCompleted
 	}
 	return taskQueue, nil

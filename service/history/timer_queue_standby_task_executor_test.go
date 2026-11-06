@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1966,7 +1965,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 
 	expectedTaskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if useSession {
-		activityInfo.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+		activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 		if !missingPlacement {
 			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 		}
@@ -2014,11 +2013,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	directive := worker_versioning.MakeUseAssignmentRulesDirective()
-	if useSession {
-		directive = nil
-	}
-
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddActivityTask(
@@ -2030,7 +2024,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 			ScheduledEventId:       scheduledEvent.EventId,
 			ScheduleToStartTimeout: durationpb.New(timerTimeout),
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
-			VersionDirective:       directive,
+			VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
