@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -1537,6 +1538,103 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
+}
+
+/*
+TestStickyActivityAssignmentRules tests sticky routing after assignment rules are resolved:
+1. Resolve an activity's assignment-rules directive with no selected version to its sticky queue.
+2. Preserve validation for workflow tasks, explicit build IDs, and selected legacy versions.
+3. Preserve rejection when a redirect requires another worker.
+*/
+func TestStickyActivityAssignmentRules(t *testing.T) {
+	t.Parallel()
+	missingBuildID := serviceerror.NewInternal("should have a build ID directive on versioned sticky queue")
+	for _, tc := range []struct {
+		name           string
+		taskType       enumspb.TaskQueueType
+		directive      *taskqueuespb.TaskVersionDirective
+		versioningData *persistencespb.VersioningData
+		wantError      error
+	}{
+		{
+			name: "activity without version directive", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		{
+			name: "activity without legacy data", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(),
+		},
+		{
+			name: "activity with empty legacy data", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), versioningData: &persistencespb.VersioningData{},
+		},
+		{
+			name: "workflow still requires explicit build ID", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+		},
+		{
+			name: "activity with explicit empty build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective(""), wantError: missingBuildID,
+		},
+		{
+			name: "activity with selected build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			versioningData: &persistencespb.VersioningData{
+				AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp("build")},
+			},
+		},
+		{
+			name: "activity with selected version set", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeUseAssignmentRulesDirective(), wantError: missingBuildID,
+			versioningData: &persistencespb.VersioningData{
+				VersionSets: []*persistencespb.CompatibleVersionSet{createVersionSet("build")},
+			},
+		},
+		{
+			name: "activity with explicit build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective("build"),
+		},
+		{
+			name: "activity with redirected build ID", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			directive: worker_versioning.MakeBuildIdDirective("build"), wantError: serviceerrors.NewStickyWorkerUnavailable(),
+			versioningData: &persistencespb.VersioningData{
+				RedirectRules: []*persistencespb.RedirectRule{{
+					Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{SourceBuildId: "build", TargetBuildId: "replacement"},
+				}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			queue := NewMockphysicalTaskQueueManager(gomock.NewController(t))
+			queueFuture := future.NewFuture[physicalTaskQueueManager]()
+			queueFuture.Set(queue, nil)
+			pm := &taskQueuePartitionManagerImpl{
+				partition:          newTestTaskQueue(namespaceID, taskQueueName, tc.taskType).StickyPartition("sticky-worker"),
+				defaultQueueFuture: queueFuture,
+				userDataManager: &mockUserDataManager{data: &persistencespb.VersionedTaskQueueUserData{
+					Data: &persistencespb.TaskQueueUserData{VersioningData: tc.versioningData},
+				}},
+			}
+			spoolQueue, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(t.Context(), tc.directive, nil, "run", "workflow", false)
+			if tc.wantError != nil {
+				switch tc.wantError.(type) {
+				case *serviceerror.Internal:
+					require.ErrorAs(t, err, new(*serviceerror.Internal))
+				case *serviceerrors.StickyWorkerUnavailable:
+					require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				default:
+					t.Fatalf("unsupported expected error type %T", tc.wantError)
+				}
+				require.EqualError(t, err, tc.wantError.Error())
+				require.Nil(t, spoolQueue)
+				require.Nil(t, syncMatchQueue)
+				return
+			}
+			require.NoError(t, err)
+			require.Same(t, queue, spoolQueue)
+			require.Same(t, queue, syncMatchQueue)
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
@@ -3055,23 +3153,20 @@ func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager(
 	return partitionMgr
 }
 
+/*
+TestSingleSessionPollRouting tests delegation to the physical queue manager:
+1. Submit single-session workflow and activity polls, plus an ordinary sticky poll.
+2. Verify the partition manager passes the original metadata to the physical queue.
+3. Return its task and preserve the caller's acquisition flag.
+*/
 func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
-	writeErr := serviceerror.NewUnavailable("assignment failed")
 	for _, tc := range []struct {
-		name          string
-		assigned      bool
-		activity      bool
-		ordinary      bool
-		empty         bool
-		forwardErr    error
-		assignmentErr error
+		name     string
+		activity bool
+		ordinary bool
 	}{
-		{name: "acquire workflow"},
-		{name: "empty poll", empty: true},
-		{name: "forwarding failed", forwardErr: context.DeadlineExceeded},
-		{name: "assignment failed", assignmentErr: writeErr},
-		{name: "assigned polls locally", assigned: true},
-		{name: "activity polls locally", activity: true},
+		{name: "single session workflow"},
+		{name: "single session activity", activity: true},
 		{name: "ordinary sticky poll", ordinary: true},
 	} {
 		s.Run(tc.name, func() {
@@ -3090,287 +3185,26 @@ func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
 					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
 				}}
 			}
-			local := tc.assigned || tc.activity || tc.ordinary
-			if !tc.activity && !tc.ordinary {
-				queue.EXPECT().ExclusiveWorkerAssigned().Return(tc.assigned)
-			}
 			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
-			var expectedErr error
-			if local {
-				queue.EXPECT().PollTask(gomock.Any(), metadata).Return(nil, errNoTasks)
-				expectedErr = errNoTasks
-			} else {
-				expectedErr = tc.forwardErr
-				if tc.empty {
-					expectedErr = errNoTasks
-				}
-				pollErr := expectedErr
-				forwarded := queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool {
-					return m.isSingleSessionAcquisitionInProgress()
-				})).DoAndReturn(func(_ context.Context, m *pollMetadata) (*internalTask, error) {
-					require.NotSame(t, metadata, m)
-					require.Same(t, metadata.sessionOptions, m.sessionOptions)
-					if pollErr != nil {
-						return nil, pollErr
-					}
-					return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
-				})
-				if expectedErr == nil {
-					queue.EXPECT().AssignExclusiveWorker().After(forwarded).Return(tc.assignmentErr)
-					expectedErr = tc.assignmentErr
-				}
-			}
-
-			if expectedErr == nil {
-				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-			}
+			expected := newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response})
+			queue.EXPECT().PollTask(gomock.Any(), metadata).Return(expected, nil)
+			queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), expected).Return(nil)
 			ctx := context.WithValue(t.Context(), identityKey, tv.WorkerIdentity())
 			queue.EXPECT().UpdatePollerInfo(pollerIdentity(tv.WorkerIdentity()), metadata).Times(2)
 			task, _, err := pm.PollTask(ctx, metadata)
-			if expectedErr != nil {
-				require.ErrorIs(t, err, expectedErr)
-				require.Nil(t, task)
-			} else {
-				require.NoError(t, err)
-				require.Same(t, response, task.pollWorkflowTaskQueueResponse())
-				require.Equal(t, pm.ns.Name(), task.namespace)
-			}
+			require.NoError(t, err)
+			require.Same(t, expected, task)
+			require.False(t, metadata.isSingleSessionAcquisitionInProgress())
 		})
 	}
 }
 
-func (s *PartitionManagerTestSuite) TestSingleSessionConcurrentAcquisition() {
-	for _, tc := range []struct {
-		name           string
-		persistBlocked bool
-	}{
-		{name: "forwarding"},
-		{name: "persisting assignment", persistBlocked: true},
-	} {
-		s.Run(tc.name, func() {
-			synctest.Test(s.T(), func(t *testing.T) {
-				ctx, cancel := context.WithCancel(t.Context())
-				defer cancel()
-				tv := testvars.New(t)
-				pm := s.newEagerDispatchPartitionManager(0, nil)
-				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
-				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
-				var assigned atomic.Bool
-				queue.EXPECT().ExclusiveWorkerAssigned().DoAndReturn(assigned.Load).AnyTimes()
-				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
-					},
-				}}
-				entered := make(chan struct{}, 1)
-				release := make(chan struct{})
-				block := func() error {
-					entered <- struct{}{}
-					select {
-					case <-release:
-						return nil
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-				}
-				response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
-				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).DoAndReturn(
-					func(context.Context, *pollMetadata) (*internalTask, error) {
-						if !tc.persistBlocked {
-							if err := block(); err != nil {
-								return nil, err
-							}
-						}
-						return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil
-					})
-				queue.EXPECT().AssignExclusiveWorker().DoAndReturn(func() error {
-					assigned.Store(true)
-					if tc.persistBlocked {
-						return block()
-					}
-					return nil
-				})
-				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-				type result struct {
-					task *internalTask
-					err  error
-				}
-				completed := make(chan result, 1)
-				go func() {
-					task, _, err := pm.PollTask(ctx, metadata)
-					completed <- result{task: task, err: err}
-				}()
-				await.Rcv(t, entered)
-
-				competing := make(chan result, 2)
-				for range 2 {
-					go func() {
-						task, _, err := pm.PollTask(ctx, metadata)
-						competing <- result{task: task, err: err}
-					}()
-				}
-				synctest.Wait()
-				select {
-				case <-competing:
-					t.Fatal("competing polls must wait for acquisition to finish")
-				default:
-				}
-
-				task, _, err := pm.PollTask(ctx, &pollMetadata{
-					sessionOptions: metadata.sessionOptions,
-					conditions:     &matchingservice.PollConditions{NoWait: true},
-				})
-				require.ErrorIs(t, err, errNoTasks)
-				require.Nil(t, task)
-				queue.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(nil, errNoTasks)
-				_, _, err = pm.PollTask(ctx, &pollMetadata{})
-				require.ErrorIs(t, err, errNoTasks, "ordinary polls do not enter the acquisition guard")
-
-				other := s.newEagerDispatchPartitionManager(0, nil)
-				other.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName() + "-2")
-				otherQueue := other.defaultQueue().(*MockphysicalTaskQueueManager)
-				otherQueue.EXPECT().ExclusiveWorkerAssigned().Return(false)
-				otherQueue.EXPECT().AssignExclusiveWorker().Return(nil)
-				otherQueue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-				otherQueue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).Return(newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response}), nil)
-				task, _, err = other.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: other.partition.RpcName()},
-					},
-				}})
-				require.NoError(t, err)
-				require.NotNil(t, task, "a different session acquires independently")
-
-				localEntered := make(chan struct{}, 2)
-				localRelease := make(chan struct{})
-				queue.EXPECT().PollTask(gomock.Any(), metadata).DoAndReturn(func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
-					localEntered <- struct{}{}
-					select {
-					case <-localRelease:
-					case <-ctx.Done():
-					}
-					return nil, errNoTasks
-				}).Times(2)
-				close(release)
-				first := await.Rcv(t, completed)
-				require.NoError(t, first.err)
-				require.Same(t, response, first.task.pollWorkflowTaskQueueResponse())
-				for range 2 {
-					await.Rcv(t, localEntered)
-				}
-				close(localRelease)
-				for range 2 {
-					waiter := await.Rcv(t, competing)
-					require.ErrorIs(t, waiter.err, errNoTasks)
-					require.Nil(t, waiter.task)
-				}
-			})
-		})
-	}
-}
-
-func (s *PartitionManagerTestSuite) TestSingleSessionWaitingPollContext() {
-	for _, tc := range []struct {
-		name     string
-		cancel   bool
-		assigned bool
-	}{
-		{name: "cancelled while waiting", cancel: true},
-		{name: "deadline while waiting"},
-		{name: "deadline retained after assignment", assigned: true},
-	} {
-		s.Run(tc.name, func() {
-			synctest.Test(s.T(), func(t *testing.T) {
-				ctx, cancel := context.WithCancel(t.Context())
-				defer cancel()
-				tv := testvars.New(t)
-				pm := s.newEagerDispatchPartitionManager(0, nil)
-				pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
-				queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
-				var assigned atomic.Bool
-				queue.EXPECT().ExclusiveWorkerAssigned().DoAndReturn(assigned.Load).AnyTimes()
-				metadata := &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
-					Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-						SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
-					},
-				}}
-				entered := make(chan struct{})
-				release := make(chan struct{})
-				queue.EXPECT().PollTask(gomock.Any(), gomock.Cond(func(m *pollMetadata) bool { return m.isSingleSessionAcquisitionInProgress() })).DoAndReturn(
-					func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
-						close(entered)
-						select {
-						case <-release:
-							return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}}), nil
-						case <-ctx.Done():
-							return nil, ctx.Err()
-						}
-					})
-				queue.EXPECT().AssignExclusiveWorker().DoAndReturn(func() error {
-					assigned.Store(true)
-					return nil
-				})
-				queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-				owner := make(chan error, 1)
-				go func() {
-					_, _, err := pm.PollTask(ctx, metadata)
-					owner <- err
-				}()
-				await.Rcv(t, entered)
-
-				deadline := time.Now().Add(10 * time.Second)
-				waiterCtx, cancelWaiter := context.WithDeadline(ctx, deadline)
-				defer cancelWaiter()
-				waiter := make(chan error, 1)
-				go func() {
-					_, _, err := pm.PollTask(waiterCtx, metadata)
-					waiter <- err
-				}()
-				synctest.Wait()
-				select {
-				case <-waiter:
-					t.Fatal("competing poll must wait for acquisition or its context")
-				default:
-				}
-
-				if tc.assigned {
-					localEntered := make(chan context.Context, 1)
-					queue.EXPECT().PollTask(gomock.Any(), metadata).DoAndReturn(func(ctx context.Context, _ *pollMetadata) (*internalTask, error) {
-						localEntered <- ctx
-						<-ctx.Done()
-						return nil, errNoTasks
-					})
-					timer := time.NewTimer(3 * time.Second)
-					defer timer.Stop()
-					await.Rcv(t, timer.C)
-					close(release)
-					require.NoError(t, await.Rcv(t, owner))
-					localCtx := await.Rcv(t, localEntered)
-					localDeadline, ok := localCtx.Deadline()
-					require.True(t, ok)
-					require.Equal(t, deadline, localDeadline)
-					require.Equal(t, 7*time.Second, time.Until(localDeadline))
-					require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
-					require.ErrorIs(t, localCtx.Err(), context.DeadlineExceeded)
-					return
-				}
-				if tc.cancel {
-					cancelWaiter()
-				}
-				require.ErrorIs(t, await.Rcv(t, waiter), errNoTasks)
-				require.NoError(t, ctx.Err(), "a waiting poll must not cancel the acquisition owner")
-				select {
-				case <-owner:
-					t.Fatal("acquisition must remain pending when a waiting poll ends")
-				default:
-				}
-				close(release)
-				require.NoError(t, await.Rcv(t, owner))
-			})
-		})
-	}
-}
-
+/*
+TestStickyBacklogNotificationBeforeQueueInitialization tests an early backlog advertisement:
+1. Deliver a remote backlog update before the sticky queue finishes initialization.
+2. Verify notification handling waits rather than discarding the update.
+3. Finish initialization and verify the queue receives the advertised partition and priority.
+*/
 func (s *PartitionManagerTestSuite) TestStickyBacklogNotificationBeforeQueueInitialization() {
 	synctest.Test(s.T(), func(t *testing.T) {
 		tv := testvars.New(t)

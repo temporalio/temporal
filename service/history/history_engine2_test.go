@@ -680,7 +680,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 			s.Equal(response.GetStartedEventId(), persistedExecutionInfo.GetWorkflowTaskStartedEventId())
 			if tc.singleSession {
 				s.True(persistedExecutionInfo.GetSessionState().GetExclusiveWorker())
-				s.Equal("S", persistedExecutionInfo.GetSessionState().GetWorkerAddress())
+				s.Equal("S", persistedExecutionInfo.GetSessionState().GetWorkerQueue())
 				s.Equal("S", persistedExecutionInfo.GetStickyTaskQueue())
 				s.Empty(persistedExecutionInfo.GetAssignedBuildId())
 			} else {
@@ -876,7 +876,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
-				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"})
+				ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"})
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -888,7 +888,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				s.Equal(int64(3), info.GetWorkflowTaskStartedEventId())
 				if exclusiveWorker {
 					s.Equal("S", info.GetStickyTaskQueue())
-					s.Equal("S", info.GetSessionState().GetWorkerAddress())
+					s.Equal("S", info.GetSessionState().GetWorkerQueue())
 				}
 				return tests.UpdateWorkflowExecutionResponse, nil
 			})

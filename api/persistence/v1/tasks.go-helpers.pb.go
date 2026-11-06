@@ -116,6 +116,43 @@ func (this *TaskQueueInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ExclusiveWorkerAssignment to the protobuf v3 wire format
+func (val *ExclusiveWorkerAssignment) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ExclusiveWorkerAssignment from the protobuf v3 wire format
+func (val *ExclusiveWorkerAssignment) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ExclusiveWorkerAssignment) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ExclusiveWorkerAssignment values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ExclusiveWorkerAssignment) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ExclusiveWorkerAssignment
+	switch t := that.(type) {
+	case *ExclusiveWorkerAssignment:
+		that1 = t
+	case ExclusiveWorkerAssignment:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type SubqueueInfo to the protobuf v3 wire format
 func (val *SubqueueInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

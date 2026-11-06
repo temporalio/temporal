@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1468,9 +1469,18 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (ms *MutableStateImpl) SetSessionState(state *persistencespb.SessionState) {
+	current := ms.executionInfo.GetSessionState()
+	if current.GetExclusiveWorker() &&
+		(!state.GetExclusiveWorker() || state.GetWorkerQueue() != current.GetWorkerQueue()) {
+		softassert.Fail(ms.logger, "attempted to replace an exclusive worker binding",
+			tag.WorkflowTaskQueueName(current.GetWorkerQueue()),
+			tag.NewStringTag("requested-task-queue", state.GetWorkerQueue()),
+		)
+		return
+	}
 	ms.executionInfo.SessionState = state
-	// Note: executionInfo.StickyTaskQueue and SessionState.WorkerAddress are mirror values of each other
-	ms.SetStickyTaskQueue(state.GetWorkerAddress(), nil)
+	// Note: executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirror values of each other
+	ms.SetStickyTaskQueue(state.GetWorkerQueue(), nil)
 }
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
@@ -1479,7 +1489,7 @@ func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeo
 }
 
 // ClearStickyTaskQueue does not clear the sticky task queue if the workflow is bound to an exclusive worker.
-// Currently, executionInfo.StickyTaskQueue and SessionState.WorkerAddress are mirrors of each other.
+// Currently, executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirrors of each other.
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
 		return
@@ -1487,7 +1497,7 @@ func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
 	if sessionState := ms.executionInfo.GetSessionState(); sessionState != nil {
-		sessionState.WorkerAddress = ""
+		sessionState.WorkerQueue = ""
 	}
 }
 
@@ -4474,7 +4484,11 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
 		Priority:                attributes.Priority,
-		SessionOptions:          attributes.SessionOptions,
+	}
+	if attributes.GetSessionOptions().GetWorkflowSession() != nil {
+		ai.SessionState = &persistencespb.ActivitySessionState{
+			Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
+		}
 	}
 
 	if attributes.UseWorkflowBuildId {

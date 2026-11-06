@@ -44,11 +44,11 @@ type (
 
 		// mutable
 		sync.Mutex
-		rangeID                 int64
-		subqueues               []*dbSubqueue
-		otherHasTasks           bool
-		scaleState              *persistencespb.PartitionScaleState
-		exclusiveWorkerAssigned bool
+		rangeID                   int64
+		subqueues                 []*dbSubqueue
+		otherHasTasks             bool
+		scaleState                *persistencespb.PartitionScaleState
+		exclusiveWorkerAssignment *persistencespb.ExclusiveWorkerAssignment
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -114,19 +114,21 @@ func newTaskQueueDB(
 func (db *taskQueueDB) ExclusiveWorkerAssigned() bool {
 	db.Lock()
 	defer db.Unlock()
-	return db.exclusiveWorkerAssigned
+	return db.exclusiveWorkerAssignment != nil
 }
 
-func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) (bool, error) {
+func (db *taskQueueDB) assignExclusiveWorker(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
-	if db.exclusiveWorkerAssigned {
-		return false, nil
+	if db.exclusiveWorkerAssignment != nil {
+		return nil
 	}
-	db.exclusiveWorkerAssigned = true
+	db.exclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
 	db.lastChange = time.Now()
-	// Fence scanner snapshots captured before this record became retained metadata.
-	return true, db.updateTaskQueueLocked(ctx, true)
+	// TODO (Shivam): Protect against a delayed scanner deleting this record using a pre-assignment
+	// snapshot with the same RangeID. Keep the range unchanged here so the writer retains its ID block.
+	// Not super urgent to fix since the probability of this happening is quite low.
+	return db.updateTaskQueueLocked(ctx, false)
 }
 
 // RangeID returns the current persistence view of rangeID
@@ -210,7 +212,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
 		db.scaleState = response.TaskQueueInfo.PartitionScaleState
-		db.exclusiveWorkerAssigned = response.TaskQueueInfo.GetExclusiveWorkerAssigned()
+		db.exclusiveWorkerAssignment = response.TaskQueueInfo.GetExclusiveWorkerAssignment()
 		err := db.updateTaskQueueLocked(ctx, true)
 		if err != nil {
 			db.rangeID = 0
@@ -822,22 +824,22 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		infos[i] = &db.subqueues[i].SubqueueInfo
 	}
 	info := &persistencespb.TaskQueueInfo{
-		NamespaceId:             db.queue.NamespaceId(),
-		Name:                    db.queue.PersistenceName(),
-		TaskType:                db.queue.TaskType(),
-		Kind:                    db.queue.Partition().Kind(),
-		AckLevel:                db.subqueues[subqueueZero].AckLevel, // backwards compatibility
-		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
-		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
-		Subqueues:               infos,
-		OtherHasTasks:           db.otherHasTasks,
-		PartitionScaleState:     db.scaleState,
-		ExclusiveWorkerAssigned: db.exclusiveWorkerAssigned,
+		NamespaceId:               db.queue.NamespaceId(),
+		Name:                      db.queue.PersistenceName(),
+		TaskType:                  db.queue.TaskType(),
+		Kind:                      db.queue.Partition().Kind(),
+		AckLevel:                  db.subqueues[subqueueZero].AckLevel, // backwards compatibility
+		LastUpdateTime:            timestamp.TimeNowPtrUtc(),
+		ApproximateBacklogCount:   db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
+		Subqueues:                 infos,
+		OtherHasTasks:             db.otherHasTasks,
+		PartitionScaleState:       db.scaleState,
+		ExclusiveWorkerAssignment: db.exclusiveWorkerAssignment,
 	}
 	// Retain metadata for assigned exclusive workers so queue reloads cannot allow
 	// the same destination to acquire another workflow, even after its workflow completes.
 	// TODO (Shivam) -- more thinking and discussion required on the scavenging of this task queue metadata.
-	if !info.GetExclusiveWorkerAssigned() {
+	if info.GetExclusiveWorkerAssignment() == nil {
 		info.ExpiryTime = db.expiryTime()
 	}
 	return info

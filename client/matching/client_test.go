@@ -262,6 +262,7 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 			require.Equal(t, "worker", outgoing.GetPollRequest().GetIdentity())
 			require.Equal(t, request.GetPollerId(), outgoing.GetPollerId())
 			protorequire.ProtoEqual(t, request.GetPollRequest().GetSessionOptions(), outgoing.GetPollRequest().GetSessionOptions())
+			require.Same(t, request.GetPollRequest().GetSessionOptions(), outgoing.GetPollRequest().GetSessionOptions())
 			protorequire.ProtoEqual(t, request.GetPollRequest().GetDeploymentOptions(), outgoing.GetPollRequest().GetDeploymentOptions())
 			protorequire.ProtoEqual(t, request.GetConditions(), outgoing.GetConditions())
 			outgoingMetadata, ok := metadata.FromOutgoingContext(ctx)

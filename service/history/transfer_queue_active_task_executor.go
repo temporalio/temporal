@@ -276,6 +276,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	taskQueue, err := workflow.ActivityTaskQueue(mutableState, ai)
 	if err != nil {
+		// TODO (Shivam): Also, This error should not fail the activity transfer task
+		// since it could be sent to the DLQ. Ensure that this is not the case.
 		return err
 	}
 	singleSessionBound := mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
@@ -288,6 +290,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
+	// NOTE (Shivam): Consider the case for general session activity tasks where in if the worker has
+	// changed between this, does this task correctly go to the new worker?
 	return t.pushActivity(ctx, task, taskQueue, singleSessionBound, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
 

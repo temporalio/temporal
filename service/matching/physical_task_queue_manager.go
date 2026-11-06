@@ -230,6 +230,8 @@ func newPhysicalTaskQueueManager(
 		partitionMgr.rateLimitManager,
 		pqMgr.onRateLimited,
 		pqMgr.MarkAlive,
+		pqMgr.ExclusiveWorkerAssigned,
+		pqMgr.AssignExclusiveWorker,
 	)
 	return pqMgr, nil
 }
@@ -438,30 +440,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	singleSessionAcquisitionInProgress := c.partitionMgr.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && pollMetadata.isSingleSessionAcquisitionInProgress()
-	if singleSessionAcquisitionInProgress {
-		callCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		stop := context.AfterFunc(c.tqCtx, cancel)
-		defer stop()
-		if err := c.tqCtx.Err(); err != nil {
-			return nil, err
-		}
-		ctx = callCtx
-	}
-
 	for {
-		var (
-			task *internalTask
-			err  error
-		)
-		if singleSessionAcquisitionInProgress {
-			// This poll, with stable identity set, now has the opportunity to be forwarded to the normal task queue for matching with a task.
-			// Once matched, no more polls with a stable identity are forwarded to the normal task queue.
-			task, err = ForwardPollWithTarget(ctx, pollMetadata, c.matchingClient, c.partitionMgr.partition, c.partitionMgr.partition.TaskQueue().RootPartition())
-		} else {
-			task, err = c.matcher.Poll(ctx, pollMetadata)
-		}
+		task, err := c.matcher.Poll(ctx, pollMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -982,10 +962,5 @@ func (c *physicalTaskQueueManagerImpl) ExclusiveWorkerAssigned() bool {
 func (c *physicalTaskQueueManagerImpl) AssignExclusiveWorker() error {
 	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 	defer cancel()
-	changed, err := c.backlogMgr.getDB().assignExclusiveWorker(ctx)
-	if changed {
-		// Assignment advances the lease fence; reload to give the task writer a consistent ID block.
-		c.UnloadFromPartitionManager(unloadCauseUnspecified)
-	}
-	return err
+	return c.backlogMgr.getDB().assignExclusiveWorker(ctx)
 }

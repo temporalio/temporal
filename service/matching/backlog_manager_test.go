@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1326,6 +1327,12 @@ func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsRead
 	s.Require().Equal(1, tr.getLoadedTasks())
 }
 
+/*
+TestTaskQueueSingleSessionMetadata tests assignment metadata across repeated reloads:
+1. Create assigned and unassigned sticky workflow queues with an expiry.
+2. Reload each queue, update its ack level, and synchronize metadata three times.
+3. Preserve assignment data, including unknown fields, and omit expiry only for assigned queues.
+*/
 func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1344,17 +1351,22 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 				StickyPartition(tv.StickyTaskQueue().GetName())
 			queue := UnversionedQueueKey(partition)
 			cfg := newTaskQueueConfig(partition.TaskQueue(), NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewMemoryClient(), logger)), tv.NamespaceName())
+			info := &persistencespb.TaskQueueInfo{
+				NamespaceId:    queue.NamespaceId(),
+				Name:           queue.PersistenceName(),
+				TaskType:       queue.TaskType(),
+				Kind:           enumspb.TASK_QUEUE_KIND_STICKY,
+				LastUpdateTime: timestamppb.Now(),
+				ExpiryTime:     timestamppb.New(time.Now().Add(time.Hour)),
+			}
+			if tc.assigned {
+				info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
+				unknownField := protowire.AppendTag(nil, 1, protowire.BytesType)
+				unknownField = protowire.AppendString(unknownField, "future-session-reference")
+				info.GetExclusiveWorkerAssignment().ProtoReflect().SetUnknown(unknownField)
+			}
 			_, err := store.CreateTaskQueue(t.Context(), &persistence.CreateTaskQueueRequest{
-				RangeID: 1,
-				TaskQueueInfo: &persistencespb.TaskQueueInfo{
-					NamespaceId:             queue.NamespaceId(),
-					Name:                    queue.PersistenceName(),
-					TaskType:                queue.TaskType(),
-					Kind:                    enumspb.TASK_QUEUE_KIND_STICKY,
-					LastUpdateTime:          timestamppb.Now(),
-					ExpiryTime:              timestamppb.New(time.Now().Add(time.Hour)),
-					ExclusiveWorkerAssigned: tc.assigned,
-				},
+				RangeID: 1, TaskQueueInfo: info,
 			})
 			require.NoError(t, err)
 
@@ -1369,9 +1381,10 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 					NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 				})
 				require.NoError(t, err)
-				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
+				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil)
 				require.Equal(t, int64(iteration+1), persisted.TaskQueueInfo.GetAckLevel())
 				if tc.assigned {
+					protorequire.ProtoEqual(t, info.GetExclusiveWorkerAssignment(), persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
 					require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
 				} else {
 					require.NotNil(t, persisted.TaskQueueInfo.GetExpiryTime())
@@ -1382,6 +1395,12 @@ func TestTaskQueueSingleSessionMetadata(t *testing.T) {
 	}
 }
 
+/*
+TestSingleSessionAssignmentPersists tests a durable assignment without a lease change:
+1. Load an unassigned sticky workflow queue and persist its assignment.
+2. Verify the assignment has no expiry and RangeID is unchanged, including when the assignment call is repeated.
+3. Reload the queue and verify its assignment is still present.
+*/
 func TestSingleSessionAssignmentPersists(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)
@@ -1394,23 +1413,21 @@ func TestSingleSessionAssignmentPersists(t *testing.T) {
 	_, err := db.RenewLease(t.Context())
 	require.NoError(t, err)
 	require.False(t, db.ExclusiveWorkerAssigned())
-	staleRange := db.rangeID
+	rangeID := db.RangeID()
 
-	changed, err := db.assignExclusiveWorker(t.Context())
+	err = db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
-	require.True(t, changed)
 	persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
 		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
 	})
 	require.NoError(t, err)
-	require.True(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssigned())
+	require.NotNil(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
 	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
-	require.Equal(t, staleRange+1, persisted.RangeID, "assignment fences snapshots taken before retention")
+	require.Equal(t, rangeID, persisted.RangeID, "assignment preserves the writer's allocated ID block")
 
-	changed, err = db.assignExclusiveWorker(t.Context())
+	err = db.assignExclusiveWorker(t.Context())
 	require.NoError(t, err)
-	require.False(t, changed)
-	require.Equal(t, persisted.RangeID, db.rangeID)
+	require.Equal(t, persisted.RangeID, db.RangeID())
 
 	reloaded := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
 	_, err = reloaded.RenewLease(t.Context())

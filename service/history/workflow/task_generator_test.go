@@ -2103,6 +2103,12 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 	}
 }
 
+/*
+TestSingleSessionWorkflowTaskTimers tests ordinary and speculative workflow-task timeout generation:
+1. Schedule tasks on S for ordinary and exclusive workflows with different run timeout settings.
+2. Create a schedule-to-start timer only for the ordinary task, while both receive a transfer task.
+3. Keep finite recovery timers for speculative tasks and their conversion to durable normal tasks.
+*/
 func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -2125,7 +2131,7 @@ func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 				WorkflowRunTimeout:           tc.runTimeout,
 			}
 			if tc.bound {
-				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "S"}
+				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
 			}
 			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 			ms.EXPECT().IsStickyTaskQueueSet().Return(true).AnyTimes()

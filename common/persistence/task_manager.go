@@ -83,7 +83,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
 	expiryTime := taskQueueInfo.GetExpiryTime()
-	if taskQueueInfo.GetExclusiveWorkerAssigned() {
+	if taskQueueInfo.GetExclusiveWorkerAssignment() != nil {
 		expiryTime = nil
 	} else if expiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")

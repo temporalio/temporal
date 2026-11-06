@@ -77,10 +77,14 @@ message TaskQueueInfo {
   // Dynamic partition scaling state (root only):
   PartitionScaleState partition_scale_state = 11;
 
-  // Records that an exclusive worker's sticky workflow queue has acquired a workflow.
-  // Retained after workflow completion and worker replacement to prevent reuse.
-  bool exclusive_worker_assigned = 12;
+  ExclusiveWorkerAssignment exclusive_worker_assignment = 12;
 }
+
+// Presence records that an exclusive worker's sticky workflow queue has acquired a workflow.
+// Retained after workflow completion and worker replacement to prevent reuse.
+// Note: This message may grow in the recent future to include more information such as the workflowID
+// for added optimizations.
+message ExclusiveWorkerAssignment {}
 
 message SubqueueInfo {
   // Key is the information used by a splitting algorithm to decide which tasks should go in

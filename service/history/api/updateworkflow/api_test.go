@@ -205,6 +205,12 @@ func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutio
 	}
 }
 
+/*
+TestSpeculativeDispatchFallsBackWhenStickyWorkerUnavailable tests ordinary speculative dispatch fallback:
+1. Dispatch the task to sticky queue S and return StickyWorkerUnavailable from Matching.
+2. Retry dispatch on the original normal queue foo and accept the task.
+3. Reach the later namespace lookup, whose injected error confirms dispatch continued past fallback.
+*/
 func TestSpeculativeDispatchFallsBackWhenStickyWorkerUnavailable(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)

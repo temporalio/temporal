@@ -672,6 +672,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, err
 	}
 	if sticky && !stickyWorkerAvailable(pm) {
+		// TODO(Shivam): Carry exclusive-session context from History so the first lookup can
+		// load the partition directly without this separate metadata read.
 		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
 		if err != nil {
 			return "", false, err
@@ -792,7 +794,7 @@ func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partit
 	if err != nil {
 		return false, err
 	}
-	return response.TaskQueueInfo.GetExclusiveWorkerAssigned(), nil
+	return response.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil, nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(
@@ -931,7 +933,7 @@ pollLoop:
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
 		// TODO (Shivam): Consider the edge case in the case of exclusive workers where the call to recordWorkflowTaskStarted succeeded
-		// but the response never reached matching. You could have a world in where workflow execution A has a worker address of S
+		// but the response never reached matching. You could have a world in where workflow execution A has a worker queue of S
 		// and so does workflow execution B.
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {

@@ -300,13 +300,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 			if tc.session {
-				ai.SessionOptions = &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+				ai.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
 			if !tc.missingPlacement {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 			if tc.bound {
-				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: "sticky-worker"})
+				mutableState.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "sticky-worker"})
 			}
 
 			transferTask := &tasks.ActivityTask{
@@ -328,7 +328,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 				request := s.createAddActivityTaskRequest(transferTask, ai)
 				if tc.session {
 					request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
-					request.VersionDirective = nil
 				}
 				if tc.bound {
 					request.SingleSessionOptions = &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"}
@@ -695,7 +694,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			executionInfo := mutableState.GetExecutionInfo()
 			executionInfo.StickyTaskQueue = stickyTaskQueueName
 			if tc.bound {
-				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerAddress: stickyTaskQueueName}
+				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: stickyTaskQueueName}
 			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 

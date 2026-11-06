@@ -633,56 +633,81 @@ func (s *activitySuite) TestResetActivity_ScheduledEventLookupErrors() {
 	}
 }
 
+/*
+TestActivitySessionMembershipSurvivesHistoryAndRetry tests internal activity membership:
+1. Serialize the public session options in the scheduled history event.
+2. Apply that event and create internal state only for workflow-session placement.
+3. Reload ActivityInfo and retry the activity while preserving its membership.
+*/
 func (s *activitySuite) TestActivitySessionMembershipSurvivesHistoryAndRetry() {
-	options := &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
-	command := &commandpb.ScheduleActivityTaskCommandAttributes{
-		ActivityId:             "session-activity",
-		ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "normal-queue"},
-		ScheduleToCloseTimeout: durationpb.New(time.Minute),
-		SessionOptions:         options,
+	for _, tc := range []struct {
+		name      string
+		options   *sessionpb.ActivitySessionOptions
+		wantState *persistencespb.ActivitySessionState
+	}{
+		{name: "no session options"},
+		{name: "empty session options", options: &sessionpb.ActivitySessionOptions{}},
+		{
+			name:      "workflow session",
+			options:   &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+			wantState: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}},
+		},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			mutableState := NewMutableState(
+				s.mockShard, s.mockShard.MockEventsCache, s.mockShard.GetLogger(), tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+			)
+			command := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "session-activity",
+				ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "normal-queue"},
+				ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				SessionOptions:         tc.options,
+			}
+			event, batchID := mutableState.hBuilder.AddActivityTaskScheduledEvent(4, command, tests.Namespace)
+			data, err := proto.Marshal(event)
+			require.NoError(t, err)
+			restoredEvent := &historypb.HistoryEvent{}
+			require.NoError(t, proto.Unmarshal(data, restoredEvent))
+			protorequire.ProtoEqual(t, tc.options, restoredEvent.GetActivityTaskScheduledEventAttributes().GetSessionOptions())
+
+			s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any())
+			ai, err := mutableState.ApplyActivityTaskScheduledEvent(batchID, restoredEvent)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.wantState, ai.GetSessionState())
+			require.Equal(t, "normal-queue", ai.GetTaskQueue())
+
+			data, err = proto.Marshal(ai)
+			require.NoError(t, err)
+			restored := &persistencespb.ActivityInfo{}
+			require.NoError(t, proto.Unmarshal(data, restored))
+			UpdateActivityInfoForRetries(restored, 1, 2, nil, timestamppb.Now(), true)
+			protorequire.ProtoEqual(t, tc.wantState, restored.GetSessionState())
+			require.Equal(t, int32(2), restored.GetAttempt())
+		})
 	}
-	event, batchID := s.mutableState.hBuilder.AddActivityTaskScheduledEvent(4, command, tests.Namespace)
-	data, err := proto.Marshal(event)
-	s.Require().NoError(err)
-	restoredEvent := &historypb.HistoryEvent{}
-	s.Require().NoError(proto.Unmarshal(data, restoredEvent))
-	protorequire.ProtoEqual(s.T(), options, restoredEvent.GetActivityTaskScheduledEventAttributes().GetSessionOptions())
-
-	s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any())
-	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(batchID, restoredEvent)
-	s.Require().NoError(err)
-	protorequire.ProtoEqual(s.T(), options, ai.GetSessionOptions())
-	s.Require().Equal("normal-queue", ai.GetTaskQueue())
-
-	data, err = proto.Marshal(ai)
-	s.Require().NoError(err)
-	restored := &persistencespb.ActivityInfo{}
-	s.Require().NoError(proto.Unmarshal(data, restored))
-	UpdateActivityInfoForRetries(restored, 1, 2, nil, timestamppb.Now(), true)
-	protorequire.ProtoEqual(s.T(), options, restored.GetSessionOptions())
-	s.Require().Equal(int32(2), restored.GetAttempt())
 }
 
 func TestActivityTaskQueue(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name             string
-		options          *sessionpb.ActivitySessionOptions
+		state            *persistencespb.ActivitySessionState
 		missingPlacement bool
 	}{
-		{name: "no session options"},
-		{name: "empty session options", options: &sessionpb.ActivitySessionOptions{}},
-		{name: "session enabled", options: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
-		{name: "session missing placement", missingPlacement: true, options: &sessionpb.ActivitySessionOptions{Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+		{name: "no session state"},
+		{name: "empty session state", state: &persistencespb.ActivitySessionState{}},
+		{name: "session enabled", state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
+		{name: "session missing placement", missingPlacement: true, state: &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tv := testvars.New(t)
 			ms := historyi.NewMockMutableState(gomock.NewController(t))
-			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionOptions: tc.options}
+			ai := &persistencespb.ActivityInfo{TaskQueue: tv.TaskQueue().GetName(), SessionState: tc.state}
 			expected := tv.TaskQueue()
-			if tc.options.GetWorkflowSession() != nil {
+			if tc.state.GetWorkflowSession() != nil {
 				current := tv.StickyTaskQueue()
 				if tc.missingPlacement {
 					current = tv.TaskQueue()
