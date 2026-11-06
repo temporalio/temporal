@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -4311,8 +4312,9 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
+					mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil),
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
 								Metadata: &persistencespb.ChasmNodeMetadata{
@@ -5857,8 +5859,9 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
+					mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil),
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
 					}, nil),
 				)
@@ -6009,7 +6012,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil).AnyTimes()
+	mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
@@ -6033,7 +6037,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil).AnyTimes()
+	mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -6071,7 +6076,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil).AnyTimes()
+	mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -7889,7 +7895,8 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
+	mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil).AnyTimes()
+	mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			nodeKeyToUpdate: &updateNode,
 			newNodeKey:      &newNode,
@@ -8434,6 +8441,83 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalSkippedCountsBufferedE
 	s.Equal(int64(eventCount)*eventSize, s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())-skippedBefore)
 }
 
+func (s *mutableStateSuite) TestCloseTransactionChasmPhaseErrors() {
+	for _, phase := range []string{"Prepare", "Events", "Finish"} {
+		s.Run(phase, func() {
+			r := require.New(s.T())
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, s.buildWorkflowMutableState(), 123)
+			r.NoError(err)
+			tree := historyi.NewMockChasmTree(gomock.NewController(s.T()))
+			ms.chasmTree = tree
+			tree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+			tree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+			expectedErr := errors.New("close transaction phase failed")
+			switch phase {
+			case "Prepare":
+				tree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(expectedErr)
+			case "Events":
+				tree.EXPECT().PrepareCloseTransaction(gomock.Any()).DoAndReturn(func(context.Context) error {
+					ms.executionInfo.VersionHistories = &historyspb.VersionHistories{}
+					return nil
+				})
+				tree.EXPECT().AbortCloseTransaction()
+			case "Finish":
+				tree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil)
+				tree.EXPECT().FinishCloseTransaction(gomock.Any(), false).Return(chasm.NodesMutation{}, expectedErr)
+			default:
+				r.FailNow("unknown close transaction phase")
+			}
+
+			_, err = ms.closeTransaction(s.T().Context(), historyi.TransactionPolicyPassive)
+			if phase == "Events" {
+				r.Error(err)
+			} else {
+				r.ErrorIs(err, expectedErr)
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPersistsChasmSignalEventID() {
+	s.mockConfig.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+	dbState.ExecutionInfo.WorkflowTaskStartedEventId = common.EmptyEventID
+	requestID := "buffered-signal"
+	dbState.BufferedEvents[0].GetWorkflowExecutionSignaledEventAttributes().RequestId = requestID
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	s.NoError(ms.UpdateCurrentVersion(s.namespaceEntry.FailoverVersion(tests.WorkflowID), false))
+	registry := chasm.NewRegistry(s.logger)
+	s.NoError(registry.Register(&chasm.CoreLibrary{}))
+	s.NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	tree := chasm.NewEmptyTree(registry, ms, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+	ms.chasmTree = tree
+	ctx := chasm.NewMutableContext(s.T().Context(), tree)
+	wf := chasmworkflow.NewWorkflow(ctx, chasm.NewMSPointer(ms))
+	s.NoError(tree.SetRootComponent(wf))
+	s.NoError(wf.AddIncomingSignalEvent(ctx, requestID, common.BufferedEventID))
+
+	mutation, workflowEvents, err := ms.CloseTransactionAsMutation(s.T().Context(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	var signalEventID int64
+	for _, batch := range workflowEvents {
+		for _, event := range batch.Events {
+			if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == requestID {
+				signalEventID = event.GetEventId()
+			}
+		}
+	}
+	s.Positive(signalEventID)
+	reloaded, err := chasm.NewTreeFromDB(mutation.UpsertChasmNodes, registry, ms, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	readCtx := chasm.NewContext(s.T().Context(), reloaded)
+	component, err := reloaded.ComponentByPath(readCtx, nil)
+	s.NoError(err)
+	s.Equal(signalEventID, component.(*chasmworkflow.Workflow).IncomingSignals[requestID].Get(readCtx).EventId,
+		"event-ID updates after preparation must be serialized before finishing")
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 	principal := &commonpb.Principal{Type: "user", Name: "alice"}
 	for _, tc := range []struct {
@@ -8456,7 +8540,8 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 			mutableState.chasmTree = mockChasmTree
 			mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
 			mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-			mockChasmTree.EXPECT().CloseTransaction(gomock.Cond(func(ctx context.Context) bool {
+			mockChasmTree.EXPECT().PrepareCloseTransaction(gomock.Any()).Return(nil).AnyTimes()
+			mockChasmTree.EXPECT().FinishCloseTransaction(gomock.Cond(func(ctx context.Context) bool {
 				return proto.Equal(principal, headers.GetPrincipal(ctx))
 			}), tc.expectedIsActive).Return(chasm.NodesMutation{}, nil).Times(1)
 
@@ -8893,6 +8978,124 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		)
 		s.Require().NoError(err)
 		s.Require().True(ms.isStateDirty())
+	}
+
+	for _, tc := range []struct {
+		name          string
+		sideEffect    bool
+		existingTimer bool
+		immediate     bool
+		invalid       bool
+		due           bool
+		expectedSkip  time.Duration
+	}{
+		{name: "PendingChasmPureTimer", expectedSkip: time.Hour},
+		{name: "PendingChasmSideEffectTimerAndOutboundTask", sideEffect: true, expectedSkip: time.Hour},
+		{name: "ExistingAndPendingChasmTimers", sideEffect: true, existingTimer: true, expectedSkip: time.Hour},
+		{name: "ImmediatePureTaskSchedulesTimer", immediate: true, expectedSkip: time.Hour},
+		{name: "InvalidPendingChasmTimerIsIgnored", invalid: true, due: true, expectedSkip: 3 * time.Hour},
+		{name: "DuePendingChasmTimerBlocksSkipping", due: true},
+	} {
+		s.Run(tc.name, func() {
+			r := require.New(s.T())
+			baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry,
+				buildEligibleState(baseTime.Add(3*time.Hour)), 1)
+			r.NoError(err)
+			_, err = ms.StartTransaction(s.namespaceEntry)
+			r.NoError(err)
+			ms.timeSource = clock.NewEventTimeSource().Update(baseTime)
+			ms.wrapTimeSourceWithTimeSkipping()
+			controller := gomock.NewController(s.T())
+			pureHandler := chasm.NewMockPureTaskHandler[*chasmworkflow.Workflow, *commonpb.Payload](controller)
+			sideEffectHandler := chasm.NewMockSideEffectTaskHandler[*chasmworkflow.Workflow, *commonpb.Header](controller)
+			registry := chasm.NewRegistry(s.logger)
+			r.NoError(registry.Register(&chasm.CoreLibrary{}))
+			r.NoError(registry.Register(&timeSkippingTestLibrary{
+				Library:      chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()),
+				timerHandler: pureHandler, sideEffectHandler: sideEffectHandler,
+			}))
+			tree := chasm.NewEmptyTree(registry, ms, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+			ms.chasmTree = tree
+			ctx := chasm.NewMutableContext(s.T().Context(), tree)
+			wf := chasmworkflow.NewWorkflow(ctx, chasm.NewMSPointer(ms))
+			r.NoError(tree.SetRootComponent(wf))
+			if tc.existingTimer {
+				ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
+				sideEffectHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
+				ctx.AddTask(wf, chasm.TaskAttributes{ScheduledTime: baseTime.Add(3 * time.Hour)}, &commonpb.Header{})
+				_, _, err := ms.CloseTransactionAsMutation(s.T().Context(), historyi.TransactionPolicyActive)
+				r.NoError(err)
+				ms.executionInfo.TimeSkippingInfo.Config.Enabled = true
+				ms.timeSkippingInfoUpdated = true
+				wf, ctx, err = ms.ChasmWorkflowComponent(s.T().Context())
+				r.NoError(err)
+			}
+			timerTime := baseTime.Add(time.Hour)
+			if tc.due {
+				timerTime = baseTime
+			}
+			if tc.sideEffect {
+				validations := 2
+				if tc.existingTimer {
+					validations++
+				}
+				sideEffectHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(validations)
+				ctx.AddTask(wf, chasm.TaskAttributes{Destination: "endpoint"}, &commonpb.Header{})
+				ctx.AddTask(wf, chasm.TaskAttributes{ScheduledTime: timerTime}, &commonpb.Header{})
+			} else if tc.immediate {
+				pureHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
+				pureHandler.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, _ chasm.TaskAttributes, _ *commonpb.Payload) error {
+						ctx.AddTask(wf, chasm.TaskAttributes{ScheduledTime: timerTime}, &commonpb.Payload{})
+						return nil
+					})
+				ctx.AddTask(wf, chasm.TaskAttributes{}, &commonpb.Payload{})
+			} else {
+				pureHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(!tc.invalid, nil)
+				ctx.AddTask(wf, chasm.TaskAttributes{ScheduledTime: timerTime}, &commonpb.Payload{})
+			}
+
+			mutation, workflowEvents, err := ms.CloseTransactionAsMutation(s.T().Context(), historyi.TransactionPolicyActive)
+			r.NoError(err)
+			r.Equal(tc.expectedSkip, mutation.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+			var skipEvents int
+			var chasmTimers []time.Time
+			for _, batch := range workflowEvents {
+				for _, event := range batch.Events {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+						skipEvents++
+						r.Equal(baseTime.Add(tc.expectedSkip), event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+					}
+				}
+			}
+			if tc.expectedSkip > 0 {
+				r.Equal(1, skipEvents)
+			} else {
+				r.Zero(skipEvents)
+			}
+			for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+				switch task.(type) {
+				case *tasks.ChasmTask, *tasks.ChasmTaskPure:
+					chasmTimers = append(chasmTimers, task.GetVisibilityTime())
+				default:
+					continue
+				}
+			}
+			if tc.invalid {
+				r.Zero(chasmTimers)
+			} else {
+				expectedTimes := []time.Time{timerTime.Add(-tc.expectedSkip)}
+				if tc.existingTimer {
+					expectedTimes = append(expectedTimes, baseTime.Add(3*time.Hour-tc.expectedSkip))
+				}
+				r.ElementsMatch(expectedTimes, chasmTimers, "timers must be generated once using the updated offset")
+			}
+			if tc.sideEffect {
+				r.Len(mutation.Tasks[tasks.CategoryOutbound], 1, "timer regeneration must not suppress pending outbound tasks")
+			}
+			r.False(tree.IsDirty())
+		})
 	}
 
 	s.Run("Active_Eligible_WritesEventAndRegeneratesTimerTask", func() {
@@ -10176,7 +10379,7 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 
 	s.Run("AdvancedVersionedTransitionFlags", func() {
 		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).Times(1)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(1)
 		s.mutableState.chasmTree = mockChasmTree
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -10187,17 +10390,53 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
 	})
 
-	s.Run("NotEffectiveForWorkflows", func() {
-		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(chasm.WorkflowArchetypeID)).Times(1)
-		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(0)
-		s.mutableState.chasmTree = mockChasmTree
+	s.Run("NotEffectiveForWorkflowsWithNoNexus", func() {
+		s.mutableState.chasmTree = NoopChasmTree
+		s.True(s.mutableState.IsWorkflow())
+		s.False(s.mutableState.ChasmEnabled())
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			LastUpdateVersionedTransition: timeSkippingVT(6),
 			AccumulatedSkippedDuration:    durationpb.New(time.Hour),
 		}
+
+		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+		s.Empty(s.mutableState.PopTasks())
+	})
+
+	s.Run("EffectiveForWorkflowsWithNexus", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(1)
+		s.mutableState.chasmTree = mockChasmTree
+		s.True(s.mutableState.ChasmEnabled())
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(6),
+			AccumulatedSkippedDuration:    durationpb.New(time.Hour),
+			Config:                        &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo:               &persistencespb.FastForwardInfo{},
+			FastForwardInfoLastUpdateVersionedTransition: timeSkippingVT(6),
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo.TargetTime = timestamppb.New(s.mutableState.Now().Add(time.Hour))
 		// VT advanced and accumulated skip grew from 0 → 1h in this delta.
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+		s.Empty(s.mutableState.PopTasks(), "TaskRefresher generates the Workflow fast-forward timer")
+	})
+
+	s.Run("NonWorkflowAddsPendingFastForwardTimer", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.SchedulerArchetypeID).AnyTimes()
+		mockChasmTree.EXPECT().MarkTotalTimeSkippedUpdatedInPassive().Times(1)
+		s.mutableState.chasmTree = mockChasmTree
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(6),
+			AccumulatedSkippedDuration:    durationpb.New(time.Hour),
+			Config:                        &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo:               &persistencespb.FastForwardInfo{},
+			FastForwardInfoLastUpdateVersionedTransition: timeSkippingVT(6),
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo.TargetTime = timestamppb.New(s.mutableState.Now().Add(time.Hour))
+		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+		s.Len(s.mutableState.PopTasks()[tasks.CategoryTimer], 1)
 	})
 }
 
