@@ -31,7 +31,7 @@ fairsim -- -tasks=1000000 -keys=20
 # Generate a million tasks with a much more lopsided distribution
 fairsim -- -tasks=1000000 -keys=50 -zipf-s=3 -zipf-v=1.1
 
-# Try alternate counter paramters
+# Try alternate counter parameters
 for w in 1 10 100 1000 10000; do
   fairsim -counter-params <(echo '{"CMS":{"W":'$w'}}') -- -tasks=1000000 -keys=1000 | grep p90s: | tail -1
 done
