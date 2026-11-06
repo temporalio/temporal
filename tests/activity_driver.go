@@ -468,7 +468,7 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event, m *activi
 	case isDispatchDelayEvent(e.Type):
 		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
-		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e, awaitingCompletion)+activityDriverTimerMargin))
+		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e, awaitingCompletion)+activityDriverTimerMargin), from == model.ResetRequested)
 	default:
 		requireErrorMatches(t, e, from, wantReject, a.rpc(t, e))
 	}
@@ -566,14 +566,21 @@ func activityRejectKind(err error) model.ErrorKind {
 
 // awaitActivityTimeout blocks until the activity reports the timeout for e, and fails if it does not
 // within (window + margin).
-func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
+func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time, resetPending bool) {
 	state := a.driverState()
 	want := timeoutType(e)
 	var got activityTimeoutInfo
 	await.Require(a.testContext(), t, func(t *await.T) {
 		got = a.timeoutInfo(t)
 		retried := got.attempt > state.startedAttempt || got.handoffAttempt > state.startedHandoffAttempt
-		fired := got.timeout == want && (got.terminal || retried)
+		resetApplied := false
+		if resetPending && got.timeout == want {
+			// A timeout can apply a reset without advancing either counter.
+			runState := a.observedState(t).runState
+			resetApplied = runState == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED || runState == enumspb.PENDING_ACTIVITY_STATE_PAUSED
+		}
+
+		fired := got.timeout == want && (got.terminal || retried || resetApplied)
 		t.Require().Truef(fired,
 			"%s: activity reports timeout %s at attempt %d/handoff %d (terminal=%v), want %s after attempt %d/handoff %d",
 			e, got.timeout, got.attempt, got.handoffAttempt, got.terminal, want, state.startedAttempt, state.startedHandoffAttempt)

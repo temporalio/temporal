@@ -1803,12 +1803,13 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 
 		for _, testCase := range []struct {
-			name              string
-			trace             []model.Event
-			heartbeatResponse *workflowservice.RecordActivityTaskHeartbeatResponse
-			expectedRunState  enumspb.PendingActivityState
-			finish            []model.Event
-			expectedOutcome   activityTerminalOutcome
+			name                string
+			trace               []model.Event
+			startToCloseTimeout time.Duration
+			heartbeatResponse   *workflowservice.RecordActivityTaskHeartbeatResponse
+			expectedRunState    enumspb.PendingActivityState
+			finish              []model.Event
+			expectedOutcome     activityTerminalOutcome
 		}{
 			{
 				name:              "pause requested before handoff",
@@ -1842,6 +1843,34 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				finish:            []model.Event{model.RespondCanceled},
 				expectedOutcome:   activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED},
 			},
+			// The carried start-to-close timer stays active while an operator request is pending.
+			{
+				name:                "start-to-close expires after handoff with cancellation pending",
+				trace:               []model.Event{model.Poll, model.Handoff, model.RequestCancel},
+				startToCloseTimeout: 5 * activityShortTimeout,
+				heartbeatResponse:   &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true},
+				expectedRunState:    enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED,
+				finish:              []model.Event{model.StartToCloseElapses},
+				expectedOutcome:     activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, retryState: enumspb.RETRY_STATE_CANCEL_REQUESTED},
+			},
+			{
+				name:                "start-to-close expires after handoff with pause pending",
+				trace:               []model.Event{model.Poll, model.Handoff, model.Pause},
+				startToCloseTimeout: 5 * activityShortTimeout,
+				heartbeatResponse:   &workflowservice.RecordActivityTaskHeartbeatResponse{ActivityPaused: true},
+				expectedRunState:    enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+				finish:              []model.Event{model.StartToCloseElapses, model.Unpause, model.BackoffElapses, model.Poll, model.Complete},
+				expectedOutcome:     activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+			},
+			{
+				name:                "start-to-close expires after handoff with reset pending",
+				trace:               []model.Event{model.Poll, model.Handoff, model.Reset},
+				startToCloseTimeout: 5 * activityShortTimeout,
+				heartbeatResponse:   &workflowservice.RecordActivityTaskHeartbeatResponse{ActivityReset: true},
+				expectedRunState:    enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION,
+				finish:              []model.Event{model.StartToCloseElapses, model.Poll, model.Complete},
+				expectedOutcome:     activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+			},
 		} {
 			s.Run(testCase.name, func(s *activityParityTestSuite) {
 				check := func(t *testing.T, env *testcore.TestEnv, a parityActivity) {
@@ -1855,7 +1884,6 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 					require.True(t, a.handoffInfo(t).awaitingCompletion)
 					require.Equal(t, testCase.expectedRunState, a.activityInfo(t).RunState)
 
-					// External failure applies the activity retry before fully pausing; cancellation is acknowledged directly.
 					for _, event := range testCase.finish {
 						a.driveEvent(t, event)
 					}
@@ -1869,7 +1897,9 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 					t := s.T()
 					env := newActivityParityEnv(t)
-					check(t, env, newSAADriver(t, env, cfg).driveTrace(t, testCase.trace))
+					testConfig := cfg
+					testConfig.StartToClose = testCase.startToCloseTimeout
+					check(t, env, newSAADriver(t, env, testConfig).driveTrace(t, testCase.trace))
 				})
 			})
 		}

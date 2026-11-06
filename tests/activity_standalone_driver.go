@@ -81,7 +81,7 @@ func (a *saaHandle) testContext() context.Context {
 }
 
 func (a *saaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
-	awaitActivityTimeout(t, a, e, deadline)
+	awaitActivityTimeout(t, a, e, deadline, false)
 }
 
 // timeoutInfo is the most recent timeout the activity reports.

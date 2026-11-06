@@ -21,14 +21,17 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -305,7 +308,7 @@ func (s *StandaloneActivityStateReplicationSuite) SetupSuite() {
 		activity.StandaloneAsyncHandoffEnabled.Key():            true,
 		activity.EnableStandaloneActivityOperatorCommands.Key(): true,
 	}
-	s.setupSuite()
+	s.setupSuite(testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}))
 }
 
 func (s *StandaloneActivityStateReplicationSuite) SetupTest() {
@@ -371,7 +374,8 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 					},
 				})
 			} else {
-				_, err = s.clusters[0].FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
+				// The standby frontend forwards the handoff to the namespace's active cluster.
+				_, err = s.clusters[1].FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
 			}
 			require.NoError(t, err)
 
@@ -423,7 +427,9 @@ func (s *StandaloneActivityStateReplicationSuite) TestAsyncHandoffFailover() {
 
 			// Wait for the application state on standby before changing namespace ownership.
 			await.Require(ctx, t, func(t *await.T) {
-				replicated, err := s.clusters[1].FrontendClient().DescribeActivityExecution(t.Context(), describe)
+				// Read standby state directly instead of forwarding this check to the active cluster.
+				standbyContext := metadata.AppendToOutgoingContext(t.Context(), interceptor.DCRedirectionContextHeaderName, "false")
+				replicated, err := s.clusters[1].FrontendClient().DescribeActivityExecution(standbyContext, describe)
 				require.NoError(t, err)
 				require.Equal(t, testCase.expectedRunState, replicated.GetInfo().GetRunState())
 				require.EqualValues(t, 1, replicated.GetInfo().GetAttempt())
