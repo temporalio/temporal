@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v11 "go.temporal.io/api/enums/v1"
 	v1 "go.temporal.io/api/failure/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -29,8 +30,10 @@ type UpdateState struct {
 	// Populated when the update was rejected by a validator.
 	// Used to resolve the update outcome for callbacks on rejected updates.
 	RejectionFailure *v1.Failure `protobuf:"bytes,2,opt,name=rejection_failure,json=rejectionFailure,proto3" json:"rejection_failure,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// History event references for attached callbacks, keyed by request ID.
+	CallbackAttachmentEventReferences map[string]*CallbackAttachmentEventReference `protobuf:"bytes,3,rep,name=callback_attachment_event_references,json=callbackAttachmentEventReferences,proto3" json:"callback_attachment_event_references,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *UpdateState) Reset() {
@@ -77,14 +80,83 @@ func (x *UpdateState) GetRejectionFailure() *v1.Failure {
 	return nil
 }
 
+func (x *UpdateState) GetCallbackAttachmentEventReferences() map[string]*CallbackAttachmentEventReference {
+	if x != nil {
+		return x.CallbackAttachmentEventReferences
+	}
+	return nil
+}
+
+type CallbackAttachmentEventReference struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The type of history event that attached the callbacks.
+	EventType v11.EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
+	// The ID of the history event that attached the callbacks.
+	EventId       int64 `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallbackAttachmentEventReference) Reset() {
+	*x = CallbackAttachmentEventReference{}
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallbackAttachmentEventReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallbackAttachmentEventReference) ProtoMessage() {}
+
+func (x *CallbackAttachmentEventReference) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallbackAttachmentEventReference.ProtoReflect.Descriptor instead.
+func (*CallbackAttachmentEventReference) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CallbackAttachmentEventReference) GetEventType() v11.EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return v11.EventType(0)
+}
+
+func (x *CallbackAttachmentEventReference) GetEventId() int64 {
+	if x != nil {
+		return x.EventId
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDesc = "" +
 	"\n" +
-	">temporal/server/chasm/lib/workflow/proto/v1/update_state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a%temporal/api/failure/v1/message.proto\"y\n" +
+	">temporal/server/chasm/lib/workflow/proto/v1/update_state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a&temporal/api/enums/v1/event_type.proto\x1a%temporal/api/failure/v1/message.proto\"\xd2\x03\n" +
 	"\vUpdateState\x12\x1b\n" +
 	"\tupdate_id\x18\x01 \x01(\tR\bupdateId\x12M\n" +
-	"\x11rejection_failure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\x10rejectionFailureBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
+	"\x11rejection_failure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\x10rejectionFailure\x12\xb0\x01\n" +
+	"$callback_attachment_event_references\x18\x03 \x03(\v2_.temporal.server.chasm.lib.workflow.proto.v1.UpdateState.CallbackAttachmentEventReferencesEntryR!callbackAttachmentEventReferences\x1a\xa3\x01\n" +
+	"&CallbackAttachmentEventReferencesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12c\n" +
+	"\x05value\x18\x02 \x01(\v2M.temporal.server.chasm.lib.workflow.proto.v1.CallbackAttachmentEventReferenceR\x05value:\x028\x01\"~\n" +
+	" CallbackAttachmentEventReference\x12?\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\x03R\aeventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDescOnce sync.Once
@@ -98,18 +170,24 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDesc
 	return file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_goTypes = []any{
-	(*UpdateState)(nil), // 0: temporal.server.chasm.lib.workflow.proto.v1.UpdateState
-	(*v1.Failure)(nil),  // 1: temporal.api.failure.v1.Failure
+	(*UpdateState)(nil),                      // 0: temporal.server.chasm.lib.workflow.proto.v1.UpdateState
+	(*CallbackAttachmentEventReference)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.CallbackAttachmentEventReference
+	nil,                                      // 2: temporal.server.chasm.lib.workflow.proto.v1.UpdateState.CallbackAttachmentEventReferencesEntry
+	(*v1.Failure)(nil),                       // 3: temporal.api.failure.v1.Failure
+	(v11.EventType)(0),                       // 4: temporal.api.enums.v1.EventType
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_depIdxs = []int32{
-	1, // 0: temporal.server.chasm.lib.workflow.proto.v1.UpdateState.rejection_failure:type_name -> temporal.api.failure.v1.Failure
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: temporal.server.chasm.lib.workflow.proto.v1.UpdateState.rejection_failure:type_name -> temporal.api.failure.v1.Failure
+	2, // 1: temporal.server.chasm.lib.workflow.proto.v1.UpdateState.callback_attachment_event_references:type_name -> temporal.server.chasm.lib.workflow.proto.v1.UpdateState.CallbackAttachmentEventReferencesEntry
+	4, // 2: temporal.server.chasm.lib.workflow.proto.v1.CallbackAttachmentEventReference.event_type:type_name -> temporal.api.enums.v1.EventType
+	1, // 3: temporal.server.chasm.lib.workflow.proto.v1.UpdateState.CallbackAttachmentEventReferencesEntry.value:type_name -> temporal.server.chasm.lib.workflow.proto.v1.CallbackAttachmentEventReference
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_init() }
@@ -123,7 +201,7 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_init() 
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDesc), len(file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
