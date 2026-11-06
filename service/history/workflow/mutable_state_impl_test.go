@@ -57,6 +57,7 @@ import (
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -6280,6 +6281,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.True(proto.Equal(target.LastUpdateTime, current.LastUpdateTime), "LastUpdateTime mismatch")
 	s.Equal(target.CancelRequested, current.CancelRequested, "CancelRequested mismatch")
 	s.Equal(target.CancelRequestId, current.CancelRequestId, "CancelRequestId mismatch")
+	s.True(proto.Equal(target.GetSessionState(), current.GetSessionState()), "SessionState mismatch")
 	s.Equal(target.StickyTaskQueue, current.StickyTaskQueue, "StickyTaskQueue mismatch")
 	s.True(proto.Equal(target.StickyScheduleToStartTimeout, current.StickyScheduleToStartTimeout), "StickyScheduleToStartTimeout mismatch")
 	s.Equal(target.Attempt, current.Attempt, "Attempt mismatch")
@@ -10199,4 +10201,188 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
+}
+
+/*
+TestSingleSessionBindingReloadAndFailure tests binding across a task failure and mutable-state reload:
+1. Bind the workflow to S, start its workflow task, and record a start-to-close timeout.
+2. Reload mutable state and verify clearing stickiness leaves the exclusive destination intact.
+3. Schedule the transient retry on S with the increased attempt and no schedule-to-start timer.
+4. Start the retry on a replacement worker and verify its start-to-close timer is created.
+*/
+func (s *mutableStateSuite) TestSingleSessionBindingReloadAndFailure() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	ms := TestGlobalMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId: tests.WorkflowID, WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "foo"},
+				WorkflowRunTimeout: durationpb.New(time.Hour), WorkflowTaskTimeout: durationpb.New(time.Second),
+			},
+		})
+	s.Require().NoError(err)
+	ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"})
+	ms.executionInfo.DefaultWorkflowTaskTimeout = durationpb.New(time.Second)
+	ms.executionInfo.WorkflowTaskAttempt = 1
+	wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.Require().NoError(err)
+	s.Equal("S", wt.TaskQueue.GetName())
+	_, wt, err = ms.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "request", ms.CurrentTaskQueue(), "worker-1", nil, nil, nil, false, nil, 0)
+	s.Require().NoError(err)
+	_, err = ms.AddWorkflowTaskTimedOutEvent(wt)
+	s.Require().NoError(err)
+	s.Equal(int32(2), ms.GetExecutionInfo().GetWorkflowTaskAttempt())
+	s.Equal("S", ms.CurrentTaskQueue().GetName())
+	_, _, err = ms.CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	reloaded, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.GlobalNamespaceEntry, ms.CloneToProto(), 123)
+	s.Require().NoError(err)
+	s.True(proto.Equal(ms.GetExecutionInfo().GetSessionState(), reloaded.GetExecutionInfo().GetSessionState()))
+	s.Require().NoError(reloaded.UpdateCurrentVersion(tests.Version, false))
+	reloaded.ClearStickyTaskQueue()
+	s.Equal("S", reloaded.CurrentTaskQueue().GetName())
+	s.Equal("S", reloaded.GetExecutionInfo().GetSessionState().GetWorkerQueue())
+	wt, err = reloaded.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.Require().NoError(err)
+	s.Equal("S", wt.TaskQueue.GetName())
+	s.Equal("foo", reloaded.executionInfo.GetTaskQueue())
+	s.True(reloaded.IsTransientWorkflowTask())
+	failureCount := reloaded.GetExecutionInfo().GetWorkflowTaskAttemptsSinceLastSuccess()
+	s.Equal(int32(1), failureCount)
+
+	mutation, eventBatches, err := reloaded.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	s.Empty(eventBatches)
+	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+	s.Require().Len(mutation.Tasks[tasks.CategoryTransfer], 1)
+	transferTask, ok := mutation.Tasks[tasks.CategoryTransfer][0].(*tasks.WorkflowTask)
+	s.Require().True(ok)
+	s.Equal("S", transferTask.TaskQueue)
+	s.Equal(wt.ScheduledEventID, transferTask.ScheduledEventID)
+	s.Equal(int32(2), wt.Attempt)
+
+	_, resumed, err := reloaded.AddWorkflowTaskStartedEvent(wt.ScheduledEventID, "replacement-request", reloaded.CurrentTaskQueue(), "worker-2", nil, nil, nil, false, nil, 0)
+	s.Require().NoError(err)
+	s.True(reloaded.HasStartedWorkflowTask())
+	s.Equal("S", resumed.TaskQueue.GetName())
+	s.Equal(int32(2), resumed.Attempt)
+	s.Equal(failureCount, reloaded.GetExecutionInfo().GetWorkflowTaskAttemptsSinceLastSuccess())
+	mutation, _, err = reloaded.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	s.Require().Len(mutation.Tasks[tasks.CategoryTimer], 1)
+	startedTimeout, ok := mutation.Tasks[tasks.CategoryTimer][0].(*tasks.WorkflowTaskTimeoutTask)
+	s.Require().True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, startedTimeout.TimeoutType)
+}
+
+/*
+TestSetSessionStatePreservesExclusiveBinding tests updates to an existing exclusive binding:
+1. Bind the workflow to worker queue S and its matching sticky destination.
+2. Accept the same binding, but report and reject a different queue, nonexclusive state, or nil state.
+3. Preserve destination S and the normal workflow task queue throughout.
+*/
+func TestSetSessionStatePreservesExclusiveBinding(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		state    *persistencespb.SessionState
+		rejected bool
+	}{
+		{name: "same binding", state: &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}},
+		{name: "different queue", state: &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "other"}, rejected: true},
+		{name: "nonexclusive state", state: &persistencespb.SessionState{WorkerQueue: "S"}, rejected: true},
+		{name: "cleared state", rejected: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			ms := &MutableStateImpl{logger: logger, executionInfo: &persistencespb.WorkflowExecutionInfo{TaskQueue: "foo"}}
+			initial := &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+			ms.SetSessionState(initial)
+			var assertion *testlogger.Expectation
+			if tc.rejected {
+				assertion = logger.Expect(testlogger.Error, "failed assertion: attempted to replace an exclusive worker binding")
+			}
+
+			ms.SetSessionState(tc.state)
+
+			if tc.rejected {
+				require.EqualValues(t, 1, assertion.MatchCount())
+				require.Same(t, initial, ms.GetExecutionInfo().GetSessionState())
+			} else {
+				require.Same(t, tc.state, ms.GetExecutionInfo().GetSessionState())
+			}
+			require.Equal(t, "S", ms.GetExecutionInfo().GetStickyTaskQueue())
+			require.Equal(t, "foo", ms.GetExecutionInfo().GetTaskQueue())
+		})
+	}
+}
+
+/*
+TestSingleSessionStickyPolicy tests sticky state for ordinary and exclusive workflows:
+1. Set an exclusive session and verify its worker queue initializes sticky destination S.
+2. Resolve either queue name to S with the workflow run timeout for an exclusive workflow.
+3. Keep S when stickiness is cleared; ordinary workflows still allow sticky updates and clearing.
+4. Preserve the normal workflow task queue foo throughout.
+*/
+func TestSingleSessionStickyPolicy(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		bound       bool
+		stickyQueue string
+	}{
+		{name: "ordinary", stickyQueue: "S"},
+		{name: "exclusive session", bound: true, stickyQueue: "S"},
+		{name: "session initializes sticky destination", bound: true, stickyQueue: "other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ms := &MutableStateImpl{executionInfo: &persistencespb.WorkflowExecutionInfo{
+				TaskQueue: "foo", StickyTaskQueue: tc.stickyQueue,
+				StickyScheduleToStartTimeout: durationpb.New(time.Second),
+				WorkflowRunTimeout:           durationpb.New(time.Hour),
+			}}
+			if tc.bound {
+				state := &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+				ms.SetSessionState(state)
+				protorequire.ProtoEqual(t, state, ms.executionInfo.GetSessionState())
+				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
+				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+				ms.SetStickyTaskQueue("S", durationpb.New(3*time.Second))
+				require.Equal(t, 3*time.Second, ms.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+				for _, queueName := range []string{"foo", "S"} {
+					queue, timeout := ms.TaskQueueScheduleToStartTimeout(queueName)
+					require.Equal(t, "S", queue.GetName())
+					require.Equal(t, "foo", queue.GetNormalName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, queue.GetKind())
+					require.Equal(t, time.Hour, timeout.AsDuration())
+				}
+			} else {
+				ms.SetStickyTaskQueue("other", durationpb.New(2*time.Second))
+				require.Equal(t, "other", ms.executionInfo.GetStickyTaskQueue())
+			}
+			if tc.bound {
+				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetWorkerQueue())
+			} else {
+				require.Nil(t, ms.executionInfo.GetSessionState())
+			}
+			ms.ClearStickyTaskQueue()
+			if tc.bound {
+				require.Equal(t, "S", ms.executionInfo.GetStickyTaskQueue())
+			} else {
+				require.Empty(t, ms.executionInfo.GetStickyTaskQueue())
+				require.Nil(t, ms.executionInfo.GetStickyScheduleToStartTimeout())
+			}
+			if tc.bound {
+				require.Equal(t, ms.executionInfo.GetStickyTaskQueue(), ms.executionInfo.GetSessionState().GetWorkerQueue())
+			} else {
+				require.Nil(t, ms.executionInfo.GetSessionState())
+			}
+			require.Equal(t, "foo", ms.executionInfo.GetTaskQueue())
+		})
+	}
 }

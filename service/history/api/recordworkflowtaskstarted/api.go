@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -76,6 +77,16 @@ func Invoke(
 			if req.GetStamp() != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
 				// This happens when the workflow task was rescheduled.
 				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
+			}
+
+			singleSession := req.PollRequest.GetSessionOptions().GetSingleSession()
+			stableIdentity := singleSession.GetStableIdentity()
+			executionInfo := mutableState.GetExecutionInfo()
+			// An unbound execution can acquire the polling session's stable identity.
+			// Once bound, every start request, including retries, must identify the same session.
+			sessionState := executionInfo.GetSessionState()
+			if sessionState.GetExclusiveWorker() && (stableIdentity == "" || stableIdentity != sessionState.GetWorkerQueue()) {
+				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
 
 			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
@@ -177,11 +188,22 @@ func Invoke(
 				return nil, err
 			}
 
+			newSingleSessionBinding := singleSession != nil && !sessionState.GetExclusiveWorker()
+			if newSingleSessionBinding {
+				// Bind after the task start is accepted so both changes commit in the same transaction.
+				mutableState.SetSessionState(&persistencespb.SessionState{
+					ExclusiveWorker: true,
+					WorkerQueue:     stableIdentity,
+				})
+			}
+
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				// A speculative workflow task can remain in memory only if starting it did not
 				// produce changes that need to be persisted. Otherwise, closing the transaction
 				// converts it to a normal workflow task and persists all of the changes.
-				updateAction.Noop = !mutableState.IsDirty()
+				// Note: newSingleSessionBinding is set to true when a worker is bound to a single-session sticky task queue.
+				// When this bit is set, we have to persist it immediately, which is why we don't have updateAction.Noop set to true.
+				updateAction.Noop = !newSingleSessionBinding && !mutableState.IsDirty()
 			} else {
 				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
 				// even when dirty mutable state causes the start to be persisted, the transition can

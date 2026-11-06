@@ -1479,3 +1479,41 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 
 	return wfContext, serializedTaskToken
 }
+
+/*
+TestSingleSessionCompletionDestination tests sticky attributes on an exclusive workflow's completion:
+1. Start a workflow task and bind the workflow to worker queue S.
+2. Accept a completion without sticky attributes, but reject one requesting another destination.
+3. Preserve the exclusive binding and sticky destination S in both cases.
+*/
+func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestination() {
+	for _, destination := range []string{"S", "other"} {
+		s.Run(destination, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			wfContext := s.createStartedWorkflow(tv)
+			_, _, token := s.createSentUpdate(tv, wfContext)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			ms.SetSessionState(&persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"})
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
+			if destination == "other" {
+				request.StickyAttributes = tv.StickyExecutionAttributes(time.Second)
+				request.StickyAttributes.WorkerTaskQueue.Name = destination
+			}
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(), CompleteRequest: request,
+			})
+			if destination == "other" {
+				var invalid *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalid)
+			} else {
+				s.Require().NoError(err)
+			}
+			s.True(ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
+			s.Equal("S", ms.GetExecutionInfo().GetSessionState().GetWorkerQueue())
+			s.Equal("S", ms.GetExecutionInfo().GetStickyTaskQueue())
+		})
+	}
+}

@@ -328,6 +328,18 @@ message WorkflowExecutionInfo {
 
   // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
+
+  // Session binding retained for the lifetime of this workflow execution.
+  SessionState session_state = 118;
+}
+
+// Note: This is experimental and could change in the near future.
+message SessionState {
+  // Whether this session is mapped strongly to an individual worker. Exclusive sessions also remain at their assigned address.
+  bool exclusive_worker = 1;
+  // Stable sticky task queue name, mirrored by WorkflowExecutionInfo.sticky_task_queue.
+  // This identifies the session across worker process replacements.
+  string worker_queue = 2;
 }
 
 message TimeSkippingInfo {

@@ -79,6 +79,43 @@ func (this *WorkflowExecutionInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type SessionState to the protobuf v3 wire format
+func (val *SessionState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SessionState from the protobuf v3 wire format
+func (val *SessionState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SessionState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SessionState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SessionState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SessionState
+	switch t := that.(type) {
+	case *SessionState:
+		that1 = t
+	case SessionState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type TimeSkippingInfo to the protobuf v3 wire format
 func (val *TimeSkippingInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -432,8 +432,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternalf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID)
 	}
 
-	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+	// Bound tasks wait for a replacement worker on the same queue, so an S2S timer would only recreate them which is
+	// why this timer is created only for non-exclusive workflow tasks.
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
+		scheduleToStartTimeout := timeout.AsDuration()
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -473,10 +476,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 ) error {
 
 	var scheduleToStartTimeout time.Duration
-	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout = timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
+		scheduleToStartTimeout = timeout.AsDuration()
 	} else {
-		// Speculative WT has ScheduleToStart timeout even on normal task queue.
+		// Speculative WT needs a finite recovery timeout even on normal and single-session queues.
 		// Normally WT should be added to matching right after being created
 		// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
 		// there is no good way to handle the error.
@@ -484,6 +488,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		// and new normal WT will be created.
 		// Note: this timer will also fire if workflow received an update,
 		// but there is no workers available. Speculative WT will time out, and normal WT will be created.
+		// Note: For speculative workflow tasks attached to an exclusive worker, this block of code assigns a default of a 5 second
+		// S2S timer timeout. This is required so that it's retries can be executed effectively.
 		scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
 	}
 

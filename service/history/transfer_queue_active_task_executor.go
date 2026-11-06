@@ -355,7 +355,9 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
-		// sticky worker is unavailable, switch to original normal task queue
+		// sticky worker is unavailable, switch to original normal task queue. Note: Sending back to the normal task queue is done
+		// only if the workflow task is not assigned to an exclusive worker. In the case of an exclusive worker, matching does not
+		// send *serviceerrors.StickyWorkerUnavailable and this code path is not taken.
 		taskQueue = &taskqueuepb.TaskQueue{
 			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
 			Name: normalTaskQueueName,

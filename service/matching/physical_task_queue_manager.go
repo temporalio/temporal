@@ -228,6 +228,8 @@ func newPhysicalTaskQueueManager(
 		partitionMgr.rateLimitManager,
 		pqMgr.onRateLimited,
 		pqMgr.MarkAlive,
+		pqMgr.ExclusiveWorkerAssigned,
+		pqMgr.AssignExclusiveWorker,
 	)
 	return pqMgr, nil
 }
@@ -949,4 +951,14 @@ func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.Ta
 		taskqueue.MergeStats(result, s)
 	}
 	return result
+}
+
+func (c *physicalTaskQueueManagerImpl) ExclusiveWorkerAssigned() bool {
+	return c.backlogMgr.getDB().ExclusiveWorkerAssigned()
+}
+
+func (c *physicalTaskQueueManagerImpl) AssignExclusiveWorker() error {
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	defer cancel()
+	return c.backlogMgr.getDB().assignExclusiveWorker(ctx)
 }

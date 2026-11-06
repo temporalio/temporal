@@ -28,6 +28,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -1298,6 +1299,98 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
 	s.Empty(s.matchingEngine.partitions)
+}
+
+/*
+TestQueryWorkflowAssignedStickyWithoutPollers tests queries while the session worker is absent:
+1. Prepare assigned and ordinary sticky queues, both loaded and unloaded, without pollers.
+2. Verify ordinary sticky queues return StickyWorkerUnavailable.
+3. Verify assigned queues load if needed and hold the query until a poller arrives.
+4. Poll the query, answer it, and verify the waiting caller receives the answer.
+*/
+func (s *matchingEngineSuite) TestQueryWorkflowAssignedStickyWithoutPollers() {
+	for _, tc := range []struct {
+		name             string
+		assigned, loaded bool
+	}{
+		{name: "assigned unloaded", assigned: true},
+		{name: "assigned loaded", assigned: true, loaded: true},
+		{name: "ordinary unloaded"},
+		{name: "ordinary loaded", loaded: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				StickyPartition(tv.StickyTaskQueue().GetName())
+			if tc.assigned {
+				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+				require.NoError(t, err)
+				queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+				require.NoError(t, queue.AssignExclusiveWorker())
+				if !tc.loaded {
+					s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+				}
+			}
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.Equal(t, tc.loaded, pm != nil)
+			require.False(t, stickyWorkerAvailable(pm))
+
+			request := &matchingservice.QueryWorkflowRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(),
+				QueryRequest: &workflowservice.QueryWorkflowRequest{
+					Namespace: s.ns.Name().String(), Execution: tv.WorkflowExecution(),
+					Query: &querypb.WorkflowQuery{QueryType: "q"},
+				},
+			}
+			if !tc.assigned {
+				_, err := s.matchingEngine.QueryWorkflow(ctx, request)
+				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.Equal(t, tc.loaded, pm != nil)
+				return
+			}
+
+			queryResult := future.NewFuture[*matchingservice.QueryWorkflowResponse]()
+			go func() {
+				response, err := s.matchingEngine.QueryWorkflow(ctx, request)
+				queryResult.Set(response, err)
+			}()
+			await.Require(ctx, t, func(t *await.T) {
+				pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(t.Context(), partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.NotNil(t, pm)
+				require.False(t, stickyWorkerAvailable(pm))
+				data := &pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl).matcher.data
+				data.lock.Lock()
+				defer data.lock.Unlock()
+				require.Equal(t, 1, data.tasks.Len())
+			}, 5*time.Second, 10*time.Millisecond)
+			require.False(t, queryResult.Ready())
+
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+			require.NoError(t, err)
+			task, _, err := pm.PollTask(ctx, &pollMetadata{})
+			require.NoError(t, err)
+			require.NotNil(t, task)
+			require.True(t, task.isQuery())
+			protorequire.ProtoEqual(t, request, task.query.request)
+			task.finish(taskFinishResult{consumedToken: true})
+			answer := payloads.EncodeString("answer")
+			require.NoError(t, s.matchingEngine.RespondQueryTaskCompleted(ctx, &matchingservice.RespondQueryTaskCompletedRequest{
+				TaskId: task.query.taskID,
+				CompletedRequest: &workflowservice.RespondQueryTaskCompletedRequest{
+					CompletedType: enumspb.QUERY_RESULT_TYPE_ANSWERED, QueryResult: answer,
+				},
+			}, metrics.NoopMetricsHandler))
+			response, err := queryResult.Get(ctx)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &matchingservice.QueryWorkflowResponse{QueryResult: answer}, response)
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -7102,4 +7195,111 @@ func (s *matchingEngineSuite) testStickyActivityRouting(versioned, mismatchedDep
 	s.Require().NotNil(response)
 	s.Require().Equal("session-activity", response.GetActivityId())
 	s.Require().NotEmpty(response.GetTaskToken())
+}
+
+/*
+TestSingleSessionOfflineWorkflowAdmission tests workflow task admission without a session worker:
+1. Prepare assigned, ordinary, and missing sticky queue metadata, with queues loaded or unloaded.
+2. Add a workflow task without any poller and verify unassigned queues reject it.
+3. Verify assigned queues load if needed and persist the task only in their sticky backlog.
+4. Unload and reload the assigned queue, then verify a session poll receives the persisted task.
+*/
+func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
+	for _, tc := range []struct {
+		name                      string
+		assigned, loaded, missing bool
+	}{
+		{name: "assigned unloaded", assigned: true},
+		{name: "assigned loaded without pollers", assigned: true, loaded: true},
+		{name: "ordinary unloaded"},
+		{name: "ordinary loaded without pollers", loaded: true},
+		{name: "metadata missing", missing: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+			queue := UnversionedQueueKey(partition)
+			if !tc.missing {
+				info := &persistencespb.TaskQueueInfo{
+					NamespaceId: queue.NamespaceId(), Name: queue.PersistenceName(), TaskType: queue.TaskType(),
+					Kind: enumspb.TASK_QUEUE_KIND_STICKY, LastUpdateTime: timestamppb.Now(),
+					ExpiryTime: timestamppb.New(time.Now().Add(time.Hour)),
+				}
+				_, err := s.v1TaskManager.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+					RangeID: 1, TaskQueueInfo: info,
+				})
+				require.NoError(t, err)
+				if tc.assigned {
+					info = common.CloneProto(info)
+					info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
+					info.ExpiryTime = nil
+					_, err = s.v1TaskManager.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+						RangeID: 2, PrevRangeID: 1, TaskQueueInfo: info,
+					})
+					require.NoError(t, err)
+				}
+			}
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, tc.loaded, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.False(t, stickyWorkerAvailable(pm))
+
+			_, syncMatch, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute),
+			})
+			require.False(t, syncMatch)
+			require.Zero(t, s.v1TaskManager.getTaskCount(newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+			if !tc.assigned {
+				require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+				require.Zero(t, s.v1TaskManager.getTaskCount(queue))
+				pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+				require.NoError(t, err)
+				require.Equal(t, tc.loaded, pm != nil)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, 1, s.v1TaskManager.getTaskCount(queue))
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.NotNil(t, pm)
+			require.False(t, stickyWorkerAvailable(pm))
+			s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+			pm, _, err = s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+			require.NoError(t, err)
+			task, _, err := pm.PollTask(ctx, &pollMetadata{sessionOptions: &sessionpb.WorkerSessionOptions{
+				Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				},
+			}})
+			require.NoError(t, err)
+			require.NotNil(t, task)
+			require.Equal(t, tv.WorkflowID(), task.event.GetData().GetWorkflowId())
+			require.Equal(t, int64(7), task.event.GetData().GetScheduledEventId())
+			task.finish(taskFinishResult{consumedToken: true})
+		})
+	}
+}
+
+/*
+TestSingleSessionOfflineAdmissionReadFailure tests a failed assignment lookup:
+1. Make the sticky queue metadata read fail while adding a workflow task.
+2. Verify Matching returns that error without loading a partition or reporting a sync match.
+*/
+func TestSingleSessionOfflineAdmissionReadFailure(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t)
+	store := persistence.NewMockTaskManager(gomock.NewController(t))
+	readErr := serviceerror.NewUnavailable("metadata read failed")
+	store.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
+		NamespaceID: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue().GetName(), TaskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	}).Return(nil, readErr)
+	engine := &matchingEngineImpl{taskManager: store, logger: log.NewTestLogger()}
+	_, syncMatch, err := engine.AddWorkflowTask(t.Context(), &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+	})
+	require.ErrorIs(t, err, readErr)
+	require.False(t, syncMatch)
+	require.Empty(t, engine.partitions)
 }

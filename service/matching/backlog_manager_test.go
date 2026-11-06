@@ -14,11 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
@@ -27,10 +29,12 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1321,4 +1325,113 @@ func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsRead
 	tr.mergeTasks([]*persistencespb.AllocatedTaskInfo{mkTask(6)}, mergeWrite)
 	s.Require().Equal(2, s.capturedTasksLen(), "reader should still deliver new tasks")
 	s.Require().Equal(1, tr.getLoadedTasks())
+}
+
+/*
+TestTaskQueueSingleSessionMetadata tests assignment metadata across repeated reloads:
+1. Create assigned and unassigned sticky workflow queues with an expiry.
+2. Reload each queue, update its ack level, and synchronize metadata three times.
+3. Preserve assignment data, including unknown fields, and omit expiry only for assigned queues.
+*/
+func TestTaskQueueSingleSessionMetadata(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		assigned bool
+	}{
+		{name: "unassigned"},
+		{name: "assigned", assigned: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tv := testvars.New(t)
+			logger := log.NewTestLogger()
+			store := newTestTaskManager(logger)
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				StickyPartition(tv.StickyTaskQueue().GetName())
+			queue := UnversionedQueueKey(partition)
+			cfg := newTaskQueueConfig(partition.TaskQueue(), NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewMemoryClient(), logger)), tv.NamespaceName())
+			info := &persistencespb.TaskQueueInfo{
+				NamespaceId:    queue.NamespaceId(),
+				Name:           queue.PersistenceName(),
+				TaskType:       queue.TaskType(),
+				Kind:           enumspb.TASK_QUEUE_KIND_STICKY,
+				LastUpdateTime: timestamppb.Now(),
+				ExpiryTime:     timestamppb.New(time.Now().Add(time.Hour)),
+			}
+			if tc.assigned {
+				info.ExclusiveWorkerAssignment = &persistencespb.ExclusiveWorkerAssignment{}
+				unknownField := protowire.AppendTag(nil, 1, protowire.BytesType)
+				unknownField = protowire.AppendString(unknownField, "future-session-reference")
+				info.GetExclusiveWorkerAssignment().ProtoReflect().SetUnknown(unknownField)
+			}
+			_, err := store.CreateTaskQueue(t.Context(), &persistence.CreateTaskQueueRequest{
+				RangeID: 1, TaskQueueInfo: info,
+			})
+			require.NoError(t, err)
+
+			for iteration := range 3 {
+				db := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
+				_, err = db.RenewLease(t.Context())
+				require.NoError(t, err)
+				db.updateAckLevelAndBacklogStats(subqueueZero, int64(iteration+1), 0, time.Time{})
+				require.NoError(t, db.SyncState(t.Context()))
+
+				persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
+					NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
+				})
+				require.NoError(t, err)
+				require.Equal(t, tc.assigned, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil)
+				require.Equal(t, int64(iteration+1), persisted.TaskQueueInfo.GetAckLevel())
+				if tc.assigned {
+					protorequire.ProtoEqual(t, info.GetExclusiveWorkerAssignment(), persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
+					require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
+				} else {
+					require.NotNil(t, persisted.TaskQueueInfo.GetExpiryTime())
+					require.True(t, persisted.TaskQueueInfo.GetExpiryTime().AsTime().After(time.Now()))
+				}
+			}
+		})
+	}
+}
+
+/*
+TestSingleSessionAssignmentPersists tests a durable assignment without a lease change:
+1. Load an unassigned sticky workflow queue and persist its assignment.
+2. Verify the assignment has no expiry and RangeID is unchanged, including when the assignment call is repeated.
+3. Reload the queue and verify its assignment is still present.
+*/
+func TestSingleSessionAssignmentPersists(t *testing.T) {
+	t.Parallel()
+	tv := testvars.New(t)
+	logger := log.NewTestLogger()
+	store := newTestTaskManager(logger)
+	partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(tv.StickyTaskQueue().GetName())
+	queue := UnversionedQueueKey(partition)
+	cfg := newTaskQueueConfig(partition.TaskQueue(), NewConfig(dynamicconfig.NewNoopCollection()), tv.NamespaceName())
+	db := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
+	_, err := db.RenewLease(t.Context())
+	require.NoError(t, err)
+	require.False(t, db.ExclusiveWorkerAssigned())
+	rangeID := db.RangeID()
+
+	err = db.assignExclusiveWorker(t.Context())
+	require.NoError(t, err)
+	persisted, err := store.GetTaskQueue(t.Context(), &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(), TaskQueue: queue.PersistenceName(), TaskType: queue.TaskType(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, persisted.TaskQueueInfo.GetExclusiveWorkerAssignment())
+	require.Nil(t, persisted.TaskQueueInfo.GetExpiryTime())
+	require.Equal(t, rangeID, persisted.RangeID, "assignment preserves the writer's allocated ID block")
+
+	err = db.assignExclusiveWorker(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, persisted.RangeID, db.RangeID())
+
+	reloaded := newTaskQueueDB(cfg, store, queue, logger, metrics.NoopMetricsHandler, false)
+	_, err = reloaded.RenewLease(t.Context())
+	require.NoError(t, err)
+	require.True(t, reloaded.ExclusiveWorkerAssigned())
+	require.NoError(t, reloaded.SyncState(t.Context()))
 }

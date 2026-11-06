@@ -21,6 +21,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -111,14 +112,16 @@ type (
 	}
 
 	pollMetadata struct {
-		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
-		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
-		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
-		conditions                *matchingservice.PollConditions
-		forwardedFrom             string
-		localPollStartTime        time.Time
-		workerInstanceKey         string
-		workerControlTaskQueue    string
+		sessionOptions                     *sessionpb.WorkerSessionOptions
+		singleSessionAcquisitionInProgress bool // This is set to true when a poller is *attempting to acquire* a single session for an exclusive worker identity
+		taskQueueMetadata                  *taskqueuepb.TaskQueueMetadata
+		workerVersionCapabilities          *commonpb.WorkerVersionCapabilities
+		deploymentOptions                  *deploymentpb.WorkerDeploymentOptions
+		conditions                         *matchingservice.PollConditions
+		forwardedFrom                      string
+		localPollStartTime                 time.Time
+		workerInstanceKey                  string
+		workerControlTaskQueue             string
 	}
 
 	userDataUpdate struct {
@@ -209,6 +212,10 @@ type (
 		taskHookFactories []hooks.TaskHookFactory
 	}
 )
+
+func (m *pollMetadata) isSingleSessionAcquisitionInProgress() bool {
+	return m != nil && m.singleSessionAcquisitionInProgress
+}
 
 // Add registers a poller for a worker instance. Thread-safe.
 func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
@@ -659,12 +666,29 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return "", false, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		// TODO(Shivam): Carry exclusive-session context from History so the first lookup can
+		// load the partition directly without this separate metadata read.
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
+		if err != nil {
+			return "", false, err
+		}
+		if !assigned {
+			// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
+			return "", false, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			// if this sticky task queue partition is dealing with an assigned session, we load it's partition manager.
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+			if err != nil {
+				return "", false, err
+			}
+		}
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -755,6 +779,22 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
+	queue := UnversionedQueueKey(partition)
+	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(),
+		TaskQueue:   queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+	})
+	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return response.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil, nil
+}
+
 func (e *matchingEngineImpl) GrantEagerDispatch(
 	ctx context.Context,
 	request *matchingservice.GrantEagerDispatchRequest,
@@ -816,6 +856,9 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
+
+			singleSessionAcquisitionInProgress: partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && request.GetSessionOptions().GetSingleSession() != nil,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -887,6 +930,9 @@ pollLoop:
 			requestClone = common.CloneProto(request)
 			requestClone.WorkerVersionCapabilities.BuildId = ""
 		}
+		// TODO (Shivam): Consider the edge case in the case of exclusive workers where the call to recordWorkflowTaskStarted succeeded
+		// but the response never reached matching. You could have a world in where workflow execution A has a worker queue of S
+		// and so does workflow execution B.
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
@@ -1093,6 +1139,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			sessionOptions:            request.GetSessionOptions(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1233,12 +1280,25 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
-	// do not load sticky task queues if not already loaded, which means they have no poller.
+	// Assigned sessions accept queries even without recent pollers.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
-		return nil, serviceerrors.NewStickyWorkerUnavailable()
+	}
+	if sticky && !stickyWorkerAvailable(pm) {
+		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
+		if err != nil {
+			return nil, err
+		}
+		if !assigned {
+			return nil, serviceerrors.NewStickyWorkerUnavailable()
+		}
+		if pm == nil {
+			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseQuery)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	taskID := uuid.NewString()

@@ -1468,14 +1468,37 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	}
 }
 
+func (ms *MutableStateImpl) SetSessionState(state *persistencespb.SessionState) {
+	current := ms.executionInfo.GetSessionState()
+	if current.GetExclusiveWorker() &&
+		(!state.GetExclusiveWorker() || state.GetWorkerQueue() != current.GetWorkerQueue()) {
+		softassert.Fail(ms.logger, "attempted to replace an exclusive worker binding",
+			tag.WorkflowTaskQueueName(current.GetWorkerQueue()),
+			tag.NewStringTag("requested-task-queue", state.GetWorkerQueue()),
+		)
+		return
+	}
+	ms.executionInfo.SessionState = state
+	// Note: executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirror values of each other
+	ms.SetStickyTaskQueue(state.GetWorkerQueue(), nil)
+}
+
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
 	ms.executionInfo.StickyTaskQueue = name
 	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
 }
 
+// ClearStickyTaskQueue does not clear the sticky task queue if the workflow is bound to an exclusive worker.
+// Currently, executionInfo.StickyTaskQueue and SessionState.WorkerQueue are mirrors of each other.
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
+	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+		return
+	}
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
+	if sessionState := ms.executionInfo.GetSessionState(); sessionState != nil {
+		sessionState.WorkerQueue = ""
+	}
 }
 
 func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
@@ -1487,6 +1510,12 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 // in mutable state and provided name.
 // ScheduleToStartTimeout is set based on queue kind and workflow task type.
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*taskqueuepb.TaskQueue, *durationpb.Duration) {
+	// If the workflow is bound to an exclusive worker, then the schedule to start timeout is
+	// the WorkflowRunTimeout. This is because unlike regular sticky tasks, exclusive worker tasks do not fall back
+	// on the normal task queue.
+	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+		return ms.CurrentTaskQueue(), ms.executionInfo.WorkflowRunTimeout
+	}
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {
 		return &taskqueuepb.TaskQueue{

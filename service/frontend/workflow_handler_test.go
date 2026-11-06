@@ -6919,3 +6919,90 @@ func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
 	_, err := wh.PollActivityTaskQueue(ctx, request)
 	s.Require().NoError(err)
 }
+
+/*
+TestExclusiveWorkerSessionPolls tests the namespace gate for workflow and activity polls:
+1. Ordinary and nonexclusive polls continue while exclusive sessions are disabled.
+2. Exclusive polls are rejected before Matching when the namespace flag is off.
+3. Enabling the flag admits exclusive polls and leaves the original requests unchanged.
+*/
+func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
+	singleSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"},
+	}}
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run(taskType.String(), func() {
+			for _, tc := range []struct {
+				name      string
+				namespace string
+				kind      enumspb.TaskQueueKind
+				options   *sessionpb.WorkerSessionOptions
+				disabled  bool
+			}{
+				{name: "ordinary normal poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				{name: "ordinary sticky poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY},
+				{name: "nonexclusive session poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: &sessionpb.WorkerSessionOptions{}},
+				{name: "exclusive session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: true},
+				{name: "exclusive session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession},
+			} {
+				s.Run(tc.name, func() {
+					client := dc.NewMemoryClient()
+					client.OverrideSetting(dc.EnableExclusiveWorkerSessions, []dc.ConstrainedValue{{
+						Constraints: dc.Constraints{Namespace: "enabled-namespace"}, Value: true,
+					}})
+					config := NewConfig(dc.NewCollection(client, log.NewNoopLogger()), numHistoryShards)
+					wh := s.getWorkflowHandler(config)
+					ctx, cancel := context.WithTimeout(s.T().Context(), time.Minute)
+					defer cancel()
+					taskQueue := &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: tc.kind}
+					if tc.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+						taskQueue.NormalName = "normal-queue"
+					}
+					var err error
+					if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+						request := &workflowservice.PollWorkflowTaskQueueRequest{
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options),
+						}
+						original := common.CloneProto(request)
+						if !tc.disabled {
+							ns := namespace.NewLocalNamespaceForTest(
+								&persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: tc.namespace},
+								&persistencespb.NamespaceConfig{}, cluster.TestCurrentClusterName,
+							)
+							s.mockNamespaceCache.EXPECT().GetNamespace(namespace.Name(tc.namespace)).Return(ns, nil)
+							s.mockMatchingClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+								func(_ context.Context, requestToMatching *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+									s.Require().Same(request, requestToMatching.GetPollRequest())
+									return &matchingservice.PollWorkflowTaskQueueResponse{}, nil
+								})
+						}
+						_, err = wh.PollWorkflowTaskQueue(ctx, request)
+						s.ProtoEqual(original, request)
+					} else {
+						request := &workflowservice.PollActivityTaskQueueRequest{
+							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options),
+						}
+						original := common.CloneProto(request)
+						if !tc.disabled {
+							s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(tc.namespace)).Return(s.testNamespaceID, nil)
+							s.mockMatchingClient.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+								func(_ context.Context, requestToMatching *matchingservice.PollActivityTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+									s.Require().Same(request, requestToMatching.GetPollRequest())
+									return &matchingservice.PollActivityTaskQueueResponse{}, nil
+								})
+						}
+						_, err = wh.PollActivityTaskQueue(ctx, request)
+						s.ProtoEqual(original, request)
+					}
+					if tc.disabled {
+						var disabled *serviceerror.FailedPrecondition
+						s.Require().ErrorAs(err, &disabled)
+						s.Require().ErrorContains(err, "Exclusive-worker sessions are disabled for this namespace")
+					} else {
+						s.Require().NoError(err)
+					}
+				})
+			}
+		})
+	}
+}

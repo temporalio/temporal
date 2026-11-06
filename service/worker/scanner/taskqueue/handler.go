@@ -78,8 +78,8 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 }
 
 func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueState) {
-	if strings.HasPrefix(key.TaskQueueName, scannerTaskQueuePrefix) {
-		return // avoid deleting our own task queue
+	if state.retainMetadata || strings.HasPrefix(key.TaskQueueName, scannerTaskQueuePrefix) {
+		return
 	}
 
 	delta := time.Now().UTC().Sub(state.lastUpdated)

@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -269,33 +270,51 @@ func (s *engineSuite) TearDownTest() {
 }
 
 func (s *engineSuite) TestGetMutableStateSync() {
-	ctx := context.Background()
+	for _, exclusiveWorker := range []bool{false, true} {
+		name := "ordinary"
+		if exclusiveWorker {
+			name = "exclusive worker"
+		}
+		s.Run(name, func() {
+			ctx := s.T().Context()
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: s.T().Name(),
+				RunId:      tests.RunID,
+			}
+			taskqueue := "testTaskQueue"
+			identity := "testIdentity"
 
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "test-get-workflow-execution-event-id",
-		RunId:      tests.RunID,
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+				execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+			wt := addWorkflowTaskScheduledEvent(ms)
+			addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+			var expectedSessionState *persistencespb.SessionState
+			if exclusiveWorker {
+				expectedSessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+				ms.SetSessionState(common.CloneProto(expectedSessionState))
+			}
+			wfMs := workflow.TestCloneToProto(ctx, ms)
+			gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+			request := &historyservice.GetMutableStateRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution:   &execution,
+			}
+			response, err := s.historyEngine.GetMutableState(ctx, request)
+			s.Require().NoError(err)
+			s.Equal(int64(4), response.GetNextEventId())
+			s.Equal(tests.RunID, response.GetFirstExecutionRunId())
+			protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
+			if exclusiveWorker {
+				response.GetSessionState().WorkerQueue = "other"
+				response, err = s.historyEngine.GetMutableState(ctx, request)
+				s.Require().NoError(err)
+				protorequire.ProtoEqual(s.T(), expectedSessionState, response.GetSessionState())
+			}
+		})
 	}
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wt := addWorkflowTaskScheduledEvent(ms)
-	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	// right now the next event ID is 4
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
-
-	// test get the next event ID instantly
-	response, err := s.historyEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		Execution:   &execution,
-	})
-	s.Nil(err)
-	s.Equal(int64(4), response.GetNextEventId())
-	s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 }
 
 func (s *engineSuite) TestGetMutableState_IntestRunID() {
@@ -708,6 +727,72 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
 	s.True(ok, "context task queue must be set")
 	s.Equal(taskqueue, contextTaskQueue)
+}
+
+/*
+TestSingleSessionQueryDoesNotFallback tests queries for a workflow bound to exclusive worker S:
+1. Load the persisted workflow binding and issue a query with a caller deadline.
+2. Send exactly one query to sticky queue S while preserving that deadline.
+3. Return the result or Matching error without retrying on the normal queue.
+*/
+func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
+	s.historyEngine.matchingClient = s.mockMatchingClient
+	s.historyEngine.rawMatchingClient = s.mockMatchingClient
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "success"},
+		{name: "worker unavailable", err: &serviceerrors.StickyWorkerUnavailable{}},
+		{name: "deadline", err: context.DeadlineExceeded},
+		{name: "cancelled", err: context.Canceled},
+		{name: "internal", err: serviceerror.NewInternal("failure")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			execution := &commonpb.WorkflowExecution{WorkflowId: t.Name(), RunId: tests.RunID}
+			ms := workflow.TestLocalMutableState(s.mockShard, s.eventsCache, tests.LocalNamespaceEntry,
+				execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, execution, "wType", "foo", payloads.EncodeString("input"),
+				100*time.Second, 50*time.Second, 200*time.Second, "worker")
+			wt := addWorkflowTaskScheduledEvent(ms)
+			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
+			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
+			ms.SetStickyTaskQueue("S", nil)
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true, WorkerQueue: "S"}
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
+
+			ctx, cancel := context.WithTimeout(contextutil.WithMetadataContext(t.Context()), time.Minute)
+			defer cancel()
+			expectedResult := payloads.EncodeBytes([]byte{1, 2, 3})
+			s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(callCtx context.Context, req *matchingservice.QueryWorkflowRequest, _ ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+					require.NoError(t, callCtx.Err())
+					require.Equal(t, "S", req.GetTaskQueue().GetName())
+					require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, req.GetTaskQueue().GetKind())
+					deadline, ok := callCtx.Deadline()
+					require.True(t, ok)
+					callerDeadline, _ := ctx.Deadline()
+					require.Equal(t, callerDeadline, deadline)
+					return &matchingservice.QueryWorkflowResponse{QueryResult: expectedResult}, tc.err
+				}).Times(1)
+			response, err := s.historyEngine.QueryWorkflow(ctx, &historyservice.QueryWorkflowRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Request: &workflowservice.QueryWorkflowRequest{
+					Execution: execution,
+					Query:     &querypb.WorkflowQuery{},
+				},
+			})
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+				require.Nil(t, response)
+			} else {
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, expectedResult, response.GetResponse().GetQueryResult())
+			}
+		})
+	}
 }
 
 func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {

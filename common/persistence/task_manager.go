@@ -49,7 +49,9 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	// TODO (Shivam): Revisit this if and when we add a Placement concept on Workflow Start requests
+	// and if that requires assignment before queue creation.
+	if taskQueueInfo.GetExpiryTime() == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -80,7 +82,10 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	expiryTime := taskQueueInfo.GetExpiryTime()
+	if taskQueueInfo.GetExclusiveWorkerAssignment() != nil {
+		expiryTime = nil
+	} else if expiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -96,7 +101,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		TaskQueueInfo: taskQueueInfoBlob,
 
 		TaskQueueKind: request.TaskQueueInfo.GetKind(),
-		ExpiryTime:    taskQueueInfo.ExpiryTime,
+		ExpiryTime:    expiryTime,
 
 		PrevRangeID: request.PrevRangeID,
 	}
