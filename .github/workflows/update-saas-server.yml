@@ -1,0 +1,48 @@
+name: Update SaaS for landed server commits
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-updates:
+    if: github.repository == 'temporalio/temporal' && vars.SAAS_SERVER_UPDATES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout landed history
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and enumerate landed candidates
+        id: candidates
+        run: |
+          .github/scripts/saas-server-update.sh enumerate >"$RUNNER_TEMP/server-candidates"
+          printf 'count=%s\n' "$(wc -l <"$RUNNER_TEMP/server-candidates" | tr -d ' ')" >>"$GITHUB_OUTPUT"
+          {
+            printf 'Landed OSS candidates (dispatch not yet confirmed):\n'
+            sed 's/^/- /' "$RUNNER_TEMP/server-candidates"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Generate target workflow token
+        if: steps.candidates.outputs.count != '0'
+        id: token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          repositories: saas-temporal
+          permission-actions: write
+          permission-contents: read
+
+      - name: Dispatch exact SaaS updater candidates
+        if: steps.candidates.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SAAS_SERVER_UPDATES_ENABLED: ${{ vars.SAAS_SERVER_UPDATES_ENABLED }}
+        run: .github/scripts/saas-server-update.sh dispatch
