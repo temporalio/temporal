@@ -3686,7 +3686,7 @@ func (s *mutableStateSuite) TestRetryActivity_AggregateFailureSizeAfterReset() {
 	s.Greater(s.mutableState.activityFailureSize, 1500)
 	s.assertActivityFailureSizeConsistent()
 
-	s.NoError(ResetActivity(context.Background(), s.mockShard, s.mutableState, "activity-0", false, false, false, 0))
+	s.NoError(ResetActivity(context.Background(), s.mutableState, "activity-0", false, false, false, 0))
 	s.Nil(ai.RetryLastFailure)
 	s.Zero(s.mutableState.activityFailureSize)
 	s.assertActivityFailureSizeConsistent()

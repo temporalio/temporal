@@ -92,7 +92,6 @@ func UpdateActivityInfoForRetries(
 
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
-	_ historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
@@ -279,7 +278,6 @@ func PauseActivity(
 
 func ResetActivity(
 	ctx context.Context,
-	_ historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
@@ -393,7 +391,6 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 }
 
 func UnpauseActivity(
-	_ historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	resetAttempts bool,
@@ -432,7 +429,6 @@ func UnpauseActivity(
 }
 
 func UnpauseActivityWithResume(
-	_ historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -457,7 +453,6 @@ func UnpauseActivityWithResume(
 }
 
 func UnpauseActivityWithReset(
-	_ historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,

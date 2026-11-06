@@ -22,31 +22,31 @@ func TestActivityReschedulingUsesVirtualTime(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name string
-		run  func(context.Context, historyi.ShardContext, historyi.MutableState, *persistencespb.ActivityInfo) error
+		run  func(context.Context, historyi.MutableState, *persistencespb.ActivityInfo) error
 	}{
 		{
 			name: "Unpause",
-			run: func(_ context.Context, shardContext historyi.ShardContext, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
-				return UnpauseActivity(shardContext, ms, ai, false, false, 0)
+			run: func(_ context.Context, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
+				return UnpauseActivity(ms, ai, false, false, 0)
 			},
 		},
 		{
 			name: "Reset",
-			run: func(ctx context.Context, shardContext historyi.ShardContext, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
-				return ResetActivity(ctx, shardContext, ms, ai.ActivityId, false, false, false, 0)
+			run: func(ctx context.Context, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
+				return ResetActivity(ctx, ms, ai.ActivityId, false, false, false, 0)
 			},
 		},
 		{
 			name: "ResumeNewRun",
-			run: func(_ context.Context, shardContext historyi.ShardContext, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
-				_, err := UnpauseActivityWithResume(shardContext, ms, ai, true, 0)
+			run: func(_ context.Context, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
+				_, err := UnpauseActivityWithResume(ms, ai, true, 0)
 				return err
 			},
 		},
 		{
 			name: "ResetNewRun",
-			run: func(_ context.Context, shardContext historyi.ShardContext, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
-				_, err := UnpauseActivityWithReset(shardContext, ms, ai, true, false, 0)
+			run: func(_ context.Context, ms historyi.MutableState, ai *persistencespb.ActivityInfo) error {
+				_, err := UnpauseActivityWithReset(ms, ai, true, false, 0)
 				return err
 			},
 		},
@@ -54,12 +54,7 @@ func TestActivityReschedulingUsesVirtualTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			realNow := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
-			virtualNow := realNow.Add(time.Hour)
-			ts := clock.NewEventTimeSource()
-			ts.Update(realNow)
-			shardContext := historyi.NewMockShardContext(ctrl)
-			shardContext.EXPECT().GetTimeSource().Return(ts).AnyTimes()
+			virtualNow := time.Date(2026, 11, 5, 13, 0, 0, 0, time.UTC)
 			ms := historyi.NewMockMutableState(ctrl)
 			ms.EXPECT().Now().Return(virtualNow)
 			ai := &persistencespb.ActivityInfo{
@@ -78,7 +73,7 @@ func TestActivityReschedulingUsesVirtualTime(t *testing.T) {
 				},
 			)
 
-			require.NoError(t, tc.run(t.Context(), shardContext, ms, ai))
+			require.NoError(t, tc.run(t.Context(), ms, ai))
 			require.Equal(t, virtualNow, scheduledTime)
 		})
 	}
@@ -99,10 +94,6 @@ func TestPendingActivityRetryUsesVirtualTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			ts := clock.NewEventTimeSource()
-			ts.Update(virtualNow.Add(-time.Hour))
-			shardContext := historyi.NewMockShardContext(ctrl)
-			shardContext.EXPECT().GetTimeSource().Return(ts).AnyTimes()
 			ms := historyi.NewMockMutableState(ctrl)
 			ms.EXPECT().Now().Return(virtualNow)
 			ms.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&commonpb.ActivityType{Name: "activity"}, nil)
@@ -112,7 +103,7 @@ func TestPendingActivityRetryUsesVirtualTime(t *testing.T) {
 				LastAttemptCompleteTime: timestamppb.New(virtualNow.Add(-2 * time.Minute)),
 			}
 
-			result, err := GetPendingActivityInfo(t.Context(), shardContext, ms, ai)
+			result, err := GetPendingActivityInfo(t.Context(), ms, ai)
 			require.NoError(t, err)
 			if tc.inBackoff {
 				protorequire.ProtoEqual(t, ai.ScheduledTime, result.NextAttemptScheduleTime)

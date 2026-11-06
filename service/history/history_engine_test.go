@@ -19,9 +19,11 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -60,6 +62,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
@@ -2258,17 +2261,44 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	s.Error(err, "workflow task heartbeat timeout")
 }
 
-func (s *engineSuite) TestWorkflowTaskHeartbeatTimeoutWithTimeSkipping() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTimeoutCheck() {
 	for _, tc := range []struct {
-		name        string
-		skipped     time.Duration
-		elapsed     time.Duration
-		wantTimeout bool
+		name     string
+		enabled  bool
+		skipped  time.Duration
+		elapsed  time.Duration
+		noForce  bool
+		commands []*commandpb.Command
+		messages []*protocolpb.Message
+		wantErr  string
 	}{
 		{name: "NoOffsetWithinLimit", elapsed: time.Minute},
-		{name: "NoOffsetExpired", elapsed: time.Hour, wantTimeout: true},
+		{name: "NoOffsetExpired", elapsed: time.Hour, wantErr: "workflow task heartbeat timeout"},
+		{name: "TimeSkippingEnabledWithinLimit", enabled: true, skipped: 24 * time.Hour, elapsed: time.Minute},
+		{name: "TimeSkippingEnabledExpired", enabled: true, skipped: 24 * time.Hour, elapsed: time.Hour, wantErr: "workflow task heartbeat timeout"},
 		{name: "RetainedOffsetWithinLimit", skipped: 24 * time.Hour, elapsed: time.Minute},
-		{name: "RetainedOffsetExpired", skipped: 24 * time.Hour, elapsed: time.Hour, wantTimeout: true},
+		{name: "RetainedOffsetExpired", skipped: 24 * time.Hour, elapsed: time.Hour, wantErr: "workflow task heartbeat timeout"},
+		{name: "ExpiredWithoutForceCreateNewWorkflowTask", elapsed: time.Hour, noForce: true},
+		{
+			name:    "ExpiredWithCommands",
+			elapsed: time.Hour,
+			commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+					RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{MarkerName: "marker"},
+				},
+			}},
+		},
+		{
+			name:    "ExpiredWithMessages",
+			elapsed: time.Hour,
+			messages: []*protocolpb.Message{{
+				Id:                 "message",
+				ProtocolInstanceId: "unknown-update",
+				Body:               protoutils.MarshalAny(s.T(), &updatepb.Acceptance{}),
+			}},
+			wantErr: "wasn't found on the server",
+		},
 	} {
 		s.Run(tc.name, func() {
 			t := s.T()
@@ -2282,14 +2312,25 @@ func (s *engineSuite) TestWorkflowTaskHeartbeatTimeoutWithTimeSkipping() {
 			state := workflow.TestCloneToProto(t.Context(), ms)
 			// The offset remains part of the execution clock after time skipping is disabled.
 			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: tc.enabled},
 				AccumulatedSkippedDuration: durationpb.New(tc.skipped),
 			}
-			state.ExecutionInfo.WorkflowTaskOriginalScheduledTime = timestamppb.New(
+			originalScheduledTime := timestamppb.New(
 				s.mockShard.GetTimeSource().Now().Add(tc.skipped).Add(-tc.elapsed))
-			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-				&persistence.GetWorkflowExecutionResponse{State: state}, nil)
-			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-				tests.UpdateWorkflowExecutionResponse, nil)
+			state.ExecutionInfo.WorkflowTaskOriginalScheduledTime = originalScheduledTime
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Cond(
+				func(req *persistence.GetWorkflowExecutionRequest) bool { return req.WorkflowID == tc.name },
+			)).Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).AnyTimes()
+			var persisted *persistencespb.WorkflowExecutionInfo
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Cond(
+				func(req *persistence.UpdateWorkflowExecutionRequest) bool {
+					return req.UpdateWorkflowMutation.ExecutionInfo.WorkflowId == tc.name
+				},
+			)).DoAndReturn(
+				func(_ context.Context, req *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					persisted = req.UpdateWorkflowMutation.ExecutionInfo
+					return tests.UpdateWorkflowExecutionResponse, nil
+				}).AnyTimes()
 
 			token, err := (&tokenspb.Task{
 				NamespaceId: tests.NamespaceID.String(), WorkflowId: we.WorkflowId, RunId: we.RunId,
@@ -2299,14 +2340,20 @@ func (s *engineSuite) TestWorkflowTaskHeartbeatTimeoutWithTimeSkipping() {
 			_, err = s.historyEngine.RespondWorkflowTaskCompleted(t.Context(), &historyservice.RespondWorkflowTaskCompletedRequest{
 				NamespaceId: tests.NamespaceID.String(),
 				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
-					TaskToken: token, Identity: "worker", ForceCreateNewWorkflowTask: true,
+					TaskToken: token, Identity: "worker", ForceCreateNewWorkflowTask: !tc.noForce,
+					Commands: tc.commands, Messages: tc.messages,
 				},
 			})
-			if tc.wantTimeout {
-				require.ErrorContains(t, err, "workflow task heartbeat timeout")
-			} else {
-				require.NoError(t, err)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
 			}
+			require.NoError(t, err)
+			if tc.noForce || len(tc.commands) > 0 || len(tc.messages) > 0 {
+				return
+			}
+			require.Greater(t, persisted.WorkflowTaskScheduledEventId, wt.ScheduledEventID)
+			protorequire.ProtoEqual(t, originalScheduledTime, persisted.WorkflowTaskOriginalScheduledTime)
 		})
 	}
 }
