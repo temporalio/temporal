@@ -734,14 +734,3 @@ func message(level Level, msg string, tags []tag.Tag) string {
 	}
 	return b.String()
 }
-
-func formatValue(t tag.Tag) string {
-	switch v := t.Value().(type) {
-	case fmt.Stringer:
-		return v.String()
-	case string:
-		return v
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
