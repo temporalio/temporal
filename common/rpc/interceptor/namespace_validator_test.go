@@ -229,6 +229,109 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			method:      api.OperatorServicePrefix + "DeleteNamespace",
 			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
 		},
+		// SOFT_DELETED
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.WorkflowServicePrefix + "StartWorkflowExecution",
+			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.WorkflowServicePrefix + "ListWorkflowExecutions",
+			req:         &workflowservice.ListWorkflowExecutionsRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.WorkflowServicePrefix + "UpdateNamespace",
+			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.AdminServicePrefix + "DescribeMutableState",
+			req:         &adminservice.DescribeMutableStateRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DeleteNamespace",
+			req:         &operatorservice.DeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "SoftDeleteNamespace",
+			req:         &operatorservice.SoftDeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "SoftDeleteNamespace",
+			req:         &operatorservice.SoftDeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.OperatorServicePrefix + "SoftDeleteNamespace",
+			req:         &operatorservice.SoftDeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.OperatorServicePrefix + "SoftDeleteNamespace",
+			req:         &operatorservice.SoftDeleteNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "RestoreNamespace",
+			req:         &operatorservice.RestoreNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "RestoreNamespace",
+			req:         &operatorservice.RestoreNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.OperatorServicePrefix + "RestoreNamespace",
+			req:         &operatorservice.RestoreNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: &serviceerror.NamespaceInvalidState{},
+			method:      api.OperatorServicePrefix + "RestoreNamespace",
+			req:         &operatorservice.RestoreNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DescribeNamespaceRestore",
+			req:         &operatorservice.DescribeNamespaceRestoreRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DescribeNamespaceRestore",
+			req:         &operatorservice.DescribeNamespaceRestoreRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DescribeNamespaceRestore",
+			req:         &operatorservice.DescribeNamespaceRestoreRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+			expectedErr: nil,
+			method:      api.OperatorServicePrefix + "DescribeNamespaceRestore",
+			req:         &operatorservice.DescribeNamespaceRestoreRequest{Namespace: "test-namespace"},
+		},
 		// AdminService APIs
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -1034,4 +1137,62 @@ func (s *namespaceValidatorSuite) Test_Intercept_AdminVisibilityRequests_Namespa
 		s.ErrorAs(err, &notFound)
 		s.False(handlerCalled)
 	}
+}
+
+// The namespace lifecycle APIs accept the namespace by ID as well as by name, like DeleteNamespace.
+func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequestsByID() {
+	testCases := []struct {
+		method string
+		req    any
+	}{
+		{method: "SoftDeleteNamespace", req: &operatorservice.SoftDeleteNamespaceRequest{NamespaceId: "test-namespace-id"}},
+		{method: "RestoreNamespace", req: &operatorservice.RestoreNamespaceRequest{NamespaceId: "test-namespace-id"}},
+		{method: "DescribeNamespaceRestore", req: &operatorservice.DescribeNamespaceRestoreRequest{NamespaceId: "test-namespace-id"}},
+	}
+	for _, testCase := range testCases {
+		s.Run(testCase.method, func() {
+			detail := &persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info:              &persistencespb.NamespaceInfo{State: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+			}
+			ns, err := namespace.FromPersistentState(detail, namespace.NewDefaultReplicationResolverFactory()(detail))
+			s.Require().NoError(err)
+			s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("test-namespace-id")).Return(ns, nil)
+
+			nvi := NewNamespaceValidatorInterceptor(
+				s.mockRegistry,
+				dynamicconfig.GetBoolPropertyFn(false),
+				dynamicconfig.GetIntPropertyFn(100),
+				nil)
+			handlerCalled := false
+			_, err = nvi.StateValidationIntercept(
+				s.T().Context(),
+				testCase.req,
+				&grpc.UnaryServerInfo{FullMethod: api.OperatorServicePrefix + testCase.method},
+				func(ctx context.Context, req any) (any, error) {
+					handlerCalled = true
+					return nil, nil
+				})
+			s.NoError(err)
+			s.True(handlerCalled)
+		})
+	}
+}
+
+func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequestRejectsNameAndID() {
+	nvi := NewNamespaceValidatorInterceptor(
+		s.mockRegistry,
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
+	_, err := nvi.StateValidationIntercept(
+		s.T().Context(),
+		&operatorservice.SoftDeleteNamespaceRequest{Namespace: "test-namespace", NamespaceId: "test-namespace-id"},
+		&grpc.UnaryServerInfo{FullMethod: api.OperatorServicePrefix + "SoftDeleteNamespace"},
+		func(ctx context.Context, req any) (any, error) {
+			s.Fail("handler must not be called")
+			return nil, nil
+		})
+	s.ErrorIs(err, errBothNamespaceIDAndNameSet)
 }

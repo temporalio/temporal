@@ -251,7 +251,9 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
-		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+		// A soft-deleted namespace's schedules are frozen, so checking them would report false
+		// violations.
+		if ns.State() == enumspb.NAMESPACE_STATE_DELETED || ns.State() == enumspb.NAMESPACE_STATE_SOFT_DELETED {
 			continue
 		}
 		//nolint:forbidigo // scanner works per namespace, not per workflow.

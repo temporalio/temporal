@@ -303,6 +303,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
 				Data:        task.Info.Data,
+				RestoreInfo: task.GetRestoreInfo(),
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
@@ -470,6 +471,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
 			Data:        data,
+			RestoreInfo: task.GetRestoreInfo(),
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
@@ -630,7 +632,9 @@ func ConvertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.F
 
 func (h *taskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
 	switch input {
-	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED:
+	case enumspb.NAMESPACE_STATE_REGISTERED,
+		enumspb.NAMESPACE_STATE_DEPRECATED,
+		enumspb.NAMESPACE_STATE_SOFT_DELETED:
 		return nil
 	default:
 		return ErrInvalidNamespaceState

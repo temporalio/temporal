@@ -1182,3 +1182,116 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.NoError(err)
 }
+
+func (s *namespaceReplicationTaskExecutorSuite) softDeletedNamespaceTask(
+	operation enumsspb.NamespaceOperation,
+	id string,
+	name string,
+	configVersion int64,
+	restoreInfo *persistencespb.NamespaceRestoreInfo,
+) *replicationspb.NamespaceTaskAttributes {
+	return &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: operation,
+		Id:                 id,
+		Info: &namespacepb.NamespaceInfo{
+			Name:  name,
+			State: enumspb.NAMESPACE_STATE_SOFT_DELETED,
+		},
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: durationpb.New(24 * time.Hour),
+		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "some random active cluster name",
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: "some random active cluster name"},
+				{ClusterName: "some random standby cluster name"},
+			},
+		},
+		ConfigVersion:   configVersion,
+		FailoverVersion: 1,
+		RestoreInfo:     restoreInfo,
+	}
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_SoftDeleted() {
+	id := uuid.NewString()
+	name := "soft-deleted-namespace"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "some random active cluster name",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_CREATE, id, name, 3, restoreInfo)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		nil, &serviceerror.NamespaceNotFound{}).Times(1)
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.True(proto.Equal(restoreInfo, request.Namespace.Info.RestoreInfo))
+			return &persistence.CreateNamespaceResponse{ID: id}, nil
+		})
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_SoftDeleted() {
+	id := uuid.NewString()
+	name := "soft-deleted-namespace"
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "some random active cluster name",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_UPDATE, id, name, 3, restoreInfo)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    id,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			ConfigVersion:     2,
+			FailoverVersion:   1,
+		}, IsGlobalNamespace: true}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 10,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.True(proto.Equal(restoreInfo, request.Namespace.Info.RestoreInfo))
+			s.Equal(int64(3), request.Namespace.ConfigVersion)
+			return nil
+		})
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}
+
+// A delayed soft delete that arrives after a newer update, such as a restore, must not change
+// the namespace.
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_StaleSoftDeleteIgnored() {
+	id := uuid.NewString()
+	name := "restored-namespace"
+	task := s.softDeletedNamespaceTask(enumsspb.NAMESPACE_OPERATION_UPDATE, id, name, 3, nil)
+
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
+		&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    id,
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			ConfigVersion:     4,
+			FailoverVersion:   1,
+		}, IsGlobalNamespace: true}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 10,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+
+	s.NoError(s.namespaceReplicator.Execute(s.T().Context(), task))
+}

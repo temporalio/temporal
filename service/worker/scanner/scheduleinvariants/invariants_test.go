@@ -103,6 +103,15 @@ func deletedNS(id, name, activeCluster string) *namespace.Namespace {
 	)
 }
 
+// softDeletedNS builds a local namespace in the SOFT_DELETED state, which ListAllNamespaces skips.
+func softDeletedNS(id, name, activeCluster string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: id, Name: name, State: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+		nil,
+		activeCluster,
+	)
+}
+
 // globalNS builds a global (replicated) namespace whose active cluster is
 // activeCluster. Only global namespaces return false from ActiveInCluster when the
 // active cluster doesn't match; local namespaces are always "active" in every cluster.
@@ -123,9 +132,10 @@ func TestListAllNamespaces_FiltersInactiveAndDeleted(t *testing.T) {
 
 	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{
 		localNS("id-1", "ns-1", testClusterName),
-		globalNS("id-2", "ns-2", "other-cluster"),  // inactive in this cluster
-		globalNS("id-3", "ns-3", testClusterName),  // active here
-		deletedNS("id-4", "ns-4", testClusterName), // deleted
+		globalNS("id-2", "ns-2", "other-cluster"),      // inactive in this cluster
+		globalNS("id-3", "ns-3", testClusterName),      // active here
+		deletedNS("id-4", "ns-4", testClusterName),     // deleted
+		softDeletedNS("id-5", "ns-5", testClusterName), // soft-deleted: its schedules are frozen
 	})
 
 	names := d.newActivities().ListAllNamespaces()
