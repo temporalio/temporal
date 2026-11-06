@@ -20,8 +20,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/testing/testhooks"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// replicationLaneProtocolVersion is the version of the replication lane protocol
+// implemented by the lane stream sender and receiver.
+const replicationLaneProtocolVersion = 1
 
 type laneStreamReceiver struct {
 	ProcessToolBox
@@ -31,11 +37,16 @@ type laneStreamReceiver struct {
 	serverShardKey          ClusterShardKey
 	highPriorityTaskTracker ExecutableTaskTracker
 	lowPriorityTaskTracker  ExecutableTaskTracker
-	// memberLanes holds one lane per isolated namespace, created lazily as the
-	// sender tags messages with isolated_namespace_id. Each lane is its own
-	// monotonic stream for the life of the stream connection; a retired lane
-	// (the sender merged the namespace back) is dropped once its pending work
-	// drains. Tasks are still scheduled at the message's priority.
+	// lanesEnabled is whether this receiver accepts replication lanes, and maxLanes how many
+	// it tracks at once. Both are fixed for the life of the stream.
+	lanesEnabled bool
+	maxLanes     int
+	laneFeedback LaneFeedbackProvider
+	// memberLanes holds one tracker per replication lane, keyed by the lane ID in
+	// WorkflowReplicationMessages.lane_info and created lazily. Each lane is its own
+	// monotonic stream for the life of the stream connection. A retired lane is
+	// dropped once its pending work drains. Tasks are still scheduled at the
+	// message's priority.
 	memberLaneMu      sync.Mutex
 	memberLanes       map[string]*memberLane
 	memberLanesClosed bool // set by Stop; late-created lanes are pre-cancelled
@@ -56,6 +67,7 @@ func newLaneStreamReceiver(
 	taskConverter ExecutableTaskConverter,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
+	laneFeedback LaneFeedbackProvider,
 ) *laneStreamReceiver {
 	logger := log.With(
 		processToolBox.Logger,
@@ -74,6 +86,9 @@ func newLaneStreamReceiver(
 		serverShardKey:          serverShardKey,
 		highPriorityTaskTracker: highPriorityTaskTracker,
 		lowPriorityTaskTracker:  lowPriorityTaskTracker,
+		lanesEnabled:            processToolBox.Config.ReplicationStreamReceiverLanesEnabled(),
+		maxLanes:                processToolBox.Config.ReplicationStreamReceiverMaxLanes(),
+		laneFeedback:            laneFeedback,
 		memberLanes:             make(map[string]*memberLane),
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
@@ -104,9 +119,6 @@ func newLaneStreamReceiver(
 		}
 	}
 	receiver.flowController = NewReceiverFlowControl(taskTrackerMap, processToolBox.Config)
-	if receiver.NamespaceThrottler == nil {
-		receiver.NamespaceThrottler = NoopNamespaceThrottler{}
-	}
 	return receiver
 }
 
@@ -164,8 +176,12 @@ func (r *laneStreamReceiver) Stop() {
 	r.logger.Info("StreamReceiver shutting down.")
 }
 
+// IsValid returns false once ReplicationStreamReceiverLanesEnabled changes, so that the stream
+// reconnects and advertises the new lane support to its sender.
 func (r *laneStreamReceiver) IsValid() bool {
-	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted
+	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted &&
+		r.Config.ReplicationStreamReceiverLanesEnabled() == r.lanesEnabled &&
+		r.Config.ReplicationStreamReceiverMaxLanes() == r.maxLanes
 }
 
 func (r *laneStreamReceiver) Key() ClusterShardKeyPair {
@@ -231,7 +247,7 @@ func (r *laneStreamReceiver) ackMessage(
 	size := r.highFamilyTrackingCount() + r.lowPriorityTaskTracker.Size()
 
 	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
-	var isolatedLaneStates map[string]*replicationspb.ReplicationState
+	var laneStates map[string]*replicationspb.ReplicationState
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
@@ -274,20 +290,20 @@ func (r *laneStreamReceiver) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
-		// Fold isolated member lanes into the overall min so Scopes[0] on the sender
-		// (and thus cleanup) accounts for a lagging lane: the overall min must be the
-		// lowest point in flight across every lane. Report each lane's watermark keyed
-		// by namespace so the sender can anchor per-member state on applied points.
+		// Fold lanes into the overall min so Scopes[0] on the sender (and thus
+		// cleanup) accounts for a lagging lane: the overall min must be the lowest
+		// point in flight across every lane. Report each lane's watermark keyed by
+		// lane ID so the sender can track each lane's progress.
 		memberWms := r.memberLaneWatermarks()
 		if len(memberWms) > 0 {
-			isolatedLaneStates = make(map[string]*replicationspb.ReplicationState, len(memberWms))
+			laneStates = make(map[string]*replicationspb.ReplicationState, len(memberWms))
 		}
-		for ns, wm := range memberWms {
+		for laneID, wm := range memberWms {
 			if wm.Watermark < inclusiveLowWaterMark {
 				inclusiveLowWaterMark = wm.Watermark
 				inclusiveLowWaterMarkTime = wm.Timestamp
 			}
-			isolatedLaneStates[ns] = &replicationspb.ReplicationState{
+			laneStates[laneID] = &replicationspb.ReplicationState{
 				InclusiveLowWatermark:     wm.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
 			}
@@ -308,8 +324,26 @@ func (r *laneStreamReceiver) ackMessage(
 	}
 
 	var throttleHighNamespaceIDs []string
+	var laneFeedback *anypb.Any
+	var maxLanes int32
+	laneProtocolVersion := r.laneProtocolVersion(receiverMode)
 	if receiverMode == ReceiverModeTieredStack {
-		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+	}
+	if laneProtocolVersion > 0 {
+		maxLanes = int32(r.maxLanes)
+		if maxBytes := r.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes(); maxBytes > 0 {
+			laneFeedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
+			if size := proto.Size(laneFeedback); size > maxBytes {
+				metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
+					1,
+					metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
+					metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
+				)
+				r.logger.Warn("Dropping replication lane feedback larger than the configured limit.", tag.NewInt("size", size), tag.NewInt("limit", maxBytes))
+				laneFeedback = nil
+			}
+		}
 	}
 	err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -319,11 +353,10 @@ func (r *laneStreamReceiver) ackMessage(
 				HighPriorityState:         highPriorityWatermark,
 				LowPriorityState:          lowPriorityWatermark,
 				ThrottleHighNamespaceIds:  throttleHighNamespaceIDs,
-				IsolatedLaneStates:        isolatedLaneStates,
-				// Advertise that this receiver routes isolated_namespace_id-tagged
-				// messages, so the sender may safely emit lane traffic to it.
-				// Isolation only applies to the tiered stack.
-				SupportsNamespaceIsolation: receiverMode == ReceiverModeTieredStack,
+				LaneStates:                laneStates,
+				LaneProtocolVersion:       laneProtocolVersion,
+				LaneFeedback:              laneFeedback,
+				MaxLanes:                  maxLanes,
 			},
 		},
 	})
@@ -389,21 +422,24 @@ func (r *laneStreamReceiver) processMessages(
 		)
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
-		// Route to the per-lane tracker: an isolated namespace's lane gets its own
-		// monotonic tracker; unset routes by priority (HIGH / default-LOW).
-		taskTracker, err := r.getTaskTrackerForLane(priority, messages.GetIsolatedNamespaceId(), messages.GetRetireIsolatedLane())
+		laneID, err := r.messageLaneID(messages)
+		if err != nil {
+			return NewStreamError("ReplicationTask lane check failed", err)
+		}
+		// Route to the per-lane tracker: a lane gets its own monotonic tracker; no lane
+		// routes by priority (HIGH / default-LOW).
+		taskTracker, err := r.getTaskTrackerForLane(priority, laneID, messages.GetLaneInfo().GetRetire())
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
 		}
 
 		if priority == enumsspb.TASK_PRIORITY_HIGH {
-			// Isolation acts on HIGH (live) traffic: feed the throttler every HIGH task,
-			// including isolated-lane tasks, so an isolated namespace stays observable
-			// and is released once its HIGH rate drops. Load is scoped to the local shard.
+			// Feed the provider every HIGH task, including lane tasks, so an isolated
+			// namespace stays observable and can be released once its rate drops.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
-					r.NamespaceThrottler.RecordTask(r.clientShardKey.ShardID, nsID)
+					r.laneFeedback.RecordTask(r.clientShardKey.ShardID, nsID)
 				}
 			}
 		}
@@ -414,12 +450,12 @@ func (r *laneStreamReceiver) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...)
-		if isolatedNamespaceID := messages.GetIsolatedNamespaceId(); isolatedNamespaceID != "" {
+		if laneID != "" {
 			// Finish strictly after TrackTasks: the ack loop may only delete a
 			// retiring lane once no batch sits between lane resolution and tracking,
 			// or the batch would be tracked on an orphaned lane and dropped from the
 			// ack fold.
-			r.finishLaneBatch(isolatedNamespaceID, messages.GetRetireIsolatedLane())
+			r.finishLaneBatch(laneID, messages.GetLaneInfo().GetRetire())
 		}
 		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
@@ -479,37 +515,40 @@ func (r *laneStreamReceiver) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 	}
 }
 
-// getTaskTrackerForLane returns the tracker for a message's lane: an isolated
-// namespace's lane gets its own lazily-created tracker so each lane stays a single
-// monotonic stream; an empty namespace routes by priority (HIGH / default-LOW).
+// getTaskTrackerForLane returns the tracker for a message's lane: a lane gets its own
+// lazily-created tracker so each lane stays a single monotonic stream; an empty lane
+// ID routes by priority (HIGH / default-LOW).
 // Every lane resolution must be paired with finishLaneBatch after the batch's
 // TrackTasks call, so the ack loop never deletes the lane mid-batch.
-func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriority, isolatedNamespaceID string, retire bool) (ExecutableTaskTracker, error) {
-	if isolatedNamespaceID == "" {
+func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriority, laneID string, retire bool) (ExecutableTaskTracker, error) {
+	if laneID == "" {
 		return r.getTaskTracker(priority)
 	}
 	if priority != enumsspb.TASK_PRIORITY_HIGH {
-		// Isolation splits the HIGH lane only. Lane-tagged traffic at any other
+		// Lanes split the HIGH lane only. Lane-tagged traffic at any other
 		// priority (including single-stack UNSPECIFIED, whose ack path would never
 		// fold a member lane) is a sender bug — fail the stream rather than
 		// silently mis-acking.
-		return nil, serviceerror.NewInternalf("isolated lane traffic must be HIGH priority, got %v", priority)
+		return nil, serviceerror.NewInternalf("lane traffic must be HIGH priority, got %v", priority)
 	}
 	r.memberLaneMu.Lock()
 	defer r.memberLaneMu.Unlock()
-	lane, ok := r.memberLanes[isolatedNamespaceID]
+	lane, ok := r.memberLanes[laneID]
 	if !ok {
+		if open := r.openLaneCount(); open >= r.maxLanes {
+			return nil, serviceerror.NewInvalidArgumentf("sender opened a replication lane beyond max_lanes %d with %d lanes open", r.maxLanes, open)
+		}
 		lane = &memberLane{tracker: NewExecutableTaskTracker(r.logger, r.MetricsHandler)}
 		if r.memberLanesClosed {
 			// Lost the race with Stop(): pre-cancel so tracked tasks are
 			// cancelled rather than executed after shutdown.
 			lane.tracker.Cancel()
 		}
-		r.memberLanes[isolatedNamespaceID] = lane
+		r.memberLanes[laneID] = lane
 	}
 	if !retire && lane.retiring {
-		// Non-retire traffic on a retired lane means the sender re-isolated the
-		// namespace before the lane drained: the lane is live again. Without this,
+		// Non-retire traffic on a retired lane means the sender reused the lane
+		// before it drained: the lane is live again. Without this,
 		// the stale retiring flag would delete an active lane at the first
 		// transient drain, dropping its watermark from the ack fold.
 		lane.retiring = false
@@ -518,15 +557,28 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 	return lane.tracker, nil
 }
 
+// openLaneCount returns how many lanes have not been retired. A retired lane still drains, but
+// no longer counts toward max_lanes: the sender sends its retirement marker before it opens
+// another lane. The caller holds memberLaneMu.
+func (r *laneStreamReceiver) openLaneCount() int {
+	open := 0
+	for _, lane := range r.memberLanes {
+		if !lane.retiring {
+			open++
+		}
+	}
+	return open
+}
+
 // finishLaneBatch completes a batch that getTaskTrackerForLane resolved to a lane,
 // called after the batch's TrackTasks: it releases the batch's hold on the lane and
 // applies the message's retire flag. A retiring lane is only dropped once it is
 // drained and no batch is mid-track — so a retired lane can never pin the overall
 // ack minimum, and a batch can never be orphaned onto a deleted lane.
-func (r *laneStreamReceiver) finishLaneBatch(isolatedNamespaceID string, retire bool) {
+func (r *laneStreamReceiver) finishLaneBatch(laneID string, retire bool) {
 	r.memberLaneMu.Lock()
 	defer r.memberLaneMu.Unlock()
-	lane, ok := r.memberLanes[isolatedNamespaceID]
+	lane, ok := r.memberLanes[laneID]
 	if !ok {
 		return
 	}
@@ -536,9 +588,6 @@ func (r *laneStreamReceiver) finishLaneBatch(isolatedNamespaceID string, retire 
 	}
 }
 
-// highFamilyTrackingCount is the total tracked-task count across the default HIGH lane
-// and all isolated member lanes (used for HIGH flow control — isolation splits the
-// HIGH lane).
 func (r *laneStreamReceiver) highFamilyTrackingCount() int {
 	count := r.highPriorityTaskTracker.Size()
 	r.memberLaneMu.Lock()
@@ -549,9 +598,8 @@ func (r *laneStreamReceiver) highFamilyTrackingCount() int {
 	return count
 }
 
-// memberLaneWatermarks snapshots the low watermark of every isolated member lane that
-// has received at least one batch, keyed by namespace id. Retired lanes are dropped
-// once drained.
+// memberLaneWatermarks snapshots the low watermark of every lane that has received at
+// least one batch, keyed by lane ID. Retired lanes are dropped once drained.
 func (r *laneStreamReceiver) memberLaneWatermarks() map[string]WatermarkInfo {
 	r.memberLaneMu.Lock()
 	lanes := make(map[string]*memberLane, len(r.memberLanes))
@@ -647,4 +695,32 @@ func (r *laneStreamReceiver) setReceiverMode(priority enumsspb.TaskPriority) {
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeTieredStack))
 	default:
 	}
+}
+
+// laneProtocolVersion is the replication lane protocol version this receiver advertises.
+// Lanes split HIGH priority traffic, so they require the tiered stack.
+func (r *laneStreamReceiver) laneProtocolVersion(receiverMode ReceiverMode) int32 {
+	if !r.lanesEnabled || receiverMode != ReceiverModeTieredStack {
+		return 0
+	}
+	return replicationLaneProtocolVersion
+}
+
+// messageLaneID returns the lane ID of a batch, or an empty string for a batch on a
+// default lane. It rejects lane metadata this receiver has not advertised support for.
+func (r *laneStreamReceiver) messageLaneID(messages *replicationspb.WorkflowReplicationMessages) (string, error) {
+	if messages.GetIsolatedNamespaceId() != "" || messages.GetRetireIsolatedLane() {
+		return "", serviceerror.NewInvalidArgument("namespace isolation lanes are not supported by this receiver")
+	}
+	laneInfo := messages.GetLaneInfo()
+	if laneInfo == nil {
+		return "", nil
+	}
+	if !r.lanesEnabled {
+		return "", serviceerror.NewInvalidArgument("replication lanes are not enabled on this receiver")
+	}
+	if laneInfo.GetLaneId() == "" {
+		return "", serviceerror.NewInvalidArgument("replication lane ID is empty")
+	}
+	return laneInfo.GetLaneId(), nil
 }

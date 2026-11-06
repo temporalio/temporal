@@ -12,14 +12,20 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type laneStreamReceiverSuite struct {
@@ -82,6 +88,7 @@ func (s *laneStreamReceiverSuite) SetupTest() {
 		NewExecutableTaskConverter(processToolBox),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
+		NewNoopLaneFeedbackProvider(),
 	)
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(
 		map[string]cluster.ClusterInformation{
@@ -387,9 +394,9 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_FoldsMemberLaneWate
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 
-	// An isolated lane lagging below both shared-lane watermarks.
+	// A lane lagging below both shared-lane watermarks.
 	laneWatermark := WatermarkInfo{Watermark: 100, Timestamp: time.Unix(0, 1000)}
-	laneTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
+	laneTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
 	s.NoError(err)
 	laneTracker.TrackTasks(laneWatermark)
 
@@ -404,19 +411,20 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_FoldsMemberLaneWate
 	// The shared-lane states keep their own watermarks.
 	s.Equal(highWatermarkInfo.Watermark, state.HighPriorityState.InclusiveLowWatermark)
 	s.Equal(lowWatermarkInfo.Watermark, state.LowPriorityState.InclusiveLowWatermark)
-	// The lane reports its own applied watermark keyed by namespace.
-	s.Len(state.IsolatedLaneStates, 1)
-	s.Equal(laneWatermark.Watermark, state.IsolatedLaneStates["ns-a"].InclusiveLowWatermark)
-	s.Equal(timestamppb.New(laneWatermark.Timestamp), state.IsolatedLaneStates["ns-a"].InclusiveLowWatermarkTime)
+	// The lane reports its own applied watermark keyed by lane ID.
+	s.Equal(map[string]*replicationspb.ReplicationState{
+		"lane-a": {
+			InclusiveLowWatermark:     laneWatermark.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+		},
+	}, state.LaneStates)
 }
 
 func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNamespaces() {
 	s.streamReceiver.receiverMode = ReceiverModeTieredStack
-	throttler := &fakeNamespaceThrottler{throttled: map[int32][]string{
-		s.streamReceiver.clientShardKey.ShardID:     {"ns-hot-a", "ns-hot-b"},
-		s.streamReceiver.clientShardKey.ShardID + 1: {"ns-other"},
-	}}
-	s.streamReceiver.NamespaceThrottler = throttler
+	feedback := NewMockLaneFeedbackProvider(s.controller)
+	feedback.EXPECT().ThrottledNamespaceIDs(s.streamReceiver.clientShardKey.ShardID).Return([]string{"ns-hot-a", "ns-hot-b"})
+	s.streamReceiver.laneFeedback = feedback
 	watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 1000)}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
@@ -429,9 +437,136 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNam
 	s.NoError(err)
 	s.Len(s.stream.requests, 1)
 	state := s.stream.requests[0].GetSyncReplicationState()
-	// Only the local shard's throttled set is reported.
 	s.Equal([]string{"ns-hot-a", "ns-hot-b"}, state.ThrottleHighNamespaceIds)
-	s.Equal(s.streamReceiver.clientShardKey.ShardID, throttler.queriedShardID)
+	// Without lane support, the receiver reports no lane limit or feedback.
+	s.Zero(state.MaxLanes)
+	s.Nil(state.LaneFeedback)
+}
+
+func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAndFeedback() {
+	small, err := anypb.New(timestamppb.New(time.Unix(1, 0)))
+	s.NoError(err)
+	large, err := anypb.New(wrapperspb.Bytes(make([]byte, 4096)))
+	s.NoError(err)
+	dc := dynamicconfig.NewMemoryClient()
+	s.streamReceiver.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes = dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(
+		dynamicconfig.NewCollection(dc, log.NewNoopLogger()),
+	)
+	laneWatermark := WatermarkInfo{Watermark: 5, Timestamp: time.Unix(0, 500)}
+	laneTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	laneTracker.TrackTasks(laneWatermark)
+	s.streamReceiver.finishLaneBatch("lane-a", false)
+	for _, tc := range []struct {
+		name       string
+		maxBytes   int
+		useDefault bool
+		feedback   *anypb.Any
+		expected   *anypb.Any
+		dropped    bool
+	}{
+		{name: "DefaultAllowsSmallFeedback", useDefault: true, feedback: small, expected: small},
+		{name: "DefaultDropsLargeFeedback", useDefault: true, feedback: large, dropped: true},
+		{name: "RaisedLimitAllowsLargeFeedback", maxBytes: 8192, feedback: large, expected: large},
+		{name: "ExactLimitIncludesAnyEnvelope", maxBytes: proto.Size(large), feedback: large, expected: large},
+		{name: "OneByteOverLimit", maxBytes: proto.Size(large) - 1, feedback: large, dropped: true},
+		{name: "LoweredLimitDropsSmallFeedback", maxBytes: proto.Size(small) - 1, feedback: small, dropped: true},
+		{name: "ZeroDisablesFeedback", feedback: small},
+		{name: "NegativeDisablesFeedback", maxBytes: -1, feedback: small},
+		{name: "ReenabledOnSameReceiver", maxBytes: 8192, feedback: large, expected: large},
+		{name: "NilFeedback", maxBytes: 4096},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			maxBytes := 4096
+			if !tc.useDefault {
+				maxBytes = tc.maxBytes
+				revert := dc.OverrideSetting(dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes, maxBytes)
+				defer revert()
+			}
+			s.stream.requests = nil
+			s.streamReceiver.receiverMode = ReceiverModeTieredStack
+			s.streamReceiver.lanesEnabled = true
+			s.streamReceiver.maxLanes = 7
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.streamReceiver.MetricsHandler = metricsHandler
+			feedback := NewMockLaneFeedbackProvider(gomock.NewController(t))
+			feedback.EXPECT().ThrottledNamespaceIDs(s.streamReceiver.clientShardKey.ShardID).Return(nil)
+			if maxBytes > 0 {
+				feedback.EXPECT().Feedback(s.streamReceiver.clientShardKey.ShardID, maxBytes).Return(tc.feedback)
+			}
+			s.streamReceiver.laneFeedback = feedback
+			watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 1000)}
+			s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+			s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+			s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+			s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+			s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+			s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+
+			_, err := s.streamReceiver.ackMessage(s.stream)
+			require.NoError(t, err)
+			require.Len(t, s.stream.requests, 1)
+			state := s.stream.requests[0].GetSyncReplicationState()
+			protorequire.ProtoEqual(t, &replicationspb.SyncReplicationState{
+				InclusiveLowWatermark:     laneWatermark.Watermark,
+				InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+				HighPriorityState: &replicationspb.ReplicationState{
+					InclusiveLowWatermark:     watermarkInfo.Watermark,
+					InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+				},
+				LowPriorityState: &replicationspb.ReplicationState{
+					InclusiveLowWatermark:     watermarkInfo.Watermark,
+					InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+				},
+				LaneStates: map[string]*replicationspb.ReplicationState{
+					"lane-a": {
+						InclusiveLowWatermark:     laneWatermark.Watermark,
+						InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+					},
+				},
+				LaneProtocolVersion: replicationLaneProtocolVersion,
+				MaxLanes:            7,
+				LaneFeedback:        tc.expected,
+			}, state)
+			recordings := capture.SnapshotMetric(metrics.ReplicationLaneFeedbackDropped.Name())
+			if tc.dropped {
+				fromCluster := metrics.FromClusterIDTag(s.streamReceiver.serverShardKey.ClusterID)
+				toCluster := metrics.ToClusterIDTag(s.streamReceiver.clientShardKey.ClusterID)
+				require.Equal(t, []*metricstest.CapturedRecording{{
+					Value: int64(1),
+					Tags: map[string]string{
+						fromCluster.Key: fromCluster.Value,
+						toCluster.Key:   toCluster.Value,
+					},
+				}}, recordings)
+			} else {
+				require.Empty(t, recordings)
+			}
+		})
+	}
+}
+
+func (s *laneStreamReceiverSuite) TestGetTaskTrackerForLane_MaxLanes() {
+	s.streamReceiver.maxLanes = 2
+	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-b", true)
+	s.NoError(err)
+	s.streamReceiver.finishLaneBatch("lane-b", true)
+
+	// A retired lane that is still draining does not count, so the sender may open another.
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-c", false)
+	s.NoError(err)
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-d", false)
+	s.ErrorContains(err, "beyond max_lanes 2")
+	// Lanes already open keep working.
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
 }
 
 func (s *laneStreamReceiverSuite) TestHighFamilyTrackingCount_IncludesMemberLanes() {
@@ -508,11 +643,162 @@ func (s *laneStreamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredSt
 					InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
 					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
 				},
-				SupportsNamespaceIsolation: true,
 			},
 		},
 	},
 	}, s.stream.requests)
+}
+
+func (s *laneStreamReceiverSuite) TestAckMessage_LaneProtocolVersion() {
+	for _, tc := range []struct {
+		name            string
+		lanesEnabled    bool
+		receiverMode    ReceiverMode
+		expectedVersion int32
+	}{
+		{name: "LanesDisabled", lanesEnabled: false, receiverMode: ReceiverModeTieredStack, expectedVersion: 0},
+		{name: "LanesEnabled", lanesEnabled: true, receiverMode: ReceiverModeTieredStack, expectedVersion: replicationLaneProtocolVersion},
+		{name: "LanesEnabledSingleStack", lanesEnabled: true, receiverMode: ReceiverModeSingleStack, expectedVersion: 0},
+	} {
+		s.Run(tc.name, func() {
+			s.stream.requests = nil
+			s.streamReceiver.lanesEnabled = tc.lanesEnabled
+			s.streamReceiver.receiverMode = tc.receiverMode
+			watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 10)}
+			s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+			if tc.receiverMode == ReceiverModeTieredStack {
+				s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+				s.receiverFlowController.EXPECT().GetFlowControlInfo(gomock.Any()).Return(FlowControlInfo{}).Times(2)
+			} else {
+				s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+			}
+			s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+			s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+
+			_, err := s.streamReceiver.ackMessage(s.stream)
+			s.NoError(err)
+			s.Len(s.stream.requests, 1)
+			state := s.stream.requests[0].GetSyncReplicationState()
+			s.Equal(tc.expectedVersion, state.GetLaneProtocolVersion())
+			s.False(state.GetSupportsNamespaceIsolation())
+		})
+	}
+}
+
+func (s *laneStreamReceiverSuite) TestIsValid_LanesEnabledChanged() {
+	s.streamReceiver.status = common.DaemonStatusStarted
+	s.streamReceiver.lanesEnabled = false
+	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(false)
+	s.True(s.streamReceiver.IsValid())
+
+	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(true)
+	s.False(s.streamReceiver.IsValid())
+}
+
+func (s *laneStreamReceiverSuite) TestProcessMessage_LaneBatchUsesLaneTracker() {
+	s.streamReceiver.lanesEnabled = true
+	s.stream.respChan <- StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
+		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
+			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks: []*replicationspb.ReplicationTask{{
+						TaskType:       enumsspb.ReplicationTaskType(-1),
+						SourceTaskId:   99,
+						VisibilityTime: timestamppb.New(time.Unix(0, 99)),
+						Priority:       enumsspb.TASK_PRIORITY_HIGH,
+					}},
+					ExclusiveHighWatermark:     100,
+					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
+					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+					LaneInfo:                   &replicationspb.ReplicationLaneInfo{LaneId: "lane-a"},
+				},
+			},
+		},
+	}
+	close(s.stream.respChan)
+
+	// The default HIGH tracker mock has no TrackTasks expectation, so tracking the
+	// batch there fails the test.
+	err := s.streamReceiver.processMessages(s.stream)
+	s.NoError(err)
+	s.Len(s.taskScheduler.tasks, 1)
+	s.Contains(s.streamReceiver.memberLanes, "lane-a")
+	s.Equal(1, s.streamReceiver.memberLanes["lane-a"].tracker.Size())
+}
+
+func (s *laneStreamReceiverSuite) TestProcessMessage_RejectsUnsupportedLaneMetadata() {
+	for _, tc := range []struct {
+		name         string
+		lanesEnabled bool
+		priority     enumsspb.TaskPriority
+		configure    func(*replicationspb.WorkflowReplicationMessages)
+	}{
+		{
+			name:         "LanesDisabled",
+			lanesEnabled: false,
+			priority:     enumsspb.TASK_PRIORITY_HIGH,
+			configure: func(m *replicationspb.WorkflowReplicationMessages) {
+				m.LaneInfo = &replicationspb.ReplicationLaneInfo{LaneId: "lane-a"}
+			},
+		},
+		{
+			name:         "EmptyLaneID",
+			lanesEnabled: true,
+			priority:     enumsspb.TASK_PRIORITY_HIGH,
+			configure: func(m *replicationspb.WorkflowReplicationMessages) {
+				m.LaneInfo = &replicationspb.ReplicationLaneInfo{}
+			},
+		},
+		{
+			name:         "LowPriorityLane",
+			lanesEnabled: true,
+			priority:     enumsspb.TASK_PRIORITY_LOW,
+			configure: func(m *replicationspb.WorkflowReplicationMessages) {
+				m.LaneInfo = &replicationspb.ReplicationLaneInfo{LaneId: "lane-a"}
+			},
+		},
+		{
+			name:         "NamespaceIsolationLane",
+			lanesEnabled: true,
+			priority:     enumsspb.TASK_PRIORITY_HIGH,
+			configure: func(m *replicationspb.WorkflowReplicationMessages) {
+				m.IsolatedNamespaceId = "namespace-id"
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.streamReceiver.lanesEnabled = tc.lanesEnabled
+			s.streamReceiver.receiverMode = ReceiverModeUnset
+			s.streamReceiver.memberLanes = make(map[string]*memberLane)
+			s.taskScheduler.tasks = nil
+			messages := &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks: []*replicationspb.ReplicationTask{{
+					TaskType:       enumsspb.ReplicationTaskType(-1),
+					SourceTaskId:   99,
+					VisibilityTime: timestamppb.New(time.Unix(0, 99)),
+					Priority:       tc.priority,
+				}},
+				ExclusiveHighWatermark:     100,
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
+				Priority:                   tc.priority,
+			}
+			tc.configure(messages)
+			stream := &mockStream{
+				respChan: make(chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse], 1),
+			}
+			stream.respChan <- StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
+				Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
+					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{Messages: messages},
+				},
+			}
+			close(stream.respChan)
+
+			err := s.streamReceiver.processMessages(stream)
+			s.ErrorAs(err, new(*StreamError))
+			s.Empty(s.taskScheduler.tasks)
+			s.Empty(s.streamReceiver.memberLanes)
+		})
+	}
 }
 
 func (s *laneStreamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {

@@ -347,6 +347,9 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamImplementation                     dynamicconfig.TypedPropertyFn[dynamicconfig.ReplicationStreamImplementationSettings]
+	ReplicationStreamReceiverLanesEnabled               dynamicconfig.BoolPropertyFn
+	ReplicationStreamReceiverMaxLanes                   dynamicconfig.IntPropertyFn
+	ReplicationStreamReceiverLaneFeedbackMaxBytes       dynamicconfig.IntPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
@@ -700,6 +703,9 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamImplementation:                     dynamicconfig.ReplicationStreamImplementation.Get(dc),
+		ReplicationStreamReceiverLanesEnabled:               dynamicconfig.ReplicationStreamReceiverLanesEnabled.Get(dc),
+		ReplicationStreamReceiverMaxLanes:                   dynamicconfig.ReplicationStreamReceiverMaxLanes.Get(dc),
+		ReplicationStreamReceiverLaneFeedbackMaxBytes:       dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),

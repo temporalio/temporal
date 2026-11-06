@@ -3197,6 +3197,30 @@ Fields: Sender and Receiver, each a list of rules. A rule has RemoteCluster, Imp
 Streams that match no rule use legacy. If any rule is invalid, every stream uses legacy.
 Changing the implementation selected for a stream restarts that stream.`,
 	)
+	ReplicationStreamReceiverLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamReceiverLanesEnabled",
+		false,
+		`ReplicationStreamReceiverLanesEnabled allows lane stream receivers to accept replication lanes.
+A lane stream receiver advertises lane support to its sender only when this is true. It has no
+effect on legacy stream receivers. Changing it restarts lane stream receivers.`,
+	)
+	ReplicationStreamReceiverMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverMaxLanes",
+		8,
+		`ReplicationStreamReceiverMaxLanes is the most replication lanes a lane stream receiver tracks
+at once on one stream. The receiver advertises it to its sender, which never opens more, and fails
+the stream if a sender does. A lane counts until the sender sends its retirement marker, so this
+default leaves room above the sender's default of 4 for a lane to be replaced while another
+retires. Changing it restarts lane stream receivers.`,
+	)
+	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
+		4096,
+		`ReplicationStreamReceiverLaneFeedbackMaxBytes limits the serialized size of lane_feedback
+on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
+watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
+Changes take effect on the next ack without restarting the stream.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
