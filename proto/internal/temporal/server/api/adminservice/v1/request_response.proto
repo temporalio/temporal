@@ -426,6 +426,9 @@ message RefreshWorkflowTasksRequest {
   string archetype = 4;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 5;
+  // If non-zero, refresh only once the shard owner's registry has the namespace REGISTERED at this
+  // ConfigVersion or later.
+  int64 min_namespace_config_version = 6;
 }
 
 message RefreshWorkflowTasksResponse {}
