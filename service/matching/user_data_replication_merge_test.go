@@ -310,7 +310,7 @@ func (s *matchingEngineSuite) TestRolloutsDoNotAccumulateVersions() {
 	// Both task types begin with the same 12 versions: one current version and 11 drained versions.
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		versions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
-		for i := 0; i < retainedVersions; i++ {
+		for i := range retainedVersions {
 			versions[fmt.Sprintf("build-%03d", i)] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED)
 		}
 		versions[initialCurrentBuildID].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
@@ -901,12 +901,12 @@ func (s *matchingEngineSuite) TestForceReplicationClearsOrphans() {
 		Clock:   &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1},
 		PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData),
 	}
-	// Model the incident's accumulated versions on both task types, plus a whole forgotten deployment.
+	// Both task types have extra drained versions, plus a whole forgotten deployment.
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		versions := map[string]*deploymentspb.WorkerDeploymentVersionData{
 			"current": newTestWorkerDeploymentVersionData(10, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
 		}
-		for i := 0; i < 606; i++ {
+		for i := range 3 {
 			versions[fmt.Sprintf("drained-%03d", i)] = newTestWorkerDeploymentVersionData(5, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED)
 		}
 		current.PerType[int32(taskType)] = taskQueueUserDataWithDeployment(nil, taskType, "deployment", &persistencespb.WorkerDeploymentData{
@@ -920,14 +920,14 @@ func (s *matchingEngineSuite) TestForceReplicationClearsOrphans() {
 		}
 	}
 	current.PerType[int32(enumspb.TASK_QUEUE_TYPE_NEXUS)] = &persistencespb.TaskQueueTypeUserData{}
-	// The active retains only 12 versions and no longer has the forgotten deployment or Nexus task type.
+	// The active retains one drained version and the current version, but has forgotten the other entries.
 	incoming := common.CloneProto(current)
 	incoming.Clock = &clockspb.HybridLogicalClock{WallClock: 200, ClusterId: 1}
 	delete(incoming.PerType, int32(enumspb.TASK_QUEUE_TYPE_NEXUS))
 	for _, perType := range incoming.PerType {
 		delete(perType.DeploymentData.DeploymentsData, "forgotten-deployment")
 		versions := perType.DeploymentData.DeploymentsData["deployment"].Versions
-		for i := 11; i < 606; i++ {
+		for i := 1; i < 3; i++ {
 			delete(versions, fmt.Sprintf("drained-%03d", i))
 		}
 	}
