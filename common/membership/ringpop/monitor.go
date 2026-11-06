@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
-	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -25,6 +24,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/ringpop/snapshothosts"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -63,6 +63,7 @@ type monitor struct {
 	services                  config.ServicePortMap
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
+	snapshotExpiry            time.Duration
 	propagationTime           time.Duration
 	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
@@ -85,6 +86,7 @@ func newMonitor(
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
 	maxJoinDuration time.Duration,
+	snapshotExpiry time.Duration,
 	propagationTime time.Duration,
 	joinTime time.Time,
 	replicaPoints int,
@@ -114,6 +116,7 @@ func newMonitor(
 		hostID:                    hostID,
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
+		snapshotExpiry:            snapshotExpiry,
 		propagationTime:           propagationTime,
 		joinTime:                  joinTime,
 	}
@@ -232,7 +235,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  statichosts.New(hostPorts...),
+			DiscoverProvider:  snapshothosts.New(rpo.logger, rpo.refreshCurrentHostports, rpo.snapshotExpiry, hostPorts...),
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
@@ -351,6 +354,26 @@ func (rpo *monitor) startHeartbeat(broadcastHostport string) error {
 }
 
 func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
+	hostports, err := rpo.retrieveCurrentHostports(500)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve bootstrap hostports: %w", err)
+	}
+
+	rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(hostports, ",")))
+	return hostports, nil
+}
+
+func (rpo *monitor) refreshCurrentHostports() ([]string, error) {
+	hostports, err := rpo.retrieveCurrentHostports(500)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve refresh hostports: %w", err)
+	}
+
+	rpo.logger.Info("refresh hosts fetched", tag.BootstrapHostPorts(strings.Join(hostports, ",")))
+	return hostports, nil
+}
+
+func (rpo *monitor) retrieveCurrentHostports(maxUnique int) ([]string, error) {
 	pageSize := 1000
 	set := make(map[string]struct{})
 
@@ -374,14 +397,13 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 		}
 		nextPageToken = resp.NextPageToken
 
-		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.
-		if len(nextPageToken) == 0 || len(set) >= 500 {
+		// Stop iterating once we have either maxUnique unique ip:port combos (if maxUnique is not -1) or there are no more results.
+		if len(nextPageToken) == 0 || (len(set) >= maxUnique && maxUnique != -1) {
 			bootstrapHostPorts := make([]string, 0, len(set))
 			for k := range set {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
 			}
 
-			rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
 	}
