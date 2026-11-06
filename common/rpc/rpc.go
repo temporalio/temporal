@@ -129,7 +129,7 @@ func NewFactory(
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{grpc.MaxRecvMsgSize(maxGRPCRecvPayloadSize)}
 
 	if d.tlsFactory != nil {
 		serverConfig, err := d.tlsFactory.GetFrontendServerConfig()
@@ -162,7 +162,7 @@ func (d *RPCFactory) GetRemoteClusterClientConfig(hostname string) (*tls.Config,
 }
 
 func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{grpc.MaxRecvMsgSize(maxGRPCRecvPayloadSize)}
 
 	if d.EnableInternodeServerKeepalive {
 		rpcConfig := d.config.Services[string(d.serviceName)].RPC
