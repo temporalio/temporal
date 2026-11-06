@@ -78,6 +78,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
+		NewStreamReceiverFactory(),
 		true,
 	)
 	streamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -410,6 +411,7 @@ func (s *streamReceiverMonitorSuite) TestStop_SkipsInboundStreamsWhenFlagDisable
 			Logger:          log.NewNoopLogger(),
 			DLQWriter:       NoopDLQWriter{},
 		}),
+		NewStreamReceiverFactory(),
 		true,
 	)
 
@@ -463,6 +465,30 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
 	}]
 	s.True(ok)
 	s.True(stream.IsValid())
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_UsesReceiverFactory() {
+	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	streamKey := ClusterShardKeyPair{Client: clientKey, Server: serverKey}
+
+	stream := NewMockManagedStreamReceiver(s.controller)
+	stream.EXPECT().Start()
+	stream.EXPECT().Stop().AnyTimes()
+	receiverFactory := NewMockStreamReceiverFactory(s.controller)
+	receiverFactory.EXPECT().NewStreamReceiver(
+		s.streamReceiverMonitor.ProcessToolBox,
+		s.streamReceiverMonitor.executableTaskConverter,
+		clientKey,
+		serverKey,
+	).Return(stream)
+	s.streamReceiverMonitor.receiverFactory = receiverFactory
+
+	s.streamReceiverMonitor.doReconcileOutboundStreams(map[ClusterShardKeyPair]struct{}{streamKey: {}})
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Equal(map[ClusterShardKeyPair]StreamReceiver{streamKey: stream}, s.streamReceiverMonitor.outboundStreams)
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
