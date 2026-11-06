@@ -68,3 +68,20 @@ message WorkerCommandDispatchTask {
 
 // CancelCommand requests the worker to cancel the running activity.
 message CancelCommand {}
+
+message HandoffStartToCloseTimeoutTask {
+  // Copied from ActivityAttemptState.AsyncHandoffState.start_to_close_stamp.
+  // Used to reject stale timers after activity retries, resets, or timeout updates.
+  // Handoff retries preserve this stamp and the original start-to-close deadline.
+  int32 stamp = 1;
+}
+
+message StartToHandoffTimeoutTask {
+  // Matches ActivityAttemptState.stamp to reject stale timeout tasks after retries or option updates.
+  int32 stamp = 1;
+}
+
+message HandoffToCloseTimeoutTask {
+  // Matches ActivityAttemptState.stamp to reject stale timeout tasks after retries or option updates.
+  int32 stamp = 1;
+}

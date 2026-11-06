@@ -127,6 +127,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RespondActivityTaskCanceled":        {},
 		"RespondActivityTaskCanceledById":    {},
 		"RespondActivityTaskCompleted":       {},
+		"RespondActivityTaskHandoff":         {},
 		"RespondActivityTaskCompletedById":   {},
 		"RespondActivityTaskFailed":          {},
 		"RespondActivityTaskFailedById":      {},

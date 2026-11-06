@@ -3,12 +3,14 @@ package activity
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -20,6 +22,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
@@ -1098,6 +1101,11 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(20 * time.Second),
 		StartToCloseTimeout:    durationpb.New(10 * time.Second),
+		AsyncHandoffOptions: &apiactivitypb.AsyncHandoffOptions{
+			StartToHandoffTimeout: durationpb.New(10 * time.Second),
+			HandoffToCloseTimeout: durationpb.New(8 * time.Second),
+			RetryPolicy:           common.CloneProto(defaultRetryPolicy),
+		},
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(10 * time.Second),
 			BackoffCoefficient: 2,
@@ -1110,10 +1118,16 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 	})
 	require.NoError(t, err)
 
-	err = activity.mergeActivityOptions(&workflowservice.UpdateActivityExecutionOptionsRequest{
+	original := common.CloneProto(activity.GetOriginalOptions())
+	// Mutate a nested field to verify current options don't share memory with the original snapshot.
+	activity.AsyncHandoffOptions.StartToHandoffTimeout.Seconds++
+
+	beforeUpdate := common.CloneProto(activity.ActivityState)
+	options, err := activity.mergeActivityOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 		ActivityId: "act",
 		ActivityOptions: &apiactivitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{Name: "updated-task-queue"},
+			StartToCloseTimeout: durationpb.New(5 * time.Second),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "updated-task-queue"},
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(time.Second),
 			},
@@ -1123,13 +1137,18 @@ func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *test
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
 			"task_queue.name",
+			"start_to_close_timeout",
 			"retry_policy.initial_interval",
 			"priority.fairness_key",
 		}},
 	})
 	require.NoError(t, err)
+	protorequire.ProtoEqual(t, beforeUpdate, activity.ActivityState)
+	activity.applyActivityOptions(options)
 
 	originalOptions := activity.GetOriginalOptions()
+	protorequire.ProtoEqual(t, original, originalOptions)
+	require.Equal(t, 5*time.Second, activity.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration())
 	require.Equal(t, "original-task-queue", originalOptions.GetTaskQueue().GetName())
 	require.Equal(t, 10*time.Second, originalOptions.GetRetryPolicy().GetInitialInterval().AsDuration())
 	require.Equal(t, "original-fairness-key", originalOptions.GetPriority().GetFairnessKey())
@@ -1320,4 +1339,202 @@ func TestEffectiveUserMetadata_FallsBackToLegacy(t *testing.T) {
 
 	got := activity.effectiveUserMetadata(ctx)
 	require.Same(t, legacyMD, got)
+}
+
+func TestHandleHandoff(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		status activitypb.ActivityExecutionStatus
+	}{
+		{name: "without handoff options", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED},
+		{name: "pending pause", status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED},
+		{name: "pending cancellation", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED},
+		{name: "pending reset", status: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			now := defaultTime
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+				HandleNow:            func(chasm.Component) time.Time { return now },
+				HandleMetricsHandler: func() metrics.Handler { return metrics.NoopMetricsHandler },
+				HandleNamespaceEntry: testNamespaceEntry,
+				GoCtx: context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{
+					config: &Config{
+						BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
+					},
+				}),
+			}}
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "namespace-id", BusinessId: "activity-id", ArchetypeId: ArchetypeID}).Marshal()
+			require.NoError(t, err)
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: test.status},
+				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
+			}
+			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
+				Token:   &tokenspb.Task{NamespaceId: "namespace-id", Attempt: 2, ActivityAttemptStamp: 6, ComponentRef: ref},
+				Request: &activitypb.RespondActivityTaskHandoffRequest{NamespaceId: "namespace-id"},
+			}
+
+			// A namespace mismatch is rejected without recording handoff.
+			input.Request.NamespaceId = "other-namespace-id"
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			require.False(t, act.GetAwaitingCompletion())
+			require.Nil(t, act.GetAsyncHandoffTime())
+
+			// A valid task token records handoff without changing the status or activity attempt.
+			input.Request.NamespaceId = "namespace-id"
+			result, err := act.HandleHandoff(ctx, input)
+			require.NoError(t, err)
+			require.True(t, result.NewlyRecorded)
+			require.True(t, act.GetAwaitingCompletion())
+			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+			require.Equal(t, test.status, act.GetStatus())
+			require.Empty(t, ctx.Tasks, "reporting alone must not restart legacy timers")
+			require.EqualValues(t, 2, act.LastAttempt.Get(ctx).GetCount())
+
+			// Repeating handoff preserves the original timestamp and does not count another handoff.
+			now = now.Add(time.Minute)
+			result, err = act.HandleHandoff(ctx, input)
+			require.NoError(t, err)
+			require.False(t, result.NewlyRecorded)
+			require.Equal(t, defaultTime, act.GetAsyncHandoffTime().AsTime())
+
+			// A stale task token is rejected even when handoff is already recorded.
+			input.Token.ActivityAttemptStamp--
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+
+			// Handoff requires a worker task token; by-ID tokens are rejected.
+			input.Token.Attempt = ByIDTokenAttempt
+			_, err = act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		})
+	}
+}
+
+func TestHandleHandoffRejectsInvalidTask(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		status  activitypb.ActivityExecutionStatus
+		attempt int32
+	}{
+		{name: "scheduled", status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, attempt: 2},
+		{name: "fully paused", status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, attempt: 2},
+		{name: "completed", status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, attempt: 2},
+		{name: "failed", status: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, attempt: 2},
+		{name: "canceled", status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, attempt: 2},
+		{name: "terminated", status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, attempt: 2},
+		{name: "timed out", status: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, attempt: 2},
+		{name: "wrong positive attempt", status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, attempt: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+				HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+				HandleMetricsHandler: func() metrics.Handler { return metrics.NoopMetricsHandler },
+			}}
+			ref, err := (&persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: ArchetypeID,
+			}).Marshal()
+			require.NoError(t, err)
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: test.status},
+				LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2, Stamp: 7, StartedStamp: 6}),
+			}
+			input := WithToken[*activitypb.RespondActivityTaskHandoffRequest]{
+				Token: &tokenspb.Task{
+					NamespaceId:          "namespace-id",
+					Attempt:              test.attempt,
+					ActivityAttemptStamp: 6,
+					ComponentRef:         ref,
+				},
+				Request: &activitypb.RespondActivityTaskHandoffRequest{NamespaceId: "namespace-id"},
+			}
+
+			result, err := act.HandleHandoff(ctx, input)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+			require.Nil(t, result)
+			require.False(t, act.GetAwaitingCompletion())
+			require.Nil(t, act.GetAsyncHandoffTime())
+		})
+	}
+}
+
+// A missing stamp must not bypass task freshness checks when handoff retries reuse the attempt number.
+func TestActivityTaskTokenRequiresStampWithHandoffOptions(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                string
+		missingTokenStamp   bool
+		missingStartedStamp bool
+	}{
+		{name: "missing token stamp", missingTokenStamp: true},
+		{name: "missing pickup stamp", missingStartedStamp: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, ctx := newHandoffRetryTestActivity(t)
+			attempt := a.LastAttempt.Get(ctx)
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id", BusinessId: "test-activity"}).Marshal()
+			require.NoError(t, err)
+
+			token := &tokenspb.Task{Attempt: attempt.GetCount(), ActivityAttemptStamp: attempt.GetStartedStamp(), ComponentRef: ref}
+			if testCase.missingTokenStamp {
+				token.ActivityAttemptStamp = 0
+			}
+
+			if testCase.missingStartedStamp {
+				attempt.StartedStamp = 0
+			}
+
+			err = a.validateActivityTaskToken(ctx, token, "test-namespace-id", false)
+			require.ErrorAs(t, err, new(*serviceerror.NotFound))
+		})
+	}
+}
+
+func TestReportedTimeoutDoesNotConvertToScheduleToClose(t *testing.T) {
+	t.Parallel()
+
+	for _, handedOff := range []bool{false, true} {
+		t.Run(fmt.Sprintf("handedOff=%t", handedOff), func(t *testing.T) {
+			t.Parallel()
+
+			a, ctx := newHandoffRetryTestActivity(t)
+			a.AwaitingCompletion = handedOff
+			// Prevent another retry without firing a server timeout; the reported failure must remain unchanged.
+			a.ScheduleToCloseTimeout = durationpb.New(ctx.Now(a).Sub(a.GetScheduleTime().AsTime()) + time.Second)
+			timeoutType := enumspb.TIMEOUT_TYPE_START_TO_HANDOFF
+			if handedOff {
+				timeoutType = enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE
+			}
+
+			failure := createActivityTimeoutFailure(timeoutType)
+			ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id", BusinessId: "test-activity"}).Marshal()
+			require.NoError(t, err)
+
+			// External by-ID reporters can supply timeout failures; they are not authoritative server timers.
+			_, err = a.HandleFailed(ctx, RespondFailedEvent{
+				Token: &tokenspb.Task{Attempt: ByIDTokenAttempt, ComponentRef: ref},
+				Request: &historyservice.RespondActivityTaskFailedRequest{
+					NamespaceId:   "test-namespace-id",
+					FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{Failure: failure},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, a.GetStatus())
+			require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, a.Outcome.Get(ctx).GetRetryState())
+			protorequire.ProtoEqual(t, failure, a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure())
+			require.Empty(t, ctx.Tasks)
+		})
+	}
 }

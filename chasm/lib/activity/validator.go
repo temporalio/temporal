@@ -11,6 +11,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -40,15 +42,20 @@ func ValidateAndNormalizeStandaloneActivity(
 		return err
 	}
 
-	return validateAndNormalizeActivityAttributes(
-		activityID,
-		activityType,
-		getDefaultActivityRetrySettings,
-		maxIDLengthLimit,
-		namespaceName,
-		options,
-		priority,
-		durationpb.New(0))
+	err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority)
+	if err != nil {
+		return err
+	}
+
+	if options.GetAsyncHandoffOptions() != nil {
+		// TODO: Reuse shared handoff timeout validation for opted-in workflow activities when WFA
+		// async handoff is supported, preserving workflow-specific limits.
+		defaults := getDefaultActivityRetrySettings(namespaceName.String())
+		return validateAndNormalizeHandoffOptions(options, &defaults)
+	}
+
+	return validateAndNormalizeTimeouts(activityID, activityType, durationpb.New(0), options)
 }
 
 // ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
@@ -99,6 +106,23 @@ func validateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
+	err := validateActivityAttributes(activityID, activityType, getDefaultActivityRetrySettings,
+		maxIDLengthLimit, namespaceName, options, priority)
+	if err != nil {
+		return err
+	}
+
+	return validateAndNormalizeTimeouts(activityID, activityType, runTimeout, options)
+}
+
+func validateActivityAttributes(
+	activityID, activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceName namespace.Name,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+) error {
 	if activityID == "" {
 		return serviceerror.NewInvalidArgument("activityId is not set")
 	}
@@ -123,10 +147,7 @@ func validateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
-	return validateAndNormalizeTimeouts(activityID,
-		activityType,
-		runTimeout,
-		options)
+	return nil
 }
 
 func validatePropagatedNexusSerializationContext(nexusContext *nexuspb.PropagatedSerializationContext, maxIDLengthLimit int) error {
@@ -241,8 +262,12 @@ func validateOriginalOptionsRestorable(original *activitypb.ActivityOptions) err
 	if original.GetTaskQueue().GetName() == "" {
 		return serviceerror.NewInvalidArgument("cannot restore original options: no original task queue was recorded for this activity")
 	}
-	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 && original.GetStartToCloseTimeout().AsDuration() <= 0 {
-		return serviceerror.NewInvalidArgument("cannot restore original options: no original schedule-to-close or start-to-close timeout was recorded for this activity")
+
+	noPhaseCoverage := original.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration() <= 0 ||
+		original.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration() <= 0
+	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
+		original.GetStartToCloseTimeout().AsDuration() <= 0 && noPhaseCoverage {
+		return serviceerror.NewInvalidArgument("cannot restore original options: a positive schedule-to-close or start-to-close timeout, or both handoff phase timeouts, is required")
 	}
 	return nil
 }
@@ -499,21 +524,30 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 // form, as produced by util.ConvertPathToCamel) that UpdateActivityExecutionOptions supports.
 // It must stay in sync with the fields handled in MergeActivityOptions.
 var supportedActivityOptionsUpdatePaths = map[string]struct{}{
-	"taskQueue.name":                 {},
-	"scheduleToCloseTimeout":         {},
-	"scheduleToStartTimeout":         {},
-	"startToCloseTimeout":            {},
-	"heartbeatTimeout":               {},
-	"priority":                       {},
-	"priority.priorityKey":           {},
-	"priority.fairnessKey":           {},
-	"priority.fairnessWeight":        {},
-	"retryPolicy":                    {},
-	"retryPolicy.initialInterval":    {},
-	"retryPolicy.backoffCoefficient": {},
-	"retryPolicy.maximumInterval":    {},
-	"retryPolicy.maximumAttempts":    {},
-	"startDelay":                     {},
+	"taskQueue.name":                                     {},
+	"scheduleToCloseTimeout":                             {},
+	"scheduleToStartTimeout":                             {},
+	"startToCloseTimeout":                                {},
+	"heartbeatTimeout":                                   {},
+	"priority":                                           {},
+	"priority.priorityKey":                               {},
+	"priority.fairnessKey":                               {},
+	"priority.fairnessWeight":                            {},
+	"retryPolicy":                                        {},
+	"retryPolicy.initialInterval":                        {},
+	"retryPolicy.backoffCoefficient":                     {},
+	"retryPolicy.maximumInterval":                        {},
+	"retryPolicy.maximumAttempts":                        {},
+	"startDelay":                                         {},
+	"asyncHandoffOptions":                                {},
+	"asyncHandoffOptions.startToHandoffTimeout":          {},
+	"asyncHandoffOptions.handoffToCloseTimeout":          {},
+	"asyncHandoffOptions.heartbeatTimeout":               {},
+	"asyncHandoffOptions.retryPolicy":                    {},
+	"asyncHandoffOptions.retryPolicy.initialInterval":    {},
+	"asyncHandoffOptions.retryPolicy.backoffCoefficient": {},
+	"asyncHandoffOptions.retryPolicy.maximumInterval":    {},
+	"asyncHandoffOptions.retryPolicy.maximumAttempts":    {},
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
@@ -655,6 +689,10 @@ func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		if opts.GetRetryPolicy().GetMaximumAttempts() < 0 {
 			return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 		}
+	}
+
+	if util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions") {
+		return validateHandoffOptionsUpdate(opts, updateFields, getDefaultActivityRetrySettings(req.GetNamespace()))
 	}
 
 	return nil
@@ -841,5 +879,238 @@ func validateJitter(jitter *durationpb.Duration) error {
 	if err := timestamp.ValidateAndCapProtoDuration(jitter); err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid jitter: %v", err)
 	}
+	return nil
+}
+
+// validateAndExtractHandoffRequest validates public input and extracts the token and routing ID.
+func validateAndExtractHandoffRequest(
+	request *workflowservice.RespondActivityTaskHandoffRequest,
+	maxIDLength int,
+) (*tokenspb.Task, string, error) {
+	if len(request.GetTaskToken()) == 0 {
+		return nil, "", serviceerror.NewInvalidArgument("task token is required")
+	}
+
+	if len(request.GetIdentity()) > maxIDLength {
+		return nil, "", serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(request.GetIdentity()), maxIDLength)
+	}
+
+	token, err := tasktoken.NewSerializer().Deserialize(request.GetTaskToken())
+	if err != nil {
+		return nil, "", serviceerror.NewInvalidArgument("invalid activity task token")
+	}
+
+	businessID, err := validateAndExtractHandoffTaskToken(token)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return token, businessID, nil
+}
+
+func validateAndExtractHandoffTaskToken(token *tokenspb.Task) (string, error) {
+	if token.GetNamespaceId() == "" {
+		return "", serviceerror.NewInvalidArgument("invalid activity task token")
+	}
+
+	if token.GetAttempt() <= 0 {
+		return "", serviceerror.NewInvalidArgument("activity task token attempt must be positive")
+	}
+
+	businessID := token.GetWorkflowId()
+	if len(token.GetComponentRef()) != 0 {
+		ref, err := tasktoken.NewSerializer().DeserializeChasmComponentRef(token.GetComponentRef())
+		if err != nil {
+			return "", serviceerror.NewInvalidArgument("malformed activity component reference")
+		}
+
+		if ref.GetNamespaceId() == "" {
+			return "", serviceerror.NewInvalidArgument("activity component reference is missing namespace ID")
+		}
+
+		if ref.GetBusinessId() == "" {
+			return "", serviceerror.NewInvalidArgument("activity component reference is missing business ID")
+		}
+
+		// Standalone activity task tokens address the activity root, not another component.
+		if ref.GetArchetypeId() != ArchetypeID || len(ref.GetComponentPath()) != 0 {
+			return "", serviceerror.NewInvalidArgument("activity task token must reference the activity root")
+		}
+
+		if ref.GetNamespaceId() != token.GetNamespaceId() {
+			return "", serviceerror.NewInvalidArgument("token does not match namespace")
+		}
+
+		businessID = ref.GetBusinessId()
+	}
+
+	if businessID == "" {
+		return "", serviceerror.NewInvalidArgument("activity task token does not identify an activity execution")
+	}
+
+	return businessID, nil
+}
+
+// validateAndNormalizeHandoffOptions normalizes opted-in options in place. Callers clone first and
+// apply any workflow-specific outer bounds before calling. Start-to-close stays disabled when
+// unset, including when schedule-to-close is positive. Phase-only coverage need not bound queue wait.
+// A nil retryDefaults preserves the stored policy; creation and policy replacements supply defaults.
+// Invalid user options return InvalidArgument. A nil projection is a caller error; legacy absence is a no-op.
+func validateAndNormalizeHandoffOptions(options *activitypb.ActivityOptions, retryDefaults *retrypolicy.DefaultRetrySettings) error {
+	if options == nil {
+		return serviceerror.NewInternal("activity options projection is nil")
+	}
+
+	if options.GetAsyncHandoffOptions() == nil {
+		return nil
+	}
+
+	handoff := options.GetAsyncHandoffOptions()
+	for _, timeout := range []struct {
+		name  string
+		value *durationpb.Duration
+	}{
+		{name: "ScheduleToCloseTimeout", value: options.ScheduleToCloseTimeout},
+		{name: "ScheduleToStartTimeout", value: options.ScheduleToStartTimeout},
+		{name: "StartToCloseTimeout", value: options.StartToCloseTimeout},
+		{name: "HeartbeatTimeout", value: options.HeartbeatTimeout},
+		{name: "AsyncHandoffOptions.StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{name: "AsyncHandoffOptions.HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{name: "AsyncHandoffOptions.HeartbeatTimeout", value: handoff.HeartbeatTimeout},
+	} {
+		if err := timestamp.ValidateAndCapProtoDuration(timeout.value); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid %s: %v", timeout.name, err)
+		}
+	}
+
+	if options.GetStartToCloseTimeout().AsDuration() <= 0 && options.GetScheduleToCloseTimeout().AsDuration() <= 0 &&
+		(handoff.GetStartToHandoffTimeout().AsDuration() <= 0 || handoff.GetHandoffToCloseTimeout().AsDuration() <= 0) {
+		return serviceerror.NewInvalidArgument("a positive start-to-close or schedule-to-close timeout, or both handoff phase timeouts, is required")
+	}
+
+	if retryDefaults != nil {
+		if handoff.RetryPolicy == nil {
+			handoff.RetryPolicy = &commonpb.RetryPolicy{}
+		}
+
+		retrypolicy.EnsureDefaults(handoff.RetryPolicy, *retryDefaults)
+	}
+
+	if err := retrypolicy.Validate(handoff.RetryPolicy); err != nil {
+		return err
+	}
+
+	options.StartToCloseTimeout = capPositive(options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	if options.GetScheduleToCloseTimeout().AsDuration() > 0 {
+		if options.GetScheduleToStartTimeout().AsDuration() <= 0 {
+			options.ScheduleToStartTimeout = durationpb.New(options.ScheduleToCloseTimeout.AsDuration())
+		} else {
+			options.ScheduleToStartTimeout = capPositive(options.ScheduleToStartTimeout, options.ScheduleToCloseTimeout)
+		}
+	}
+
+	handoff.StartToHandoffTimeout = capPositive(handoff.StartToHandoffTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	handoff.HandoffToCloseTimeout = capPositive(handoff.HandoffToCloseTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+
+	handoff.HeartbeatTimeout = capPositive(handoff.HeartbeatTimeout, handoff.StartToHandoffTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+	options.HeartbeatTimeout = capPositive(options.HeartbeatTimeout, handoff.HandoffToCloseTimeout, options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+
+	return nil
+}
+
+func capPositive(value *durationpb.Duration, bounds ...*durationpb.Duration) *durationpb.Duration {
+	if value.AsDuration() <= 0 {
+		return value
+	}
+
+	result := value.AsDuration()
+	for _, bound := range bounds {
+		if limit := bound.AsDuration(); limit > 0 && limit < result {
+			result = limit
+		}
+	}
+
+	return durationpb.New(result)
+}
+
+// validateHandoffOptionsUpdate validates selected values; coverage is checked after merging with stored options.
+func validateHandoffOptionsUpdate(options *activitypb.ActivityOptions, fields map[string]struct{}, defaults retrypolicy.DefaultRetrySettings) error {
+	handoff := options.GetAsyncHandoffOptions()
+	if util.FieldMaskHasSubPath(fields, "asyncHandoffOptions") && handoff == nil {
+		return serviceerror.NewInvalidArgument("AsyncHandoffOptions is not provided")
+	}
+
+	if util.FieldMaskHasSubPath(fields, "asyncHandoffOptions.retryPolicy") && handoff.GetRetryPolicy() == nil {
+		return serviceerror.NewInvalidArgument("AsyncHandoffOptions.RetryPolicy is not provided")
+	}
+
+	if handoff == nil {
+		return nil
+	}
+
+	_, replaceOptions := fields["asyncHandoffOptions"]
+	for _, field := range []struct {
+		path, name string
+		value      *durationpb.Duration
+	}{
+		{path: "asyncHandoffOptions.startToHandoffTimeout", name: "StartToHandoffTimeout", value: handoff.StartToHandoffTimeout},
+		{path: "asyncHandoffOptions.handoffToCloseTimeout", name: "HandoffToCloseTimeout", value: handoff.HandoffToCloseTimeout},
+		{path: "asyncHandoffOptions.heartbeatTimeout", name: "HeartbeatTimeout", value: handoff.HeartbeatTimeout},
+	} {
+		if _, selected := fields[field.path]; selected || replaceOptions {
+			if err := timestamp.ValidateAndCapProtoDuration(field.value); err != nil {
+				return serviceerror.NewInvalidArgumentf("invalid AsyncHandoffOptions.%s: %v", field.name, err)
+			}
+		}
+	}
+
+	return validateHandoffRetryPolicyUpdate(handoff, fields, defaults)
+}
+
+func validateHandoffRetryPolicyUpdate(
+	handoff *activitypb.AsyncHandoffOptions,
+	fields map[string]struct{},
+	defaults retrypolicy.DefaultRetrySettings,
+) error {
+	if _, replacePolicy := fields["asyncHandoffOptions.retryPolicy"]; replacePolicy {
+		if handoff.RetryPolicy == nil {
+			handoff.RetryPolicy = &commonpb.RetryPolicy{}
+		}
+
+		retrypolicy.EnsureDefaults(handoff.RetryPolicy, defaults)
+		return retrypolicy.Validate(handoff.RetryPolicy)
+	}
+
+	if _, replaceOptions := fields["asyncHandoffOptions"]; replaceOptions && handoff.GetRetryPolicy() != nil {
+		// Validate a copy so omitted-policy intent remains available to the History update path.
+		policy := common.CloneProto(handoff.GetRetryPolicy())
+		retrypolicy.EnsureDefaults(policy, defaults)
+		return retrypolicy.Validate(policy)
+	}
+
+	policy := handoff.GetRetryPolicy()
+	for _, field := range []struct {
+		path, name string
+		value      *durationpb.Duration
+	}{
+		{path: "asyncHandoffOptions.retryPolicy.initialInterval", name: "InitialInterval", value: policy.GetInitialInterval()},
+		{path: "asyncHandoffOptions.retryPolicy.maximumInterval", name: "MaximumInterval", value: policy.GetMaximumInterval()},
+	} {
+		if _, selected := fields[field.path]; selected {
+			if err := timestamp.ValidateAndCapProtoDuration(field.value); err != nil {
+				return serviceerror.NewInvalidArgumentf("invalid handoff %s: %v", field.name, err)
+			}
+		}
+	}
+
+	if _, selected := fields["asyncHandoffOptions.retryPolicy.backoffCoefficient"]; selected && policy.GetBackoffCoefficient() < 1 {
+		return serviceerror.NewInvalidArgument("handoff BackoffCoefficient cannot be less than 1")
+	}
+
+	if _, selected := fields["asyncHandoffOptions.retryPolicy.maximumAttempts"]; selected && policy.GetMaximumAttempts() < 0 {
+		return serviceerror.NewInvalidArgument("handoff MaximumAttempts cannot be negative")
+	}
+
 	return nil
 }

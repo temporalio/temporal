@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -199,7 +201,8 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		"taskQueue.normalName": {},
 		// non_retryable_error_types is a repeated field; set/clear semantics
 		// do not map cleanly onto a single field-mask path (no append/remove).
-		"retryPolicy.nonRetryableErrorTypes": {},
+		"retryPolicy.nonRetryableErrorTypes":                     {},
+		"asyncHandoffOptions.retryPolicy.nonRetryableErrorTypes": {},
 	}
 
 	// Enumerate all valid field-mask paths for ActivityOptions via protoreflect.
@@ -215,14 +218,26 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 		require.True(t, exists, "notOfferedPaths entry %q does not correspond to any proto field path", p)
 	}
 
-	// populatedOptions has a distinct non-zero value for every possible field so
+	// populatedOptions has a distinct non-zero value for every supported field so
 	// the per-path mutation check below can detect whether the field was actually set.
 	populatedOptions := &activitypb.ActivityOptions{
+		StartDelay:             durationpb.New(2 * time.Second),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-queue"},
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		StartToCloseTimeout:    durationpb.New(3 * time.Second),
 		HeartbeatTimeout:       durationpb.New(1 * time.Second),
+		AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+			StartToHandoffTimeout: durationpb.New(2 * time.Second),
+			HandoffToCloseTimeout: durationpb.New(4 * time.Second),
+			HeartbeatTimeout:      durationpb.New(time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(3 * time.Second),
+				BackoffCoefficient: 3,
+				MaximumInterval:    durationpb.New(40 * time.Second),
+				MaximumAttempts:    7,
+			},
+		},
 		Priority: &commonpb.Priority{
 			PriorityKey:    42,
 			FairnessKey:    "test-key",
@@ -249,12 +264,15 @@ func TestMergeActivityOptionsCoversAllFields(t *testing.T) {
 
 			fromVal, fd := getValueAtProtoPath(populatedOptions.ProtoReflect(), path)
 			intoVal, _ := getValueAtProtoPath(mergeInto.ProtoReflect(), path)
+			require.True(t, fromVal.IsValid(), "populate fixture for path %q", path)
 
 			switch fd.Kind() {
 			case protoreflect.MessageKind:
+				require.True(t, fromVal.Message().IsValid(), "populate fixture for path %q", path)
 				require.True(t, proto.Equal(safeProtoMessage(fromVal), safeProtoMessage(intoVal)),
 					"MergeActivityOptions did not update message field %q", path)
 			default:
+				require.NotEqual(t, fd.Default().Interface(), fromVal.Interface(), "populate fixture for path %q", path)
 				require.Equal(t, fromVal.Interface(), intoVal.Interface(),
 					"MergeActivityOptions did not update scalar field %q", path)
 			}
@@ -323,4 +341,44 @@ func safeProtoMessage(v protoreflect.Value) proto.Message {
 		return nil
 	}
 	return v.Message().Interface()
+}
+
+func TestMergeActivityOptionsHandoff(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name                 string
+		from, into, expected *activitypb.AsyncHandoffOptions
+		paths                []string
+		invalid              bool
+	}{
+		{name: "remove entire message", into: &activitypb.AsyncHandoffOptions{}, paths: []string{"async_handoff_options"}},
+		{name: "empty message preserves presence", from: &activitypb.AsyncHandoffOptions{}, paths: []string{"asyncHandoffOptions"}, expected: &activitypb.AsyncHandoffOptions{}},
+		{name: "unselected options unchanged", from: &activitypb.AsyncHandoffOptions{}, into: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, expected: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}},
+		{name: "clear duration", from: &activitypb.AsyncHandoffOptions{}, into: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(time.Minute)}, paths: []string{"asyncHandoffOptions.startToHandoffTimeout"}, expected: &activitypb.AsyncHandoffOptions{}},
+		{name: "missing duration parent", paths: []string{"asyncHandoffOptions.startToHandoffTimeout"}, invalid: true},
+		{name: "missing whole policy parent", paths: []string{"asyncHandoffOptions.retryPolicy"}, invalid: true},
+		{name: "missing nested policy parent", from: &activitypb.AsyncHandoffOptions{}, paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
+		{name: "missing both nested parents", paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, invalid: true},
+		{name: "whole removal does not hide missing child parent", paths: []string{"asyncHandoffOptions", "asyncHandoffOptions.heartbeatTimeout"}, invalid: true},
+		{name: "create nested policy", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}, paths: []string{"asyncHandoffOptions.retryPolicy.maximumAttempts"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 3}}},
+		{name: "replace non-retryable types", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}, into: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"asyncHandoffOptions.retryPolicy"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"new"}}}},
+		{name: "clear non-retryable types", from: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}, into: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{NonRetryableErrorTypes: []string{"old"}}}, paths: []string{"asyncHandoffOptions.retryPolicy"}, expected: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			from := &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.from}
+			into := &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.into}
+			fields := util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: testCase.paths})
+			err := MergeActivityOptions(into, from, fields)
+			if testCase.invalid {
+				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+				return
+			}
+
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &activitypb.ActivityOptions{AsyncHandoffOptions: testCase.expected}, into)
+		})
+	}
 }

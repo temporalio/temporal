@@ -329,6 +329,38 @@ func TestNewNilRegistry_TasksDecodable(t *testing.T) {
 	require.NotZero(t, found, "tree carried no tasks, so this asserted nothing")
 }
 
+// TestNewNilRegistryHandoffTasksDecodable verifies that handoff timers remain registered and
+// decodable without runtime handlers or configuration. This catches missing registrations that
+// would prevent offline tools such as tdbg from decoding these persisted tasks.
+func TestNewNilRegistryHandoffTasksDecodable(t *testing.T) {
+	t.Parallel()
+
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
+	require.NoError(t, err)
+
+	for _, task := range []proto.Message{
+		&activitypb.HandoffStartToCloseTimeoutTask{Stamp: 1},
+		&activitypb.StartToHandoffTimeoutTask{Stamp: 1},
+		&activitypb.HandoffToCloseTimeoutTask{Stamp: 1},
+	} {
+		t.Run(string(task.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
+			t.Parallel()
+
+			typeID, ok := registry.TaskIDFor(task)
+			require.True(t, ok)
+			registrable, ok := registry.TaskByID(typeID)
+			require.True(t, ok)
+
+			blob, err := serialization.Encode(task)
+			require.NoError(t, err)
+			decoded, ok := reflect.New(registrable.GoType().Elem()).Interface().(proto.Message)
+			require.True(t, ok)
+			require.NoError(t, serialization.Decode(blob, decoded))
+			require.True(t, proto.Equal(task, decoded))
+		})
+	}
+}
+
 // TestDetachedRead_UnknownTaskType keeps a detached read working when the tree carries a task
 // type the reader does not know, as happens when a newer server wrote the record. Tasks are
 // inert here: nothing validates or executes them, so an unrecognized one is ignored.

@@ -940,6 +940,13 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 	failActivityTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
 	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
+
+	handoffActivityTaskReq := &workflowservice.RespondActivityTaskHandoffRequest{}
+	nvi.setNamespace(namespaceEntry, handoffActivityTaskReq)
+	s.Equal(namespaceEntryName, handoffActivityTaskReq.Namespace)
+	handoffActivityTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, handoffActivityTaskReq)
+	s.Equal(namespaceRequestName, handoffActivityTaskReq.Namespace)
 }
 
 // Test_Intercept_AdminVisibilityRequests covers the admin visibility APIs, where the

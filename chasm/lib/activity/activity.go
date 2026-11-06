@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/consts"
@@ -97,6 +96,13 @@ type RespondFailedEvent struct {
 type RespondCancelledEvent struct {
 	Request *historyservice.RespondActivityTaskCanceledRequest
 	Token   *tokenspb.Task
+}
+
+// HandoffResult defers the accepted-handoff metric until the mutation has persisted.
+type HandoffResult struct {
+	Response       *workflowservice.RespondActivityTaskHandoffResponse
+	NewlyRecorded  bool
+	MetricsHandler metrics.Handler
 }
 
 // errClosed is the error returned by an operator command on a closed activity.
@@ -181,6 +187,7 @@ func NewStandaloneActivity(
 			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
+			AsyncHandoffOptions:    request.GetAsyncHandoffOptions(),
 			Priority:               request.Priority,
 			StartDelay:             request.GetStartDelay(),
 			OriginalOptions: &apiactivitypb.ActivityOptions{
@@ -190,6 +197,7 @@ func NewStandaloneActivity(
 				StartToCloseTimeout:    common.CloneProto(request.GetStartToCloseTimeout()),
 				HeartbeatTimeout:       common.CloneProto(request.GetHeartbeatTimeout()),
 				RetryPolicy:            common.CloneProto(request.GetRetryPolicy()),
+				AsyncHandoffOptions:    common.CloneProto(request.GetAsyncHandoffOptions()),
 				Priority:               common.CloneProto(request.GetPriority()),
 				StartDelay:             common.CloneProto(request.GetStartDelay()),
 			},
@@ -284,8 +292,15 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	attempt := a.LastAttempt.Get(ctx)
 	links := ctx.Links(a)
 
+	var handoffAttempt int32
+	if a.GetAsyncHandoffOptions() != nil {
+		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+	}
+
 	return &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 attempt.GetStartedTime(),
+		HandoffAttempt:              handoffAttempt,
+		AsyncHandoffOptions:         a.GetAsyncHandoffOptions(),
 		Attempt:                     attempt.GetCount(),
 		Priority:                    a.GetPriority(),
 		RetryPolicy:                 a.GetRetryPolicy(),
@@ -321,6 +336,8 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
+
+	a.clearStartToCloseState(ctx)
 	return callback.ScheduleCompletionCallbacks(ctx, a)
 }
 
@@ -416,12 +433,9 @@ func (a *Activity) HandleFailed(
 	}
 
 	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
-	retryState, err := a.tryReschedule(
-		ctx,
-		retrypolicy.IsRetryableFailure(failure, a.GetRetryPolicy().GetNonRetryableErrorTypes()),
-		nextRetryDelay,
-		failure,
-	)
+	retryState, err := a.tryReschedule(ctx, retryEvent{
+		overridingRetryInterval: nextRetryDelay, failure: failure,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +581,14 @@ func (a *Activity) RecordHeartbeat(
 		Details:             details,
 		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
 	})
-	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+
+	heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration()
+	if options := a.GetAsyncHandoffOptions(); options != nil {
+		heartbeatTimeout = activeHeartbeatTimeout(
+			a.GetAwaitingCompletion(), heartbeatTimeout, options.GetHeartbeatTimeout().AsDuration())
+	}
+
+	if heartbeatTimeout > 0 {
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
@@ -625,12 +646,8 @@ func (a *Activity) validateActivityTaskToken(
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	tokenStamp := token.GetActivityAttemptStamp()
-	startedStamp := a.LastAttempt.Get(ctx).GetStartedStamp()
-	// Matching versions without stamped tokens leave tokenStamp zero;
-	// History versions without StartedStamp persistence leave startedStamp zero.
-	requiresLegacyStampCompatibility := tokenStamp == 0 || startedStamp == 0
-	if !requiresLegacyStampCompatibility && tokenStamp != startedStamp {
+
+	if !a.isActivityTaskStampValid(ctx, token) {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 
@@ -658,4 +675,58 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 		chasm.SearchAttributeExecutionTime.Value(a.firstDispatchTime()),
 	}
+}
+
+// HandleHandoff durably records the first handoff of the current activity task.
+func (a *Activity) HandleHandoff(
+	ctx chasm.MutableContext,
+	input WithToken[*activitypb.RespondActivityTaskHandoffRequest],
+) (*HandoffResult, error) {
+	if input.Token.GetAttempt() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("activity task token attempt must be positive")
+	}
+
+	if err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId(), false); err != nil {
+		return nil, err
+	}
+
+	result := &HandoffResult{Response: &workflowservice.RespondActivityTaskHandoffResponse{}}
+	if a.GetAwaitingCompletion() {
+		return result, nil
+	}
+
+	a.AwaitingCompletion = true
+	a.AsyncHandoffTime = timestamppb.New(ctx.Now(a))
+
+	if a.GetAsyncHandoffOptions() != nil {
+		// Retire submission timers without invalidating the current token or carried budget.
+		a.LastAttempt.Get(ctx).Stamp++
+		if err := a.issueHandoffTimers(ctx, false, true); err != nil {
+			return nil, err
+		}
+	}
+
+	result.NewlyRecorded = true
+	result.MetricsHandler = a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskHandoffScope)
+
+	return result, nil
+}
+
+func (a *Activity) clearHandoffState() {
+	a.AwaitingCompletion = false
+	a.AsyncHandoffTime = nil
+}
+
+// isActivityTaskStampValid matches the token against StartedStamp, which stays fixed through handoff
+// and option updates. Handoff retries reuse the attempt number, so opted-in worker tokens require
+// nonzero matching stamps. Missing stamps remain allowed without handoff options or for by-ID
+// operations; otherwise, both stamps must match.
+func (a *Activity) isActivityTaskStampValid(ctx chasm.Context, token *tokenspb.Task) bool {
+	tokenStamp := token.GetActivityAttemptStamp()
+	startedStamp := a.LastAttempt.Get(ctx).GetStartedStamp()
+	if tokenStamp == 0 || startedStamp == 0 {
+		return a.GetAsyncHandoffOptions() == nil || token.GetAttempt() == ByIDTokenAttempt
+	}
+
+	return tokenStamp == startedStamp
 }

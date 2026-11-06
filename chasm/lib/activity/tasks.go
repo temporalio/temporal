@@ -2,8 +2,10 @@ package activity
 
 import (
 	"context"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -230,29 +232,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(
-		ctx,
-		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
-		0,
-		createStartToCloseTimeoutFailure(),
-	)
-	if err != nil {
-		return err
-	}
-
-	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
-
-	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-
-		return nil
-	}
-
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
-		timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		retryState:     retryState,
-		metricsHandler: metricsHandler,
-	})
+	return activity.handleTimeout(ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
@@ -288,6 +268,15 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 		return false, nil
 	}
 
+	if activity.GetAsyncHandoffOptions() != nil {
+		deadlines, err := activity.handoffDeadlines(ctx, true)
+		if err != nil {
+			return false, err
+		}
+
+		return isTimeoutDue(deadlines.Heartbeat, taskAttrs.ScheduledTime), nil
+	}
+
 	// Must not have been a heartbeat since this task was created
 	hbTimeout := activity.GetHeartbeatTimeout().AsDuration() // T
 	attemptStartTime := attempt.GetStartedTime().AsTime()
@@ -310,26 +299,137 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(
-		ctx,
-		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_HEARTBEAT),
-		0,
-		createHeartbeatTimeoutFailure(),
-	)
+	return activity.handleTimeout(ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+}
+
+// handleTimeout is the authoritative retryable-timer path. Reported failures use HandleFailed.
+func (a *Activity) handleTimeout(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+	if timeoutType == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
+		return serviceerror.NewInternal("server activity timeout type is unspecified")
+	}
+
+	retryState, err := a.tryReschedule(ctx, retryEvent{
+		serverTimeoutType: timeoutType, failure: createActivityTimeoutFailure(timeoutType),
+	})
 	if err != nil {
 		return err
 	}
 
-	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
-
+	metricsHandler := a.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		a.emitOnAttemptTimedOutMetrics(metricsHandler, timeoutType)
 		return nil
 	}
 
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
-		timeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		retryState:     retryState,
-		metricsHandler: metricsHandler,
-	})
+	return TransitionTimedOut.Apply(a, ctx, timeoutEvent{timeoutType: timeoutType, retryState: retryState, metricsHandler: metricsHandler})
+}
+
+type handoffStartToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
+
+func newHandoffStartToCloseTimeoutTaskHandler() *handoffStartToCloseTimeoutTaskHandler {
+	return &handoffStartToCloseTimeoutTaskHandler{}
+}
+
+func (h *handoffStartToCloseTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.HandoffStartToCloseTimeoutTask) (bool, error) {
+	if a.GetAsyncHandoffOptions() == nil || a.GetStartToCloseTimeout().AsDuration() <= 0 {
+		return false, nil
+	}
+
+	// Paused activities start a fresh start-to-close timer at the next worker pickup on unpause.
+	if a.isTerminal() || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+		return false, nil
+	}
+
+	state := a.LastAttempt.Get(ctx).GetAsyncHandoffState()
+	if task.GetStamp() != state.GetStartToCloseStamp() {
+		return false, nil
+	}
+
+	if state.GetStartToCloseStartedTime() == nil {
+		// Worker pickup must record the start time. Fail on this invariant violation instead of
+		// silently discarding a required timeout.
+		if a.hasAttemptInProgress() {
+			return false, serviceerror.NewInternal("active start-to-close budget has no start time")
+		}
+
+		// Task no longer applies if no start time; the next worker pickup records a start time and schedules a new timer.
+		return false, nil
+	}
+
+	deadlines, err := a.handoffDeadlines(ctx, a.hasAttemptInProgress())
+	if err != nil {
+		return false, err
+	}
+
+	return isTimeoutDue(deadlines.StartToClose, invocation.ScheduledTime), nil
+}
+
+func (h *handoffStartToCloseTimeoutTaskHandler) Execute(ctx chasm.MutableContext, a *Activity, _ chasm.TaskAttributes, _ *activitypb.HandoffStartToCloseTimeoutTask) error {
+	return a.handleTimeout(ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+}
+
+type startToHandoffTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
+
+func newStartToHandoffTimeoutTaskHandler() *startToHandoffTimeoutTaskHandler {
+	return &startToHandoffTimeoutTaskHandler{}
+}
+
+func (h *startToHandoffTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.StartToHandoffTimeoutTask) (bool, error) {
+	if a.GetAsyncHandoffOptions() == nil {
+		return false, nil
+	}
+
+	if !a.hasAttemptInProgress() || a.GetAwaitingCompletion() {
+		return false, nil
+	}
+
+	if task.GetStamp() != a.LastAttempt.Get(ctx).GetStamp() {
+		return false, nil
+	}
+
+	deadlines, err := a.handoffDeadlines(ctx, true)
+	if err != nil {
+		return false, err
+	}
+
+	return isTimeoutDue(deadlines.StartToHandoff, invocation.ScheduledTime), nil
+}
+
+func (h *startToHandoffTimeoutTaskHandler) Execute(ctx chasm.MutableContext, a *Activity, _ chasm.TaskAttributes, _ *activitypb.StartToHandoffTimeoutTask) error {
+	return a.handleTimeout(ctx, enumspb.TIMEOUT_TYPE_START_TO_HANDOFF)
+}
+
+type handoffToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
+
+func newHandoffToCloseTimeoutTaskHandler() *handoffToCloseTimeoutTaskHandler {
+	return &handoffToCloseTimeoutTaskHandler{}
+}
+
+func (h *handoffToCloseTimeoutTaskHandler) Validate(ctx chasm.Context, a *Activity, invocation chasm.TaskInvocation, task *activitypb.HandoffToCloseTimeoutTask) (bool, error) {
+	if a.GetAsyncHandoffOptions() == nil {
+		return false, nil
+	}
+
+	if !a.hasAttemptInProgress() || !a.GetAwaitingCompletion() {
+		return false, nil
+	}
+
+	if task.GetStamp() != a.LastAttempt.Get(ctx).GetStamp() {
+		return false, nil
+	}
+
+	deadlines, err := a.handoffDeadlines(ctx, true)
+	if err != nil {
+		return false, err
+	}
+
+	return isTimeoutDue(deadlines.HandoffToClose, invocation.ScheduledTime), nil
+}
+
+func (h *handoffToCloseTimeoutTaskHandler) Execute(ctx chasm.MutableContext, a *Activity, _ chasm.TaskAttributes, _ *activitypb.HandoffToCloseTimeoutTask) error {
+	return a.handleTimeout(ctx, enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE)
+}
+
+func isTimeoutDue(deadline, scheduledTime time.Time) bool {
+	return !deadline.IsZero() && !deadline.After(scheduledTime)
 }

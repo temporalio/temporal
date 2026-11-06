@@ -435,3 +435,34 @@ func TestValidateRetryPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestIsRetryableTimeout(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		timeoutType enumspb.TimeoutType
+		retryable   bool
+	}{
+		{enumspb.TIMEOUT_TYPE_START_TO_CLOSE, true},
+		{enumspb.TIMEOUT_TYPE_HEARTBEAT, true},
+		{enumspb.TIMEOUT_TYPE_START_TO_HANDOFF, true},
+		{enumspb.TIMEOUT_TYPE_HANDOFF_TO_CLOSE, true},
+		{enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, false},
+		{enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, false},
+		{enumspb.TIMEOUT_TYPE_UNSPECIFIED, false},
+		{enumspb.TimeoutType(999), false},
+	} {
+		t.Run(tc.timeoutType.String(), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.retryable, IsRetryableTimeout(tc.timeoutType, nil))
+			require.False(t, IsRetryableTimeout(tc.timeoutType, []string{TimeoutFailureTypePrefix + tc.timeoutType.String()}))
+			require.Equal(t, tc.retryable, IsRetryableTimeout(tc.timeoutType, []string{"application-error"}))
+
+			failure := &failurepb.Failure{FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{TimeoutType: tc.timeoutType},
+			}}
+			require.Equal(t, tc.retryable, IsRetryableFailure(failure, nil))
+			require.False(t, IsRetryableFailure(failure, []string{TimeoutFailureTypePrefix + tc.timeoutType.String()}))
+		})
+	}
+}

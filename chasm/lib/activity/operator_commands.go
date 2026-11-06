@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -82,41 +83,21 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
+	if err := a.applyActivityOptionsUpdate(ctx, frontendReq, updateFields); err != nil {
+		return nil, err
+	}
+
 	attempt := a.LastAttempt.Get(ctx)
-
-	if frontendReq.GetRestoreOriginal() {
-		ogOptions := a.GetOriginalOptions()
-		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
-		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
-		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
-		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
-		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
-		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
-		a.Priority = common.CloneProto(ogOptions.GetPriority())
-		// start_delay only governs the first dispatch. Once the first attempt has started, restoring
-		// the original value would shift ScheduleToClose without affecting dispatch timing.
-		if a.GetFirstAttemptStartedTime() == nil {
-			a.StartDelay = common.CloneProto(ogOptions.GetStartDelay())
-		}
-	} else {
-		if err := a.mergeActivityOptions(frontendReq); err != nil {
-			return nil, err
-		}
-	}
-
-	// Recalculate policy-derived retry intervals based on the (possibly updated) retry policy.
-	// Worker-provided NextRetryDelay values are preserved for their already-scheduled retry.
-	if a.shouldRecalculateCurrentRetryInterval(attempt, frontendReq.GetRestoreOriginal(), updateFields) {
-		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
-		attempt.CurrentRetryInterval = durationpb.New(newInterval)
-	}
 
 	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
 	a.reissueScheduleToClose(ctx)
 
 	attempt.Stamp++
 
-	a.reissueRunningAttemptTimers(ctx, attempt)
+	if err := a.reissueRunningAttemptTimers(ctx, attempt); err != nil {
+		return nil, err
+	}
+
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		a.reissueDispatchAndScheduleToStart(ctx, attempt)
 	}
@@ -140,6 +121,7 @@ func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateAc
 				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
 				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				RetryPolicy:            a.GetRetryPolicy(),
+				AsyncHandoffOptions:    a.GetAsyncHandoffOptions(),
 				Priority:               a.GetPriority(),
 				StartDelay:             a.GetStartDelay(),
 			},
@@ -153,8 +135,7 @@ func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateAc
 //   - the activity is waiting to retry, i.e. in SCHEDULED or PAUSED state (a running attempt has no
 //     pending backoff to recalculate);
 //   - a retry is actually pending (CurrentRetryInterval is set);
-//   - the update touches the retry policy: either RestoreOriginal (which replaces the whole policy),
-//     or the update mask includes "retryPolicy" or one of its subfields;
+//   - the update explicitly changes the governing retry policy, or restores the original options;
 //   - the pending interval is still policy-derived (CurrentRetryIntervalSource is RETRY_POLICY).
 //     A worker-provided NextRetryDelay override is preserved regardless of its value. An
 //     UNSPECIFIED source (attempt state persisted before this field existed) is treated the same
@@ -164,6 +145,7 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	attempt *activitypb.ActivityAttemptState,
 	restoreOriginal bool,
 	updateFields map[string]struct{},
+	handoffPolicyUpdated bool,
 ) bool {
 	status := a.GetStatus()
 	if status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
@@ -176,7 +158,12 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	}
 
 	if !restoreOriginal {
-		if !util.FieldMaskHasPathOrSubPath(updateFields, "retryPolicy") {
+		policyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "retryPolicy")
+		if attempt.GetPendingRetryType() == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+			policyUpdated = handoffPolicyUpdated
+		}
+
+		if !policyUpdated {
 			return false
 		}
 	}
@@ -184,11 +171,12 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	return attempt.GetCurrentRetryIntervalSource() == activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
 }
 
-// mergeActivityOptions applies the field mask from the request to the activity state.
+// mergeActivityOptions returns merged and normalized options without changing activity state.
 // The structure mirrors the field-mask logic in service/history/api/updateactivityoptions/api.go
 func (a *Activity) mergeActivityOptions(
+	ctx chasm.Context,
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
-) error {
+) (*apiactivitypb.ActivityOptions, error) {
 	updateFields := util.ParseFieldMask(req.GetUpdateMask())
 
 	// Build an ActivityOptions view of the current Activity state so we can use the shared merge function.
@@ -200,37 +188,45 @@ func (a *Activity) mergeActivityOptions(
 		HeartbeatTimeout:       common.CloneProto(a.HeartbeatTimeout),
 		Priority:               common.CloneProto(a.Priority),
 		RetryPolicy:            common.CloneProto(a.RetryPolicy),
+		AsyncHandoffOptions:    common.CloneProto(a.GetAsyncHandoffOptions()),
 		StartDelay:             common.CloneProto(a.StartDelay),
 	}
 
 	if err := activityoptions.MergeActivityOptions(ao, common.CloneProto(req.GetActivityOptions()), updateFields); err != nil {
-		return err
+		return nil, err
 	}
 
 	if util.FieldMaskHasSubPath(updateFields, "retryPolicy") {
 		if err := retrypolicy.Validate(ao.GetRetryPolicy()); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	// Re-normalize timeouts after the update so that relationships like
-	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
-	// This mirrors adjustActivityOptions for workflow-embedded activities.
-	if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
-		return err
+	// Normalize merged timeouts based on whether handoff options are present.
+	if ao.GetAsyncHandoffOptions() != nil {
+		incoming := req.GetActivityOptions().GetAsyncHandoffOptions()
+		_, replaceHandoff := updateFields["asyncHandoffOptions"]
+		_, replaceHandoffPolicy := updateFields["asyncHandoffOptions.retryPolicy"]
+
+		// Apply defaults when adding handoff options or replacing a whole options/policy message.
+		// Leaf edits to existing options preserve unselected policy values.
+		needsRetryDefaults := replaceHandoffPolicy ||
+			(replaceHandoff && incoming != nil) ||
+			(a.GetAsyncHandoffOptions() == nil && incoming != nil && util.FieldMaskHasSubPath(updateFields, "asyncHandoffOptions"))
+		var retryDefaults *retrypolicy.DefaultRetrySettings
+		if needsRetryDefaults {
+			defaults := activityContextFromChasm(ctx).config.DefaultActivityRetryPolicy(ctx.NamespaceEntry().Name().String())
+			retryDefaults = &defaults
+		}
+
+		if err := validateAndNormalizeHandoffOptions(ao, retryDefaults); err != nil {
+			return nil, err
+		}
+	} else if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
+		return nil, err
 	}
 
-	// Write the merged and normalized options back to the Activity state fields.
-	a.TaskQueue = ao.TaskQueue
-	a.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
-	a.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
-	a.StartToCloseTimeout = ao.StartToCloseTimeout
-	a.HeartbeatTimeout = ao.HeartbeatTimeout
-	a.Priority = ao.Priority
-	a.RetryPolicy = ao.RetryPolicy
-	a.StartDelay = ao.StartDelay
-
-	return nil
+	return ao, nil
 }
 
 func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
@@ -457,6 +453,11 @@ func (a *Activity) handleReset(
 		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
 			return nil, err
 		}
+
+		if a.GetAsyncHandoffOptions() == nil && a.GetOriginalOptions().GetAsyncHandoffOptions() != nil &&
+			!activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
+			return nil, serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+		}
 	}
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityResetScope)
@@ -530,6 +531,9 @@ func (a *Activity) resetKeepPaused(
 	frontendReq *workflowservice.ResetActivityExecutionRequest,
 	metricsHandler metrics.Handler,
 ) (*activitypb.ResetActivityExecutionResponse, error) {
+	a.clearHandoffState()
+	a.resetHandoffAttempt(ctx)
+
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
@@ -590,16 +594,196 @@ func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
 // with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
 // only if the activity has never started.
 func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
-	og := a.GetOriginalOptions()
-	a.TaskQueue = common.CloneProto(og.GetTaskQueue())
-	a.ScheduleToCloseTimeout = common.CloneProto(og.GetScheduleToCloseTimeout())
-	a.ScheduleToStartTimeout = common.CloneProto(og.GetScheduleToStartTimeout())
-	a.StartToCloseTimeout = common.CloneProto(og.GetStartToCloseTimeout())
-	a.HeartbeatTimeout = common.CloneProto(og.GetHeartbeatTimeout())
-	a.RetryPolicy = common.CloneProto(og.GetRetryPolicy())
-	a.Priority = common.CloneProto(og.GetPriority())
-	if a.GetFirstAttemptStartedTime() == nil {
-		a.StartDelay = common.CloneProto(og.GetStartDelay())
-	}
+	a.applyActivityOptions(a.originalActivityOptions())
 	a.reissueScheduleToClose(ctx)
+}
+
+// pendingRetryType distinguishes an old main retry from an initial queue wait or a live delivery.
+func (a *Activity) pendingRetryType(attempt *activitypb.ActivityAttemptState) activitypb.ActivityRetryType {
+	pending := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED) &&
+		attempt.GetCurrentRetryInterval() != nil
+	if !pending {
+		return activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED
+	}
+
+	if attempt.GetPendingRetryType() == activitypb.ACTIVITY_RETRY_TYPE_UNSPECIFIED {
+		return activitypb.ACTIVITY_RETRY_TYPE_ACTIVITY
+	}
+
+	return attempt.GetPendingRetryType()
+}
+
+func (a *Activity) originalActivityOptions() *apiactivitypb.ActivityOptions {
+	options := common.CloneProto(a.GetOriginalOptions())
+
+	// Restoring start delay after pickup would shift the schedule-to-close deadline.
+	if a.GetFirstAttemptStartedTime() != nil {
+		options.StartDelay = common.CloneProto(a.GetStartDelay())
+	}
+
+	return options
+}
+
+func (a *Activity) applyActivityOptions(options *apiactivitypb.ActivityOptions) {
+	a.TaskQueue = options.TaskQueue
+	a.ScheduleToCloseTimeout = options.ScheduleToCloseTimeout
+	a.ScheduleToStartTimeout = options.ScheduleToStartTimeout
+	a.StartToCloseTimeout = options.StartToCloseTimeout
+	a.HeartbeatTimeout = options.HeartbeatTimeout
+	a.Priority = options.Priority
+	a.RetryPolicy = options.RetryPolicy
+	a.AsyncHandoffOptions = options.AsyncHandoffOptions
+	a.StartDelay = options.StartDelay
+}
+
+// applyActivityOptionsUpdate validates merged options and live handoff/retry changes before applying them.
+func (a *Activity) applyActivityOptionsUpdate(
+	ctx chasm.MutableContext,
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+	updateFields map[string]struct{},
+) error {
+	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
+	incoming := req.GetActivityOptions().GetAsyncHandoffOptions()
+	_, replaceHandoff := updateFields["asyncHandoffOptions"]
+
+	// Replacing existing handoff options resets an omitted retry policy to namespace defaults,
+	// so any pending policy-derived retry backoff is recalculated. Adding or re-adding options
+	// without a supplied retry policy preserves the pending retry backoff.
+	handoffPolicyUpdated := util.FieldMaskHasPathOrSubPath(updateFields, "asyncHandoffOptions.retryPolicy") ||
+		(replaceHandoff && incoming != nil && (hadHandoffOptions || incoming.GetRetryPolicy() != nil))
+
+	var options *apiactivitypb.ActivityOptions
+	if req.GetRestoreOriginal() {
+		options = a.originalActivityOptions()
+	} else {
+		var err error
+		options, err = a.mergeActivityOptions(ctx, req)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Check new opt-in admission before changing execution state.
+	willHaveHandoffOptions := options.GetAsyncHandoffOptions() != nil
+	if !hadHandoffOptions && willHaveHandoffOptions && !activityContextFromChasm(ctx).config.StandaloneAsyncHandoffEnabled(ctx.NamespaceEntry().Name().String()) {
+		return serviceerror.NewInvalidArgument("async handoff is not enabled for this namespace")
+	}
+
+	if err := a.applyRetryAndHandoffStateUpdate(ctx, options, req.GetRestoreOriginal(), updateFields, handoffPolicyUpdated); err != nil {
+		return err
+	}
+
+	a.applyActivityOptions(options)
+	return nil
+}
+
+// applyRetryAndHandoffStateUpdate validates and calculates retry/handoff changes using the current
+// state and resulting options. It applies those changes only after all checks pass.
+func (a *Activity) applyRetryAndHandoffStateUpdate(
+	ctx chasm.MutableContext,
+	options *apiactivitypb.ActivityOptions,
+	restoreOriginal bool,
+	updateFields map[string]struct{},
+	handoffPolicyUpdated bool,
+) error {
+	attempt := a.LastAttempt.Get(ctx)
+	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
+	willHaveHandoffOptions := options.GetAsyncHandoffOptions() != nil
+
+	pendingType := a.pendingRetryType(attempt)
+	handoffAttempt, startToCloseStartedAt, err := a.handoffStateForOptionsUpdate(ctx, willHaveHandoffOptions)
+	if err != nil {
+		return err
+	}
+
+	// Recalculate a pending policy-derived delay only when its governing policy was updated.
+	pendingHandoffPolicyAbsent := pendingType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF && !willHaveHandoffOptions
+	var updatedRetryInterval *durationpb.Duration
+	if !pendingHandoffPolicyAbsent && a.shouldRecalculateCurrentRetryInterval(attempt, restoreOriginal, updateFields, handoffPolicyUpdated) {
+		policy, count := options.GetRetryPolicy(), attempt.GetCount()
+		if pendingType == activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+			policy, count = options.GetAsyncHandoffOptions().GetRetryPolicy(), handoffAttempt
+		}
+
+		if count <= 0 {
+			return serviceerror.NewInternal("pending activity retry counter is not initialized")
+		}
+
+		updatedRetryInterval = durationpb.New(backoff.CalculateExponentialRetryInterval(policy, max(count-1, 1)))
+	}
+
+	// All checks have passed; apply the handoff state and pending retry changes.
+	if hadHandoffOptions != willHaveHandoffOptions {
+		a.clearStartToCloseState(ctx)
+	}
+
+	if willHaveHandoffOptions && attempt.AsyncHandoffState == nil {
+		attempt.AsyncHandoffState = &activitypb.ActivityAttemptState_AsyncHandoffState{}
+	}
+
+	if state := attempt.GetAsyncHandoffState(); state != nil {
+		state.Count = handoffAttempt
+		state.StartToCloseStartedTime = nil
+		if !startToCloseStartedAt.IsZero() {
+			state.StartToCloseStartedTime = timestamppb.New(startToCloseStartedAt)
+		}
+	}
+
+	attempt.PendingRetryType = pendingType
+	if updatedRetryInterval != nil {
+		attempt.CurrentRetryInterval = updatedRetryInterval
+	}
+
+	return nil
+}
+
+// handoffStateForOptionsUpdate returns the resulting handoff count and start-to-close start time.
+// It only calculates return values; it does not update the activity's fields.
+// The count is 0 when options are absent, 1 when added, or retained otherwise.
+// The start time is preserved, set to the current task's pickup time on live opt-in, or zero when
+// no clock should run. Inconsistent current state returns an error.
+func (a *Activity) handoffStateForOptionsUpdate(ctx chasm.Context, willHaveHandoffOptions bool) (int32, time.Time, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	hadHandoffOptions := a.GetAsyncHandoffOptions() != nil
+	pendingType := a.pendingRetryType(attempt)
+	if !hadHandoffOptions && !willHaveHandoffOptions && pendingType != activitypb.ACTIVITY_RETRY_TYPE_HANDOFF {
+		return 0, time.Time{}, nil
+	}
+
+	state := attempt.GetAsyncHandoffState()
+	deliveryActive := a.hasAttemptInProgress()
+	paused := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+	taskStartedAt := timestamp.TimeValue(attempt.GetStartedTime())
+	startToCloseStartedAt := timestamp.TimeValue(state.GetStartToCloseStartedTime())
+
+	if a.GetAwaitingCompletion() && (!deliveryActive || timestamp.TimeValue(a.GetAsyncHandoffTime()).IsZero()) {
+		return 0, time.Time{}, serviceerror.NewInternal("activity completion phase has no active delivery or handoff time")
+	}
+
+	if deliveryActive && taskStartedAt.IsZero() {
+		return 0, time.Time{}, serviceerror.NewInternal("active activity task has invalid pickup state")
+	}
+
+	if hadHandoffOptions && (state.GetCount() <= 0 || deliveryActive && startToCloseStartedAt.IsZero()) {
+		return 0, time.Time{}, serviceerror.NewInternal("activity handoff state is not initialized")
+	}
+
+	// Removing options must not bypass the state checks above.
+	if !willHaveHandoffOptions {
+		return 0, time.Time{}, nil
+	}
+
+	if hadHandoffOptions {
+		if paused {
+			return state.GetCount(), time.Time{}, nil
+		}
+
+		return state.GetCount(), startToCloseStartedAt, nil
+	}
+
+	if deliveryActive {
+		return 1, taskStartedAt, nil
+	}
+
+	return 1, time.Time{}, nil
 }

@@ -37,6 +37,8 @@ type eagerActivityTaskData struct {
 	currentAttemptScheduledTime         *timestamppb.Timestamp
 	startedTime                         *timestamppb.Timestamp
 	attempt                             int32
+	handoffAttempt                      int32
+	asyncHandoffOptions                 *apiactivitypb.AsyncHandoffOptions
 	scheduleToCloseTimeout              *durationpb.Duration
 	startToCloseTimeout                 *durationpb.Duration
 	heartbeatTimeout                    *durationpb.Duration
@@ -59,6 +61,11 @@ func (a *Activity) eagerActivityTaskData(
 	requestData := a.RequestData.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 
+	var handoffAttempt int32
+	if a.GetAsyncHandoffOptions() != nil {
+		handoffAttempt = attempt.GetAsyncHandoffState().GetCount()
+	}
+
 	// This data is used to construct the eager response after the transaction has completed, so
 	// it must not retain mutable state owned by the transaction.
 	return &eagerActivityTaskData{
@@ -74,6 +81,8 @@ func (a *Activity) eagerActivityTaskData(
 		currentAttemptScheduledTime:         common.CloneProto(a.dispatchTimeForAttempt(attempt)),
 		startedTime:                         common.CloneProto(attempt.GetStartedTime()),
 		attempt:                             attempt.GetCount(),
+		handoffAttempt:                      handoffAttempt,
+		asyncHandoffOptions:                 common.CloneProto(a.GetAsyncHandoffOptions()),
 		scheduleToCloseTimeout:              common.CloneProto(a.GetScheduleToCloseTimeout()),
 		startToCloseTimeout:                 common.CloneProto(a.GetStartToCloseTimeout()),
 		heartbeatTimeout:                    common.CloneProto(a.GetHeartbeatTimeout()),
@@ -115,6 +124,8 @@ func (d *eagerActivityTaskData) response(componentRef []byte) (*workflowservice.
 		CurrentAttemptScheduledTime:         d.currentAttemptScheduledTime,
 		StartedTime:                         d.startedTime,
 		Attempt:                             d.attempt,
+		HandoffAttempt:                      d.handoffAttempt,
+		AsyncHandoffOptions:                 d.asyncHandoffOptions,
 		ScheduleToCloseTimeout:              d.scheduleToCloseTimeout,
 		StartToCloseTimeout:                 d.startToCloseTimeout,
 		HeartbeatTimeout:                    d.heartbeatTimeout,
@@ -161,6 +172,9 @@ func (a *Activity) runState() enumspb.PendingActivityState {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		if a.GetAwaitingCompletion() {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
+		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		// The worker is still executing under its existing task token; the public PendingActivityState
@@ -168,6 +182,9 @@ func (a *Activity) runState() enumspb.PendingActivityState {
 		// ActivityReset=true on its next heartbeat response.
 		if a.isPaused() {
 			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
+		if a.GetAwaitingCompletion() {
+			return enumspb.PENDING_ACTIVITY_STATE_AWAITING_COMPLETION
 		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
@@ -219,7 +236,10 @@ func (a *Activity) buildActivityExecutionInfo(
 	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:                          key.BusinessID,
 		ActivityType:                        a.GetActivityType(),
+		AsyncHandoffOptions:                 a.GetAsyncHandoffOptions(),
+		AsyncHandoffTime:                    a.GetAsyncHandoffTime(),
 		Attempt:                             attempt.GetCount(),
+		AwaitingCompletion:                  a.hasAttemptInProgress() && a.GetAwaitingCompletion(),
 		CanceledReason:                      a.CancelState.GetReason(),
 		ClosedByPrincipal:                   resolvedPrincipal(executionInfo.ClosedByPrincipal),
 		CloseTime:                           closeTime,
@@ -258,6 +278,9 @@ func (a *Activity) buildActivityExecutionInfo(
 		Status:                              status,
 		TaskQueue:                           a.GetTaskQueue().GetName(),
 		UserMetadata:                        a.effectiveUserMetadata(ctx),
+	}
+	if a.GetAsyncHandoffOptions() != nil {
+		info.HandoffAttempt = attempt.GetAsyncHandoffState().GetCount()
 	}
 	if request.GetIncludeHeartbeatDetails() {
 		info.HeartbeatDetails = heartbeat.GetDetails()

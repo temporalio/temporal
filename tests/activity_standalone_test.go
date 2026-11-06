@@ -23,7 +23,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/activity"
 	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -124,6 +126,7 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
+	cluster.OverrideDynamicConfig(s.T(), activity.StandaloneAsyncHandoffEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
@@ -15657,4 +15660,138 @@ func (env *standaloneActivityEnv) pollWorkerCommand(
 	require.NoError(t, err)
 
 	return &executeReq
+}
+
+func (s *standaloneActivityTestSuite) TestAsyncHandoff() {
+	s.Run("DisableHandoffAfterRecording", func(s *standaloneActivityTestSuite) {
+		env := s.newTestEnv()
+		t := s.T()
+		ctx := s.Context()
+
+		activityID, taskQueue := env.Tv().ActivityID(), env.Tv().TaskQueue().GetName()
+		startRequest := &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			TaskQueue:           env.Tv().TaskQueue(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().RequestID(),
+			AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{},
+		}
+		start, err := env.FrontendClient().StartActivityExecution(ctx, startRequest)
+		require.NoError(t, err)
+		task := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, start.GetRunId())
+
+		handoff := &workflowservice.RespondActivityTaskHandoffRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+		}
+		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
+		require.NoError(t, err)
+
+		env.OverrideDynamicConfig(activity.StandaloneAsyncHandoffEnabled, false)
+
+		// Disabled admission rejects opted-in Start requests before deduplication or USE_EXISTING.
+		for _, testCase := range []struct {
+			name, requestID string
+			conflictPolicy  enumspb.ActivityIdConflictPolicy
+		}{
+			{name: "successful Start retry", requestID: startRequest.GetRequestId()},
+			{name: "use existing", requestID: env.Tv().Any().String(), conflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING},
+		} {
+			retry := common.CloneProto(startRequest)
+			retry.RequestId = testCase.requestID
+			retry.IdConflictPolicy = testCase.conflictPolicy
+			_, err := env.FrontendClient().StartActivityExecution(ctx, retry)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument), testCase.name)
+		}
+
+		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, handoff)
+		require.ErrorAs(t, err, new(*serviceerror.Unimplemented))
+
+		describeRequest := &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      start.GetRunId(),
+		}
+		response, err := env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
+		require.NoError(t, err)
+		require.True(t, response.GetInfo().GetAwaitingCompletion())
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+
+		response, err = env.FrontendClient().DescribeActivityExecution(ctx, describeRequest)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, response.GetInfo().GetStatus())
+	})
+
+	// TODO remove when WFA async handoff is supported
+	s.Run("RejectWorkflowActivityHandoff", func(s *standaloneActivityTestSuite) {
+		env := s.newTestEnv()
+		t := s.T()
+		ctx := s.Context()
+
+		taskQueue := env.Tv().TaskQueue().GetName()
+		activityType := env.Tv().ActivityType().GetName()
+		workflowFn := func(ctx workflow.Context) error {
+			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				TaskQueue:             taskQueue,
+				StartToCloseTimeout:   defaultStartToCloseTimeout,
+				DisableEagerExecution: true,
+			})
+			return workflow.ExecuteActivity(ctx, activityType).Get(ctx, nil)
+		}
+		env.SdkWorker().RegisterWorkflow(workflowFn)
+		run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        env.Tv().WorkflowID(),
+			TaskQueue: env.WorkerTaskQueue(),
+		}, workflowFn)
+		require.NoError(t, err)
+
+		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+
+		// The flag cannot enable updates until the workflow activity path persists handoff options.
+		env.OverrideDynamicConfig(activity.WorkflowAsyncHandoffEnabled, true)
+
+		// Neither workflow update API may opt an activity into the standalone-only feature.
+		for _, path := range []string{"async_handoff_options", "asyncHandoffOptions.heartbeatTimeout"} {
+			_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+				Namespace: env.Namespace().String(), WorkflowId: run.GetID(), RunId: run.GetRunID(), ActivityId: task.GetActivityId(),
+				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
+			})
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+
+			_, err = env.FrontendClient().UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
+				Namespace: env.Namespace().String(), Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+				Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: task.GetActivityId()},
+				ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}},
+				UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{path}},
+			})
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		}
+
+		_, err = env.FrontendClient().RespondActivityTaskHandoff(ctx, &workflowservice.RespondActivityTaskHandoffRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+		})
+		require.ErrorAs(t, err, new(*serviceerror.Unimplemented))
+
+		// Rejected handoff leaves the activity task available for normal completion.
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+		require.NoError(t, run.Get(ctx, nil))
+	})
 }

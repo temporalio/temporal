@@ -16,6 +16,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -24,7 +28,9 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -1417,6 +1423,156 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 	})
 }
 
+func TestValidateAndExtractHandoffRequest(t *testing.T) {
+	t.Parallel()
+
+	validToken, err := (&tokenspb.Task{
+		NamespaceId: "namespace-id",
+		Attempt:     1,
+		WorkflowId:  "workflow-id",
+		ActivityId:  "activity-id",
+	}).Marshal()
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		name               string
+		request            *workflowservice.RespondActivityTaskHandoffRequest
+		expectedError      string
+		expectedBusinessID string
+	}{
+		{
+			name: "workflow routing uses token workflow ID",
+			request: &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: validToken, ResourceId: "activity:untrusted-id",
+			},
+			expectedBusinessID: "workflow-id",
+		},
+		{
+			name:          "nil request",
+			expectedError: "task token is required",
+		},
+		{
+			name:          "missing token",
+			request:       &workflowservice.RespondActivityTaskHandoffRequest{},
+			expectedError: "task token is required",
+		},
+		{
+			name: "malformed token",
+			request: &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: []byte{0xff},
+			},
+			expectedError: "invalid activity task token",
+		},
+		{
+			name: "long identity",
+			request: &workflowservice.RespondActivityTaskHandoffRequest{
+				TaskToken: validToken,
+				Identity:  strings.Repeat("x", defaultMaxIDLengthLimit+1),
+			},
+			expectedError: fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit),
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, businessID, err := validateAndExtractHandoffRequest(testCase.request, defaultMaxIDLengthLimit)
+			if testCase.expectedError != "" {
+				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+				require.ErrorContains(t, err, testCase.expectedError)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, testCase.expectedBusinessID, businessID)
+		})
+	}
+}
+
+func TestValidateAndExtractHandoffTaskToken(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name         string
+		mutate       func(*tokenspb.Task)
+		componentRef *persistencespb.ChasmComponentRef
+	}{
+		{name: "zero attempt", mutate: func(token *tokenspb.Task) {
+			token.Attempt = 0
+		}},
+		{name: "missing namespace", mutate: func(token *tokenspb.Task) {
+			token.NamespaceId = ""
+		}},
+		{name: "malformed reference never falls back to workflow", mutate: func(token *tokenspb.Task) {
+			token.ComponentRef = []byte{0xff}
+			token.WorkflowId = "workflow-id"
+		}},
+		{
+			name: "missing reference business ID",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				ArchetypeId: ArchetypeID,
+			},
+		},
+		{
+			name: "missing reference archetype",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+			},
+		},
+		{
+			name: "wrong reference archetype",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		{
+			name: "non-root reference",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId:   "namespace-id",
+				BusinessId:    "activity-id",
+				ArchetypeId:   ArchetypeID,
+				ComponentPath: []string{"Visibility"},
+			},
+		},
+		{
+			name: "reference namespace mismatch",
+			componentRef: &persistencespb.ChasmComponentRef{
+				NamespaceId: "other-namespace-id",
+				BusinessId:  "activity-id",
+				ArchetypeId: ArchetypeID,
+			},
+		},
+		{name: "missing routing ID", mutate: func(token *tokenspb.Task) {
+			token.ComponentRef = nil
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			componentRef := testCase.componentRef
+			if componentRef == nil {
+				componentRef = &persistencespb.ChasmComponentRef{
+					NamespaceId: "namespace-id",
+					BusinessId:  "activity-id",
+					ArchetypeId: ArchetypeID,
+				}
+			}
+			ref, err := componentRef.Marshal()
+			require.NoError(t, err)
+			token := &tokenspb.Task{NamespaceId: "namespace-id", Attempt: 1, ComponentRef: ref}
+			if testCase.mutate != nil {
+				testCase.mutate(token)
+			}
+
+			_, err = validateAndExtractHandoffTaskToken(token)
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		})
+	}
+}
+
 func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
 	return retrypolicy.DefaultRetrySettings{
 		InitialInterval:            time.Second,
@@ -1424,4 +1580,396 @@ func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
 		BackoffCoefficient:         2.0,
 		MaximumAttempts:            0,
 	}
+}
+
+func TestValidateAndNormalizeHandoffOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("UpdateMasks", func(t *testing.T) {
+		t.Parallel()
+
+		for _, testCase := range []struct {
+			name    string
+			options *activitypb.AsyncHandoffOptions
+			path    string
+			invalid bool
+		}{
+			{name: "remove", path: "async_handoff_options"},
+			{name: "empty replacement", path: "asyncHandoffOptions", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "duration needs source parent", path: "asyncHandoffOptions.startToHandoffTimeout", invalid: true},
+			{name: "policy needs handoff parent", path: "asyncHandoffOptions.retryPolicy", invalid: true},
+			{name: "policy leaf needs both parents", path: "asyncHandoffOptions.retryPolicy.maximumAttempts", options: &activitypb.AsyncHandoffOptions{}, invalid: true},
+			{name: "whole nil policy gets defaults", path: "asyncHandoffOptions.retryPolicy", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "duration clear", path: "asyncHandoffOptions.handoffToCloseTimeout", options: &activitypb.AsyncHandoffOptions{}},
+			{name: "negative duration", path: "asyncHandoffOptions.startToHandoffTimeout", options: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(-time.Second)}, invalid: true},
+			{name: "unsupported retry list leaf", path: "asyncHandoffOptions.retryPolicy.nonRetryableErrorTypes", options: &activitypb.AsyncHandoffOptions{RetryPolicy: &commonpb.RetryPolicy{}}, invalid: true},
+			{name: "unselected handoff values are ignored", path: "heartbeat_timeout", options: &activitypb.AsyncHandoffOptions{StartToHandoffTimeout: durationpb.New(-time.Second)}},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+
+				request := &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace: "namespace", ActivityId: "activity",
+					ActivityOptions: &activitypb.ActivityOptions{AsyncHandoffOptions: common.CloneProto(testCase.options)},
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{testCase.path}},
+				}
+				err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(request, getDefaultRetrySettings, defaultMaxIDLengthLimit)
+				if testCase.invalid {
+					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+					return
+				}
+
+				require.NoError(t, err)
+				if testCase.path == "asyncHandoffOptions.retryPolicy" {
+					require.Equal(t, time.Second, request.GetActivityOptions().GetAsyncHandoffOptions().GetRetryPolicy().GetInitialInterval().AsDuration())
+				}
+			})
+		}
+	})
+
+	t.Run("StandaloneVsEmbedded", func(t *testing.T) {
+		t.Parallel()
+
+		for _, standalone := range []bool{false, true} {
+			t.Run(fmt.Sprintf("standalone=%t", standalone), func(t *testing.T) {
+				t.Parallel()
+
+				options := &activitypb.ActivityOptions{
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+					ScheduleToCloseTimeout: durationpb.New(time.Minute),
+					AsyncHandoffOptions:    &activitypb.AsyncHandoffOptions{},
+				}
+
+				var err error
+				if standalone {
+					err = ValidateAndNormalizeStandaloneActivity(defaultActivityID, defaultActivityType, getDefaultRetrySettings, defaultMaxIDLengthLimit, namespace.Name(defaultNamespaceID), options, nil)
+				} else {
+					err = ValidateAndNormalizeEmbeddedActivity(defaultActivityID, defaultActivityType, getDefaultRetrySettings, defaultMaxIDLengthLimit, namespace.Name(defaultNamespaceID), options, nil, durationpb.New(30*time.Second), defaultTaskQueue)
+				}
+
+				require.NoError(t, err)
+				if standalone {
+					require.Nil(t, options.GetStartToCloseTimeout())
+					require.Equal(t, time.Minute, options.GetScheduleToCloseTimeout().AsDuration())
+					require.Equal(t, time.Minute, options.GetScheduleToStartTimeout().AsDuration())
+				} else {
+					require.Equal(t, 30*time.Second, options.GetStartToCloseTimeout().AsDuration())
+					require.Equal(t, 30*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+					require.Equal(t, 30*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				}
+			})
+		}
+	})
+
+	t.Run("TimeoutNormalization", func(t *testing.T) {
+		t.Parallel()
+
+		for _, testCase := range []struct {
+			name                                                                              string
+			scheduleToClose, startToClose, scheduleToStart                                    time.Duration
+			expectedStartToClose, expectedScheduleToStart, expectedStartToHandoff             time.Duration
+			expectedHandoffToClose, expectedPreHandoffHeartbeat, expectedPostHandoffHeartbeat time.Duration
+			mutate                                                                            func(*activitypb.ActivityOptions)
+		}{
+			{
+				name:                         "schedule-to-close caps start-to-close and schedule-to-start",
+				scheduleToClose:              5 * time.Minute,
+				startToClose:                 10 * time.Minute,
+				scheduleToStart:              500 * time.Second,
+				expectedStartToClose:         5 * time.Minute,
+				expectedScheduleToStart:      5 * time.Minute,
+				expectedStartToHandoff:       2 * time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  2 * time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "schedule-to-start defaults to schedule-to-close",
+				scheduleToClose:              5 * time.Minute,
+				startToClose:                 time.Minute,
+				expectedStartToClose:         time.Minute,
+				expectedScheduleToStart:      5 * time.Minute,
+				expectedStartToHandoff:       time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "schedule-to-start is capped without enabling start-to-close",
+				scheduleToClose:              5 * time.Minute,
+				scheduleToStart:              500 * time.Second,
+				expectedScheduleToStart:      5 * time.Minute,
+				expectedStartToHandoff:       2 * time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  2 * time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "schedule-to-close alone leaves start-to-close disabled",
+				scheduleToClose:              5 * time.Minute,
+				expectedScheduleToStart:      5 * time.Minute,
+				expectedStartToHandoff:       2 * time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  2 * time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "start-to-close does not cap schedule-to-start",
+				startToClose:                 time.Minute,
+				scheduleToStart:              500 * time.Second,
+				expectedStartToClose:         time.Minute,
+				expectedScheduleToStart:      500 * time.Second,
+				expectedStartToHandoff:       time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "start-to-close alone leaves schedule timeouts disabled",
+				startToClose:                 time.Minute,
+				expectedStartToClose:         time.Minute,
+				expectedStartToHandoff:       time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "phase timeouts leave explicit schedule-to-start unchanged",
+				scheduleToStart:              500 * time.Second,
+				expectedScheduleToStart:      500 * time.Second,
+				expectedStartToHandoff:       2 * time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  2 * time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "phase timeouts alone leave schedule timeouts and start-to-close disabled",
+				expectedStartToHandoff:       2 * time.Minute,
+				expectedHandoffToClose:       30 * time.Second,
+				expectedPreHandoffHeartbeat:  2 * time.Minute,
+				expectedPostHandoffHeartbeat: 30 * time.Second,
+			},
+			{
+				name:                         "schedule-to-close caps both phases and heartbeats",
+				scheduleToClose:              15 * time.Second,
+				expectedScheduleToStart:      15 * time.Second,
+				expectedStartToHandoff:       15 * time.Second,
+				expectedHandoffToClose:       15 * time.Second,
+				expectedPreHandoffHeartbeat:  15 * time.Second,
+				expectedPostHandoffHeartbeat: 15 * time.Second,
+			},
+			{
+				name:                         "start-to-close caps both phases and heartbeats",
+				startToClose:                 15 * time.Second,
+				expectedStartToClose:         15 * time.Second,
+				expectedStartToHandoff:       15 * time.Second,
+				expectedHandoffToClose:       15 * time.Second,
+				expectedPreHandoffHeartbeat:  15 * time.Second,
+				expectedPostHandoffHeartbeat: 15 * time.Second,
+			},
+			{
+				name:                         "schedule-to-close caps heartbeats with phase timeouts disabled",
+				scheduleToClose:              time.Minute,
+				expectedScheduleToStart:      time.Minute,
+				expectedPreHandoffHeartbeat:  time.Minute,
+				expectedPostHandoffHeartbeat: time.Minute,
+				mutate: func(options *activitypb.ActivityOptions) {
+					options.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(0)
+					options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(0)
+				},
+			},
+			{
+				name:                         "start-to-close caps heartbeats with phase timeouts disabled",
+				startToClose:                 time.Minute,
+				expectedStartToClose:         time.Minute,
+				expectedPreHandoffHeartbeat:  time.Minute,
+				expectedPostHandoffHeartbeat: time.Minute,
+				mutate: func(options *activitypb.ActivityOptions) {
+					options.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(0)
+					options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(0)
+				},
+			},
+			{
+				name:                   "positive phase timeouts leave disabled heartbeats unchanged",
+				expectedStartToHandoff: 2 * time.Minute,
+				expectedHandoffToClose: 30 * time.Second,
+				mutate: func(options *activitypb.ActivityOptions) {
+					options.HeartbeatTimeout = durationpb.New(0)
+					options.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(0)
+				},
+			},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+
+				options := &activitypb.ActivityOptions{
+					ScheduleToCloseTimeout: durationpb.New(testCase.scheduleToClose),
+					StartToCloseTimeout:    durationpb.New(testCase.startToClose),
+					ScheduleToStartTimeout: durationpb.New(testCase.scheduleToStart),
+					HeartbeatTimeout:       durationpb.New(90 * time.Second),
+					RetryPolicy:            &commonpb.RetryPolicy{MaximumAttempts: 1},
+					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						StartToHandoffTimeout: durationpb.New(120 * time.Second),
+						HandoffToCloseTimeout: durationpb.New(30 * time.Second),
+						HeartbeatTimeout:      durationpb.New(150 * time.Second),
+					},
+				}
+
+				if testCase.mutate != nil {
+					testCase.mutate(options)
+				}
+
+				expected := &activitypb.ActivityOptions{
+					ScheduleToCloseTimeout: durationpb.New(testCase.scheduleToClose),
+					StartToCloseTimeout:    durationpb.New(testCase.expectedStartToClose),
+					ScheduleToStartTimeout: durationpb.New(testCase.expectedScheduleToStart),
+					HeartbeatTimeout:       durationpb.New(testCase.expectedPostHandoffHeartbeat),
+					RetryPolicy:            &commonpb.RetryPolicy{MaximumAttempts: 1},
+					AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{
+						StartToHandoffTimeout: durationpb.New(testCase.expectedStartToHandoff),
+						HandoffToCloseTimeout: durationpb.New(testCase.expectedHandoffToClose),
+						HeartbeatTimeout:      durationpb.New(testCase.expectedPreHandoffHeartbeat),
+						RetryPolicy:           &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 2, MaximumInterval: durationpb.New(100 * time.Second)},
+					},
+				}
+
+				require.NoError(t, validateAndNormalizeHandoffOptions(options, &retrypolicy.DefaultDefaultRetrySettings))
+				protorequire.ProtoEqual(t, expected, options)
+				require.NoError(t, validateAndNormalizeHandoffOptions(options, &retrypolicy.DefaultDefaultRetrySettings))
+				protorequire.ProtoEqual(t, expected, options)
+			})
+		}
+	})
+
+	t.Run("Validation", func(t *testing.T) {
+		t.Parallel()
+
+		for _, testCase := range []struct {
+			name                   string
+			mutate                 func(*activitypb.ActivityOptions)
+			invalid                bool
+			expectedStartToHandoff time.Duration
+			expectedHandoffToClose time.Duration
+			retryDefaults          *retrypolicy.DefaultRetrySettings
+			expectedRetryPolicy    *commonpb.RetryPolicy
+			expectedError          string
+		}{
+			{name: "empty options keep phase timers disabled"},
+			{name: "start-to-handoff alone cannot cover both phases", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToCloseTimeout = nil
+				options.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(time.Second)
+			}, invalid: true},
+			{name: "handoff-to-close alone cannot cover both phases", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToCloseTimeout = nil
+				options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(time.Second)
+			}, invalid: true},
+			{
+				name: "handoff policy uses namespace defaults independently of activity policy",
+				retryDefaults: &retrypolicy.DefaultRetrySettings{
+					InitialInterval:            3 * time.Second,
+					MaximumIntervalCoefficient: 10,
+					BackoffCoefficient:         3,
+					MaximumAttempts:            7,
+				},
+				expectedRetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(3 * time.Second),
+					MaximumInterval:    durationpb.New(30 * time.Second),
+					BackoffCoefficient: 3,
+					MaximumAttempts:    7,
+				},
+			},
+			{
+				name: "explicit handoff policy overrides namespace defaults",
+				retryDefaults: &retrypolicy.DefaultRetrySettings{
+					InitialInterval:            3 * time.Second,
+					MaximumIntervalCoefficient: 10,
+					BackoffCoefficient:         3,
+					MaximumAttempts:            7,
+				},
+				mutate: func(options *activitypb.ActivityOptions) {
+					options.AsyncHandoffOptions.RetryPolicy = &commonpb.RetryPolicy{
+						InitialInterval:        durationpb.New(5 * time.Second),
+						MaximumInterval:        durationpb.New(20 * time.Second),
+						BackoffCoefficient:     2,
+						MaximumAttempts:        4,
+						NonRetryableErrorTypes: []string{"handoff-error"},
+					}
+				},
+				expectedRetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:        durationpb.New(5 * time.Second),
+					MaximumInterval:        durationpb.New(20 * time.Second),
+					BackoffCoefficient:     2,
+					MaximumAttempts:        4,
+					NonRetryableErrorTypes: []string{"handoff-error"},
+				},
+			},
+			{name: "negative schedule-to-close timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToCloseTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid ScheduleToCloseTimeout: negative duration"},
+			{name: "negative schedule-to-start timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.ScheduleToStartTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid ScheduleToStartTimeout: negative duration"},
+			{name: "negative start-to-close timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.StartToCloseTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid StartToCloseTimeout: negative duration"},
+			{name: "negative activity heartbeat", mutate: func(options *activitypb.ActivityOptions) {
+				options.HeartbeatTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid HeartbeatTimeout: negative duration"},
+			{name: "negative submission timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.AsyncHandoffOptions.StartToHandoffTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.StartToHandoffTimeout: negative duration"},
+			{name: "negative completion timeout", mutate: func(options *activitypb.ActivityOptions) {
+				options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.HandoffToCloseTimeout: negative duration"},
+			{name: "negative submission heartbeat", mutate: func(options *activitypb.ActivityOptions) {
+				options.AsyncHandoffOptions.HeartbeatTimeout = durationpb.New(-time.Second)
+			}, invalid: true, expectedError: "invalid AsyncHandoffOptions.HeartbeatTimeout: negative duration"},
+			{name: "invalid handoff policy", mutate: func(options *activitypb.ActivityOptions) {
+				options.AsyncHandoffOptions.RetryPolicy = &commonpb.RetryPolicy{BackoffCoefficient: 0.5, MaximumAttempts: 3}
+			}, invalid: true},
+			{name: "duration cap", mutate: func(options *activitypb.ActivityOptions) {
+				options.AsyncHandoffOptions.StartToHandoffTimeout = &durationpb.Duration{Seconds: 1000 * 365 * 24 * 60 * 60}
+				options.ScheduleToCloseTimeout = nil
+				options.AsyncHandoffOptions.HandoffToCloseTimeout = durationpb.New(time.Minute)
+			}, expectedStartToHandoff: 100 * 365 * 24 * time.Hour, expectedHandoffToClose: time.Minute},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+
+				options := &activitypb.ActivityOptions{ScheduleToCloseTimeout: durationpb.New(time.Hour), RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1}, AsyncHandoffOptions: &activitypb.AsyncHandoffOptions{}}
+				if testCase.mutate != nil {
+					testCase.mutate(options)
+				}
+
+				mainPolicy := common.CloneProto(options.GetRetryPolicy())
+
+				defaults := testCase.retryDefaults
+				if defaults == nil {
+					defaults = &retrypolicy.DefaultDefaultRetrySettings
+				}
+
+				err := validateAndNormalizeHandoffOptions(options, defaults)
+				if testCase.invalid {
+					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+					if testCase.expectedError != "" {
+						require.ErrorContains(t, err, testCase.expectedError)
+					}
+
+					return
+				}
+
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, mainPolicy, options.GetRetryPolicy())
+				if testCase.expectedRetryPolicy != nil {
+					protorequire.ProtoEqual(t, testCase.expectedRetryPolicy, options.GetAsyncHandoffOptions().GetRetryPolicy())
+				}
+
+				require.Zero(t, options.GetStartToCloseTimeout().AsDuration())
+				require.Zero(t, options.GetHeartbeatTimeout().AsDuration())
+				require.Zero(t, options.GetAsyncHandoffOptions().GetHeartbeatTimeout().AsDuration())
+				require.Equal(t, testCase.expectedStartToHandoff, options.GetAsyncHandoffOptions().GetStartToHandoffTimeout().AsDuration())
+				require.Equal(t, testCase.expectedHandoffToClose, options.GetAsyncHandoffOptions().GetHandoffToCloseTimeout().AsDuration())
+			})
+		}
+	})
 }

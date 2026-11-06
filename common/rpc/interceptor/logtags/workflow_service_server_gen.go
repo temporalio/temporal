@@ -455,6 +455,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.RespondActivityTaskFailedByIdResponse:
 		return nil
+	case *workflowservice.RespondActivityTaskHandoffRequest:
+		return wt.fromTaskToken(r.GetTaskToken())
+	case *workflowservice.RespondActivityTaskHandoffResponse:
+		return nil
 	case *workflowservice.RespondNexusTaskCompletedRequest:
 		return nil
 	case *workflowservice.RespondNexusTaskCompletedResponse:

@@ -33,8 +33,13 @@ type Outcome struct {
 // Initial is the state of a newly created Activity.
 func Initial(cfg Config) AbstractState {
 	s := AbstractState{Status: Scheduled, AttemptCount: 1}
+	if cfg.AsyncHandoffOptions {
+		s.HandoffAttempt = 1
+	}
+
 	if cfg.InitialAttemptStarted {
 		s.Status = Started
+		s.HandoffStartToCloseStarted = cfg.AsyncHandoffOptions
 		return s
 	}
 	if cfg.HasStartDelay {
@@ -46,12 +51,27 @@ func Initial(cfg Config) AbstractState {
 // Transition is the model's total transition function: given the config, the current state, and an
 // event, it returns an Outcome.
 func Transition(cfg Config, s AbstractState, e Event) Outcome {
+	outcome := transition(cfg, s, e)
+	next := &outcome.Next
+	if next.Status.Terminal() || next.Status == Paused {
+		next.HandoffStartToCloseStarted = false
+	}
+
+	if !deliveryActive(*next) {
+		next.AwaitingCompletion = false
+	}
+
+	return outcome
+}
+
+func transition(cfg Config, s AbstractState, e Event) Outcome {
 	if s.Status == Unspecified {
 		panic("unreachable")
 	}
 	if s.Status.Terminal() {
 		return handleEventInTerminalState(s, e)
 	}
+
 	switch e.Type {
 	case PollType:
 		return poll(cfg, s, e)
@@ -87,18 +107,31 @@ func Transition(cfg Config, s AbstractState, e Event) Outcome {
 		return startDelayElapses(cfg, s, e)
 	case BackoffElapsesType:
 		return backoffElapses(cfg, s, e)
+	case HandoffType:
+		if deliveryActive(s) {
+			s.AwaitingCompletion = true
+			return Outcome{Next: s}
+		}
+
+		return reject(s, NotFound)
+	case StartToHandoffElapsesType:
+		return startToHandoffElapses(cfg, s, e)
+	case HandoffToCloseElapsesType:
+		return handoffToCloseElapses(cfg, s, e)
 	default:
 		panic("model: unhandled event type")
 	}
 }
 
 // PollActivityTaskQueue: advances a dispatchable Scheduled attempt to Started.
-func poll(_ Config, s AbstractState, _ Event) Outcome {
+func poll(cfg Config, s AbstractState, _ Event) Outcome {
 	if !FindsTask(s) {
 		return noop(s)
 	}
 	n := s
 	n.Status = Started
+	n.AwaitingCompletion = false
+	n.HandoffStartToCloseStarted = cfg.AsyncHandoffOptions
 	return Outcome{Next: n}
 }
 
@@ -128,33 +161,29 @@ func respondCompleted(_ Config, s AbstractState, e Event) Outcome {
 // RespondActivityTaskFailed (by task token, from worker) or RespondActivityTaskFailedById.
 // (from a service completing the activity out of band). Fails an in-progress attempt.
 func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
-	switch s.Status {
-	case ResetRequested:
-		return applyDeferredReset(s)
-	case Started, PauseRequested:
-		n := s
-		if isRetryableFailure(cfg, e) && s.retriesRemaining(cfg) {
-			n.Status = Scheduled
-			n.Dispatchability = BackoffPending // the retry waits for the backoff interval
-			if s.Status == PauseRequested {
-				n.Status = Paused // pause takes effect on the retry
-			}
-			n.AttemptCount++
-			return Outcome{Next: n}
-		}
-		// no retry: terminal failure
-		n.Status = Failed
-		return Outcome{Next: n}
-	case CancelRequested:
-		n := s
-		n.Status = Failed
-		return Outcome{Next: n}
-	case Scheduled, Paused:
-		// No attempt is in progress to fail.
+	if !deliveryActive(s) {
 		return reject(s, NotFound)
-	default:
-		panic("model does not handle RespondFailed while in status " + s.Status.String())
 	}
+
+	if s.Status == ResetRequested {
+		return applyDeferredReset(cfg, s)
+	}
+
+	canRetry := s.Status != CancelRequested &&
+		isRetryableFailure(cfg, s, e) &&
+		retriesRemaining(cfg, s, false) &&
+		!retryOutlivesScheduleToClose(cfg, s, false)
+
+	if canRetry {
+		n := advanceRetry(cfg, s, false)
+		if s.Status == PauseRequested {
+			n.Status = Paused
+		}
+		return Outcome{Next: n}
+	}
+
+	s.Status = Failed
+	return Outcome{Next: s}
 }
 
 // Note: The model implies an "order of precedence": Cancel > Reset > Pause. I.e. you can Cancel in
@@ -260,11 +289,16 @@ func unpause(_ Config, s AbstractState, _ Event) Outcome {
 
 // ResetActivityExecution: makes the activity behave as if starting its first attempt, except the
 // schedule-to-close timer keeps running. Applied only once any current attempt has ended.
-func reset(_ Config, s AbstractState, e Event) Outcome {
+func reset(cfg Config, s AbstractState, e Event) Outcome {
 	switch s.Status {
 	case Scheduled, Paused:
 		n := s
 		n.AttemptCount = 1
+		n.HandoffStartToCloseStarted = false
+		if cfg.AsyncHandoffOptions {
+			n.HandoffAttempt = 1
+		}
+
 		// Reset discards a pending retry backoff (the reset attempt dispatches immediately) but keeps
 		// a pending start_delay.
 		if s.Dispatchability == BackoffPending {
@@ -341,13 +375,52 @@ func scheduleToCloseElapses(cfg Config, s AbstractState, _ Event) Outcome {
 // startToCloseElapses and heartbeatElapses represent the end of the nominal per-attempt timeouts
 // configured by the driver. The product behavior is that either one ends the running attempt.
 func startToCloseElapses(cfg Config, s AbstractState, e Event) Outcome {
+	handoffStartToCloseInactive := cfg.AsyncHandoffOptions &&
+		(!cfg.HasStartToClose || !s.HandoffStartToCloseStarted)
+
+	if handoffStartToCloseInactive {
+		return impossibleElapse(s)
+	}
+
 	return attemptTimedOut(cfg, s, e)
 }
 
 func heartbeatElapses(cfg Config, s AbstractState, e Event) Outcome {
-	if !cfg.HasHeartbeat {
+	hasHeartbeat := cfg.HasHeartbeat
+	if cfg.AsyncHandoffOptions && !s.AwaitingCompletion {
+		hasHeartbeat = cfg.HasHandoffHeartbeat
+	}
+
+	if !hasHeartbeat {
 		return impossibleElapse(s)
 	}
+
+	return attemptTimedOut(cfg, s, e)
+}
+
+func startToHandoffElapses(cfg Config, s AbstractState, e Event) Outcome {
+	canExpire := cfg.AsyncHandoffOptions &&
+		cfg.HasStartToHandoff &&
+		!s.AwaitingCompletion &&
+		deliveryActive(s)
+
+	if !canExpire {
+		return impossibleElapse(s)
+	}
+
+	return attemptTimedOut(cfg, s, e)
+}
+
+func handoffToCloseElapses(cfg Config, s AbstractState, e Event) Outcome {
+	canExpire := cfg.AsyncHandoffOptions &&
+		cfg.HasHandoffToClose &&
+		s.AwaitingCompletion &&
+		deliveryActive(s)
+
+	if !canExpire {
+		return impossibleElapse(s)
+	}
+
 	return attemptTimedOut(cfg, s, e)
 }
 
@@ -405,57 +478,95 @@ func handleEventInTerminalState(s AbstractState, e Event) Outcome {
 	case PollType:
 		return noop(s) // A worker can always poll
 	case HeartbeatType, RespondCompletedType, RespondFailedType, RespondCanceledType,
-		RespondCompletedByIDType, RespondFailedByIDType,
+		RespondCompletedByIDType, RespondFailedByIDType, HandoffType,
 		RequestCancelType, TerminateType, PauseType, UnpauseType, ResetType, UpdateOptionsType:
 		return reject(s, NotFound)
 	case ScheduleToStartElapsesType, ScheduleToCloseElapsesType, StartToCloseElapsesType,
-		HeartbeatElapsesType, StartDelayElapsesType, BackoffElapsesType:
+		HeartbeatElapsesType, StartDelayElapsesType, BackoffElapsesType, StartToHandoffElapsesType, HandoffToCloseElapsesType:
 		return impossibleElapse(s) // the activity has closed and no time windows are in effect
 	default:
 		panic("model: unhandled event type in eventInTerminalState")
 	}
 }
 
-func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
-	switch s.Status {
-	case ResetRequested:
-		return applyDeferredReset(s)
-	case Started, PauseRequested:
-		n := s
-		if isRetryableTimeout(cfg, e.Type) && s.retriesRemaining(cfg) {
-			// retry
-			n.Status = Scheduled
-			if s.Status == PauseRequested {
-				n.Status = Paused
-			}
-			n.Dispatchability = BackoffPending
-			n.AttemptCount++
-			return Outcome{Next: n}
-		}
-		n.Status = TimedOut
-		return Outcome{Next: n}
-	case CancelRequested:
-		// Timeout -> TimedOut, not Canceled.
-		n := s
-		n.Status = TimedOut
-		return Outcome{Next: n}
-	case Scheduled, Paused:
-		return impossibleElapse(s) // there was no running attempt
-	default:
-		panic("model does not handle a per-attempt timeout while in status " + s.Status.String())
-	}
+func deliveryActive(s AbstractState) bool {
+	return s.Status == Started || s.Status == PauseRequested || s.Status == CancelRequested || s.Status == ResetRequested
 }
 
-// retriesRemaining is whether the retry policy allows an attempt after the current one.
-func (s AbstractState) retriesRemaining(cfg Config) bool {
-	return cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts
+func handoffRetry(cfg Config, s AbstractState, startToCloseExpired bool) bool {
+	return cfg.AsyncHandoffOptions && !s.AwaitingCompletion && !startToCloseExpired
+}
+
+func advanceRetry(cfg Config, s AbstractState, startToCloseExpired bool) AbstractState {
+	n := s
+	if handoffRetry(cfg, s, startToCloseExpired) {
+		n.HandoffAttempt++
+	} else {
+		n.AttemptCount++
+		n.HandoffStartToCloseStarted = false
+		if cfg.AsyncHandoffOptions {
+			n.HandoffAttempt = 1
+		}
+	}
+
+	n.Status = Scheduled
+	n.Dispatchability = BackoffPending
+	n.AwaitingCompletion = false
+	return n
+}
+
+func retriesRemaining(cfg Config, s AbstractState, startToCloseExpired bool) bool {
+	maximum, count := cfg.MaxAttempts, s.AttemptCount
+	if handoffRetry(cfg, s, startToCloseExpired) {
+		maximum, count = cfg.HandoffMaxAttempts, s.HandoffAttempt
+	}
+
+	return maximum == 0 || count < maximum
+}
+
+func retryOutlivesScheduleToClose(cfg Config, s AbstractState, startToCloseExpired bool) bool {
+	if handoffRetry(cfg, s, startToCloseExpired) {
+		return cfg.HandoffRetryOutlivesScheduleToClose
+	}
+
+	return cfg.RetryOutlivesScheduleToClose
+}
+
+func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
+	startToCloseExpired := e.Type == StartToCloseElapsesType
+	startToCloseExpiredWhileScheduled := cfg.AsyncHandoffOptions &&
+		s.Status == Scheduled &&
+		s.HandoffStartToCloseStarted &&
+		startToCloseExpired
+
+	if !deliveryActive(s) && !startToCloseExpiredWhileScheduled {
+		return impossibleElapse(s)
+	}
+
+	if s.Status == ResetRequested {
+		return applyDeferredReset(cfg, s)
+	}
+
+	canRetry := s.Status != CancelRequested &&
+		isRetryableTimeout(cfg, s, e.Type, startToCloseExpired) &&
+		retriesRemaining(cfg, s, startToCloseExpired) &&
+		!retryOutlivesScheduleToClose(cfg, s, startToCloseExpired)
+
+	if canRetry {
+		n := advanceRetry(cfg, s, startToCloseExpired)
+		if s.Status == PauseRequested {
+			n.Status = Paused
+		}
+
+		return Outcome{Next: n}
+	}
+
+	s.Status = TimedOut
+	return Outcome{Next: s}
 }
 
 // isRetryableFailure is whether a reported failure should result in a retry.
-func isRetryableFailure(cfg Config, e Event) bool {
-	if cfg.RetryOutlivesScheduleToClose {
-		return false
-	}
+func isRetryableFailure(cfg Config, s AbstractState, e Event) bool {
 	f := e.Failure
 	if f == nil {
 		return true
@@ -464,9 +575,13 @@ func isRetryableFailure(cfg Config, e Event) bool {
 	case ApplicationFailureType, ServerFailureType:
 		return !f.NonRetryable
 	case StartToCloseTimeoutFailureType:
-		return isRetryableTimeout(cfg, StartToCloseElapsesType)
+		return isRetryableTimeout(cfg, s, StartToCloseElapsesType, false)
 	case HeartbeatTimeoutFailureType:
-		return isRetryableTimeout(cfg, HeartbeatElapsesType)
+		return isRetryableTimeout(cfg, s, HeartbeatElapsesType, false)
+	case StartToHandoffTimeoutFailureType:
+		return isRetryableTimeout(cfg, s, StartToHandoffElapsesType, false)
+	case HandoffToCloseTimeoutFailureType:
+		return isRetryableTimeout(cfg, s, HandoffToCloseElapsesType, false)
 	case UnknownFailureType:
 		return true
 	case ScheduleToStartTimeoutFailureType, ScheduleToCloseTimeoutFailureType:
@@ -478,18 +593,25 @@ func isRetryableFailure(cfg Config, e Event) bool {
 
 // isRetryableTimeout is whether the timeout a timeout-elapse event type names should result in a
 // retry.
-func isRetryableTimeout(cfg Config, t EventType) bool {
-	if cfg.RetryOutlivesScheduleToClose {
-		return false
+func isRetryableTimeout(cfg Config, s AbstractState, t EventType, startToCloseExpired bool) bool {
+	exclusions := cfg.NonRetryableTimeouts
+	if handoffRetry(cfg, s, startToCloseExpired) {
+		exclusions = cfg.HandoffNonRetryableTimeouts
 	}
-	return !slices.Contains(cfg.NonRetryableTimeouts, t)
+
+	return !slices.Contains(exclusions, t)
 }
 
 // applyDeferredReset is triggered by failure or timeout. It consumes the pause intent stored while
 // the activity was RESET_REQUESTED and applies the reset.
-func applyDeferredReset(s AbstractState) Outcome {
+func applyDeferredReset(cfg Config, s AbstractState) Outcome {
 	n := s
 	n.AttemptCount = 1
+	n.HandoffStartToCloseStarted = false
+	if cfg.AsyncHandoffOptions {
+		n.HandoffAttempt = 1
+	}
+
 	n.ResetKeepPaused = false
 	if s.ResetKeepPaused {
 		n.Status = Paused
