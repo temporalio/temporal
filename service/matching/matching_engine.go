@@ -666,28 +666,23 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// Ordinary sticky queues require recent pollers; assigned sessions accept offline backlog.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
+	// Session context permits loading a sticky partition even if there are no pollers, since session workflow tasks
+	// should be spooled to the backlog
+	sessionDirective := addRequest.GetSessionDirective()
+	exclusiveSession := sessionDirective.GetIsExclusiveWorkerAssigned()
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky || sessionDirective != nil, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	}
-	if sticky && !stickyWorkerAvailable(pm) {
-		// TODO(Shivam): Carry exclusive-session context from History so the first lookup can
-		// load the partition directly without this separate metadata read.
-		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
+	if sticky && !exclusiveSession && !stickyWorkerAvailable(pm) {
+		// For general session workflow tasks, if there are no sticky polls in memory, conduct a check to
+		// see if there is an occurrence of the worker in the in-memory heartbeat cache
+		available, err := e.generalSessionWorkerAvailable(ctx, pm)
 		if err != nil {
 			return "", false, err
 		}
-		if !assigned {
-			// TODO (Shivam) -- Accept backlog even in the case of non-exclusive sessions.
+		if !available {
 			return "", false, serviceerrors.NewStickyWorkerUnavailable()
-		}
-		if pm == nil {
-			// if this sticky task queue partition is dealing with an assigned session, we load it's partition manager.
-			pm, _, err = e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
-			if err != nil {
-				return "", false, err
-			}
 		}
 	}
 
@@ -3801,6 +3796,35 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+}
+
+func (e *matchingEngineImpl) generalSessionWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager) (bool, error) {
+	if pm == nil {
+		return false, nil
+	}
+	workerInstanceKey := pm.GeneralSessionWorkerInstanceKey()
+	if workerInstanceKey == "" {
+		return false, nil
+	}
+
+	// TODO (Shivam): Cache worker heartbeat lookups to reduce # of RPC trips
+	_, err := e.matchingRawClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: pm.Namespace().ID().String(),
+		Request: &workflowservice.DescribeWorkerRequest{
+			Namespace:         pm.Namespace().Name().String(),
+			WorkerInstanceKey: workerInstanceKey,
+		},
+	})
+	// A missing registry namespace means no heartbeat observations, not a deleted Temporal namespace.
+	// Treat it as an unavailable worker so History can fall back to the normal queue.
+	_, namespaceMissing := errors.AsType[*serviceerror.NamespaceNotFound](err)
+	if err != nil && !common.IsNotFoundError(err) && !namespaceMissing {
+		return false, err
+	}
+
+	// TODO (Shivam): Recheck the sticky partition and worker identity after the RPC to avoid acting on stale heartbeat results
+	// since this race can happen
+	return err == nil, nil
 }
 
 func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {

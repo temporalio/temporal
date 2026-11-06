@@ -43,6 +43,7 @@ type (
 		// MarkAlive updates the liveness timer to keep this partition manager alive.
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
+		GeneralSessionWorkerInstanceKey() string
 		// RemovePoller eagerly removes a poller from history (for graceful shutdown).
 		RemovePoller(identity pollerIdentity)
 		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given

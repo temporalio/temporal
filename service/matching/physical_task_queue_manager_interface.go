@@ -52,6 +52,7 @@ type (
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		RemovePoller(pollerIdentity)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
+		GeneralSessionWorkerInstanceKey() string
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
