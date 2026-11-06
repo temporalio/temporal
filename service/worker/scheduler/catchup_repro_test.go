@@ -159,16 +159,16 @@ func TestCatchupRepro(t *testing.T) {
 
 func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 	withOneIteration(t)
+	// Restored when this run returns, not at the end of the test, so that an unchunked run
+	// after a chunked one in the same test runs below ChunkedCatchup.
+	prev := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = prev }()
 	if c.maxBuffer > 0 {
-		prev := CurrentTweakablePolicies.MaxBufferSize
 		CurrentTweakablePolicies.MaxBufferSize = c.maxBuffer
-		t.Cleanup(func() { CurrentTweakablePolicies.MaxBufferSize = prev })
 	}
 	if c.chunked > 0 {
-		prev := CurrentTweakablePolicies
 		CurrentTweakablePolicies.Version = ChunkedCatchup
 		CurrentTweakablePolicies.MaxCatchupMatchesPerTask = c.chunked
-		t.Cleanup(func() { CurrentTweakablePolicies = prev })
 	}
 
 	args := c.args

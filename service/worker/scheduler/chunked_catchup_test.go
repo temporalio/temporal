@@ -47,19 +47,33 @@ func TestChunkedCatchup(t *testing.T) {
 		require.Equal(t, baseStartTime, r.next.State.LastProcessedTime.AsTime())
 	})
 
-	t.Run("no-shortcut-for-jittered-specs", func(t *testing.T) {
-		// The match whose nominal time is `now` fires up to 500ms later, so it is not due
-		// yet and must stay ahead of LastProcessedTime. Jumping LastProcessedTime to now
-		// (as the shortcuts do) would skip it: next-match lookups go by nominal time.
-		args := newCatchupArgs(t, time.Hour)
-		args.Schedule.Spec.Jitter = durationpb.New(500 * time.Millisecond)
-		r := runCatchupRepro(t, catchupCase{chunked: 5000, args: args})
+	t.Run("jittered-specs-skip-to-now-minus-jitter", func(t *testing.T) {
+		// The match whose nominal time is `now` fires up to 500ms later, so it may not be due
+		// yet. Jumping LastProcessedTime to now would lose it (next-match lookups go by
+		// nominal time), so the shortcut skips only to now-500ms and walks the rest.
+		const jitter = 500 * time.Millisecond
+		args := func() *schedulespb.StartScheduleArgs {
+			args := newCatchupArgs(t, time.Hour)
+			args.Schedule.Spec.Jitter = durationpb.New(jitter)
+			return args
+		}
+		r := runCatchupRepro(t, catchupCase{chunked: 5000, args: args()})
 		require.NoError(t, r.err)
-		require.True(t, r.next.State.LastProcessedTime.AsTime().Before(baseStartTime),
-			"LastProcessedTime %s must stay before the not-yet-due match at %s",
-			r.next.State.LastProcessedTime.AsTime(), baseStartTime)
-		require.InDelta(t, 3600, r.walked, 1, "walked normally, bounded by the chunk limit")
-		require.Empty(t, r.metrics[metrics.ScheduleCatchupRangeSkipped.Name()])
+		require.LessOrEqual(t, r.walked, 2, "the first match, then at most the one at now")
+		require.Len(t, r.metrics[metrics.ScheduleCatchupRangeSkipped.Name()], 1)
+		lpt := r.next.State.LastProcessedTime.AsTime()
+		require.False(t, lpt.Before(baseStartTime.Add(-jitter)), "skipped to now-jitter, got %s", lpt)
+
+		// One second later, the match at now has fired either way: v15 and the pre-v15 walk
+		// started the same workflows.
+		pre := runCatchupRepro(t, catchupCase{args: args(), deadlockTimeout: 10 * time.Minute})
+		require.NoError(t, pre.err)
+		later := baseStartTime.Add(time.Second)
+		r2 := runCatchupRepro(t, catchupCase{chunked: 5000, args: r.next, now: later})
+		pre2 := runCatchupRepro(t, catchupCase{args: pre.next, now: later})
+		require.NoError(t, r2.err)
+		require.NoError(t, pre2.err)
+		require.Equal(t, append(pre.startedIDs, pre2.startedIDs...), append(r.startedIDs, r2.startedIDs...))
 	})
 
 	t.Run("misses-are-chunked-and-counted-exactly", func(t *testing.T) {

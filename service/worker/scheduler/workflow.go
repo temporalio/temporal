@@ -872,11 +872,8 @@ func (s *scheduler) walkTimeRange(
 		}
 	}
 
-	// Jumping LastProcessedTime to end could skip a match whose nominal time has passed but
-	// whose jittered time hasn't (next-match lookups go by nominal time), so jittered specs
-	// don't take the shortcuts; the chunk limit still bounds them.
-	shortcuts := !manual && s.hasMinVersion(ChunkedCatchup) &&
-		timestamp.DurationValue(s.Schedule.GetSpec().GetJitter()) <= 0
+	shortcuts := !manual && s.hasMinVersion(ChunkedCatchup)
+	jitter := timestamp.DurationValue(s.Schedule.GetSpec().GetJitter())
 	skipPolicy := s.resolveOverlapPolicy(overlapPolicy) == enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	// Set once no later match in this range can be started.
 	var stopReason string
@@ -887,9 +884,15 @@ func (s *scheduler) walkTimeRange(
 	var next GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if stopReason != "" {
-			// next and every later match in the range would be skipped or dropped.
-			s.recordSkippedRange(stopReason, start, next.Next, end)
-			return timeRangeResult{next: s.getNextTime(end).Next, lastAction: lastAction, lastWalked: end}
+			// next and every later match in the range would be skipped or dropped. Skip the
+			// due ones; for an unjittered spec, that's all of them.
+			var noneDue bool
+			next, lastWalked, noneDue = s.skipDueBeforeJitter(stopReason, start, end, jitter, next, lastWalked)
+			// The walk from end-jitter can't be shortened further.
+			stopReason, shortcuts = "", false
+			if noneDue {
+				break
+			}
 		}
 		if maxMatches > 0 && walked >= maxMatches {
 			s.recordChunkedCatchup(start, end, lastWalked, walked)
@@ -915,6 +918,31 @@ func (s *scheduler) walkTimeRange(
 		}
 	}
 	return timeRangeResult{next: next.Next, lastAction: lastAction, lastWalked: lastWalked}
+}
+
+// skipDueBeforeJitter skips, from next on, every match whose nominal time is at or before
+// end-jitter, and returns the first match after them, the new lastWalked, and whether that
+// match is past end. Without jitter, that's every match up to end.
+//
+// With jitter, jumping to end could lose a match whose nominal time is at or before end but
+// whose jittered time isn't, because next-match lookups go by nominal time. A match's jitter
+// is less than the spec's, so every match with a nominal time at or before end-jitter is
+// due. The caller walks the rest as before: they're skipped or dropped as they would have
+// been, and one that isn't due yet stays ahead.
+func (s *scheduler) skipDueBeforeJitter(
+	reason string,
+	start, end time.Time,
+	jitter time.Duration,
+	next GetNextTimeResult,
+	lastWalked time.Time,
+) (GetNextTimeResult, time.Time, bool) {
+	skipTo := end.Add(-jitter)
+	if skipTo.Before(next.Nominal) {
+		return next, lastWalked, false
+	}
+	s.recordSkippedRange(reason, start, next.Next, skipTo)
+	next = s.getNextTime(skipTo)
+	return next, skipTo, next.Next.IsZero() || next.Next.After(end)
 }
 
 // matchNotStarted applies the checks that keep a match from being passed to addStart, and
