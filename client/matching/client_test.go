@@ -194,14 +194,16 @@ func TestDoAddWorkflowTask_LoadBalancedRoot(t *testing.T) {
 	loadBalancer := &testLoadBalancer{writePartition: selectedPartition, writeEstimate: 17}
 	client := newTestClient(cache, loadBalancer)
 	request := &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId: testNamespaceID,
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: testTaskQueueName},
+		NamespaceId:      testNamespaceID,
+		TaskQueue:        &taskqueuepb.TaskQueue{Name: testTaskQueueName},
+		SessionDirective: &taskqueuespb.TaskSessionDirective{WorkerQueue: "worker", IsExclusiveWorkerAssigned: true},
 	}
 	response := &matchingservice.AddWorkflowTaskResponse{}
 
 	serviceClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, outgoing *matchingservice.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetTaskQueue().GetName())
+			protorequire.ProtoEqual(t, request.GetSessionDirective(), outgoing.GetSessionDirective())
 			outgoingMetadata, ok := metadata.FromOutgoingContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, []string{"17"}, outgoingMetadata.Get(estimatedTasksAllPartitionsHeaderName))

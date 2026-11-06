@@ -615,6 +615,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		// TODO (Shivam): Also, ensure if this error is going to fail the activity retry timer task.
 		return err
 	}
+	singleSessionBound := mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
@@ -630,6 +631,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			RunId:      task.GetRunID(),
 		},
 		TaskQueue:              taskQueue,
+		SessionDirective:       workflow.TaskSessionDirective(singleSessionBound, taskQueue),
 		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),

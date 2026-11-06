@@ -55,6 +55,7 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
+	exclusiveWorker        bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -229,6 +230,7 @@ func (u *Updater) applyRequest(
 	}
 
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+	u.exclusiveWorker = ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker()
 	u.priority = common.CloneProto(ms.GetExecutionInfo().Priority)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
@@ -421,6 +423,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 			RunId:      u.wfKey.RunID,
 		},
 		TaskQueue:              u.taskQueue,
+		SessionDirective:       workflow.TaskSessionDirective(u.exclusiveWorker, u.taskQueue),
 		ScheduledEventId:       u.scheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,

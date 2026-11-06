@@ -54,8 +54,9 @@ const (
 
 type (
 	addTaskParams struct {
-		taskInfo    *persistencespb.TaskInfo
-		forwardInfo *taskqueuespb.TaskForwardInfo
+		taskInfo         *persistencespb.TaskInfo
+		forwardInfo      *taskqueuespb.TaskForwardInfo
+		sessionDirective *taskqueuespb.TaskSessionDirective
 	}
 	// physicalTaskQueueManagerImpl manages a set of physical queues that comprise one logical
 	// queue, corresponding to a single versioned queue of a task queue partition.

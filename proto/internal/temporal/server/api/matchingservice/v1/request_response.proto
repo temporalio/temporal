@@ -168,6 +168,8 @@ message AddWorkflowTaskRequest {
   temporal.api.common.v1.Priority priority = 12;
   // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
   int32 stamp = 13;
+  // Session placement associated with this task, if any.
+  temporal.server.api.taskqueue.v1.TaskSessionDirective session_directive = 14;
 }
 
 message AddWorkflowTaskResponse {
@@ -196,6 +198,8 @@ message AddActivityTaskRequest {
   // necessary start information is carried within this component, obviating the need to use the fields that apply to
   // embedded activities.
   bytes component_ref = 14;
+  // Session placement associated with this task, if any.
+  temporal.server.api.taskqueue.v1.TaskSessionDirective session_directive = 15;
 }
 
 message AddActivityTaskResponse {

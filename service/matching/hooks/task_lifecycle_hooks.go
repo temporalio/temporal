@@ -5,6 +5,7 @@ import (
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sessionpb "go.temporal.io/api/session/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -41,6 +42,8 @@ type (
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 		IsSyncMatch       bool // Deprecated: use SyncMatchOutcome instead.
 		SyncMatchOutcome  SyncMatchOutcome
+		// Non-nil only when the task belongs to an already-bound single session.
+		SingleSessionOptions *sessionpb.SingleSessionOptions
 	}
 
 	TaskHookFactory interface {

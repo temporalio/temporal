@@ -17,6 +17,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -459,6 +460,13 @@ reredirectTask:
 		return "", false, err
 	}
 
+	hookVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+	var singleSessionOptions *sessionpb.SingleSessionOptions
+	if params.sessionDirective.GetIsExclusiveWorkerAssigned() {
+		singleSessionOptions = &sessionpb.SingleSessionOptions{StableIdentity: params.sessionDirective.GetWorkerQueue()}
+		hookVersion = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DirectiveDeployment(directive))
+	}
+
 	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo, taskDispatchRevisionNumber, targetVersion)
 	pm.config.setDefaultPriority(syncMatchTask)
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
@@ -506,7 +514,7 @@ reredirectTask:
 			if !forwarded {
 				// We should not use targetVersion because targetVersion is always routing-config-deriven.
 				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
-				pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
+				pm.processTaskAddHooks(ctx, hookVersion, outcome, singleSessionOptions)
 			}
 
 			syncMatchResult := metrics.TaskAddResultSyncMatch
@@ -549,7 +557,7 @@ reredirectTask:
 		// because for unpinned tasks spoolQueue is always the default (unversioned) queue.
 		// Unpinned tasks are written to the default queue for late binding, in case target version
 		// changes by the time they can be dispatched.
-		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
+		pm.processTaskAddHooks(ctx, hookVersion, outcome, singleSessionOptions)
 	} else {
 		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
@@ -783,13 +791,19 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	}
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(
+	ctx context.Context,
+	targetVersion *deploymentspb.WorkerDeploymentVersion,
+	outcome syncMatchOutcome,
+	singleSessionOptions *sessionpb.SingleSessionOptions,
+) {
 	for _, l := range pm.taskHooks {
 		hookOutcome := syncMatchOutcomeToHook(outcome)
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
-			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
-			IsSyncMatch:       hookOutcome == hooks.SyncMatchOutcomeSuccess,
-			SyncMatchOutcome:  hookOutcome,
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
+			IsSyncMatch:          hookOutcome == hooks.SyncMatchOutcomeSuccess,
+			SyncMatchOutcome:     hookOutcome,
+			SingleSessionOptions: common.CloneProto(singleSessionOptions),
 		})
 	}
 }
@@ -1084,7 +1098,7 @@ reredirectTask:
 	if request.ForwardInfo == nil &&
 		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
-		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller, nil)
 		firedNoPollerHook = true
 	}
 
@@ -1107,7 +1121,7 @@ reredirectTask:
 	// the same task dispatch.
 	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
-		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess, nil)
 	}
 	return res, err
 }
@@ -1172,7 +1186,7 @@ reredirectTask:
 	if request.ForwardInfo == nil &&
 		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
-		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller, nil)
 		firedNoPollerHook = true
 	}
 
@@ -1195,7 +1209,7 @@ reredirectTask:
 	// the same task dispatch.
 	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
-		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess, nil)
 	}
 	return res, err
 }
