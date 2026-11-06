@@ -970,6 +970,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
 			return nil, nil
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyUseExisting),
 	)
 	s.NoError(err)
 	s.False(newFnCalled, "newFn should not be called")
