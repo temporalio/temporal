@@ -136,7 +136,8 @@ type Config struct {
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	// EnableServerVersionCheck disables periodic version checking performed by the frontend
-	EnableServerVersionCheck dynamicconfig.BoolPropertyFn
+	EnableServerVersionCheck        dynamicconfig.BoolPropertyFn
+	EnableServerVersionCheckLogging dynamicconfig.BoolPropertyFn
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
@@ -386,6 +387,7 @@ func NewConfig(
 		DefaultWorkflowRetryPolicy:               dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
 		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
+		EnableServerVersionCheckLogging:          dynamicconfig.EnableServerVersionCheckLogging.Get(dc),
 		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
 		ExposeAuthorizerErrors:                   dynamicconfig.ExposeAuthorizerErrors.Get(dc),
 		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
@@ -574,6 +576,7 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
+	s.versionChecker.InitiateShutdown()
 	// initiate graceful shutdown:
 	// 1. Fail rpc health check, this will cause client side load balancer to stop forwarding requests to this node
 	// 2. wait for failure detection time
@@ -594,7 +597,6 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 	s.operatorHandler.Stop()
 	s.adminHandler.Stop()
-	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 
 	s.logger.Info("ShutdownHandler: Draining traffic")
@@ -614,6 +616,7 @@ func (s *Service) Stop() {
 		})
 	}
 	wg.Wait()
+	s.versionChecker.Stop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)

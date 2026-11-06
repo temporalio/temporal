@@ -40,6 +40,7 @@ const (
 	serviceName             = "service_name"
 	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
+	versionCheckType        = "version_check_type"
 	workerVersion           = "worker_version"
 	workerVersioningVersion = "worker_versioning_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -523,6 +524,10 @@ func ActionType(value string) Tag {
 
 func OperationTag(value string) Tag {
 	return Tag{Key: OperationTagName, Value: value}
+}
+
+func VersionCheckTypeTag(value string) Tag {
+	return Tag{Key: versionCheckType, Value: value}
 }
 
 func StringTag(key string, value string) Tag {
