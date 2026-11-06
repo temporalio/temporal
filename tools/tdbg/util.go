@@ -319,3 +319,15 @@ func getArchetype(c *cli.Context) chasm.Archetype {
 	}
 	return chasm.WorkflowArchetype
 }
+
+// stringArray is a repeatable flag value that, unlike cli.StringSliceFlag, does not split values on commas.
+type stringArray []string
+
+func (s *stringArray) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+func (s *stringArray) String() string {
+	return strings.Join(*s, ",")
+}
