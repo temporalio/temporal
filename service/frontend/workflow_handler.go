@@ -439,10 +439,12 @@ func (wh *WorkflowHandler) Start() {
 				return
 			}
 
-			if ns.IsGlobalNamespace() &&
+			deactivated := ns.IsGlobalNamespace() &&
 				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
 				//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
-				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
+				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName())
+			// A soft-deleted namespace rejects new polls; cancel the ones already waiting too.
+			if deactivated || ns.State() == enumspb.NAMESPACE_STATE_SOFT_DELETED {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
 					for _, cancelFn := range pollers.PopAll() {

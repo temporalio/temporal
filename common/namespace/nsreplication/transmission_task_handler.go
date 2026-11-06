@@ -235,6 +235,8 @@ func NamespaceDetailToTaskAttributes(
 		ConfigVersion:   detail.ConfigVersion,
 		FailoverVersion: detail.FailoverVersion,
 		FailoverHistory: convertFailoverHistoryToReplicationProto(replicationConfig.FailoverHistory),
+		// The public NamespaceInfo in Info has no place for the restore record.
+		RestoreInfo: info.RestoreInfo,
 	}
 
 	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {

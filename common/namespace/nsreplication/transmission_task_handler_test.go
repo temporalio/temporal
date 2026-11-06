@@ -808,3 +808,47 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_DeletedNotReplicated(
 	)
 	s.Require().NoError(err)
 }
+
+// Unlike DELETED, a soft-deleted namespace replicates, and the task carries the restore record,
+// which the public NamespaceInfo has no field for.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_SoftDeletedReplicatedWithRestoreInfo() {
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "cluster-a",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	info := &persistencespb.NamespaceInfo{
+		Id:          primitives.NewUUID().String(),
+		Name:        "soft-deleted-ns",
+		State:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+		RestoreInfo: restoreInfo,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.True(proto.Equal(restoreInfo, attributes.GetRestoreInfo()))
+			return nil
+		})
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		s.T().Context(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		false, // replicationClusterListUpdated
+		int64(2),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}

@@ -467,7 +467,6 @@ func (d *namespaceHandler) UpdateNamespace(
 	if err != nil {
 		return nil, err
 	}
-
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
@@ -1501,6 +1500,10 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		}
 
 	case enumspb.NAMESPACE_STATE_DELETED:
+		return errInvalidNamespaceStateUpdate
+	case enumspb.NAMESPACE_STATE_SOFT_DELETED:
+		// Entered and left only through OperatorService SoftDeleteNamespace and RestoreNamespace,
+		// which also stop and refresh the namespace's executions.
 		return errInvalidNamespaceStateUpdate
 	default:
 		return errInvalidNamespaceStateUpdate
