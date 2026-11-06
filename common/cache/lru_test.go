@@ -113,6 +113,24 @@ func TestGenerics(t *testing.T) {
 	require.Equal(t, 1, cache.Size())
 }
 
+func TestNewLRUPassesMetricsHandler(t *testing.T) {
+	t.Parallel()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	// The other tests that build through NewLRU pass metrics.NoopMetricsHandler, which
+	// discards every recording, so none of them can observe whether the handler is forwarded.
+	cache := NewLRU(4, metricsHandler)
+
+	cache.Put("A", "Foo")
+	require.Equal(t, "Foo", cache.Get("A"))
+
+	snapshot := capture.Snapshot()
+	require.Len(t, snapshot[metrics.CacheSize.Name()], 1, "NewLRU should forward its handler")
+	require.InDelta(t, float64(4), snapshot[metrics.CacheSize.Name()][0].Value, 0)
+	require.InDelta(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value, 0)
+}
+
 func TestLRUWithTTL(t *testing.T) {
 	t.Parallel()
 
