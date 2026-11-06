@@ -246,7 +246,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		})
 		s.ErrorIs(err, writeErr)
 
+		err = wfContext.Lock(ctx, locks.PriorityHigh)
+		s.NoError(err)
 		s.Nil(wfContext.(*workflow.ContextImpl).MutableState, "mutable state must be cleared")
+		wfContext.Unlock()
 
 		// VERIFY: Context metadata set even when write fails (transaction close is attempted)
 		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
@@ -287,7 +290,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		})
 		s.ErrorIs(err, writeErr)
 
+		err = wfContext.Lock(ctx, locks.PriorityHigh)
+		s.NoError(err)
 		s.Nil(wfContext.(*workflow.ContextImpl).MutableState, "mutable state must be cleared")
+		wfContext.Unlock()
 
 		// VERIFY: Context metadata set even when sticky write fails
 		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
@@ -359,6 +365,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect only 2 calls to UpdateWorkflowExecution: for timer started and timer fired events but not Update or WFT events.
 		writtenHistoryCh := s.captureWrittenHistory(2)
+		err := wfContext.Lock(context.Background(), locks.PriorityHigh)
+		s.NoError(err)
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 
@@ -372,6 +380,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.NoError(err)
 		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
+		wfContext.Unlock()
 
 		s.EqualHistoryEvents(`
   2 TimerStarted
@@ -400,12 +409,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
 		s.Equal("rejection-of-"+tv.UpdateID(), updStatus.Outcome.GetFailure().GetMessage())
 
+		err = wfContext.Lock(context.Background(), locks.PriorityHigh)
+		s.NoError(err)
 		ms, err = wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 		_, err = ms.AddTimerFiredEvent(tv.TimerID())
 		s.NoError(err)
 		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
+		wfContext.Unlock()
 
 		s.EqualHistoryEvents(`
   3 TimerFired // No WFT events in between 2 and 3.
@@ -428,6 +440,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect 2 calls to UpdateWorkflowExecution: for timer started and WFT events.
 		writtenHistoryCh := s.captureWrittenHistory(2)
+		err := wfContext.Lock(context.Background(), locks.PriorityHigh)
+		s.NoError(err)
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 
@@ -443,6 +457,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		}
 		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
+		wfContext.Unlock()
 
 		s.EqualHistoryEvents(`
   2 TimerStarted
@@ -505,9 +520,12 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext, serializedTaskToken := s.createPausedWorkflowWithWFT(tv)
 
+		err := wfContext.Lock(context.Background(), locks.PriorityHigh)
+		s.NoError(err)
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 		s.True(ms.IsWorkflowExecutionStatusPaused())
+		wfContext.Unlock()
 
 		ctx := contextutil.WithMetadataContext(context.Background())
 
@@ -731,16 +749,13 @@ func (s *WorkflowTaskCompletedHandlerSuite) testAcceptCompleteWithWorkerDeployme
 	wfContext := s.createStartedWorkflow(tv)
 	writtenHistoryCh := s.captureWrittenHistory(1)
 
-	_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-	s.NoError(err)
-
 	updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 	s.NotNil(upd)
 
 	// Use context with metadata to verify it's set via transaction close
 	ctx := contextutil.WithMetadataContext(context.Background())
 
-	_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
+	_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tv.NamespaceID().String(),
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken:         serializedTaskToken,
@@ -873,6 +888,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.T
 
 func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVars, wfContext historyi.WorkflowContext) (*protocolpb.Message, *update.Update, []byte) {
 	ctx := context.Background()
+
+	err := wfContext.Lock(ctx, locks.PriorityHigh)
+	s.NoError(err)
+	defer wfContext.Unlock()
 
 	ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)
 	s.NoError(err)
@@ -1036,14 +1055,11 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
 
 		wfContext := s.createStartedWorkflow(tv)
-		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-		s.NoError(err)
-
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 		writtenHistoryCh := s.captureWrittenHistory(1)
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -1073,9 +1089,6 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
 
 		wfContext := s.createStartedWorkflow(tv)
-		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-		s.NoError(err)
-
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 		writtenHistoryCh := s.captureWrittenHistory(1)
@@ -1137,9 +1150,6 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		}
 
 		wfContext := s.createStartedWorkflow(tv)
-		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-		s.NoError(err)
-
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
@@ -1201,7 +1211,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		s.NoError(err)
 		s.NotNil(resp)
 
+		err = wfContext.Lock(context.Background(), locks.PriorityHigh)
+		s.NoError(err)
 		wfContext.Clear()
+		wfContext.Unlock()
 
 		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
@@ -1244,6 +1257,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		ctx := context.Background()
 		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+		err = wfContext.Lock(ctx, locks.PriorityHigh)
+		s.NoError(err)
 		ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 		startedWFT := ms.GetStartedWorkflowTask()
@@ -1259,6 +1274,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
 		)
+		wfContext.Unlock()
 		s.Error(err)
 		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 		s.ErrorAs(err, &bufferLost)
@@ -1292,6 +1308,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		ctx := context.Background()
 		s.mockExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.SetWorkflowExecutionResponse{}, nil).AnyTimes()
+		err = wfContext.Lock(ctx, locks.PriorityHigh)
+		s.NoError(err)
 		ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 		s.NoError(workflow.TimeoutWorkflow(ms, enumspb.RETRY_STATE_TIMEOUT, ""))
@@ -1304,6 +1322,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
 		)
+		wfContext.Unlock()
 		s.Error(err)
 		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 		s.ErrorAs(err, &bufferLost)
@@ -1350,9 +1369,6 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
 
 		wfContext := s.createStartedWorkflow(tv)
-		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-		s.NoError(err)
-
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 		writtenHistoryCh := s.captureWrittenHistory(1)
@@ -1372,7 +1388,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 			s.NotNil(resp)
 		}
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:  serializedTaskToken,
