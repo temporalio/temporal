@@ -326,7 +326,7 @@ type (
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
-		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+		DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time)
 
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
