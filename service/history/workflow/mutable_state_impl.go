@@ -7576,10 +7576,11 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	return insertTasks
 }
 
-func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
-	// Cached physical tasks use real time, while the caller supplies virtual time.
-	// MaximumKey is the sentinel for deleting all tasks and must not be shifted.
-	if !maxScheduledTime.Equal(tasks.MaximumKey.FireTime) {
+// DeleteCHASMPureTasks records cached pure tasks before maxScheduledTime for deletion.
+// When isPhysicalTime is false, maxScheduledTime is virtual time and is converted to real time.
+func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time, isPhysicalTime bool) {
+	// Cached physical tasks use real time. Convert virtual thresholds before comparing them.
+	if !isPhysicalTime {
 		maxScheduledTime = ms.ToRealTimeWithCurrentOffset(maxScheduledTime)
 	}
 

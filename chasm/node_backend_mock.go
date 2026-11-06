@@ -156,7 +156,7 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 	}
 }
 
-func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time, isPhysicalTime bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
