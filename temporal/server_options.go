@@ -139,5 +139,17 @@ func (so *serverOptions) validateConfig() error {
 			return fmt.Errorf("%q service is missing in config", name)
 		}
 	}
+	return so.validateMembershipConfig()
+}
+
+func (so *serverOptions) validateStaticHosts() error {
+	if len(so.hostsByService) > 0 {
+		for _, service := range DefaultServices {
+			hosts := so.hostsByService[primitives.ServiceName(service)]
+			if len(hosts.All) == 0 {
+				return fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
+			}
+		}
+	}
 	return nil
 }
