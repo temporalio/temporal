@@ -403,6 +403,11 @@ func (s *scheduler) run() error {
 		}
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
+		if r.more {
+			// This run continues-as-new below without sleeping, which is where signals are
+			// received: receive the ones that have arrived now, so they aren't dropped.
+			s.receiveSignalsNoWait()
+		}
 		// While catching up, the next wakeup is irrelevant: this run continues-as-new below.
 		if scheduleChanged && !r.more {
 			// need to calculate sleep again
@@ -1017,9 +1022,8 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextWakeup time.Time) {
-	sel := workflow.NewSelector(s.ctx)
-
+// addSignalReceives adds a receive for each signal the scheduler handles.
+func (s *scheduler) addSignalReceives(sel workflow.Selector) {
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
 	sel.AddReceive(upCh, func(ch workflow.ReceiveChannel, _ bool) {
 		ch.Receive(s.ctx, &s.pendingUpdate)
@@ -1038,6 +1042,29 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 
 	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrateToChasm)
 	sel.AddReceive(migrateCh, s.handleMigrateSignal)
+}
+
+// receiveSignalsNoWait receives and applies every signal that has already arrived, without
+// blocking. Signals are otherwise only received in sleep, so a run that continues-as-new
+// without sleeping, as a chunked catch-up does, would drop them.
+func (s *scheduler) receiveSignalsNoWait() {
+	for {
+		received := true
+		sel := workflow.NewSelector(s.ctx)
+		s.addSignalReceives(sel)
+		sel.AddDefault(func() { received = false })
+		sel.Select(s.ctx)
+		if !received {
+			return
+		}
+		// One at a time: a second update or patch would overwrite the pending one.
+		s.processSignals()
+	}
+}
+
+func (s *scheduler) sleep(nextWakeup time.Time) {
+	sel := workflow.NewSelector(s.ctx)
+	s.addSignalReceives(sel)
 
 	if s.hasMoreAllowAllBackfills() {
 		// if we have more allow-all backfills to do, do a short sleep and continue

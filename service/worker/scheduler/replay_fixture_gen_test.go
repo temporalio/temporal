@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -90,6 +91,84 @@ func TestGenerateChunkedCatchupFixtures(t *testing.T) {
 
 	writeFixture(t, "replay_chunked_catchup_v15.json.gz", runs[0])
 	writeFixture(t, "replay_chunked_catchup_skip_v15.json.gz", runs[len(runs)-1])
+}
+
+// TestGeneratePreV15CatchupFixtures records catch-ups after a stall at the default version
+// (below ChunkedCatchup), which walk the whole range in one task:
+//   - replay_catchup_stall_skip_v12: 1h+1200s behind, 1h window, Skip (1200 misses, a start,
+//     the rest buffered and dropped), then a pause signal
+//   - replay_catchup_stall_buffer_all_v12: 1800s behind, BufferAll (a full buffer, 800 dropped)
+//
+// The checked-in fixtures were recorded from main (8fcaa51f02), before ChunkedCatchup existed:
+// TestReplays replaying them on this binary checks that the pre-v15 walk, and receiving
+// signals, are unchanged. To re-record from main, copy this function, the helpers below and
+// catchup_helpers_test.go into a main checkout, and run it as TestGenerateChunkedCatchupFixtures
+// is run.
+func TestGeneratePreV15CatchupFixtures(t *testing.T) {
+	addr := os.Getenv("SCHEDULER_FIXTURE_ADDRESS")
+	if addr == "" {
+		t.Skip("set SCHEDULER_FIXTURE_ADDRESS to a dev server to regenerate the fixtures")
+	}
+	c, err := sdkclient.Dial(sdkclient.Options{HostPort: addr, DataConverter: sdk.PreferProtoDataConverter})
+	require.NoError(t, err)
+	defer c.Close()
+
+	tq := "scheduler-fixture-" + uuid.NewString()
+	w := sdkworker.New(c, tq, sdkworker.Options{})
+	w.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
+	registerStubActivities(w)
+	require.NoError(t, w.Start())
+	defer w.Stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	record := func(name string, gap time.Duration, policies *schedulepb.SchedulePolicies, pause bool) {
+		args := newCatchupArgs(t, 0)
+		args.Schedule.Action.GetStartWorkflow().TaskQueue.Name = tq
+		args.Schedule.Policies = policies
+		args.State.LastProcessedTime = timestamppb.New(time.Now().UTC().Truncate(time.Second).Add(-gap))
+		run, err := c.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        WorkflowIDPrefix + "fixture-stall-" + uuid.NewString(),
+			TaskQueue: tq,
+		}, WorkflowType, args)
+		require.NoError(t, err)
+		defer func() { _ = c.TerminateWorkflow(context.Background(), run.GetID(), "", "fixture recorded") }()
+
+		started := func(h *historypb.History) bool {
+			return hasEvent(h, enumspb.EVENT_TYPE_TIMER_STARTED) && hasMarker(h, "LocalActivity")
+		}
+		h := waitForHistory(ctx, t, c, run.GetID(), run.GetRunID(), started)
+		require.Empty(t, continuedAsNewTo(h), "the walk finished in one run")
+		if pause {
+			require.NoError(t, c.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), SignalNamePatch,
+				&schedulepb.SchedulePatch{Pause: "paused after a stall"}))
+			// Wait for the task that handled the signal.
+			h = waitForHistory(ctx, t, c, run.GetID(), run.GetRunID(), func(h *historypb.History) bool {
+				signaled := false
+				for _, e := range h.Events {
+					switch e.EventType {
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+						signaled = true
+					case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+						if signaled {
+							return true
+						}
+					default:
+					}
+				}
+				return false
+			})
+		}
+		writeFixture(t, name, h)
+	}
+	record("replay_catchup_stall_skip_v12.json.gz", time.Hour+1200*time.Second, &schedulepb.SchedulePolicies{
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: durationpb.New(time.Hour),
+	}, true)
+	record("replay_catchup_stall_buffer_all_v12.json.gz", 1800*time.Second, &schedulepb.SchedulePolicies{
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+	}, false)
 }
 
 func registerStubActivities(w sdkworker.Worker) {

@@ -34,15 +34,16 @@ type catchupCase struct {
 	name             string
 	gap              time.Duration // now - LastProcessedTime
 	overlap          enumspb.ScheduleOverlapPolicy
-	running          bool                           // a previous action is still running
-	catchupWindow    time.Duration                  // 0: production's 365d
-	maxBuffer        int                            // 0: tweakable default (1000)
-	deadlockTimeout  time.Duration                  // 0: completingDeadlockTimeout
-	chunked          int                            // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
-	args             *schedulespb.StartScheduleArgs // overrides the args built from gap
-	dcMatchesPerTask *int                           // worker.schedulerV1CatchupMatchesPerTask, injected as fx.go does
-	now              time.Time                      // workflow start time; zero: baseStartTime
-	startedRunning   bool                           // workflows the action starts never complete
+	running          bool                                         // a previous action is still running
+	catchupWindow    time.Duration                                // 0: production's 365d
+	maxBuffer        int                                          // 0: tweakable default (1000)
+	deadlockTimeout  time.Duration                                // 0: completingDeadlockTimeout
+	chunked          int                                          // >0: run at ChunkedCatchup with this MaxCatchupMatchesPerTask
+	args             *schedulespb.StartScheduleArgs               // overrides the args built from gap
+	dcMatchesPerTask *int                                         // worker.schedulerV1CatchupMatchesPerTask, injected as fx.go does
+	now              time.Time                                    // workflow start time; zero: baseStartTime
+	startedRunning   bool                                         // workflows the action starts never complete
+	beforeRun        func(env *testsuite.TestWorkflowEnvironment) // e.g. to queue signals
 }
 
 // catchupResult is what the first task did.
@@ -230,6 +231,9 @@ func runCatchupRepro(t *testing.T, c catchupCase) catchupResult {
 			return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 		})
 
+	if c.beforeRun != nil {
+		c.beforeRun(env)
+	}
 	start := time.Now()
 	if c.dcMatchesPerTask != nil {
 		dc := dynamicconfig.NewNoopCollection()
