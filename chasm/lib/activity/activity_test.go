@@ -1316,7 +1316,8 @@ func TestAttachLinks_TotalSizeCap(t *testing.T) {
 			},
 		}
 	}
-	newValidator := func(totalMaxSize int) commonlinks.Validator {
+	newValidator := func(t *testing.T, totalMaxSize int) commonlinks.Validator {
+		t.Helper()
 		cfg := test.NewLinksValidatorConfig()
 		cfg.TotalLinksMaxSize = func(string) int { return totalMaxSize }
 		return test.NewLinksValidator(t, cfg)
@@ -1333,7 +1334,7 @@ func TestAttachLinks_TotalSizeCap(t *testing.T) {
 		ctx := newContext(map[string][]*commonpb.Link{})
 		activity := newActivity()
 
-		err := activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", newValidator(linkA.Size()+linkB.Size()-1), "ns")
+		err := activity.attachLinks(ctx, []*commonpb.Link{linkA, linkB}, "req-1", newValidator(t, linkA.Size()+linkB.Size()-1), "ns")
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "bytes of links to an execution")
 		require.Empty(t, ctx.LinksByRequest[activity])
@@ -1345,7 +1346,7 @@ func TestAttachLinks_TotalSizeCap(t *testing.T) {
 		activity := newActivity()
 
 		// The cap leaves exactly enough room for the added link.
-		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(existing.Size()+added.Size()), "ns")
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()), "ns")
 		require.NoError(t, err)
 		require.Equal(t, []*commonpb.Link{added}, ctx.LinksByRequest[activity]["req-new"])
 	})
@@ -1355,7 +1356,7 @@ func TestAttachLinks_TotalSizeCap(t *testing.T) {
 		ctx := newContext(map[string][]*commonpb.Link{"req-existing": {existing}})
 		activity := newActivity()
 
-		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(existing.Size()+added.Size()-1), "ns")
+		err := activity.attachLinks(ctx, []*commonpb.Link{added}, "req-new", newValidator(t, existing.Size()+added.Size()-1), "ns")
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "bytes of links to an execution")
 		require.Empty(t, ctx.LinksByRequest[activity])
