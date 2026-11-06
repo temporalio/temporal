@@ -12,6 +12,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -21,14 +22,14 @@ type handler struct {
 
 	config            *Config
 	callbackValidator callbacks.Validator
-	linkValidator     *linkValidator
+	linkValidator     commonlinks.Validator
 	logger            log.Logger
 }
 
 func newHandler(
 	config *Config,
 	callbackValidator callbacks.Validator,
-	linkValidator *linkValidator,
+	linkValidator commonlinks.Validator,
 	logger log.Logger,
 ) *handler {
 	return &handler{
