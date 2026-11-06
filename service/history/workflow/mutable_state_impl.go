@@ -7576,17 +7576,18 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	return insertTasks
 }
 
-// DeleteCHASMPureTasks records cached pure tasks before maxScheduledTime for deletion.
-// When isPhysicalTime is false, maxScheduledTime is virtual time and is converted to real time.
-func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time, isPhysicalTime bool) {
-	// Cached physical tasks use real time. Convert virtual thresholds before comparing them.
+// DeletePhysicalCHASMPureTasks records cached physical CHASM pure tasks strictly before
+// maxLogicalScheduledTime for best-effort deletion. The threshold uses logical time and is
+// converted to the physical time used by the History task queue before comparing task timestamps.
+// When isPhysicalTime is true, the threshold is already physical time and is not converted.
+func (ms *MutableStateImpl) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time, isPhysicalTime bool) {
+	maxPhysicalScheduledTime := maxLogicalScheduledTime
 	if !isPhysicalTime {
-		maxScheduledTime = ms.ToRealTimeWithCurrentOffset(maxScheduledTime)
+		maxPhysicalScheduledTime = ms.ToRealTimeWithCurrentOffset(maxLogicalScheduledTime)
 	}
 
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
-
-		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+		if !task.GetVisibilityTime().Before(maxPhysicalScheduledTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
 		}
@@ -7597,8 +7598,7 @@ func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time, isP
 		)
 	}
 
-	// If we reach here, all tasks have visibility time before maxScheduledTime
-	// and need to be deleted.
+	// All cached tasks have visibility times before maxPhysicalScheduledTime and are marked for deletion.
 	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 

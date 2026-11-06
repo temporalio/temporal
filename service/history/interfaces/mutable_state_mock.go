@@ -1937,16 +1937,16 @@ func (mr *MockMutableStateMockRecorder) CurrentVersionedTransition() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersionedTransition", reflect.TypeOf((*MockMutableState)(nil).CurrentVersionedTransition))
 }
 
-// DeleteCHASMPureTasks mocks base method.
-func (m *MockMutableState) DeleteCHASMPureTasks(maxScheduledTime time.Time, isPhysicalTime bool) {
+// DeletePhysicalCHASMPureTasks mocks base method.
+func (m *MockMutableState) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime time.Time, isPhysicalTime bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteCHASMPureTasks", maxScheduledTime, isPhysicalTime)
+	m.ctrl.Call(m, "DeletePhysicalCHASMPureTasks", maxLogicalScheduledTime, isPhysicalTime)
 }
 
-// DeleteCHASMPureTasks indicates an expected call of DeleteCHASMPureTasks.
-func (mr *MockMutableStateMockRecorder) DeleteCHASMPureTasks(maxScheduledTime, isPhysicalTime any) *gomock.Call {
+// DeletePhysicalCHASMPureTasks indicates an expected call of DeletePhysicalCHASMPureTasks.
+func (mr *MockMutableStateMockRecorder) DeletePhysicalCHASMPureTasks(maxLogicalScheduledTime, isPhysicalTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHASMPureTasks", reflect.TypeOf((*MockMutableState)(nil).DeleteCHASMPureTasks), maxScheduledTime, isPhysicalTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePhysicalCHASMPureTasks", reflect.TypeOf((*MockMutableState)(nil).DeletePhysicalCHASMPureTasks), maxLogicalScheduledTime, isPhysicalTime)
 }
 
 // DeleteSignalRequested mocks base method.

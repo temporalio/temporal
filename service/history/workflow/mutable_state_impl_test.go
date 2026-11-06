@@ -7702,7 +7702,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	s.Len(s.mutableState.chasmPureTasks, 2)
 }
 
-func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
+func (s *mutableStateSuite) TestDeletePhysicalCHASMPureTasks() {
 	now := s.mockShard.GetTimeSource().Now()
 
 	testCases := []struct {
@@ -7742,7 +7742,7 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			}
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
-			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime, true)
+			s.mutableState.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime, true)
 
 			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
 			for _, task := range s.mutableState.chasmPureTasks {
@@ -7754,7 +7754,7 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 	}
 }
 
-func TestDeleteCHASMPureTasksTimeSkipping(t *testing.T) {
+func TestDeletePhysicalCHASMPureTasksTimeSkipping(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
@@ -7819,7 +7819,7 @@ func TestDeleteCHASMPureTasksTimeSkipping(t *testing.T) {
 						pureTasks = append(pureTasks, task)
 					}
 
-					ms.DeleteCHASMPureTasks(tc.maxScheduledTime, tc.isPhysicalTime)
+					ms.DeletePhysicalCHASMPureTasks(tc.maxScheduledTime, tc.isPhysicalTime)
 
 					require.Equal(t, pureTasks[:tc.expectedRemaining], ms.chasmPureTasks)
 					expectedDeletions := make(map[tasks.Category][]tasks.Key)
