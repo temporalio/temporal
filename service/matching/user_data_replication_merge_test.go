@@ -45,7 +45,7 @@ func taskQueueUserDataWithDeployment(
 }
 
 // Replicating identical user data leaves persisted data unchanged and emits no conflict diagnostics.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdenticalUserData() {
+func (s *matchingEngineSuite) TestReplicateIdenticalData() {
 	captureHandler := s.captureDroppedOnEngine()
 	current := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, Version: 1, ClusterId: 1},
@@ -92,7 +92,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventIdentica
 }
 
 // After failover, delayed replication can contribute valid versions and higher revisions despite its older parent clock.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDelayedReplicationAfterFailoverPreservesVersions() {
+func (s *matchingEngineSuite) TestMergeDelayedSnapshot() {
+	// The target has accepted newer writes after failover; the source event was delayed.
 	currentClock := &clockspb.HybridLogicalClock{WallClock: 200, ClusterId: 1}
 	incomingClock := &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1}
 	currentRouting := &deploymentpb.RoutingConfig{
@@ -135,6 +136,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDelayedR
 		CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "zero-routing", BuildId: "zero"},
 		RevisionNumber:           0,
 	}
+	// The delayed snapshot has newer routing but older data for A, plus versions missing from the target.
 	incoming := taskQueueUserDataWithDeployment(
 		incomingClock,
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -157,6 +159,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDelayedR
 
 	taskQueue := uuid.NewString()
 	s.seedTaskQueueUserData(taskQueue, current)
+	// Receive the delayed event and resolve routing and version revisions independently.
 	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
 
 	protorequire.ProtoEqual(s.T(), currentClock, got.GetClock())
@@ -173,23 +176,23 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDelayedR
 	protorequire.ProtoEqual(s.T(), incomingZeroRouting, gotDeployments["zero-routing"].GetRoutingConfig())
 }
 
-// Newer snapshots replace membership; delayed snapshots merge versions by revision without replacing snapshot fields.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReorderedAndRepeatedUserData() {
-	older := taskQueueUserDataWithDeployment(
-		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+// Redelivering an older snapshot must preserve higher version and routing revisions already merged locally.
+// The target's newer parent clock and task queue config must also survive each delivery.
+func (s *matchingEngineSuite) TestRedeliveryPreservesHigherRevisions() {
+	target := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
 		&persistencespb.WorkerDeploymentData{
-			RoutingConfig: newTestRoutingConfig(1, "A"),
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"A": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
 			},
 		},
 	)
-	older.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
-		FairnessWeightOverrides: map[string]float32{"older": 1},
+	target.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"target": 1},
 	}
-	newer := taskQueueUserDataWithDeployment(
+	higherRevision := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		"deployment",
@@ -200,84 +203,102 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReordere
 			},
 		},
 	)
-	newer.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
-		FairnessWeightOverrides: map[string]float32{"newer": 1},
+	higherRevision.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"source": 1},
 	}
-	disjoint := taskQueueUserDataWithDeployment(
-		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		"deployment",
-		&persistencespb.WorkerDeploymentData{
-			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
-			},
-		},
-	)
-	disjoint.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
-		FairnessWeightOverrides: map[string]float32{"disjoint": 1},
-	}
-	want := taskQueueUserDataWithDeployment(
-		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		"deployment",
-		&persistencespb.WorkerDeploymentData{
-			RoutingConfig: newTestRoutingConfig(2, "A"),
-			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"A": newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
-				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
-			},
-		},
-	)
-	want.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
-		FairnessWeightOverrides: map[string]float32{"disjoint": 1},
-	}
-	wantAfterOlderReplay := common.CloneProto(want)
-	wantAfterOlderReplayDeployment := wantAfterOlderReplay.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
-	wantAfterOlderReplayDeployment.RoutingConfig = newTestRoutingConfig(1, "A")
-	wantAfterOlderReplayDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
-	tests := []struct {
-		name             string
-		userDataUpdates  []*persistencespb.TaskQueueUserData
-		wantBeforeRepeat *persistencespb.TaskQueueUserData
-		wantAfterRepeat  *persistencespb.TaskQueueUserData
-	}{
-		{
-			name:             "ordered updates then stale user data",
-			userDataUpdates:  []*persistencespb.TaskQueueUserData{older, newer, disjoint, older},
-			wantBeforeRepeat: disjoint,
-			wantAfterRepeat:  wantAfterOlderReplay,
-		},
-		{
-			name:             "newest parent first then stale user data",
-			userDataUpdates:  []*persistencespb.TaskQueueUserData{disjoint, newer, older, older},
-			wantBeforeRepeat: want,
-			wantAfterRepeat:  want,
-		},
-		{
-			name:             "newer version before stale then repeated subset",
-			userDataUpdates:  []*persistencespb.TaskQueueUserData{newer, older, disjoint, newer},
-			wantBeforeRepeat: disjoint,
-			wantAfterRepeat:  want,
-		},
-	}
-	for _, test := range tests {
-		s.Run(test.name, func() {
-			taskQueue := uuid.NewString()
-			s.seedTaskQueueUserData(taskQueue, test.userDataUpdates[0])
-			var got *persistencespb.TaskQueueUserData
-			for _, incoming := range test.userDataUpdates[1 : len(test.userDataUpdates)-1] {
-				got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
-			}
-			protorequire.ProtoEqual(s.T(), test.wantBeforeRepeat, got)
+	lowerRevision := common.CloneProto(higherRevision)
+	lowerRevision.Clock.WallClock = 10
+	lowerDeployment := lowerRevision.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
+	lowerDeployment.RoutingConfig = newTestRoutingConfig(1, "A")
+	lowerDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
 
-			got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.userDataUpdates[len(test.userDataUpdates)-1])
-			protorequire.ProtoEqual(s.T(), test.wantAfterRepeat, got)
-		})
+	expected := common.CloneProto(target)
+	expectedDeployment := expected.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
+	expectedDeployment.RoutingConfig = newTestRoutingConfig(2, "A")
+	expectedDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
+	taskQueue := testvars.New(s.T()).TaskQueue().Name
+	s.seedTaskQueueUserData(taskQueue, target)
+
+	// First receive A at revision 2. Its older parent clock still allows it to contribute missing data.
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, higherRevision)
+	protorequire.ProtoEqual(s.T(), expected, got)
+
+	// Then receive A at revision 1. Keep revision 2, B, and the target's snapshot fields.
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, lowerRevision)
+	protorequire.ProtoEqual(s.T(), expected, got)
+
+	// Redeliver the same revision-1 snapshot. Receiving it again must leave that result unchanged.
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, lowerRevision)
+	protorequire.ProtoEqual(s.T(), expected, got)
+}
+
+// Older replication snapshots can restore a version removed by a newer snapshot because deletion is encoded as absence.
+// This accepted limitation applies to redelivery of either the original version or its later revision.
+func (s *matchingEngineSuite) TestRedeliveryCanRestoreDeletedVersions() {
+	firstSnapshot := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			RoutingConfig: newTestRoutingConfig(1, "A"),
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING),
+			},
+		},
+	)
+	firstSnapshot.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"first": 1},
 	}
+	updatedSnapshot := common.CloneProto(firstSnapshot)
+	updatedSnapshot.Clock.WallClock = 20
+	updatedDeployment := updatedSnapshot.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
+	updatedDeployment.RoutingConfig = newTestRoutingConfig(2, "A")
+	updatedDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
+	deletionSnapshot := taskQueueUserDataWithDeployment(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		"deployment",
+		&persistencespb.WorkerDeploymentData{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"B": newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE),
+			},
+		},
+	)
+	deletionSnapshot.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
+		FairnessWeightOverrides: map[string]float32{"latest": 1},
+	}
+	taskQueue := testvars.New(s.T()).TaskQueue().Name
+	s.seedTaskQueueUserData(taskQueue, firstSnapshot)
+
+	// Receive A's revision-2 update, then the newest snapshot that removes A and contains only B.
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, updatedSnapshot)
+	protorequire.ProtoEqual(s.T(), updatedSnapshot, got)
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, deletionSnapshot)
+	protorequire.ProtoEqual(s.T(), deletionSnapshot, got)
+
+	// Redeliver the original snapshot. A returns at revision 1 because its revision-2 entry was removed.
+	restoredOriginal := common.CloneProto(deletionSnapshot)
+	restoredOriginalDeployment := restoredOriginal.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
+	restoredOriginalDeployment.RoutingConfig = newTestRoutingConfig(1, "A")
+	restoredOriginalDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING)
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, firstSnapshot)
+	protorequire.ProtoEqual(s.T(), restoredOriginal, got)
+
+	// Redeliver the authoritative deletion snapshot at the same clock to remove A again.
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, deletionSnapshot)
+	protorequire.ProtoEqual(s.T(), deletionSnapshot, got)
+
+	// Redelivering A's revision-2 update can also restore it; the clock and config still come from the latest snapshot.
+	restoredUpdate := common.CloneProto(restoredOriginal)
+	restoredUpdateDeployment := restoredUpdate.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
+	restoredUpdateDeployment.RoutingConfig = newTestRoutingConfig(2, "A")
+	restoredUpdateDeployment.Versions["A"] = newTestWorkerDeploymentVersionData(2, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
+	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, updatedSnapshot)
+	protorequire.ProtoEqual(s.T(), restoredUpdate, got)
 }
 
 // Each deployment forgets one old version and registers one new version; the passive must retain the same bounded set.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRepeatedDeletionsDoNotAccumulateVersions() {
+func (s *matchingEngineSuite) TestRolloutsDoNotAccumulateVersions() {
 	const retainedVersions = 12
 	const rollouts = 50
 	initialCurrentBuildID := fmt.Sprintf("build-%03d", retainedVersions-1)
@@ -286,6 +307,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRepeated
 		Clock:   &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1},
 		PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData),
 	}
+	// Both task types begin with the same 12 versions: one current version and 11 drained versions.
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		versions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 		for i := 0; i < retainedVersions; i++ {
@@ -300,28 +322,34 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRepeated
 	taskQueue := testvars.New(s.T()).TaskQueue().Name
 	s.seedTaskQueueUserData(taskQueue, common.CloneProto(active))
 
+	// Every rollout forgets one version and adds one, so the active's retained set never grows.
 	for nextBuild := retainedVersions; nextBuild < retainedVersions+rollouts; nextBuild++ {
 		active = common.CloneProto(active)
 		active.Clock.WallClock++
 		for _, perType := range active.PerType {
 			deployment := perType.DeploymentData.DeploymentsData["deployment"]
+			// Drain the previous current version and forget the oldest retained version.
 			previous := deployment.Versions[fmt.Sprintf("build-%03d", nextBuild-1)]
 			previous.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
 			previous.RevisionNumber++
 			delete(deployment.Versions, fmt.Sprintf("build-%03d", nextBuild-retainedVersions))
+			// Register the next build and make it the routing target.
 			buildID := fmt.Sprintf("build-%03d", nextBuild)
 			deployment.Versions[buildID] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
 			deployment.RoutingConfig = newTestRoutingConfig(int64(nextBuild+1), buildID)
 		}
 
+		// Check the whole passive snapshot after each delivery, including its 12 versions and routing.
 		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, active)
 
 		protorequire.ProtoEqual(s.T(), active, got)
 	}
 }
 
+// An older snapshot can add deployment data for a missing task type without importing its snapshot-level settings.
+//
 //nolint:staticcheck // SA1019 verifies that deprecated deployment fields are selected by the parent clock.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventImportsOnlyDeploymentDataForMissingType() {
+func (s *matchingEngineSuite) TestImportDeploymentDataForMissingType() {
 	current := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -366,7 +394,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventImportsO
 }
 
 // Normal deletion must remove a forgotten version from the passive rather than retaining it in a union.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNormalDeletionRemovesVersionFromPassive() {
+func (s *matchingEngineSuite) TestReplicateDeletion() {
 	passive := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -386,13 +414,17 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNormalDe
 
 	taskQueue := uuid.NewString()
 	s.seedTaskQueueUserData(taskQueue, passive)
+	// The newer active snapshot contains only B; the passive must remove its old A entry.
 	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, active)
 
 	protorequire.ProtoEqual(s.T(), active, got)
 }
 
+// Snapshot-level config, fairness, legacy deployment data, and V2 rules follow the parent-clock winner.
+// Revision-based deployment merging must not change how these other fields are selected.
+//
 //nolint:staticcheck // SA1019 verifies that deprecated deployment fields are selected by the parent clock.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesParentClockForNonDeploymentFields() {
+func (s *matchingEngineSuite) TestSelectSnapshotFieldsByParentClock() {
 	newUserData := func(
 		clock *clockspb.HybridLogicalClock,
 		label string,
@@ -486,7 +518,9 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesPare
 	}
 }
 
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventResolvesEqualRevisionConflictByParentClock() {
+// Equal-revision differences emit diagnostics only when the snapshots are merged.
+// Replacing the whole snapshot with incoming data must not report a merge conflict.
+func (s *matchingEngineSuite) TestReportEqualRevisionConflicts() {
 	const conflictLogMessage = "found conflicting user data with same revision number during replication"
 	captureHandler := s.captureDroppedOnEngine()
 	tests := []struct {
@@ -701,7 +735,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventResolves
 	})
 }
 
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventClonesMergedDeploymentData() {
+// Replication must copy imported deployment data so later mutation of the incoming message cannot alter cached data.
+func (s *matchingEngineSuite) TestCloneMergedDeploymentData() {
 	incomingRouting := &deploymentpb.RoutingConfig{
 		CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "shared", BuildId: "incoming"},
 		RevisionNumber:           2,
@@ -760,7 +795,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventClonesMe
 	protorequire.ProtoEqual(s.T(), wantIncomingOnly, gotDeployments["incoming-only"])
 }
 
-func TestTaskQueueUserDataRevisionMergeConfig(t *testing.T) {
+// Revision merging defaults on; a namespace-specific override must not disable it for other namespaces.
+func TestRevisionMergeConfig(t *testing.T) {
 	t.Parallel()
 
 	client := dynamicconfig.NewMemoryClient()
@@ -774,7 +810,8 @@ func TestTaskQueueUserDataRevisionMergeConfig(t *testing.T) {
 }
 
 // Clockless compatibility, HLC tie-breakers, and disabling revision merging follow their explicit policies.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventMergeFlagAndClockCompatibility() {
+// Each row varies the flag or clocks while sharing deployment data with conflicting revisions and disjoint versions.
+func (s *matchingEngineSuite) TestReplicationMergePolicy() {
 	current := taskQueueUserDataWithDeployment(nil, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "deployment", &persistencespb.WorkerDeploymentData{
 		RoutingConfig: newTestRoutingConfig(5, "shared"),
 		Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -795,6 +832,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventMergeFla
 	incoming.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Config = &taskqueuepb.TaskQueueConfig{
 		FairnessWeightOverrides: map[string]float32{"incoming": 1},
 	}
+	// A merge keeps the higher version revision from current and the higher routing revision from incoming.
+	// Snapshot fields such as config still come from whichever parent clock wins.
 	mergedCurrent := common.CloneProto(current)
 	mergedCurrentDeployment := mergedCurrent.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"]
 	mergedCurrentDeployment.RoutingConfig = newTestRoutingConfig(6, "shared")
@@ -842,11 +881,13 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventMergeFla
 			taskQueue := testvars.New(s.T()).TaskQueue().Name
 			s.seedTaskQueueUserData(taskQueue, currentData)
 
+			// Apply this row's policy, then verify the complete result and that neither input was changed.
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incomingData)
 
 			protorequire.ProtoEqual(s.T(), want, got)
 			protorequire.ProtoEqual(s.T(), currentBefore, currentData)
 			protorequire.ProtoEqual(s.T(), incomingBefore, incomingData)
+			// Mutating the caller's message afterward must not change the cached result either.
 			incomingData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"].Versions["incoming-only"].RevisionNumber++
 			protorequire.ProtoEqual(s.T(), want, got)
 		})
@@ -854,12 +895,13 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventMergeFla
 }
 
 // A fresh authoritative snapshot removes accumulated versions, whole deployments, and missing task queue types.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDeletionAndForceReplicationClearAccumulatedVersions() {
+func (s *matchingEngineSuite) TestForceReplicationClearsOrphans() {
 	s.matchingEngine.config.EnableTaskQueueUserDataRevisionMerge = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	current := &persistencespb.TaskQueueUserData{
 		Clock:   &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1},
 		PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData),
 	}
+	// Model the incident's accumulated versions on both task types, plus a whole forgotten deployment.
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		versions := map[string]*deploymentspb.WorkerDeploymentVersionData{
 			"current": newTestWorkerDeploymentVersionData(10, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT),
@@ -878,6 +920,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDeletion
 		}
 	}
 	current.PerType[int32(enumspb.TASK_QUEUE_TYPE_NEXUS)] = &persistencespb.TaskQueueTypeUserData{}
+	// The active retains only 12 versions and no longer has the forgotten deployment or Nexus task type.
 	incoming := common.CloneProto(current)
 	incoming.Clock = &clockspb.HybridLogicalClock{WallClock: 200, ClusterId: 1}
 	delete(incoming.PerType, int32(enumspb.TASK_QUEUE_TYPE_NEXUS))
@@ -891,6 +934,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDeletion
 	taskQueue := testvars.New(s.T()).TaskQueue().Name
 	s.seedTaskQueueUserData(taskQueue, current)
 
+	// A fresh snapshot clears the accumulated entries. Redelivering it must keep that result unchanged.
 	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
 	protorequire.ProtoEqual(s.T(), incoming, got)
 	got = s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
@@ -919,7 +963,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventDeletion
 }
 
 // Accepted limitation: a newer incoming parent clock wins even if its snapshot omits a valid target version.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNewerClockSnapshotCanDiscardValidTargetVersion() {
+func (s *matchingEngineSuite) TestNewerSnapshotDropsTargetOnlyVersions() {
 	target := taskQueueUserDataWithDeployment(
 		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -946,13 +990,14 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNewerClo
 	taskQueue := testvars.New(s.T()).TaskQueue().Name
 	s.seedTaskQueueUserData(taskQueue, target)
 
+	// Document the accepted loss: the newer parent clock replaces B even though B has a higher revision.
 	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
 
 	protorequire.ProtoEqual(s.T(), incoming, got)
 }
 
 // Replacing deployment membership must not bypass legacy build ID merging or parent-clock selection of V2 rules.
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNewerSnapshotPreservesLegacyVersioning() {
+func (s *matchingEngineSuite) TestPreserveLegacyVersioning() {
 	s.matchingEngine.config.EnableTaskQueueUserDataRevisionMerge = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	currentClock := &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1}
 	incomingClock := &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}
@@ -979,6 +1024,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventNewerSna
 			},
 		},
 	}
+	// Deployment membership is replaced, but old V1 builds survive and V2 rules follow the incoming parent.
 	want := common.CloneProto(incoming)
 	want.VersioningData.VersionSets = []*persistencespb.CompatibleVersionSet{
 		mkNewSet("old-v1-build", currentClock),
