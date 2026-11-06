@@ -3245,6 +3245,14 @@ retires. Changing it restarts lane stream receivers.`,
 it with the replication_lane_max_lag_exceeded metric and a warning log. It does not change how the
 lane sends.`,
 	)
+	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
+		4096,
+		`ReplicationStreamReceiverLaneFeedbackMaxBytes limits the serialized size of lane_feedback
+on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
+watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
+Changes take effect on the next ack without restarting the stream.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,

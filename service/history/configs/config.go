@@ -354,6 +354,7 @@ type Config struct {
 	ReplicationStreamReceiverMaxLanes                   dynamicconfig.IntPropertyFn
 	ReplicationReceiverLaneMaxOutstandingTaskCount      dynamicconfig.IntPropertyFn
 	ReplicationReceiverMaxTotalOutstandingTaskCount     dynamicconfig.IntPropertyFn
+	ReplicationStreamReceiverLaneFeedbackMaxBytes       dynamicconfig.IntPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
@@ -714,6 +715,7 @@ func NewConfig(
 		ReplicationStreamReceiverMaxLanes:                   dynamicconfig.ReplicationStreamReceiverMaxLanes.Get(dc),
 		ReplicationReceiverLaneMaxOutstandingTaskCount:      dynamicconfig.ReplicationReceiverLaneMaxOutstandingTaskCount.Get(dc),
 		ReplicationReceiverMaxTotalOutstandingTaskCount:     dynamicconfig.ReplicationReceiverMaxTotalOutstandingTaskCount.Get(dc),
+		ReplicationStreamReceiverLaneFeedbackMaxBytes:       dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),

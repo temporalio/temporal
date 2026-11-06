@@ -17,9 +17,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -494,24 +497,57 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNam
 func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAndFeedback() {
 	small, err := anypb.New(timestamppb.New(time.Unix(1, 0)))
 	s.NoError(err)
-	large, err := anypb.New(wrapperspb.Bytes(make([]byte, laneFeedbackMaxBytes)))
+	large, err := anypb.New(wrapperspb.Bytes(make([]byte, 4096)))
 	s.NoError(err)
+	dc := dynamicconfig.NewMemoryClient()
+	s.streamReceiver.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes = dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(
+		dynamicconfig.NewCollection(dc, log.NewNoopLogger()),
+	)
+	laneWatermark := WatermarkInfo{Watermark: 5, Timestamp: time.Unix(0, 500)}
+	laneTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	laneTracker.TrackTasks(laneWatermark)
+	s.streamReceiver.finishLaneBatch("lane-a", false)
 	for _, tc := range []struct {
-		name     string
-		feedback *anypb.Any
-		expected *anypb.Any
+		name       string
+		maxBytes   int
+		useDefault bool
+		feedback   *anypb.Any
+		expected   *anypb.Any
+		dropped    bool
 	}{
-		{name: "Small", feedback: small, expected: small},
-		{name: "LargerThan4KB", feedback: large},
+		{name: "DefaultAllowsSmallFeedback", useDefault: true, feedback: small, expected: small},
+		{name: "DefaultDropsLargeFeedback", useDefault: true, feedback: large, dropped: true},
+		{name: "RaisedLimitAllowsLargeFeedback", maxBytes: 8192, feedback: large, expected: large},
+		{name: "ExactLimitIncludesAnyEnvelope", maxBytes: proto.Size(large), feedback: large, expected: large},
+		{name: "OneByteOverLimit", maxBytes: proto.Size(large) - 1, feedback: large, dropped: true},
+		{name: "LoweredLimitDropsSmallFeedback", maxBytes: proto.Size(small) - 1, feedback: small, dropped: true},
+		{name: "ZeroDisablesFeedback", feedback: small},
+		{name: "NegativeDisablesFeedback", maxBytes: -1, feedback: small},
+		{name: "ReenabledOnSameReceiver", maxBytes: 8192, feedback: large, expected: large},
+		{name: "NilFeedback", maxBytes: 4096},
 	} {
 		s.Run(tc.name, func() {
+			t := s.T()
+			maxBytes := 4096
+			if !tc.useDefault {
+				maxBytes = tc.maxBytes
+				revert := dc.OverrideSetting(dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes, maxBytes)
+				defer revert()
+			}
 			s.stream.requests = nil
 			s.streamReceiver.receiverMode = ReceiverModeTieredStack
 			s.streamReceiver.lanesEnabled = true
 			s.streamReceiver.maxLanes = 7
-			feedback := NewMockLaneFeedbackProvider(s.controller)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.streamReceiver.MetricsHandler = metricsHandler
+			feedback := NewMockLaneFeedbackProvider(gomock.NewController(t))
 			feedback.EXPECT().ThrottledNamespaceIDs(s.streamReceiver.clientShardKey.ShardID).Return(nil)
-			feedback.EXPECT().Feedback(s.streamReceiver.clientShardKey.ShardID).Return(tc.feedback)
+			if maxBytes > 0 {
+				feedback.EXPECT().Feedback(s.streamReceiver.clientShardKey.ShardID, maxBytes).Return(tc.feedback)
+			}
 			s.streamReceiver.laneFeedback = feedback
 			watermarkInfo := &WatermarkInfo{Watermark: 10, Timestamp: time.Unix(0, 1000)}
 			s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
@@ -522,11 +558,47 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAn
 			s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 
 			_, err := s.streamReceiver.ackMessage(s.stream)
-			s.NoError(err)
+			require.NoError(t, err)
+			require.Len(t, s.stream.requests, 1)
 			state := s.stream.requests[0].GetSyncReplicationState()
-			s.Equal(int32(replicationLaneProtocolVersion), state.LaneProtocolVersion)
-			s.Equal(int32(7), state.MaxLanes)
-			s.Equal(tc.expected, state.LaneFeedback)
+			protorequire.ProtoEqual(t, &replicationspb.SyncReplicationState{
+				InclusiveLowWatermark:     laneWatermark.Watermark,
+				InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+				HighPriorityState: &replicationspb.ReplicationState{
+					InclusiveLowWatermark:     watermarkInfo.Watermark,
+					InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+				},
+				LowPriorityState: &replicationspb.ReplicationState{
+					InclusiveLowWatermark:     watermarkInfo.Watermark,
+					InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+				},
+				LaneStates: map[string]*replicationspb.ReplicationState{
+					"lane-a": {
+						InclusiveLowWatermark:     laneWatermark.Watermark,
+						InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+						FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+					},
+				},
+				LaneProtocolVersion: replicationLaneProtocolVersion,
+				MaxLanes:            7,
+				LaneFeedback:        tc.expected,
+			}, state)
+			recordings := capture.SnapshotMetric(metrics.ReplicationLaneFeedbackDropped.Name())
+			if tc.dropped {
+				fromCluster := metrics.FromClusterIDTag(s.streamReceiver.serverShardKey.ClusterID)
+				toCluster := metrics.ToClusterIDTag(s.streamReceiver.clientShardKey.ClusterID)
+				require.Equal(t, []*metricstest.CapturedRecording{{
+					Value: int64(1),
+					Tags: map[string]string{
+						fromCluster.Key: fromCluster.Value,
+						toCluster.Key:   toCluster.Value,
+					},
+				}}, recordings)
+			} else {
+				require.Empty(t, recordings)
+			}
 		})
 	}
 }
