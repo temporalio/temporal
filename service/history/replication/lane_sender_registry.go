@@ -234,9 +234,10 @@ func (r *senderLaneRegistry) Paused(logicalKey string) bool {
 	return ok && lane.paused
 }
 
-// RequestRetirement withdraws a lane and fixes its exclusive end once its current send has
-// finished. Existing default reservations end at or before that boundary. New default
-// reservations own the namespace's tasks beyond it, while this lane drains its finite prefix.
+// RequestRetirement withdraws a lane. It keeps sending until its cursor covers every
+// default reservation, then fixes its exclusive end at that sent cursor. New default
+// reservations own the suffix, after the lane has sent the entire prefix. The lane stays
+// registered until the receiver acknowledges that prefix.
 // A paused lane keeps its unbounded ownership until it resumes. Once a finite handoff
 // is fixed, it cannot be expanded again: default reservations may already own the suffix.
 func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
@@ -252,15 +253,14 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	return true
 }
 
-// boundRetiringLane fixes a retirement boundary under mu after all sends with the old scope
-// finish. The finite end is persisted with the scope and never moves forward again.
+// boundRetiringLane fixes a retirement boundary under mu once the lane has sent through
+// every default reservation and released its send lease. If default reservations keep ahead
+// of the lane, retirement remains pending. The finite end is persisted and never moves again.
 func (r *senderLaneRegistry) boundRetiringLane(lane *senderLane) bool {
-	if !lane.retiring || lane.pending || lane.paused || lane.leases != 0 || lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 {
+	if !lane.retiring || lane.pending || lane.paused || lane.leases != 0 || lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 || lane.cursor < r.defaultReservedCursor {
 		return false
 	}
-	lane.scope.Range.ExclusiveMax = tasks.NewImmediateKey(max(
-		r.defaultReservedCursor, lane.cursor, lane.acked, lane.scope.Range.InclusiveMin.TaskID,
-	))
+	lane.scope.Range.ExclusiveMax = tasks.NewImmediateKey(lane.cursor)
 	return true
 }
 
@@ -312,7 +312,7 @@ func (r *senderLaneRegistry) Acquire(laneID string) (senderLaneSnapshot, bool) {
 	if !ok || lane.pending || lane.paused || lane.leases != 0 {
 		return senderLaneSnapshot{}, false
 	}
-	if lane.retiring && (lane.scope.Range.ExclusiveMax.TaskID == math.MaxInt64 || lane.acked >= lane.scope.Range.ExclusiveMax.TaskID) {
+	if lane.retiring && lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 && lane.acked >= lane.scope.Range.ExclusiveMax.TaskID {
 		return senderLaneSnapshot{}, false
 	}
 	lane.leases++

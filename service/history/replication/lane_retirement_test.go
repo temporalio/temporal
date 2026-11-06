@@ -27,6 +27,14 @@ func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 	oldOwner, acquired := r.AcquireDefault(200)
 	require.True(t, acquired)
 	require.True(t, r.RequestRetirement("a"))
+	// Default must not take the namespace back while its prefix is still unsent.
+	unbounded, ok := r.SnapshotByKey("a")
+	require.True(t, ok)
+	require.Equal(t, int64(math.MaxInt64), unbounded.scope.Range.ExclusiveMax.TaskID)
+	_, acquired = r.Acquire(lane.id)
+	require.True(t, acquired)
+	r.AdvanceLaneCursor(lane.id, 200)
+	r.Release(lane.id)
 	bounded, ok := r.SnapshotByKey("a")
 	require.True(t, ok)
 	require.True(t, bounded.retiring)
@@ -42,10 +50,6 @@ func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 		require.Empty(t, owner(retirementTask("other", 199)))
 		r.ReleaseDefault(end, true)
 	}
-	_, acquired = r.Acquire(lane.id)
-	require.True(t, acquired)
-	r.AdvanceLaneCursor(lane.id, 200)
-	r.Release(lane.id)
 	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 150}})
 	require.Empty(t, r.ReadyRetirements())
 	state := r.BuildReaderState(syncReplicationState(10_000, 10_000, 10_000))
@@ -105,6 +109,10 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 			_, acquired := r.AcquireDefault(200)
 			require.True(t, acquired)
 			r.ReleaseDefault(200, true)
+			_, acquired = r.Acquire(lane.id)
+			require.True(t, acquired)
+			r.AdvanceLaneCursor(lane.id, 200)
+			r.Release(lane.id)
 			require.True(t, r.RequestRetirement("a"))
 			r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: resume}})
 			state := r.BuildReaderState(syncReplicationState(350, 350, 350))
@@ -155,6 +163,53 @@ func TestSenderLaneRegistryRetirementWaitsForPendingHandoff(t *testing.T) {
 	require.Len(t, r.ReadyRetirements(), 1)
 }
 
+func TestSenderLaneRegistryRetirementWaitsWhileDefaultAdvances(t *testing.T) {
+	t.Parallel()
+	r, err := newSenderLaneRegistry(100, nil)
+	require.NoError(t, err)
+	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
+	require.NoError(t, err)
+	owner, acquired := r.AcquireDefault(200)
+	require.True(t, acquired)
+	require.Equal(t, "a", owner(retirementTask("a", 199)))
+	r.ReleaseDefault(200, true)
+	require.True(t, r.RequestRetirement("a"))
+	// Each time the lane sends its snapshot, default has already reserved a newer
+	// range. Retirement must remain pending rather than exposing its unsent tail.
+	for sent := int64(200); sent <= 1000; sent += 100 {
+		_, acquired = r.Acquire(lane.id)
+		require.True(t, acquired, "an unbounded retiring lane must keep sending")
+		owner, acquired = r.AcquireDefault(sent + 100)
+		require.True(t, acquired)
+		require.Equal(t, "a", owner(retirementTask("a", sent)))
+		require.Empty(t, owner(retirementTask("neighbor", sent)))
+		r.ReleaseDefault(sent+100, true)
+		r.AdvanceLaneCursor(lane.id, sent)
+		r.Release(lane.id)
+		current, ok := r.SnapshotByID(lane.id)
+		require.True(t, ok)
+		require.True(t, current.retiring)
+		require.Equal(t, int64(math.MaxInt64), current.scope.Range.ExclusiveMax.TaskID)
+		require.Empty(t, r.ReadyRetirements())
+	}
+	// Once the send cursor reaches the reservation, the handoff no longer waits
+	// for an ACK round trip. Only final removal waits for ACK >= H.
+	_, acquired = r.Acquire(lane.id)
+	require.True(t, acquired)
+	r.AdvanceLaneCursor(lane.id, 1100)
+	r.Release(lane.id)
+	current, ok := r.SnapshotByID(lane.id)
+	require.True(t, ok)
+	require.Equal(t, int64(1100), current.scope.Range.ExclusiveMax.TaskID)
+	owner, acquired = r.AcquireDefault(1200)
+	require.True(t, acquired)
+	require.Empty(t, owner(retirementTask("a", 1100)))
+	r.ReleaseDefault(1200, true)
+	require.Empty(t, r.ReadyRetirements())
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 1100}})
+	require.Len(t, r.ReadyRetirements(), 1)
+}
+
 func TestSenderLaneRegistryRetirementWaitsForResumeBeforeHandoff(t *testing.T) {
 	t.Parallel()
 	r, err := newSenderLaneRegistry(100, nil)
@@ -182,16 +237,19 @@ func TestSenderLaneRegistryRetirementWaitsForResumeBeforeHandoff(t *testing.T) {
 	require.Empty(t, r.ReadyRetirements())
 	_, acquired = r.Acquire(lane.id)
 	require.False(t, acquired)
-	// RESUME bounds the lane at the latest default reservation, not the old cursor.
+	// RESUME permits catchup, but the unsent tail still belongs to the lane.
 	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
 		InclusiveLowWatermark: 100,
 		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 	}})
 	current, acquired = r.Acquire(lane.id)
 	require.True(t, acquired)
-	require.Equal(t, int64(500), current.scope.Range.ExclusiveMax.TaskID)
+	require.Equal(t, int64(math.MaxInt64), current.scope.Range.ExclusiveMax.TaskID)
 	r.AdvanceLaneCursor(lane.id, 500)
 	r.Release(lane.id)
+	current, ok = r.SnapshotByID(lane.id)
+	require.True(t, ok)
+	require.Equal(t, int64(500), current.scope.Range.ExclusiveMax.TaskID)
 	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 500}})
 	require.Len(t, r.ReadyRetirements(), 1)
 }

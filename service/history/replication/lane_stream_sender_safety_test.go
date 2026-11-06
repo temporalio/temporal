@@ -105,15 +105,12 @@ func (s *streamSenderSuite) TestLegacyResumeCoversFiniteRetirement() {
 	}
 }
 
-func (s *laneStreamSenderSuite) TestRetiringLaneSendsOnlyItsFinitePrefix() {
-	registry, err := newSenderLaneRegistry(100, nil)
+func (s *laneStreamSenderSuite) TestRestoredRetiringLaneSendsOnlyItsFinitePrefix() {
+	scope := laneScope(namespaceLaneFilter("ns-a"), 100)
+	scope.Range.ExclusiveMax = tasks.NewImmediateKey(200)
+	registry, err := newSenderLaneRegistry(200, []*persistencespb.QueueReaderLane{{LogicalKey: "a", Scope: queues.ToPersistenceScope(scope)}})
 	s.NoError(err)
-	lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
-	s.NoError(err)
-	_, acquired := registry.AcquireDefault(200)
-	s.True(acquired)
-	registry.ReleaseDefault(200, true)
-	s.True(registry.RequestRetirement("a"))
+	lane := registry.Snapshots()[0]
 	current, acquired := registry.Acquire(lane.id)
 	s.True(acquired)
 	s.streamSender.laneRegistry = registry
@@ -356,4 +353,55 @@ func (s *laneStreamSenderSuite) TestPaceLaneRechecksPauseAfterLimiterRefuses() {
 	defer cancel()
 	s.ErrorIs(s.streamSender.paceLane(ctx, key), context.DeadlineExceeded)
 	s.Equal(1, limiter.calls)
+}
+
+func (s *laneStreamSenderSuite) TestRetirementSendsPrefixBeforeDefaultSuffix() {
+	s.streamSender.isTieredStackEnabled = true
+	registry, err := newSenderLaneRegistry(100, nil)
+	s.NoError(err)
+	lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
+	s.NoError(err)
+	_, acquired := registry.AcquireDefault(200)
+	s.True(acquired)
+	registry.ReleaseDefault(200, true)
+	s.True(registry.RequestRetirement("a"))
+	s.streamSender.laneRegistry = registry
+	s.expectLaneTestNamespaces("ns-a", "ns-b")
+	prefix := s.laneTestTask("ns-a", 101, enumsspb.TASK_PRIORITY_HIGH)
+	tail := s.laneTestTask("ns-a", 250, enumsspb.TASK_PRIORITY_HIGH)
+	neighbor := s.laneTestTask("ns-b", 260, enumsspb.TASK_PRIORITY_HIGH)
+	suffix := s.laneTestTask("ns-a", 350, enumsspb.TASK_PRIORITY_HIGH)
+	s.expectReplicationTasksIter(200, 300, tail, neighbor)
+	s.expectReplicationTasksIter(100, 300, prefix, tail, neighbor)
+	s.expectReplicationTasksIter(300, 400, suffix)
+	for _, task := range []*tasks.SyncWorkflowStateTask{prefix, tail, neighbor, suffix} {
+		s.taskConverter.EXPECT().Convert(task, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_HIGH, locks.PriorityLow).Return(
+			&replicationspb.ReplicationTask{
+				SourceTaskId: task.GetTaskID(), VisibilityTime: timestamppb.Now(), Priority: enumsspb.TASK_PRIORITY_HIGH,
+			}, nil,
+		)
+	}
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).AnyTimes()
+	var sent []int64
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		for _, task := range response.GetMessages().GetReplicationTasks() {
+			sent = append(sent, task.GetSourceTaskId())
+		}
+		return nil
+	}).AnyTimes()
+	// Other namespaces keep moving, but the unsent namespace tail stays on its lane.
+	s.NoError(s.streamSender.sendDefaultTasks(enumsspb.TASK_PRIORITY_HIGH, 200, 300))
+	s.Equal([]int64{260}, sent)
+	current, acquired := registry.Acquire(lane.id)
+	s.True(acquired)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(300))
+	s.NoError(s.streamSender.sendLaneRange(current))
+	registry.Release(lane.id)
+	current, ok := registry.SnapshotByID(lane.id)
+	s.True(ok)
+	s.Equal(int64(300), current.scope.Range.ExclusiveMax.TaskID)
+	// No lane ACK has arrived, but its prefix has been sent before the new suffix.
+	s.NoError(s.streamSender.sendDefaultTasks(enumsspb.TASK_PRIORITY_HIGH, 300, 400))
+	s.Equal([]int64{260, 101, 250, 350}, sent)
+	s.Empty(registry.ReadyRetirements())
 }
