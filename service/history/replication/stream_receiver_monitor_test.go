@@ -78,7 +78,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
-		NewLegacyStreamReceiverFactory(),
+		NewStreamReceiverFactory(),
 		true,
 	)
 	streamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -411,7 +411,7 @@ func (s *streamReceiverMonitorSuite) TestStop_SkipsInboundStreamsWhenFlagDisable
 			Logger:          log.NewNoopLogger(),
 			DLQWriter:       NoopDLQWriter{},
 		}),
-		NewLegacyStreamReceiverFactory(),
+		NewStreamReceiverFactory(),
 		true,
 	)
 

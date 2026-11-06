@@ -48,21 +48,21 @@ type (
 		) ManagedStreamReceiver
 	}
 
-	legacyStreamSenderFactory   struct{}
-	legacyStreamReceiverFactory struct{}
+	streamSenderFactory   struct{}
+	streamReceiverFactory struct{}
 )
 
-// NewLegacyStreamSenderFactory returns a factory that creates StreamSenderImpl.
-func NewLegacyStreamSenderFactory() StreamSenderFactory {
-	return legacyStreamSenderFactory{}
+// NewStreamSenderFactory returns a factory that creates StreamSenderImpl.
+func NewStreamSenderFactory() StreamSenderFactory {
+	return streamSenderFactory{}
 }
 
-// NewLegacyStreamReceiverFactory returns a factory that creates StreamReceiverImpl.
-func NewLegacyStreamReceiverFactory() StreamReceiverFactory {
-	return legacyStreamReceiverFactory{}
+// NewStreamReceiverFactory returns a factory that creates StreamReceiverImpl.
+func NewStreamReceiverFactory() StreamReceiverFactory {
+	return streamReceiverFactory{}
 }
 
-func (legacyStreamSenderFactory) NewStreamSender(
+func (streamSenderFactory) NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext historyi.ShardContext,
 	historyEngine historyi.Engine,
@@ -88,7 +88,7 @@ func (legacyStreamSenderFactory) NewStreamSender(
 	)
 }
 
-func (legacyStreamReceiverFactory) NewStreamReceiver(
+func (streamReceiverFactory) NewStreamReceiver(
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
 	clientShardKey ClusterShardKey,
