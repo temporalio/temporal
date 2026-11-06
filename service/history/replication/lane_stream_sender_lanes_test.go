@@ -403,6 +403,7 @@ func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
 	s.NoError(err)
 	lane, _, err := registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
+	registry.AdvanceLaneCursor(lane.id, 150)
 	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 150}})
 	s.True(registry.RequestRetirement(lane.logicalKey))
 	s.streamSender.laneRegistry = registry
