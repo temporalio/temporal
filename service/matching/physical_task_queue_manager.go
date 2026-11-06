@@ -11,7 +11,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -55,9 +54,9 @@ const (
 
 type (
 	addTaskParams struct {
-		taskInfo             *persistencespb.TaskInfo
-		forwardInfo          *taskqueuespb.TaskForwardInfo
-		singleSessionOptions *sessionpb.SingleSessionOptions
+		taskInfo         *persistencespb.TaskInfo
+		forwardInfo      *taskqueuespb.TaskForwardInfo
+		sessionDirective *taskqueuespb.TaskSessionDirective
 	}
 	// physicalTaskQueueManagerImpl manages a set of physical queues that comprise one logical
 	// queue, corresponding to a single versioned queue of a task queue partition.

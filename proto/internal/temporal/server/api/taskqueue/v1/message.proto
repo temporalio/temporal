@@ -13,6 +13,14 @@ import "temporal/server/api/enums/v1/task.proto";
 
 option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
+// TaskSessionDirective describes the workflow session placement associated with a task.
+message TaskSessionDirective {
+  // Sticky task queue serving the workflow session.
+  string worker_queue = 1;
+  // Whether the workflow is assigned to an exclusive worker, even if matching has not recorded that assignment yet.
+  bool is_exclusive_worker_assigned = 2;
+}
+
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
   // Default (if build_id is not present) is "unversioned":

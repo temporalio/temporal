@@ -461,7 +461,9 @@ reredirectTask:
 	}
 
 	hookVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
-	if params.singleSessionOptions != nil {
+	var singleSessionOptions *sessionpb.SingleSessionOptions
+	if params.sessionDirective.GetIsExclusiveWorkerAssigned() {
+		singleSessionOptions = &sessionpb.SingleSessionOptions{StableIdentity: params.sessionDirective.GetWorkerQueue()}
 		hookVersion = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DirectiveDeployment(directive))
 	}
 
@@ -512,7 +514,7 @@ reredirectTask:
 			if !forwarded {
 				// We should not use targetVersion because targetVersion is always routing-config-deriven.
 				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
-				pm.processTaskAddHooks(ctx, hookVersion, outcome, params.singleSessionOptions)
+				pm.processTaskAddHooks(ctx, hookVersion, outcome, singleSessionOptions)
 			}
 
 			syncMatchResult := metrics.TaskAddResultSyncMatch
@@ -555,7 +557,7 @@ reredirectTask:
 		// because for unpinned tasks spoolQueue is always the default (unversioned) queue.
 		// Unpinned tasks are written to the default queue for late binding, in case target version
 		// changes by the time they can be dispatched.
-		pm.processTaskAddHooks(ctx, hookVersion, outcome, params.singleSessionOptions)
+		pm.processTaskAddHooks(ctx, hookVersion, outcome, singleSessionOptions)
 	} else {
 		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}

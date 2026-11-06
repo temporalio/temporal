@@ -631,7 +631,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			RunId:      task.GetRunID(),
 		},
 		TaskQueue:              taskQueue,
-		SingleSessionOptions:   workflow.SingleSessionOptions(singleSessionBound, taskQueue),
+		SessionDirective:       workflow.TaskSessionDirective(singleSessionBound, taskQueue),
 		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),

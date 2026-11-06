@@ -423,7 +423,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 			RunId:      u.wfKey.RunID,
 		},
 		TaskQueue:              u.taskQueue,
-		SingleSessionOptions:   workflow.SingleSessionOptions(u.exclusiveWorker, u.taskQueue),
+		SessionDirective:       workflow.TaskSessionDirective(u.exclusiveWorker, u.taskQueue),
 		ScheduledEventId:       u.scheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,

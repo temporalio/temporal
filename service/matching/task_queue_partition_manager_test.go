@@ -2276,11 +2276,16 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 		name      string
 		taskType  enumspb.TaskQueueType
 		syncMatch bool
+		general   bool
 	}{
 		{name: "workflow sync match", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, syncMatch: true},
 		{name: "workflow backlog", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		{name: "activity sync match", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, syncMatch: true},
 		{name: "activity backlog", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{name: "general workflow sync match", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, syncMatch: true, general: true},
+		{name: "general workflow backlog", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, general: true},
+		{name: "general activity sync match", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, syncMatch: true, general: true},
+		{name: "general activity backlog", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, general: true},
 	} {
 		s.Run(tc.name, func() {
 			t := s.T()
@@ -2327,6 +2332,12 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 				pm.engine.partitionsLock.Unlock()
 			}()
 			options := &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()}
+			if tc.general {
+				options = nil
+			}
+			sessionDirective := &taskqueuespb.TaskSessionDirective{
+				WorkerQueue: tv.StickyTaskQueue().GetName(), IsExclusiveWorkerAssigned: !tc.general,
+			}
 			directive := &taskqueuespb.TaskVersionDirective{
 				Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
 				DeploymentVersion: tv.DeploymentVersion(),
@@ -2336,12 +2347,12 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 			if tc.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 				_, matched, err = pm.engine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
-					VersionDirective: directive, SingleSessionOptions: options,
+					VersionDirective: directive, SessionDirective: sessionDirective,
 				})
 			} else {
 				_, matched, err = pm.engine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
-					VersionDirective: directive, SingleSessionOptions: options,
+					VersionDirective: directive, SessionDirective: sessionDirective,
 				})
 			}
 			require.NoError(t, err)
@@ -2351,7 +2362,11 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
 			require.Equal(t, tc.taskType, calls[0].TaskQueueType)
 			require.Equal(t, hookOutcome, calls[0].SyncMatchOutcome)
 			protorequire.ProtoEqual(t, options, calls[0].SingleSessionOptions)
-			protorequire.ProtoEqual(t, tv.ExternalDeploymentVersion(), calls[0].DeploymentVersion)
+			if tc.general {
+				require.Nil(t, calls[0].DeploymentVersion)
+			} else {
+				protorequire.ProtoEqual(t, tv.ExternalDeploymentVersion(), calls[0].DeploymentVersion)
+			}
 		})
 	}
 }
