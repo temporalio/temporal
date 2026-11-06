@@ -1552,6 +1552,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingEnableTaskQueueUserDataRevisionMerge = NewNamespaceBoolSetting(
+		"matching.enableTaskQueueUserDataRevisionMerge",
+		true,
+		`When enabled, merges incoming and current worker deployment data by revision when needed to preserve delayed updates.
+When disabled, always uses the deployment snapshot selected by the parent clock without merging.`,
+	)
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
