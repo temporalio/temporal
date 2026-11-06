@@ -1461,6 +1461,34 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.ErrorContains(t, err, "cannot attach more than 2 links to an execution")
 	})
 
+	t.Run("PerExecutionTotalSizeCapEnforcedOnCreate", func(t *testing.T) {
+		link := &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: "size-cap-wf",
+					RunId:      "size-cap-run",
+				},
+			},
+		}
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.TotalLinksMaxSizePerComponent, link.Size()-1)
+		defer cleanup()
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			Links:               []*commonpb.Link{link},
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "bytes of links to an execution")
+	})
+
 	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {
 		// Reproduces the SAA Nexus-handler scenario: a benign retry of
 		// StartActivityExecution against an already-running activity with

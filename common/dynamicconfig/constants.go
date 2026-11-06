@@ -1198,6 +1198,12 @@ so forwarding by endpoint ID will not work out of the box.`,
 		2000,
 		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
 	)
+	TotalLinksMaxSizePerComponent = NewNamespaceIntSetting(
+		"chasm.totalLinksMaxSizePerComponent",
+		2*1024*1024,
+		`TotalLinksMaxSizePerComponent is the maximum total size, in bytes, of all links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.
+Links embedded in completion callbacks are not included; they count toward callback.totalMaxSizePerExecution instead.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,

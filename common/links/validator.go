@@ -4,9 +4,9 @@
 //
 //   - [Validator.Validate] checks the contents of a single request: the shape of each link, its size,
 //     and the number of links on the request. It is stateless and runs in the frontend.
-//   - [Validator.ValidateAdditions] checks per-execution aggregates (e.g. the total number of links on
-//     an execution) against what the execution already holds. It runs in history, where that state is
-//     available, and assumes Validate has already been called.
+//   - [Validator.ValidateAdditions] checks per-execution aggregates (the total number and size of links
+//     on an execution) against what the execution already holds. It runs in history, where that state
+//     is available, and assumes Validate has already been called.
 //
 // Links embedded in completion callbacks ([commonpb.Callback.Links]) are checked by Validate and count
 // toward the per-request limit. They are NOT counted toward execution aggregates: a callback's links
@@ -30,13 +30,14 @@ import (
 // Usage describes the caller-attached links already on an execution. ValidateAdditions uses it to
 // enforce per-execution limits.
 type Usage struct {
-	Count int
+	Count     int
+	TotalSize int // Size of all attached links in bytes.
 }
 
 // UsageOf computes the [Usage] of the links already attached to an execution, e.g.
 // chasm.Context.Links(component).
 func UsageOf(existing []*commonpb.Link) Usage {
-	return Usage{Count: len(existing)}
+	return Usage{Count: len(existing), TotalSize: totalSize(existing)}
 }
 
 // Validator validates links attached to executions (e.g. workflows, standalone activities, and
@@ -47,8 +48,8 @@ type Validator interface {
 	// that cannot carry completion callbacks.
 	Validate(namespaceName string, links []*commonpb.Link, cbs []*commonpb.Callback) error
 
-	// ValidateAdditions enforces aggregate limits, like the total number of links that can be attached
-	// to an execution. It is the cumulative counterpart to Validate, and should be called on both
+	// ValidateAdditions enforces aggregate limits, like the total number and size of links that can be
+	// attached to an execution. It is the cumulative counterpart to Validate, and should be called on both
 	// start and attach paths before persisting caller-attached links.
 	//
 	// newLinks must only contain links attached directly to the request. Callback-embedded links are
@@ -64,6 +65,7 @@ type ValidatorConfig struct {
 
 	// Per-execution limits, enforced by ValidateAdditions.
 	MaxLinksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TotalLinksMaxSize    dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func (vc *ValidatorConfig) Validate() error {
@@ -77,6 +79,7 @@ func (vc *ValidatorConfig) Validate() error {
 	assertGetterIsSet("MaxLinksPerRequest", vc.MaxLinksPerRequest)
 	assertGetterIsSet("LinkMaxSize", vc.LinkMaxSize)
 	assertGetterIsSet("MaxLinksPerExecution", vc.MaxLinksPerExecution)
+	assertGetterIsSet("TotalLinksMaxSize", vc.TotalLinksMaxSize)
 
 	if len(missingFields) != 0 {
 		return fmt.Errorf("missing required fields: %v", missingFields)
@@ -102,6 +105,7 @@ func ValidatorProvider(dc *dynamicconfig.Collection) (Validator, error) {
 		MaxLinksPerRequest:   dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 		LinkMaxSize:          dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerExecution: dynamicconfig.MaxLinksPerComponent.Get(dc),
+		TotalLinksMaxSize:    dynamicconfig.TotalLinksMaxSizePerComponent.Get(dc),
 	})
 }
 
@@ -129,7 +133,7 @@ func (v *validator) Validate(namespaceName string, links []*commonpb.Link, cbs [
 	return nil
 }
 
-// ValidateAdditions checks the count the execution would reach once newLinks are attached. Errors are
+// ValidateAdditions checks the count and total size the execution would reach once newLinks are attached. Errors are
 // FailedPrecondition rather than InvalidArgument: the request may be perfectly well-formed and only
 // fail because of what the execution already holds.
 func (v *validator) ValidateAdditions(
@@ -148,7 +152,27 @@ func (v *validator) ValidateAdditions(
 			existing.Count,
 		)
 	}
+
+	addedBytes := totalSize(newLinks)
+	maxSize := v.config.TotalLinksMaxSize(namespaceName)
+	if existing.TotalSize+addedBytes > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of links to an execution "+
+				"(%d bytes already attached, %d more requested)",
+			maxSize,
+			existing.TotalSize,
+			addedBytes,
+		)
+	}
 	return nil
+}
+
+func totalSize(links []*commonpb.Link) int {
+	var n int
+	for _, l := range links {
+		n += l.Size()
+	}
+	return n
 }
 
 // validateEach checks the size and required fields of each link.
