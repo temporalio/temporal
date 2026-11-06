@@ -1171,7 +1171,7 @@ func TestDeploymentVersionMonitorNotStartedWhenVersionAppearsAfterRegistration(t
 
 // Count only registrations rejected by matching's task queue version limit.
 // At the limit, registration must still reach the deployment client so it can forget old versions.
-func TestTaskQueueVersionLimitMetrics(t *testing.T) {
+func TestTaskQueueVersionLimitReachedMetricIsEmitted(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -1202,7 +1202,7 @@ func TestTaskQueueVersionLimitMetrics(t *testing.T) {
 			tqMgr.partitionMgr.userDataManager.(*mockUserDataManager).data = data
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			// End the propagation wait if matching permits registration.
+			// Cancel when registration is called so the test doesn't wait for user data.
 			deploymentClient.onRegister = cancel
 
 			err := tqMgr.ensureRegisteredInDeploymentVersion(ctx, ns, &pollMetadata{

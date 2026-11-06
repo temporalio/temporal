@@ -397,8 +397,7 @@ func (d *ClientImpl) handleRegisterVersionFailures(nsName namespace.Name, outcom
 }
 
 func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType metrics.WorkerDeploymentLimitType, message string) *serviceerror.ResourceExhausted {
-	metrics.WorkerDeploymentLimitExceeded.With(d.metricsHandler).Record(1,
-		metrics.NamespaceTag(nsName.String()), metrics.WorkerDeploymentLimitTypeTag(limitType))
+	d.recordLimitExceeded(nsName, limitType)
 	return &serviceerror.ResourceExhausted{
 		Message: message,
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -406,12 +405,20 @@ func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType 
 	}
 }
 
-func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome, deploymentName, buildID string) error {
+func (d *ClientImpl) recordLimitExceeded(nsName namespace.Name, limitType metrics.WorkerDeploymentLimitType) {
+	metrics.WorkerDeploymentLimitExceeded.With(d.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()), metrics.WorkerDeploymentLimitTypeTag(limitType))
+}
+
+func (d *ClientImpl) handleUpdateVersionFailures(nsName namespace.Name, outcome *updatepb.Outcome, deploymentName, buildID string) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+			d.recordLimitExceeded(nsName, metrics.WorkerDeploymentLimitVersionsPerDeployment)
+		}
 		return serviceerror.NewInternal(failure.Message)
 	}
 	return nil
@@ -907,7 +914,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(namespaceEntry.Name(), outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr
@@ -1026,7 +1033,7 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(namespaceEntry.Name(), outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(namespaceEntry.Name(), outcome); registerErr != nil {
 		return nil, registerErr

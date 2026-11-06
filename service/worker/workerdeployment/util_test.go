@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -742,7 +743,7 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_FailureAll
 	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
 }
 
-func TestWorkerDeploymentLimitMetrics(t *testing.T) {
+func TestDeploymentLimitReachedMetricIsEmitted(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		failureType   string
@@ -791,6 +792,55 @@ func TestWorkerDeploymentLimitMetrics(t *testing.T) {
 			require.Len(t, recordings, 1)
 			require.Equal(t, int64(1), recordings[0].Value)
 			require.Equal(t, map[string]string{"namespace": "ns-limit-test", "limit_type": tc.wantLimitType}, recordings[0].Tags)
+		})
+	}
+}
+
+// Routing updates record version-limit failures for both current and ramping versions.
+func (d *deploymentWorkflowClientSuite) TestVersionLimitMetricIsEmittedForRoutingUpdates() {
+	for _, operation := range []string{"set current", "set ramping"} {
+		d.Run(operation, func() {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			d.deploymentClient.metricsHandler = handler
+			d.deploymentClient.maxIDLengthLimit = dynamicconfig.GetIntPropertyFn(1000)
+
+			// An existing deployment rejects the new version requested with allowNoPollers.
+			d.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+				}, nil)
+			failure := &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{
+				Message: "version limit reached",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: errTooManyVersions},
+				},
+			}}}
+			d.mockHistoryClient.EXPECT().ExecuteMultiOperation(gomock.Any(), gomock.Any()).Return(
+				&historyservice.ExecuteMultiOperationResponse{Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
+					{Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{StartWorkflow: &historyservice.StartWorkflowExecutionResponse{}}},
+					{Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{UpdateWorkflow: &historyservice.UpdateWorkflowExecutionResponse{
+						Response: &workflowservice.UpdateWorkflowExecutionResponse{
+							Stage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, Outcome: failure,
+						},
+					}}},
+				}}, nil)
+
+			var err error
+			if operation == "set current" {
+				_, err = d.deploymentClient.SetCurrentVersion(d.T().Context(), d.ns, testDeployment, "A.xyz", "identity", false, nil, true)
+			} else {
+				_, err = d.deploymentClient.SetRampingVersion(d.T().Context(), d.ns, testDeployment, "A.xyz", 50, "identity", false, nil, true)
+			}
+
+			var internal *serviceerror.Internal
+			d.Require().ErrorAs(err, &internal)
+			d.Require().Equal("version limit reached", internal.Message)
+			recordings := capture.SnapshotMetric(metrics.WorkerDeploymentLimitExceeded.Name())
+			d.Require().Len(recordings, 1)
+			d.Require().Equal(int64(1), recordings[0].Value)
+			d.Require().Equal(map[string]string{"namespace": testNamespace, "limit_type": "versions"}, recordings[0].Tags)
 		})
 	}
 }
