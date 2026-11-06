@@ -73,12 +73,18 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 // omitted when the source message is absent, distinguishing "not reported"
 // from an actual zero value.
 type WorkerTaskTypeStats struct {
-	TotalSlots           *int32
-	UsedSlots            *int32
-	CurrentPollers       *int32
+	TotalSlots *int32
+	UsedSlots  *int32
+	// Current number of in-flight pollers.
+	CurrentPollers *int32
+	// Desired number of pollers.
+	TargetPollers *int32
+	// Current number of in-flight sticky pollers.
 	CurrentStickyPollers *int32
-	TotalProcessedTasks  *int32
-	TotalFailedTasks     *int32
+	// Desired number of sticky pollers.
+	TargetStickyPollers *int32
+	TotalProcessedTasks *int32
+	TotalFailedTasks    *int32
 }
 
 // appendAttributes adds one attribute per reported stat, prefixed with the
@@ -92,7 +98,9 @@ func (s WorkerTaskTypeStats) appendAttributes(attrs []log.KeyValue, taskType str
 	appendStat("total_slots", s.TotalSlots)
 	appendStat("used_slots", s.UsedSlots)
 	appendStat("current_pollers", s.CurrentPollers)
+	appendStat("target_pollers", s.TargetPollers)
 	appendStat("current_sticky_pollers", s.CurrentStickyPollers)
+	appendStat("target_sticky_pollers", s.TargetStickyPollers)
 	appendStat("total_processed_tasks", s.TotalProcessedTasks)
 	appendStat("total_failed_tasks", s.TotalFailedTasks)
 	return attrs
