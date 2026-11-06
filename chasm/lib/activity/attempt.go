@@ -199,8 +199,8 @@ func truncateRetryableFailure(ctx chasm.Context, attemptFailure *failurepb.Failu
 
 // tryReschedule attempts to reschedule the activity for retry. It handles the cases of pause and
 // reset requests that were received while the last attempt was in progress. failureRetryable
-// reports whether the failure itself permits a retry (timeouts always do; RespondActivityTaskFailed
-// depends on the failure).
+// reports whether the failure itself permits a retry under the policy, independently of the
+// remaining retry budget or schedule-to-close window.
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	failureRetryable bool,
@@ -208,7 +208,7 @@ func (a *Activity) tryReschedule(
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
 	status := a.GetStatus()
-	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED && failureRetryable {
 		event := rescheduleEvent{failure: failure}
 		if a.ResetShouldPause {
 			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
@@ -225,7 +225,8 @@ func (a *Activity) tryReschedule(
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+	shouldPause := status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && failureRetryable
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS && !shouldPause {
 		return retryState, nil
 	}
 	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
