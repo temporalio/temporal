@@ -89,7 +89,7 @@ func (a *wfaHandle) testContext() context.Context {
 }
 
 func (a *wfaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
-	awaitActivityTimeout(t, a, e, deadline)
+	awaitActivityTimeout(t, a, e, deadline, false)
 }
 
 // timeoutInfo is the most recent timeout the activity reports. DescribeWorkflowExecution exposes the
