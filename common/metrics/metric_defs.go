@@ -1194,6 +1194,10 @@ var (
 		"replication_stream_implementation_selected",
 		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
 	)
+	ReplicationLaneFeedbackDropped = NewCounterDef(
+		"replication_lane_feedback_dropped",
+		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
+	)
 	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the

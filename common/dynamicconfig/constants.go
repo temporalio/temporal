@@ -3238,6 +3238,14 @@ the stream if a sender does. A lane counts until the sender sends its retirement
 default leaves room above the sender's default of 4 for a lane to be replaced while another
 retires. Changing it restarts lane stream receivers.`,
 	)
+	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
+		4096,
+		`ReplicationStreamReceiverLaneFeedbackMaxBytes limits the serialized size of lane_feedback
+on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
+watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
+Changes take effect on the next ack without restarting the stream.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
