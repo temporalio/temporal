@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestLaneRetirementWithContinuousWrites keeps one workflow writing on the source shard
@@ -181,6 +182,19 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 		s.T().Skip("replication lanes require lane streams")
 	}
 	active, standby := s.clusters[0], s.clusters[1]
+	// Earlier drills may still have a retiring lane for the suite's namespace. Use a
+	// new namespace so seeing its first lane send proves this cap consumed a token.
+	namespaceName := "retirement-backlog-" + uuid.NewString()
+	_, err := active.FrontendClient().RegisterNamespace(s.T().Context(), &workflowservice.RegisterNamespaceRequest{
+		Namespace: namespaceName, Clusters: s.clusterReplicationConfig(),
+		ActiveClusterName: active.ClusterName(), IsGlobalNamespace: true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+	s.Require().NoError(s.waitUntilNamespaceReplicated(s.T().Context(), namespaceName))
+	description, err := active.FrontendClient().DescribeNamespace(s.T().Context(), &workflowservice.DescribeNamespaceRequest{Namespace: namespaceName})
+	s.Require().NoError(err)
+	namespaceID := description.GetNamespaceInfo().GetId()
 	for _, cluster := range s.clusters {
 		// Exercise RetryReplication and history resend directly, without state-based
 		// replication's separate cold-cache backfill behavior.
@@ -188,12 +202,12 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 	}
 	s.Equal(int32(1), s.numHistoryShards, "the backlog must share a shard")
 	stopIsolation := active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, []dynamicconfig.ReplicationLaneIsolationEntry{{
-		RemoteCluster: standby.ClusterName(), NamespaceID: s.namespaceID, TasksPerSecond: 0.01,
+		RemoteCluster: standby.ClusterName(), NamespaceID: namespaceID, TasksPerSecond: 0.01,
 	}})
 	start := func(id string) *commonpb.WorkflowExecution {
 		s.T().Helper()
 		response, err := active.FrontendClient().StartWorkflowExecution(s.T().Context(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId: uuid.NewString(), Namespace: s.namespaceName, WorkflowId: id,
+			RequestId: uuid.NewString(), Namespace: namespaceName, WorkflowId: id,
 			WorkflowType: &commonpb.WorkflowType{Name: "retirement-backlog"},
 			TaskQueue:    &taskqueuepb.TaskQueue{Name: "retirement-backlog"},
 		})
@@ -203,7 +217,7 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 	prime := start("retirement-prime-" + uuid.NewString())
 	await.Require(s.T().Context(), s.T(), func(t *await.T) {
 		_, err := active.FrontendClient().SignalWorkflowExecution(t.Context(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.namespaceName, WorkflowExecution: prime, SignalName: "prime", RequestId: uuid.NewString(),
+			Namespace: namespaceName, WorkflowExecution: prime, SignalName: "prime", RequestId: uuid.NewString(),
 		})
 		require.NoError(t, err)
 		seen := false
@@ -233,23 +247,23 @@ func (s *streamBasedReplicationTestSuite) TestLaneRetirementBacklogDoesNotBackfi
 	handler, ok := standby.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 	s.Require().True(ok)
 	capture := handler.StartCaptureWithFilter(func(name string, recording *metricstest.CapturedRecording) bool {
-		return name == metrics.ReplicationTasksBackFill.Name() && recording.Tags["namespace"] == s.namespaceName
+		return name == metrics.ReplicationTasksBackFill.Name() && recording.Tags["namespace"] == namespaceName
 	})
 	s.T().Cleanup(func() { handler.StopCapture(capture) })
 	stopIsolation()
 	for _, execution := range executions {
 		_, err := active.FrontendClient().SignalWorkflowExecution(s.T().Context(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.namespaceName, WorkflowExecution: execution, SignalName: "after-release", RequestId: uuid.NewString(),
+			Namespace: namespaceName, WorkflowExecution: execution, SignalName: "after-release", RequestId: uuid.NewString(),
 		})
 		s.NoError(err)
 	}
 	// Wait for the newer event of every workflow; start events alone would miss the
 	// exact reordering that triggers recovery after a retirement handoff.
 	for _, execution := range executions {
-		source, err := retirementHistory(s.T().Context(), active.FrontendClient(), s.namespaceName, execution)
+		source, err := retirementHistory(s.T().Context(), active.FrontendClient(), namespaceName, execution)
 		s.NoError(err)
 		await.Require(s.T().Context(), s.T(), func(t *await.T) {
-			target, err := retirementHistory(t.Context(), standby.FrontendClient(), s.namespaceName, execution)
+			target, err := retirementHistory(t.Context(), standby.FrontendClient(), namespaceName, execution)
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, source, target)
 		}, 30*time.Second, 100*time.Millisecond)
