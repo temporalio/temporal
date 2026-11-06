@@ -339,12 +339,6 @@ var _ Client = (*ClientImpl)(nil)
 var errUpdateInProgress = errors.New("update in progress")
 var errWorkflowHistoryTooLong = errors.New("workflow history too long")
 
-const (
-	limitTypeTaskQueues  = "task_queues"
-	limitTypeVersions    = "versions"
-	limitTypeDeployments = "deployments"
-)
-
 func (d *ClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -391,9 +385,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 
 func (d *ClientImpl) handleRegisterVersionFailures(nsName namespace.Name, outcome *updatepb.Outcome) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
-		return d.newResourceExhaustedError(nsName, limitTypeTaskQueues, failure.GetMessage())
+		return d.newResourceExhaustedError(nsName, metrics.WorkerDeploymentLimitTaskQueuesPerVersion, failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return d.newResourceExhaustedError(nsName, limitTypeVersions, failure.GetMessage())
+		return d.newResourceExhaustedError(nsName, metrics.WorkerDeploymentLimitVersionsPerDeployment, failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
@@ -402,9 +396,9 @@ func (d *ClientImpl) handleRegisterVersionFailures(nsName namespace.Name, outcom
 	return nil
 }
 
-func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType, message string) *serviceerror.ResourceExhausted {
+func (d *ClientImpl) newResourceExhaustedError(nsName namespace.Name, limitType metrics.WorkerDeploymentLimitType, message string) *serviceerror.ResourceExhausted {
 	metrics.WorkerDeploymentLimitExceeded.With(d.metricsHandler).Record(1,
-		metrics.NamespaceTag(nsName.String()), metrics.StringTag("limit_type", limitType))
+		metrics.NamespaceTag(nsName.String()), metrics.WorkerDeploymentLimitTypeTag(limitType))
 	return &serviceerror.ResourceExhausted{
 		Message: message,
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -1198,7 +1192,7 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
 	if count >= int64(limit) {
-		return nil, d.newResourceExhaustedError(namespaceEntry.Name(), limitTypeDeployments, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+		return nil, d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitDeploymentsPerNamespace, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
 
 	// Start the deployment workflow
@@ -1361,7 +1355,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-			return d.newResourceExhaustedError(namespaceEntry.Name(), limitTypeVersions, failure.GetMessage())
+			return d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitVersionsPerDeployment, failure.GetMessage())
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
@@ -1528,7 +1522,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, d.newResourceExhaustedError(namespaceEntry.Name(), limitTypeDeployments, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+			return nil, d.newResourceExhaustedError(namespaceEntry.Name(), metrics.WorkerDeploymentLimitDeploymentsPerNamespace, fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 		}
 	}
 

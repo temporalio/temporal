@@ -748,9 +748,9 @@ func TestWorkerDeploymentLimitMetrics(t *testing.T) {
 		failureType   string
 		wantLimitType string
 	}{
-		{name: "task queues per version", failureType: errMaxTaskQueuesInVersionType, wantLimitType: limitTypeTaskQueues},
-		{name: "versions per deployment", failureType: errTooManyVersions, wantLimitType: limitTypeVersions},
-		{name: "deployments per namespace", wantLimitType: limitTypeDeployments},
+		{name: "task queues per version", failureType: errMaxTaskQueuesInVersionType, wantLimitType: "task_queues"},
+		{name: "versions per deployment", failureType: errTooManyVersions, wantLimitType: "versions"},
+		{name: "deployments per namespace", wantLimitType: "deployments"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handler := metricstest.NewCaptureHandler()
@@ -783,7 +783,7 @@ func TestWorkerDeploymentLimitMetrics(t *testing.T) {
 				_, err = client.CreateWorkerDeployment(context.Background(), ns, "deployment", "identity", "request")
 			}
 
-			// Each rejected request records one event for its namespace and limit type.
+			// Check the emitted label strings so existing queries remain compatible when tag constants change.
 			var exhausted *serviceerror.ResourceExhausted
 			require.ErrorAs(t, err, &exhausted)
 			require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, exhausted.Cause)
