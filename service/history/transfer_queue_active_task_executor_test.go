@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -265,6 +266,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_Success() {
+	var mu sync.Mutex
 	var requests []*fcpb.ConcurrencyServiceBatchRequest
 	s.transferQueueActiveTaskExecutor.concurrencyServiceClient = &testConcurrencyServiceClient{
 		batch: func(
@@ -272,7 +274,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_Suc
 			request *fcpb.ConcurrencyServiceBatchRequest,
 			_ ...grpc.CallOption,
 		) (*fcpb.ConcurrencyServiceBatchResponse, error) {
+			mu.Lock()
 			requests = append(requests, request)
+			mu.Unlock()
 			return &fcpb.ConcurrencyServiceBatchResponse{}, nil
 		},
 	}
@@ -297,17 +301,20 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_Suc
 
 	s.Require().NoError(response.ExecutionErr)
 	s.Require().Len(requests, len(task.Limiters))
+	expectedRequests := make([]*fcpb.ConcurrencyServiceBatchRequest, len(task.Limiters))
 	for i, limiter := range task.Limiters {
-		protorequire.ProtoEqual(s.T(), &fcpb.ConcurrencyServiceBatchRequest{
+		expectedRequests[i] = &fcpb.ConcurrencyServiceBatchRequest{
 			NamespaceId:  task.NamespaceID,
 			Key:          limiter.GetKey(),
 			ReleaseSlots: []string{limiter.GetSlotId()},
-		}, requests[i])
+		}
 	}
+	protorequire.ProtoElementsMatch(s.T(), expectedRequests, requests)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_AttemptsAllReleasesOnError() {
 	releaseErr := serviceerror.NewUnavailable("release failed")
+	var mu sync.Mutex
 	var requests []*fcpb.ConcurrencyServiceBatchRequest
 	s.transferQueueActiveTaskExecutor.concurrencyServiceClient = &testConcurrencyServiceClient{
 		batch: func(
@@ -315,7 +322,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessReleaseLimiterTask_Att
 			request *fcpb.ConcurrencyServiceBatchRequest,
 			_ ...grpc.CallOption,
 		) (*fcpb.ConcurrencyServiceBatchResponse, error) {
+			mu.Lock()
 			requests = append(requests, request)
+			mu.Unlock()
 			if request.GetKey() == "limiter-2" {
 				return nil, releaseErr
 			}
