@@ -34,7 +34,7 @@ func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testi
 func TestNewInvocationResult_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
 	t.Parallel()
 
-	result, err := newInvocationResult(nil, wrappedUnavailable())
+	result, err := newInvocationResult(nil, nil, wrappedUnavailable())
 	require.NoError(t, err)
 	require.IsType(t, invocationResultRetry{}, result,
 		"wrapped Unavailable must produce a retry result, not a terminal failure")

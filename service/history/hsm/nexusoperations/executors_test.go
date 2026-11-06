@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/resource"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -668,6 +669,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				},
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
@@ -823,6 +825,7 @@ func TestProcessTimeoutTaskDoesNotEmitMetricWhenDeletionFails(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		LinkValidator:  test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		MetricsHandler: captureHandler,
 		Config:         &nexusoperations.Config{},
 	}))
@@ -890,6 +893,7 @@ func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
 			defer captureHandler.StopCapture(capture)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator:  test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				MetricsHandler: captureHandler,
 				Config:         config,
 			}))
@@ -1267,6 +1271,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			}
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -1345,6 +1350,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 		Config: &nexusoperations.Config{
 			RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 			UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
@@ -1553,6 +1559,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 			chasmRegistry := tc.setupChasmRegistry(t)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -1975,6 +1982,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 			chasmRegistry := tc.setupChasmRegistry(t)
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				LinkValidator: test.NewLinksValidator(t, test.NewLinksValidatorConfig()),
 				Config: &nexusoperations.Config{
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),

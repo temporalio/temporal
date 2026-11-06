@@ -412,13 +412,12 @@ func (o *Operation) saveInvocationResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
-		links := commonnexus.ConvertNexusLinksToProtoLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
-			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
+			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, r.links)
 		}
-		return nil, o.onCompleted(ctx, r.response.Successful, links)
+		return nil, o.onCompleted(ctx, r.response.Successful, r.links)
 	case invocationResultCancel:
 		return nil, o.onCanceled(ctx, r.failure)
 	case invocationResultFail:

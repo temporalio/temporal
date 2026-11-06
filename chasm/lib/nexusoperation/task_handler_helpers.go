@@ -217,6 +217,8 @@ type invocationResult interface {
 
 type invocationResultOK struct {
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
+	// links are the handler's response links, already converted and sanitized.
+	links []*commonpb.Link
 }
 
 func (invocationResultOK) mustImplementInvocationResult() {}
@@ -247,10 +249,11 @@ func (invocationResultTimeout) mustImplementInvocationResult() {}
 
 func newInvocationResult(
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	links []*commonpb.Link,
 	callErr error,
 ) (invocationResult, error) {
 	if callErr == nil {
-		return invocationResultOK{response: response}, nil
+		return invocationResultOK{response: response, links: links}, nil
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
