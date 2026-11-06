@@ -41,17 +41,17 @@ func (m *MockLaneFeedbackProvider) EXPECT() *MockLaneFeedbackProviderMockRecorde
 }
 
 // Feedback mocks base method.
-func (m *MockLaneFeedbackProvider) Feedback(shardID int32) *anypb.Any {
+func (m *MockLaneFeedbackProvider) Feedback(shardID int32, maxBytes int) *anypb.Any {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Feedback", shardID)
+	ret := m.ctrl.Call(m, "Feedback", shardID, maxBytes)
 	ret0, _ := ret[0].(*anypb.Any)
 	return ret0
 }
 
 // Feedback indicates an expected call of Feedback.
-func (mr *MockLaneFeedbackProviderMockRecorder) Feedback(shardID any) *gomock.Call {
+func (mr *MockLaneFeedbackProviderMockRecorder) Feedback(shardID, maxBytes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Feedback", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).Feedback), shardID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Feedback", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).Feedback), shardID, maxBytes)
 }
 
 // RecordTask mocks base method.
