@@ -116,6 +116,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	for _, category := range []tasks.Category{tasks.CategoryTransfer, tasks.CategoryReplication, tasks.CategoryVisibility} {
 		err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.ShardID,
+			RangeID:             s.RangeID,
 			TaskCategory:        category,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
@@ -124,6 +125,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	}
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
+		RangeID:             s.RangeID,
 		TaskCategory:        tasks.CategoryTimer,
 		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
@@ -177,6 +179,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
+		RangeID:             s.RangeID,
 		TaskCategory:        fakeImmediateTaskCategory,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
@@ -236,6 +239,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
+		RangeID:             s.RangeID,
 		TaskCategory:        fakeScheduledTaskCategory,
 		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
@@ -520,6 +524,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 
 	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
+		RangeID:             s.RangeID,
 		TaskCategory:        fakeScheduledTaskCategory,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
