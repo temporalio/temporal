@@ -79,9 +79,10 @@ func buildCLI() *cli.App {
 
 	app.Commands = []*cli.Command{
 		{
-			Name:      "validate-dynamic-config",
-			Usage:     "Validate a dynamic config file[s] with known keys and types",
-			ArgsUsage: "<file> ...",
+			Name:         "validate-dynamic-config",
+			Usage:        "Validate a dynamic config file[s] with known keys and types",
+			ArgsUsage:    "<file> ...",
+			OnUsageError: helpfulSubcommandFlagError,
 			Action: func(c *cli.Context) error {
 				total := 0
 				for _, fileName := range c.Args().Slice() {
@@ -106,9 +107,10 @@ func buildCLI() *cli.App {
 			},
 		},
 		{
-			Name:      "render-config",
-			Usage:     "Render server config template",
-			ArgsUsage: " ",
+			Name:         "render-config",
+			Usage:        "Render server config template",
+			ArgsUsage:    " ",
+			OnUsageError: helpfulSubcommandFlagError,
 			Action: func(c *cli.Context) error {
 				cfg, err := config.Load(
 					config.WithEnv(c.String("env")),
@@ -123,9 +125,10 @@ func buildCLI() *cli.App {
 			},
 		},
 		{
-			Name:      "start",
-			Usage:     "Start Temporal server",
-			ArgsUsage: " ",
+			Name:         "start",
+			Usage:        "Start Temporal server",
+			ArgsUsage:    " ",
+			OnUsageError: helpfulSubcommandFlagError,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    "services",
@@ -245,4 +248,74 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
+}
+
+// helpfulSubcommandFlagError rewrites the urfave/cli "flag provided but not
+// defined" error to a more actionable message when the unknown flag turns out
+// to be a known global flag passed in the wrong position (after a subcommand
+// instead of before it).
+//
+// The global flags `--root`, `--config`, `--env`, `--zone` and `--config-file`
+// must be passed before the subcommand (for example, `temporal-server --env
+// docker start`, not `temporal-server start --env docker`). Without this
+// rewrite the bare "flag provided but not defined: -e" message is hard to
+// debug — see https://github.com/temporalio/temporal/issues/6226.
+func helpfulSubcommandFlagError(cCtx *cli.Context, err error, isSubcommand bool) error {
+	if err == nil {
+		return nil
+	}
+	out := err
+	if rewritten, ok := rewriteAsGlobalFlagPlacementError(cCtx, err); ok {
+		out = rewritten
+	}
+	// Mirror urfave/cli's default "Incorrect Usage: ..." behavior, which is
+	// otherwise suppressed when OnUsageError is set. The production `main`
+	// discards the returned error, so without this print the user would see
+	// nothing.
+	if cCtx != nil && cCtx.App != nil && cCtx.App.Writer != nil {
+		_, _ = fmt.Fprintf(cCtx.App.Writer, "Incorrect Usage: %s\n", out.Error())
+	}
+	return out
+}
+
+// rewriteAsGlobalFlagPlacementError returns a friendlier error and true when
+// the urfave/cli "flag provided but not defined: -X" error refers to a flag
+// that is actually defined at the global (app) level. Returns the input error
+// and false in all other cases.
+func rewriteAsGlobalFlagPlacementError(cCtx *cli.Context, err error) (error, bool) {
+	const prefix = "flag provided but not defined: -"
+	msg := err.Error()
+	if !strings.HasPrefix(msg, prefix) {
+		return err, false
+	}
+	name := strings.TrimLeft(strings.TrimPrefix(msg, prefix), "-")
+	if cCtx == nil || cCtx.App == nil {
+		return err, false
+	}
+	var canonical string
+	for _, fl := range cCtx.App.Flags {
+		for _, n := range fl.Names() {
+			if n == name {
+				canonical = fl.Names()[0]
+				break
+			}
+		}
+		if canonical != "" {
+			break
+		}
+	}
+	if canonical == "" {
+		return err, false
+	}
+	subcommand := "the subcommand"
+	example := "<subcommand>"
+	if cCtx.Command != nil && cCtx.Command.Name != "" {
+		subcommand = "`" + cCtx.Command.Name + "`"
+		example = cCtx.Command.Name
+	}
+	return fmt.Errorf(
+		"--%s is a global flag and must be passed before %s "+
+			"(for example, `%s --%s <value> %s ...`)",
+		canonical, subcommand, cCtx.App.Name, canonical, example,
+	), true
 }
