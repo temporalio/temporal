@@ -1206,7 +1206,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		}
 		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
 			tag.WorkflowNamespace(namespaceEntry.Name().String()),
-			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -1462,7 +1461,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		}
 		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
 			tag.WorkflowNamespace(namespaceName.String()),
-			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -6575,7 +6573,6 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		}
 		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
 			tag.WorkflowNamespace(namespaceName.String()),
-			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.TaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
