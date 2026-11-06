@@ -449,8 +449,9 @@ type SyncReplicationState struct {
 	// Feedback from the receiver for the sender's lane policy, such as per-namespace
 	// health. Open source never sets or reads it: a LaneFeedbackProvider on the receiver
 	// produces it and a lane policy on the sender consumes it. The type URL versions the
-	// contents, and a policy ignores types it does not know. At most 4 KB, because it
-	// rides on stream acks.
+	// contents, and a policy ignores types it does not know. The receiver limits its
+	// serialized size through ReplicationStreamReceiverLaneFeedbackMaxBytes (4096 bytes
+	// by default), because it rides on stream acks.
 	// (-- api-linter: core::0146::any=disabled
 	//     aip.dev/not-precedent: This is not public. --)
 	LaneFeedback *anypb.Any `protobuf:"bytes,10,opt,name=lane_feedback,json=laneFeedback,proto3" json:"lane_feedback,omitempty"`

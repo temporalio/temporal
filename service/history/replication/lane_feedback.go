@@ -6,10 +6,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// laneFeedbackMaxBytes is the largest lane feedback a lane stream receiver sends. Feedback rides
-// on every ack.
-const laneFeedbackMaxBytes = 4096
-
 type (
 	// LaneFeedbackProvider supplies what a lane stream receiver reports to its sender for the
 	// sender's lane policy. One provider serves every stream receiver on the host, so it must
@@ -20,9 +16,12 @@ type (
 		// ThrottledNamespaceIDs returns the namespaces overwhelming the HIGH priority traffic
 		// of the local shard. They are sent as throttle_high_namespace_ids.
 		ThrottledNamespaceIDs(shardID int32) []string
-		// Feedback returns the feedback for the sender's lane policy on the local shard, or nil.
-		// It is sent as lane_feedback on every ack, unless it is larger than 4 KB.
-		Feedback(shardID int32) *anypb.Any
+		// Feedback returns a snapshot for the sender's lane policy on the local shard, or nil.
+		// maxBytes bounds the serialized Any, including its type URL. The provider should
+		// prioritize relevant signals within that budget and return nil if no meaningful
+		// payload fits. It must not truncate serialized bytes or mutate the returned snapshot.
+		// The receiver drops oversized feedback and still sends the rest of the ack.
+		Feedback(shardID int32, maxBytes int) *anypb.Any
 	}
 
 	noopLaneFeedbackProvider struct{}
@@ -38,4 +37,4 @@ func (noopLaneFeedbackProvider) RecordTask(int32, string) {}
 
 func (noopLaneFeedbackProvider) ThrottledNamespaceIDs(int32) []string { return nil }
 
-func (noopLaneFeedbackProvider) Feedback(int32) *anypb.Any { return nil }
+func (noopLaneFeedbackProvider) Feedback(int32, int) *anypb.Any { return nil }

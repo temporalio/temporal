@@ -332,10 +332,17 @@ func (r *laneStreamReceiver) ackMessage(
 	}
 	if laneProtocolVersion > 0 {
 		maxLanes = int32(r.maxLanes)
-		laneFeedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID)
-		if size := proto.Size(laneFeedback); size > laneFeedbackMaxBytes {
-			r.logger.Warn("Dropping replication lane feedback larger than 4 KB.", tag.NewInt("size", size))
-			laneFeedback = nil
+		if maxBytes := r.Config.ReplicationStreamReceiverLaneFeedbackMaxBytes(); maxBytes > 0 {
+			laneFeedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
+			if size := proto.Size(laneFeedback); size > maxBytes {
+				metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
+					1,
+					metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
+					metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
+				)
+				r.logger.Warn("Dropping replication lane feedback larger than the configured limit.", tag.NewInt("size", size), tag.NewInt("limit", maxBytes))
+				laneFeedback = nil
+			}
 		}
 	}
 	err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
