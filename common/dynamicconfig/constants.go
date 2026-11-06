@@ -1618,6 +1618,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingEnableTaskQueueUserDataRevisionMerge = NewNamespaceBoolSetting(
+		"matching.enableTaskQueueUserDataRevisionMerge",
+		true,
+		`When enabled, merges incoming and current worker deployment data by revision when needed to preserve delayed updates.
+When disabled, always uses the deployment snapshot selected by the parent clock without merging.`,
+	)
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
@@ -3246,7 +3252,7 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
 		"history.ReplicationProgressCacheMaxSize",
 		128000,
-		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+		`ReplicationProgressCacheMaxSize is the maximum accounted payload size in bytes of the replication progress cache per history host. The size is checked every minute. Changes recreate the cache without a restart, discarding cached progress`,
 	)
 	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
 		"history.ReplicationProgressCacheTTL",

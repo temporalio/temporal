@@ -2500,6 +2500,16 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 	callbackToken := callback.token
 	callbackURL := callback.url
 
+	// The handler hands out the callback token before its start response is recorded. Completing before
+	// then takes the completion-before-start path, which drops the start response and its handler links.
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: "test-op",
+		RunId:       startResp.RunId,
+		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+	})
+	s.NoError(err)
+
 	gen := &commonnexus.CallbackTokenGenerator{}
 	decodedToken, err := commonnexus.DecodeCallbackToken(callbackToken)
 	s.NoError(err)
