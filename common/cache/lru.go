@@ -38,6 +38,7 @@ type (
 		pinnedSize      int
 		onPut           func(val any)
 		onEvict         func(val any)
+		evictOnUnpin    func(val any) bool
 		ttl             time.Duration
 		pin             bool
 		timeSource      clock.TimeSource
@@ -170,6 +171,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 		pin:             opts.Pin,
 		onPut:           opts.OnPut,
 		onEvict:         opts.OnEvict,
+		evictOnUnpin:    opts.EvictOnUnpin,
 		timeSource:      timeSource,
 		metricsHandler:  handler,
 		backgroundEvict: backgroundEvict,
@@ -269,6 +271,10 @@ func (c *lru) Release(key any) {
 	if entry.refCount == 0 {
 		c.pinnedSize -= entry.Size()
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
+		if c.evictOnUnpin != nil && c.evictOnUnpin(entry.value) {
+			c.deleteInternal(elt)
+			return
+		}
 	}
 	// Entry size might have changed. Recalculate size and evict entries if necessary.
 	newEntrySize := getSize(entry.value)
