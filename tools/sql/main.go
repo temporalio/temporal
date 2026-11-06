@@ -123,6 +123,10 @@ func BuildCLIOptions() *cli.App {
 			Aliases: []string{"setup"},
 			Usage:   "setup initial version of sql schema",
 			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "visibility",
+					Usage: "use independent MySQL visibility version tables",
+				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagVersion,
 					Usage: "initial version of the schema, cannot be used with disable-versioning",
@@ -154,6 +158,10 @@ func BuildCLIOptions() *cli.App {
 			Aliases: []string{"update"},
 			Usage:   "update sql schema to a specific version",
 			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "visibility",
+					Usage: "use independent MySQL visibility version tables",
+				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagTargetVersion,
 					Usage: "target version for the schema update, defaults to latest",

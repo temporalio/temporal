@@ -136,6 +136,9 @@ func (mdb *db) ExpectedVersion() string {
 // VerifyVersion verify schema version is up to date
 func (mdb *db) VerifyVersion() error {
 	expectedVersion := mdb.ExpectedVersion()
+	if mdb.dbKind == sqlplugin.DbKindVisibility {
+		return schema.VerifyCompatibleVersion(visibilityVersionReader{mdb}, mdb.dbName, expectedVersion)
+	}
 	return schema.VerifyCompatibleVersion(mdb, mdb.dbName, expectedVersion)
 }
 
