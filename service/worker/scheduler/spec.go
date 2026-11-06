@@ -331,6 +331,10 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	}
 
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
+	if maxJitter <= 0 {
+		// addJitter would add zero; skip the extra rawNextTime and hash.
+		return GetNextTimeResult{Nominal: nominal, Next: nominal, ComputeLimitWarning: warned}, nil
+	}
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
 		maxJitter = min(maxJitter, following.Sub(nominal))

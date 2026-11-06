@@ -138,7 +138,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 
 // testEnv holds all components needed for scheduler tests.
 type testEnv struct {
-	t             *testing.T
+	t             testing.TB
 	Ctrl          *gomock.Controller
 	Registry      *chasm.Registry
 	Node          *chasm.Node
@@ -372,7 +372,7 @@ func (e *schedulerTestEngine) readScheduler(
 }
 
 // newTestEnv creates a new test environment with the given options.
-func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
+func newTestEnv(t testing.TB, opts ...testEnvOption) *testEnv {
 	config := &testEnvConfig{}
 	for _, opt := range opts {
 		opt(config)
