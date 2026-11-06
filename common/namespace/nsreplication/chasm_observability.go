@@ -72,10 +72,9 @@ func RecordCHASMAuthoritativeApply(
 		metrics.StringTag("mode", chasmAuthoritativeMode),
 		metrics.OutcomeTag(observation.Outcome),
 	}
-	metrics.NamespaceReplicationCHASMApplyOutcomes.With(metricsHandler).Record(
-		1,
-		append(tags, metrics.NamespaceTag(observation.Task.GetInfo().GetName()))...,
-	)
+	// Counters carry the namespace; per-namespace durations are in lifecycle events.
+	counterTags := append(tags, metrics.NamespaceTag(observation.Task.GetInfo().GetName()))
+	metrics.NamespaceReplicationCHASMApplyOutcomes.With(metricsHandler).Record(1, counterTags...)
 	metrics.NamespaceReplicationCHASMApplyLatency.With(metricsHandler).Record(observation.Duration, tags...)
 	if observation.PendingAge != nil {
 		pendingAge := max(*observation.PendingAge, 0)
@@ -91,9 +90,9 @@ func RecordCHASMAuthoritativeApply(
 	if observation.PendingAgeThresholdExceeded {
 		switch observation.Stage {
 		case CHASMApplyStageLocal:
-			metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+			metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.With(metricsHandler).Record(1, counterTags...)
 		case CHASMApplyStagePeer:
-			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, counterTags...)
 		default:
 			// Pending-threshold metrics are defined only for retry-owning local and peer stages.
 		}
