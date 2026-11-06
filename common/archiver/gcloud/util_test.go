@@ -1,6 +1,7 @@
 package gcloud
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/codec"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -217,4 +219,46 @@ func (s *utilSuite) TestWorkflowTypeNamePrecondition() {
 		s.Equal(testCase.expectedResult, newWorkflowTypeNamePrecondition(testCase.workflowTypeName)(testCase.fileName))
 	}
 
+}
+
+func TestVisibilityFieldPreconditions(t *testing.T) {
+	t.Parallel()
+	for _, field := range []struct {
+		name       string
+		newFilter  func(string) connector.Precondition
+		value      string
+		otherValue string
+	}{
+		{"workflow type", newWorkflowTypeNamePrecondition, "11", "22"},
+		{"workflow ID", newWorkflowIDPrecondition, "22", "33"},
+		{"run ID", newRunIDPrecondition, "33", "11"},
+	} {
+		t.Run(field.name, func(t *testing.T) {
+			t.Parallel()
+			filename := "closeTimeout_2020-02-27T09:42:28Z_11_22_33.visibility"
+			for _, tc := range []struct {
+				name    string
+				subject any
+				value   string
+				want    bool
+			}{
+				{"exact match", filename, field.value, true},
+				{"different field", filename, field.otherValue, false},
+				{"substring", filename, field.value[:1], false},
+				{"longer value", filename, field.value + "0", false},
+				{"full object path", "archive_with_underscores/namespace_with_underscores/" + filename, field.value, true},
+				{"match only in prefix", "archive/99/" + filename, "99", false},
+				{"malformed filename", field.value + ".visibility", field.value, false},
+				{"wrong extension", strings.TrimSuffix(filename, ".visibility") + ".history", field.value, false},
+				{"extra field", strings.TrimSuffix(filename, ".visibility") + "_44.visibility", field.value, false},
+				{"non string", 123, field.value, false},
+				{"empty filter", filename, "", true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					require.Equal(t, tc.want, field.newFilter(tc.value)(tc.subject))
+				})
+			}
+		})
+	}
 }
