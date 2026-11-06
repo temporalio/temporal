@@ -1,0 +1,132 @@
+// Package worker models workers as CHASM components and tracks their liveness using timers.
+// Workers with the same worker_grouping_key share a lease under one WorkerGroup.
+package worker
+
+import (
+	"time"
+
+	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/chasm"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+)
+
+const (
+	libraryName         = "worker"
+	groupComponentName  = "group"
+	workerComponentName = "worker"
+)
+
+var (
+	Archetype                     = chasm.FullyQualifiedName(libraryName, groupComponentName)
+	_         chasm.RootComponent = (*WorkerGroup)(nil)
+)
+
+// WorkerGroup is a CHASM root whose Business ID is the SDK's worker grouping key.
+// All workers in the group share one lease.
+type WorkerGroup struct {
+	chasm.UnimplementedComponent
+	*workerstatepb.WorkerGroupState
+
+	Workers chasm.Map[string, *Worker]
+}
+
+// Worker identifies one member of the group.
+// Its worker instance key is the key in WorkerGroup.Workers.
+type Worker struct {
+	chasm.UnimplementedComponent
+	*workerstatepb.WorkerState
+}
+
+func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+// newWorkerGroup creates an active group with no workers or lease.
+func newWorkerGroup(groupingKey string) (*WorkerGroup, error) {
+	if groupingKey == "" {
+		return nil, serviceerror.NewInvalidArgument("worker grouping key is required")
+	}
+	return &WorkerGroup{
+		WorkerGroupState: &workerstatepb.WorkerGroupState{
+			WorkerGroupingKey: groupingKey,
+			Status:            workerstatepb.WORKER_GROUP_STATUS_ACTIVE,
+		},
+		Workers: make(chasm.Map[string, *Worker]),
+	}, nil
+}
+
+func (g *WorkerGroup) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	if g.Status == workerstatepb.WORKER_GROUP_STATUS_INACTIVE {
+		return chasm.LifecycleStateCompleted
+	}
+	return chasm.LifecycleStateRunning
+}
+
+func (g *WorkerGroup) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+func (g *WorkerGroup) Terminate(
+	ctx chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, transitionLeaseExpired.Apply(g, ctx, eventLeaseExpired{})
+}
+
+func (g *WorkerGroup) StateMachineState() workerstatepb.WorkerGroupStatus {
+	return g.Status
+}
+
+func (g *WorkerGroup) SetStateMachineState(status workerstatepb.WorkerGroupStatus) {
+	g.Status = status
+}
+
+// recordHeartbeat adds new workers and renews the shared lease.
+// Workers omitted from the batch remain members.
+// TODO: Once heartbeat ordering is supported, treat workers missing from
+// the full heartbeat list as gone and reschedule their activities.
+// TODO: Handle ordering of heartbeats so that older heartbeats cannot undo newer
+// activity updates, and retried heartbeats are not applied twice.
+func (g *WorkerGroup) recordHeartbeat(
+	ctx chasm.MutableContext,
+	heartbeats []*workerpb.WorkerHeartbeat,
+	leaseDuration time.Duration,
+) error {
+	if !transitionActiveHeartbeat.Possible(g) {
+		return serviceerror.NewFailedPrecondition("worker group is inactive")
+	}
+	if leaseDuration <= 0 {
+		return serviceerror.NewInvalidArgument("worker lease duration must be positive")
+	}
+	if len(heartbeats) == 0 {
+		return serviceerror.NewInvalidArgument("at least one worker heartbeat is required")
+	}
+	// Validate the entire batch before changing membership or renewing the lease.
+	for _, heartbeat := range heartbeats {
+		key := heartbeat.GetWorkerInstanceKey()
+		if key == "" {
+			return serviceerror.NewInvalidArgument("worker instance key is required")
+		}
+		if heartbeat.GetHostInfo().GetWorkerGroupingKey() != g.WorkerGroupingKey {
+			return serviceerror.NewInvalidArgument("worker heartbeat grouping key does not match the group")
+		}
+	}
+	return transitionActiveHeartbeat.Apply(g, ctx, eventHeartbeatReceived{
+		heartbeats:    heartbeats,
+		leaseDuration: leaseDuration,
+	})
+}
+
+func (g *WorkerGroup) updateWorkers(ctx chasm.MutableContext, heartbeats []*workerpb.WorkerHeartbeat) {
+	for _, heartbeat := range heartbeats {
+		key := heartbeat.GetWorkerInstanceKey()
+		// Reuse existing worker components so their state is preserved across heartbeats.
+		if _, exists := g.Workers[key]; exists {
+			continue
+		}
+		g.Workers[key] = chasm.NewComponentField(ctx, &Worker{
+			WorkerState: &workerstatepb.WorkerState{},
+		})
+	}
+}
