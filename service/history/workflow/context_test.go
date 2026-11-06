@@ -583,8 +583,19 @@ func (s *contextSuite) TestRefreshTask() {
 
 			tc.setupMock(s.mockShard)
 
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			s.workflowContext.metricsHandler = handler
+
 			err = s.workflowContext.RefreshTasks(context.Background(), s.mockShard)
 			s.NoError(err)
+
+			// A refresh writes no events, so even a closed run must not record completion stats again.
+			snapshot := capture.Snapshot()
+			for _, recording := range append(snapshot[metrics.HistorySize.Name()], snapshot[metrics.HistoryCount.Name()]...) {
+				s.Equal(metrics.ExecutionStatsScope, recording.Tags[metrics.OperationTagName])
+			}
 		})
 	}
 }
