@@ -8029,7 +8029,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	now := ms.timeSource.Now()
+	now := ms.Now()
 	ms.closeTransactionAccrueStorageUsage(ms.withoutSkippedDuration(now))
 
 	ms.executionInfo.StateTransitionCount += 1
