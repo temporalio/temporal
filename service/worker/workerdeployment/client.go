@@ -452,12 +452,30 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, nil, err
 	}
 
+	if capabilityErr := checkWorkerControllerAvailable(); capabilityErr != nil {
+		if versionState.GetComputeConfig() != nil {
+			return nil, nil, capabilityErr
+		}
+		apiVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionState.Version)
+		exists, err := d.workerControllerInstanceClient.WorkerControllerInstanceExists(ctx, namespaceEntry, apiVersion)
+		if err != nil {
+			return nil, nil, err
+		}
+		if exists {
+			return nil, nil, capabilityErr
+		}
+	}
+
 	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), versionState, reportTaskQueueStats)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	versionInfo := versionStateToVersionInfo(versionState, tqInfos)
+
+	if checkWorkerControllerAvailable() != nil {
+		return versionInfo, tqInfos, nil
+	}
 
 	apiVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionState.Version)
 	wciDesc, _, err := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
@@ -536,6 +554,10 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("UpdateVersionComputeConfig", version.GetDeploymentName(), &retErr, namespaceEntry.Name(), version.GetBuildId(), identity)()
+
+	if err := checkWorkerControllerAvailable(); err != nil {
+		return err
+	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateComputeConfigArgs{
 		Identity:            identity,
@@ -1302,6 +1324,12 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("CreateWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
+
+	if computeConfig != nil {
+		if err := checkWorkerControllerAvailable(); err != nil {
+			return err
+		}
+	}
 
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -2163,6 +2191,10 @@ func (d *ClientImpl) ValidateComputeConfig(
 	removeScalingGroups []string,
 	identity string,
 ) error {
+	if err := checkWorkerControllerAvailable(); err != nil {
+		return err
+	}
+
 	upserts := scalingGroupUpdatesToWCI(upsertScalingGroups)
 	if err := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, version, identity, upserts, removeScalingGroups); err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())

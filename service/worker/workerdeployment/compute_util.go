@@ -1,14 +1,17 @@
 package workerdeployment
 
 import (
+	"context"
 	"errors"
 
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -138,4 +141,24 @@ func wciClientErrorToActivityError(err error) error {
 		return temporal.NewNonRetryableApplicationError(err.Error(), errFailedPrecondition, nil)
 	}
 	return err
+}
+
+func deleteWorkerControllerInstance(
+	ctx context.Context,
+	client wciclient.Client,
+	ns *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	identity string,
+) error {
+	if capabilityErr := checkWorkerControllerAvailable(); capabilityErr != nil {
+		exists, err := client.WorkerControllerInstanceExists(ctx, ns, version)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return wciClientErrorToActivityError(capabilityErr)
+		}
+		return nil
+	}
+	return client.DeleteWorkerControllerInstance(ctx, ns, version, identity)
 }

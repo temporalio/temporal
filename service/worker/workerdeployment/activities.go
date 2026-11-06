@@ -301,6 +301,9 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 }
 
 func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
+	if err := checkWorkerControllerAvailable(); err != nil {
+		return nil, wciClientErrorToActivityError(err)
+	}
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
@@ -313,5 +316,5 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 }
 
 func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
-	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
+	return deleteWorkerControllerInstance(ctx, a.WorkerControllerInstanceClient, a.namespace, input.GetVersion(), input.GetIdentity())
 }
