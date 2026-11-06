@@ -26,9 +26,6 @@ const (
 	// lanePolicyStateMaxBytes is the most policy state one lane may save. It is saved with the
 	// shard's queue state.
 	lanePolicyStateMaxBytes = 256
-	// lanePacedWindow is how recently a lane's limiter must have refused a send for the lane
-	// to count as paced.
-	lanePacedWindow = 3 * time.Second
 )
 
 type (
@@ -57,9 +54,12 @@ type (
 		// are more than the stream allows, the first ones win. The stream calls it on each
 		// receiver ack. A lane whose key is missing from the answer catches up without a rate
 		// limit and then retires. A lane's filter is fixed when the lane is created: to change
-		// it, retire the key and use a new one. An error counts as an answer with no lanes;
-		// the stream asks again on the next ack. To keep its lanes through a short failure, a
-		// policy returns its last answer instead.
+		// it, retire the key and use a new one. Once requested, retirement finishes even if
+		// the policy asks for the key again; a new lane can then use it.
+		// Each lane scans the shard queue independently, so policies should keep lane counts
+		// bounded. The optional read buffer shares recent reads, not old backlog scans.
+		// An error counts as an answer with no lanes; the stream asks again on the next ack.
+		// To keep its lanes through a short failure, a policy returns its last answer instead.
 		Evaluate(signals LaneSignals) ([]DesiredLane, error)
 		// Limiter returns the limiter that paces a lane. The stream calls it once per lane,
 		// when the lane is first desired.
@@ -120,10 +120,11 @@ type (
 		// of the task at that position. AckedTime is zero until the first ack.
 		Acked     int64
 		AckedTime time.Time
-		// Retiring is whether the lane is catching up to retire.
+		// Retiring is whether retirement has been requested, including while the lane drains.
 		Retiring bool
-		// Paced is whether the lane's limiter refused a send in the last few seconds.
-		Paced bool
+		// LastRefused is when the lane's limiter last refused a send, or zero if it never did.
+		// The policy chooses how long that observation remains relevant.
+		LastRefused time.Time
 		// Paused is whether the receiver has paused the lane.
 		Paused bool
 		// PolicyState is the state last saved with the lane.

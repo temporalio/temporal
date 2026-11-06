@@ -32,7 +32,8 @@ type senderLaneSnapshot struct {
 	cursor     int64
 	acked      int64
 	ackedTime  time.Time
-	retiring   bool
+	// retiring records retirement intent. A finite scope end is the fixed handoff boundary.
+	retiring bool
 	// paused is whether the receiver's last ack paused the lane.
 	paused bool
 	// policyState is saved with the lane for the policy that created it.
@@ -44,6 +45,12 @@ type senderLane struct {
 	leases int
 	// A pending lane is durable but cannot send until the default lane handoff completes.
 	pending bool
+}
+
+// retirementReady is called with the registry mutex held.
+func (lane *senderLane) retirementReady() bool {
+	return lane.retiring && !lane.pending && lane.leases == 0 &&
+		lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 && lane.acked >= lane.scope.Range.ExclusiveMax.TaskID
 }
 
 // senderLaneRegistry tracks the lanes of one lane stream sender and coordinates them with
@@ -80,6 +87,17 @@ func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistenc
 		}
 		if _, duplicate := r.byKey[persistedLane.GetLogicalKey()]; duplicate {
 			return nil, fmt.Errorf("duplicate persisted replication lane logical key %q", persistedLane.GetLogicalKey())
+		}
+		persistenceScope := persistedLane.GetScope()
+		if persistenceScope.GetPredicate().GetPredicateType() != enumsspb.PREDICATE_TYPE_NAMESPACE_ID {
+			return nil, fmt.Errorf("persisted replication lane %q: scope is not a namespace filter", persistedLane.GetLogicalKey())
+		}
+		rangeState := persistenceScope.GetRange()
+		if rangeState.GetInclusiveMin() == nil || rangeState.GetExclusiveMax() == nil {
+			return nil, fmt.Errorf("persisted replication lane %q is missing its range", persistedLane.GetLogicalKey())
+		}
+		if queues.FromPersistenceTaskKey(rangeState.GetInclusiveMin()).CompareTo(queues.FromPersistenceTaskKey(rangeState.GetExclusiveMax())) > 0 {
+			return nil, fmt.Errorf("persisted replication lane %q has an inverted range", persistedLane.GetLogicalKey())
 		}
 		scope := queues.FromPersistenceScope(persistedLane.GetScope())
 		filter, err := laneFilterFromScope(scope)
@@ -120,6 +138,7 @@ func (r *senderLaneRegistry) newLane(logicalKey string, filter LaneFilter, scope
 		filter:      filter,
 		scope:       scope,
 		cursor:      scope.Range.InclusiveMin.TaskID,
+		retiring:    scope.Range.ExclusiveMax.TaskID != math.MaxInt64,
 		policyState: slices.Clone(policyState),
 	}}
 }
@@ -189,12 +208,16 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 		if !ok {
 			continue
 		}
-		if state.GetInclusiveLowWatermark() > lane.acked {
-			lane.acked = state.GetInclusiveLowWatermark()
+		if acked := min(state.GetInclusiveLowWatermark(), lane.scope.Range.ExclusiveMax.TaskID); acked > lane.acked {
+			lane.acked = acked
 			lane.ackedTime = state.GetInclusiveLowWatermarkTime().AsTime()
+			changed = true
 		}
 		if paused := state.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE; paused != lane.paused {
 			lane.paused = paused
+			changed = true
+		}
+		if r.boundRetiringLane(lane) {
 			changed = true
 		}
 	}
@@ -211,26 +234,33 @@ func (r *senderLaneRegistry) Paused(logicalKey string) bool {
 	return ok && lane.paused
 }
 
-// RequestRetirement marks a lane as retiring once the receiver has acknowledged every task
-// the lane owns up to the default lane's reserved position. After that, the default lane can
-// take the lane's tasks back without a gap. A paused lane does not retire: its tasks would go
-// back to the default lane around the pause.
+// RequestRetirement withdraws a lane and fixes its exclusive end once its current send has
+// finished. Existing default reservations end at or before that boundary. New default
+// reservations own the namespace's tasks beyond it, while this lane drains its finite prefix.
+// A paused lane keeps its unbounded ownership until it resumes. Once a finite handoff
+// is fixed, it cannot be expanded again: default reservations may already own the suffix.
 func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.pending || lane.retiring || lane.paused || lane.leases != 0 {
-		return false
-	}
-	if r.defaultReservedCursor == 0 {
-		return false
-	}
-	retirementCursor := max(r.defaultReservedCursor, lane.cursor)
-	if lane.acked < retirementCursor {
+	if !ok || lane.retiring || lane.paused {
 		return false
 	}
 	lane.retiring = true
+	r.boundRetiringLane(lane)
 	r.notifyChanged()
+	return true
+}
+
+// boundRetiringLane fixes a retirement boundary under mu after all sends with the old scope
+// finish. The finite end is persisted with the scope and never moves forward again.
+func (r *senderLaneRegistry) boundRetiringLane(lane *senderLane) bool {
+	if !lane.retiring || lane.pending || lane.paused || lane.leases != 0 || lane.scope.Range.ExclusiveMax.TaskID != math.MaxInt64 {
+		return false
+	}
+	lane.scope.Range.ExclusiveMax = tasks.NewImmediateKey(max(
+		r.defaultReservedCursor, lane.cursor, lane.acked, lane.scope.Range.InclusiveMin.TaskID,
+	))
 	return true
 }
 
@@ -243,26 +273,14 @@ func (r *senderLaneRegistry) SetPolicyState(logicalKey string, policyState []byt
 	}
 }
 
-func (r *senderLaneRegistry) CancelRetirement(logicalKey string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	lane, ok := r.byKey[logicalKey]
-	if !ok || !lane.retiring {
-		return false
-	}
-	lane.retiring = false
-	r.notifyChanged()
-	return true
-}
-
-// ReadyRetirements returns the retiring lanes whose retirement marker can be sent: no lane
-// or default range is in flight.
+// ReadyRetirements returns lanes whose fixed prefix has been acknowledged and whose sender
+// has released its lease. Default reservations can continue while the lane drains.
 func (r *senderLaneRegistry) ReadyRetirements() []senderLaneSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []senderLaneSnapshot
 	for _, lane := range r.byKey {
-		if lane.retiring && lane.leases == 0 && r.defaultLeases == 0 {
+		if lane.retirementReady() && !lane.paused {
 			out = append(out, lane.senderLaneSnapshot)
 		}
 	}
@@ -270,11 +288,13 @@ func (r *senderLaneRegistry) ReadyRetirements() []senderLaneSnapshot {
 }
 
 // CompleteRetirement removes a retiring lane after its retirement marker was sent.
+// A pause arriving after ReadyRetirements cannot recall a marker already in flight.
+// Completion remains safe because the entire finite prefix was acknowledged before send.
 func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byID[laneID]
-	if !ok || !lane.retiring || lane.leases != 0 {
+	if !ok || !lane.retirementReady() {
 		return senderLaneSnapshot{}, false
 	}
 	delete(r.byID, laneID)
@@ -289,7 +309,10 @@ func (r *senderLaneRegistry) Acquire(laneID string) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byID[laneID]
-	if !ok || lane.pending || lane.retiring || lane.leases != 0 {
+	if !ok || lane.pending || lane.paused || lane.leases != 0 {
+		return senderLaneSnapshot{}, false
+	}
+	if lane.retiring && (lane.scope.Range.ExclusiveMax.TaskID == math.MaxInt64 || lane.acked >= lane.scope.Range.ExclusiveMax.TaskID) {
 		return senderLaneSnapshot{}, false
 	}
 	lane.leases++
@@ -304,6 +327,11 @@ func (r *senderLaneRegistry) Release(laneID string) {
 		return
 	}
 	lane.leases--
+	if lane.leases == 0 && lane.retiring {
+		if r.boundRetiringLane(lane) || lane.retirementReady() {
+			r.notifyChanged()
+		}
+	}
 }
 
 func (r *senderLaneRegistry) AdvanceLaneCursor(laneID string, to int64) {
@@ -316,14 +344,14 @@ func (r *senderLaneRegistry) AdvanceLaneCursor(laneID string, to int64) {
 
 // AcquireDefault reserves a default lane range ending at endExclusive. It returns a function
 // that names the lane owning a task, or "" for a task the default lane sends, or nil when no
-// lane exists. It returns false while a lane handoff or retirement is in progress, so the
-// default lane never crosses one.
+// lane exists. It returns false while a new lane's handoff is in progress. Retiring lanes
+// keep only their finite prefix, so new default reservations continue beyond that prefix.
 func (r *senderLaneRegistry) AcquireDefault(endExclusive int64) (func(tasks.Task) string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	recovering := r.defaultLeases == 0 && r.defaultRecoveryPending
 	for _, lane := range r.byKey {
-		if lane.retiring || (lane.pending && !recovering) {
+		if lane.pending && !recovering {
 			return nil, false
 		}
 	}
@@ -380,6 +408,7 @@ func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) 
 		if lane.pending {
 			lane.cursor = max(lane.cursor, r.defaultCompletedCursor)
 			lane.pending = false
+			r.boundRetiringLane(lane)
 			changed = true
 		}
 	}
@@ -392,6 +421,16 @@ func (r *senderLaneRegistry) DefaultReservedCursor() int64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.defaultReservedCursor
+}
+
+// RequireDefaultRecovery keeps new lanes pending until the default lane has replayed the
+// conservative floor. Its old completion cursor cannot establish ownership for a new lane.
+func (r *senderLaneRegistry) RequireDefaultRecovery(floor int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defaultCompletedCursor = min(r.defaultCompletedCursor, floor)
+	r.defaultRecoveryPending = true
+	r.notifyChanged()
 }
 
 // ResumeFloor returns the lowest resume point across lanes, with the ack time of the lane
@@ -460,7 +499,7 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 	slices.Sort(keys)
 	for _, logicalKey := range keys {
 		lane := r.byKey[logicalKey]
-		resume := max(lane.scope.Range.InclusiveMin.TaskID, lane.acked)
+		resume := min(max(lane.scope.Range.InclusiveMin.TaskID, lane.acked), lane.scope.Range.ExclusiveMax.TaskID)
 		scope := lane.scope
 		scope.Range.InclusiveMin = tasks.NewImmediateKey(resume)
 		state.Lanes = append(state.Lanes, &persistencespb.QueueReaderLane{

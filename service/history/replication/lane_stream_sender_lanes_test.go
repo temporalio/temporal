@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -211,7 +212,7 @@ func (s *laneStreamSenderSuite) TestPaceLane_RetriesUntilAllowed() {
 	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
 	s.Equal(3, limiter.calls)
 	// A refusal marks the lane as paced for the policy.
-	s.Contains(s.streamSender.lanePacedAt, logicalKey)
+	s.Contains(s.streamSender.laneRefusedAt, logicalKey)
 }
 
 func (s *laneStreamSenderSuite) TestPaceLane_NotPaced() {
@@ -375,7 +376,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	_, ok := registry.SnapshotByKey(logicalKey)
 	s.True(ok)
 	s.Same(limiter, s.streamSender.laneLimiter(logicalKey))
-	s.True(s.streamSender.lanePaced(logicalKey))
+	s.True(s.streamSender.laneShouldBeRateLimited(logicalKey))
 
 	// The policy sees the lane on the next ack. A lane that is no longer requested sends
 	// without a rate limit until it can retire.
@@ -391,7 +392,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).Return(nil)
 	s.NoError(s.streamSender.recvLaneSyncReplicationState(attr))
-	s.False(s.streamSender.lanePaced(logicalKey))
+	s.False(s.streamSender.laneShouldBeRateLimited(logicalKey))
 	_, ok = registry.SnapshotByKey(logicalKey)
 	s.True(ok)
 }
@@ -455,7 +456,7 @@ func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
 	s.streamSender.lanePolicy = policy
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 		s.Equal(&replicationspb.ReplicationLaneInfo{LaneId: lane.id, Retire: true}, resp.GetMessages().GetLaneInfo())
-		s.Equal(int64(100), resp.GetMessages().GetExclusiveHighWatermark())
+		s.Equal(int64(150), resp.GetMessages().GetExclusiveHighWatermark())
 		s.Equal(enumsspb.TASK_PRIORITY_HIGH, resp.GetMessages().GetPriority())
 		return nil
 	})
@@ -491,11 +492,11 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
 
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, map[string]*historyservice.HandoverNamespaceInfo{"ns-b": {}}, nil)
 	s.NoError(s.streamSender.reconcileLanes(attr, false))
-	s.False(s.streamSender.lanePaced(logicalKey))
+	s.False(s.streamSender.laneShouldBeRateLimited(logicalKey))
 
 	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil)
 	s.NoError(s.streamSender.reconcileLanes(attr, false))
-	s.True(s.streamSender.lanePaced(logicalKey))
+	s.True(s.streamSender.laneShouldBeRateLimited(logicalKey))
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
@@ -538,7 +539,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
-	s.False(s.streamSender.lanePaced(namespaceLaneKey("ns-a")))
+	s.False(s.streamSender.laneShouldBeRateLimited(namespaceLaneKey("ns-a")))
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_WithoutPolicy() {
@@ -552,7 +553,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_WithoutPolicy() {
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
-	s.False(s.streamSender.lanePaced(namespaceLaneKey("ns-a")))
+	s.False(s.streamSender.laneShouldBeRateLimited(namespaceLaneKey("ns-a")))
 }
 
 func (s *laneStreamSenderSuite) TestAdmitDesiredLanes() {
@@ -727,8 +728,10 @@ func (s *laneStreamSenderSuite) TestLanePolicyPanic() {
 			s.Nil(s.streamSender.laneLimiter(logicalKey))
 			s.streamSender.setRequestedLanes(map[string]struct{}{namespaceLaneKey("ns-c"): {}})
 			s.streamSender.laneRetired(logicalKey)
-			policy.EXPECT().Close()
+			closed := make(chan struct{}, 1)
+			policy.EXPECT().Close().Do(func() { closed <- struct{}{} })
 			s.streamSender.closeLanePolicy()
+			await.Rcv(s.T(), closed)
 		})
 	}
 }
@@ -746,10 +749,15 @@ func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryPanic() {
 func (s *laneStreamSenderSuite) TestCloseLanePolicy_PanicIsRecovered() {
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy
-	policy.EXPECT().Close().Do(func() { panic("close") })
+	closed := make(chan struct{}, 1)
+	policy.EXPECT().Close().Do(func() {
+		defer func() { closed <- struct{}{} }()
+		panic("close")
+	})
 
 	s.streamSender.closeLanePolicy()
 	s.True(s.streamSender.lanePolicyClosed)
+	await.Rcv(s.T(), closed)
 }
 
 func (s *laneStreamSenderSuite) TestCloseLanePolicy_DoesNotWaitForRunningCall() {
@@ -806,10 +814,12 @@ func (s *laneStreamSenderSuite) TestLanePolicyLifecycle() {
 	s.streamSender.startLanePolicy()
 
 	// Stopping the stream closes the policy once, and no method is called after that.
-	policy.EXPECT().Close()
+	closed := make(chan struct{}, 1)
+	policy.EXPECT().Close().Do(func() { closed <- struct{}{} })
 	s.streamSender.closeLanePolicy()
 	s.streamSender.closeLanePolicy()
 	s.streamSender.laneRetired(namespaceLaneKey("ns-a"))
+	await.Rcv(s.T(), closed)
 }
 
 func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryError() {
