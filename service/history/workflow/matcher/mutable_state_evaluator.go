@@ -113,7 +113,7 @@ func (m *mutableStateMatchEvaluator) evaluateComparison(expr *sqlparser.Comparis
 	if !ok {
 		return false, fmt.Errorf("invalid value: %s", sqlparser.String(expr.Right))
 	}
-	valStr := sqlparser.String(valExpr)
+	valStr := sqlquery.SQLValString(valExpr)
 
 	switch colNameStr {
 	case workflowTypeNameColName:
