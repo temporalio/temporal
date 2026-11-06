@@ -2573,9 +2573,29 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 
 		// Merge logic: Task queue user data has an overall clock. Deployment routing configs and
 		// individual versions within it have their own revision numbers. To merge the two user data values:
+		//
 		// 1. Select the base user data using the overall clock.
-		// 2. Merge the routing configs and versions from the other user data into the base.
+		//
+		// 2. When revision-based merging is disabled, use the selected base without merging.
+		//
+		// 3. When revision-based merging is enabled, there are three cases:
+		//
+		//    3a. Both clocks are present and incoming is equal or newer: use incoming without merging.
+		//        This lets missing versions propagate as deletions, including during same-clock force replication.
+		//
+		//    3b. Both clocks are present and incoming is older: merge its routing configs and versions into the base.
+		//        This preserves valid versions or higher revisions arriving in delayed replication after failover.
+		//
+		//    3c. Either clock is missing: retain compatibility merging because snapshot ordering is unknown.
 		baseUserData, otherUserData, selectionReason := selectTaskQueueUserData(current, incoming)
+		revisionMergeEnabled := e.config.EnableTaskQueueUserDataRevisionMerge(ns.Name().String())
+		currentClock, incomingClock := current.GetClock(), incoming.GetClock()
+		hasMissingClock := currentClock == nil || incomingClock == nil
+		incomingClockIsOlder := !hasMissingClock && hlc.Greater(currentClock, incomingClock)
+		shouldMergeDeploymentData := revisionMergeEnabled && (incomingClockIsOlder || hasMissingClock)
+		if !shouldMergeDeploymentData {
+			otherUserData = nil
+		}
 		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(baseUserData, otherUserData)
 
 		// Merge V1 sets.

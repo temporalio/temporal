@@ -7,23 +7,24 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventSourceReplayPreservesDestination() {
+// Redelivering an older or clockless source snapshot preserves higher destination revisions.
+// Equal and newer clock replacement is covered by TestReplicationMergePolicy and TestForceReplicationClearsOrphans.
+func (s *matchingEngineSuite) TestRedeliveryPreservesDestination() {
+	s.matchingEngine.config.EnableTaskQueueUserDataRevisionMerge = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	tests := []struct {
 		name          string
 		currentClock  *clockspb.HybridLogicalClock
 		incomingClock *clockspb.HybridLogicalClock
 	}{
 		{name: "destination_clock_newer", currentClock: &clockspb.HybridLogicalClock{WallClock: 20}, incomingClock: &clockspb.HybridLogicalClock{WallClock: 10}},
-		{name: "source_clock_newer", currentClock: &clockspb.HybridLogicalClock{WallClock: 10}, incomingClock: &clockspb.HybridLogicalClock{WallClock: 20}},
 		{name: "source_clock_missing", currentClock: &clockspb.HybridLogicalClock{WallClock: 20}},
-		{name: "destination_clock_missing", incomingClock: &clockspb.HybridLogicalClock{WallClock: 20}},
 		{name: "both_clocks_missing"},
-		{name: "equal_clocks", currentClock: &clockspb.HybridLogicalClock{WallClock: 20}, incomingClock: &clockspb.HybridLogicalClock{WallClock: 20}},
 	}
 	for _, test := range tests {
 		s.Run(test.name, func() {
