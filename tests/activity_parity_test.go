@@ -1295,14 +1295,14 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 		}
 		trace := []model.Event{model.Poll, model.Handoff}
 
-		check := func(t *testing.T, a parityActivity) {
+		check := func(t *testing.T, a parityActivity, completion model.Event) {
 			info := a.handoffInfo(t)
 			require.NotNil(t, info.handoffTime)
 			require.NotNil(t, info.options)
 			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetStartToHandoffTimeout(), info.options.GetStartToHandoffTimeout())
 			protorequire.ProtoEqual(t, cfg.AsyncHandoffOptions.GetHandoffToCloseTimeout(), info.options.GetHandoffToCloseTimeout())
 
-			a.driveEvent(t, model.Complete)
+			a.driveEvent(t, completion)
 			require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}, a.terminalOutcome(t))
 
 			closed := a.handoffInfo(t)
@@ -1313,15 +1313,26 @@ func (s *activityParityTestSuite) TestAsyncHandoff() {
 			a.driveEvent(t, model.Handoff)
 		}
 
-		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-			s.T().Skip("TODO: expose retained workflow handoff metadata through the API and run the shared check with newWFADriver")
-		})
+		for _, testCase := range []struct {
+			name       string
+			completion model.Event
+		}{
+			{name: "TaskToken", completion: model.Complete},
+			// By-ID completion uses an unstamped token even when the worker task is stamped.
+			{name: "ByID", completion: model.CompleteByID},
+		} {
+			s.Run(testCase.name, func(s *activityParityTestSuite) {
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					s.T().Skip("TODO: expose retained workflow handoff metadata through the API and run the shared check with newWFADriver")
+				})
 
-		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-			t := s.T()
-			env := newActivityParityEnv(t)
-			check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
-		})
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					env := newActivityParityEnv(t)
+					check(t, newSAADriver(t, env, cfg).driveTrace(t, trace), testCase.completion)
+				})
+			})
+		}
 	})
 
 	// Eager and Matching delivery use different start paths. Verify that neither
