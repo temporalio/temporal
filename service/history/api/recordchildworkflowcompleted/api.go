@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -24,6 +25,7 @@ const maxResetRedirectCount = 100
 // This API records the child completion event in the parent's history. It does the following.
 // - Rejects the request if the parent was closed for any reason other than reset.
 // - If the parent was closed due to reset, it forwards the request to the new parent following the resetRunID link.
+// - If the recorded parent run no longer exists, it delivers the completion to the current run of the same workflow ID when that run still has this child.
 // - It ensures that the child sending the completion request was initialized by this parent before accepting the request.
 func Invoke(
 	ctx context.Context,
@@ -37,10 +39,13 @@ func Invoke(
 	}
 
 	// If the parent is reset, we need to follow a possible chain of resets to deliver the completion event to the correct parent.
+	// A recorded run that retention has deleted has no ResetRunId to follow, so the current run is tried once.
+	recordedRunID := request.GetParentExecution().GetRunId()
 	redirectCount := 0
+	resolvedCurrent := false
 	for {
-		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
-		if errors.Is(err, consts.ErrWorkflowCompleted) {
+		resetRunID, recordErr := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
+		if errors.Is(recordErr, consts.ErrWorkflowCompleted) {
 			// if the parent was reset, forward the request to the new run pointed by resetRunID
 			// Note: An alternative solution is to load the current run here ane compare the originalRunIDs of the current run and the closed parent.
 			// If they match, then deliver it to the current run. We should consider this optimization if we notice that reset chain is longer than 1-2 hops.
@@ -53,11 +58,36 @@ func Invoke(
 				continue
 			}
 		}
-		if err != nil {
-			return nil, err
+		if recordErr != nil && !resolvedCurrent && recordedRunID != "" && recordedParentRunMissing(recordErr) {
+			currentRunID, currentErr := workflowConsistencyChecker.GetCurrentWorkflowRunID(
+				ctx,
+				request.GetNamespaceId(),
+				request.GetParentExecution().GetWorkflowId(),
+				locks.PriorityHigh,
+			)
+			if currentErr != nil {
+				return nil, currentErr
+			}
+			if currentRunID != "" && currentRunID != request.GetParentExecution().GetRunId() {
+				resolvedCurrent = true
+				request.ParentExecution.RunId = currentRunID
+				continue
+			}
+		}
+		if recordErr != nil {
+			return nil, recordErr
 		}
 		return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 	}
+}
+
+// recordedParentRunMissing reports that the parent run named by the request does not exist.
+// A closed parent and a pending-child mismatch are also NotFound, and those stay on their existing paths.
+func recordedParentRunMissing(err error) bool {
+	if err == nil || errors.Is(err, consts.ErrWorkflowCompleted) || errors.Is(err, consts.ErrChildExecutionNotFound) {
+		return false
+	}
+	return common.IsNotFoundError(err)
 }
 
 // recordChildWorkflowCompleted records the child completed event in the parent history if the parent is still running.
