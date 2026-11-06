@@ -137,6 +137,7 @@ type (
 
 		PollerScalingBacklogAgeScaleUp      dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingWaitTime               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PollerScalingFairnessBand           dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond     dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -229,6 +230,7 @@ type (
 		// Poller scaling decisions configuration
 		PollerScalingBacklogAgeScaleUp      func() time.Duration
 		PollerScalingWaitTime               func() time.Duration
+		PollerScalingFairnessBand           func() float64
 		PollerScalingDecisionsPerSecond     func() float64
 		PollerScalingTaskAddToDispatchRatio func() float64
 		EnablePollerScalingDecisionMetrics  func() bool
@@ -386,6 +388,7 @@ func NewConfig(
 
 		PollerScalingBacklogAgeScaleUp:      dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
+		PollerScalingFairnessBand:           dynamicconfig.MatchingPollerScalingFairnessBand.Get(dc),
 		PollerScalingDecisionsPerSecond:     dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 		PollerScalingTaskAddToDispatchRatio: dynamicconfig.MatchingPollerScalingTaskAddToDispatchRatio.Get(dc),
 		EnablePollerScalingDecisionMetrics:  dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
@@ -554,6 +557,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerScalingWaitTime: func() time.Duration {
 			return config.PollerScalingWaitTime(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingFairnessBand: func() float64 {
+			return config.PollerScalingFairnessBand(ns.String(), taskQueueName, taskType)
 		},
 		PollerScalingDecisionsPerSecond: func() float64 {
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
