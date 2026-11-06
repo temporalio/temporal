@@ -84,11 +84,14 @@ type (
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory            *pollerHistory
-		currentPolls             atomic.Int64
-		taskValidator            taskValidator
-		deploymentRegistrationCh chan struct{}
-		pollerScalingRateLimiter quotas.RateLimiter
+		pollerHistory *pollerHistory
+		currentPolls  atomic.Int64
+
+		// A sticky queue belongs to one worker process; retain its key beyond poll-history expiry.
+		generalSessionWorkerInstanceKey atomic.Pointer[string]
+		taskValidator                   taskValidator
+		deploymentRegistrationCh        chan struct{}
+		pollerScalingRateLimiter        quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -434,6 +437,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
+	c.recordGeneralSessionWorker(pollMetadata)
+
 	//nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)
@@ -543,6 +548,27 @@ func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerI
 	}
 	res := c.pollerHistory.getPollerInfo(time.Time{})
 	return res
+}
+
+func (c *physicalTaskQueueManagerImpl) recordGeneralSessionWorker(pollMetadata *pollMetadata) {
+	if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY || c.queue.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return
+	}
+	if c.generalSessionWorkerInstanceKey.Load() != nil {
+		return
+	}
+	if pollMetadata.sessionOptions == nil || pollMetadata.sessionOptions.GetSingleSession() != nil || pollMetadata.workerInstanceKey == "" {
+		return
+	}
+	workerInstanceKey := pollMetadata.workerInstanceKey
+	c.generalSessionWorkerInstanceKey.Store(&workerInstanceKey)
+}
+
+func (c *physicalTaskQueueManagerImpl) GeneralSessionWorkerInstanceKey() string {
+	if workerInstanceKey := c.generalSessionWorkerInstanceKey.Load(); workerInstanceKey != nil {
+		return *workerInstanceKey
+	}
+	return ""
 }
 
 func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {

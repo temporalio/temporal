@@ -423,6 +423,13 @@ func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
 	return pm.ns
 }
 
+func (pm *taskQueuePartitionManagerImpl) GeneralSessionWorkerInstanceKey() string {
+	if queue := pm.defaultQueue(); queue != nil {
+		return queue.GeneralSessionWorkerInstanceKey()
+	}
+	return ""
+}
+
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 	dbq := pm.defaultQueue()
 	if dbq != nil {

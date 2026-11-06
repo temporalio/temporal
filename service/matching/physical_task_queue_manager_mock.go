@@ -116,6 +116,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) FinishedDraining() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishedDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).FinishedDraining))
 }
 
+// GeneralSessionWorkerInstanceKey mocks base method.
+func (m *MockphysicalTaskQueueManager) GeneralSessionWorkerInstanceKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GeneralSessionWorkerInstanceKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GeneralSessionWorkerInstanceKey indicates an expected call of GeneralSessionWorkerInstanceKey.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GeneralSessionWorkerInstanceKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GeneralSessionWorkerInstanceKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GeneralSessionWorkerInstanceKey))
+}
+
 // GetAllPollerInfo mocks base method.
 func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*taskqueue.PollerInfo {
 	m.ctrl.T.Helper()

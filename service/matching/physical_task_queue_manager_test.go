@@ -1137,3 +1137,107 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2() {
 		})
 	}
 }
+
+// TestGeneralSessionWorkerAssociation initializes the per-worker queue's key only from a valid general-session poll.
+// Poll-history removal and later polls must retain the first key for the queue manager's lifetime.
+func (s *PhysicalTaskQueueManagerTestSuite) TestGeneralSessionWorkerAssociation() {
+	for _, mode := range []string{"general", "ordinary", "exclusive", "missing worker key", "different worker key"} {
+		s.Run(mode, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			queue := s.tqMgr
+			partition := queue.partitionMgr.partition.TaskQueue().StickyPartition(tv.StickyTaskQueue().GetName())
+			queue.partitionMgr.partition = partition
+			queue.queue = UnversionedQueueKey(partition)
+			queue.backlogMgr.getDB().queue = queue.queue
+			queue.matcher.partition = partition
+			_, err := queue.backlogMgr.getDB().RenewLease(t.Context())
+			require.NoError(t, err)
+			metadata := &pollMetadata{
+				sessionOptions:    &sessionpb.WorkerSessionOptions{},
+				workerInstanceKey: tv.WorkerInstanceKey(),
+				conditions:        &matchingservice.PollConditions{NoWait: true},
+			}
+			switch mode {
+			case "ordinary":
+				metadata.sessionOptions = nil
+			case "exclusive":
+				require.NoError(t, queue.AssignExclusiveWorker())
+				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: partition.RpcName()},
+				}}
+			case "missing worker key":
+				metadata.workerInstanceKey = ""
+			default:
+				require.Contains(t, []string{"general", "different worker key"}, mode)
+			}
+			require.Empty(t, queue.GeneralSessionWorkerInstanceKey())
+			_, err = queue.PollTask(t.Context(), metadata)
+			require.ErrorIs(t, err, errNoTasks)
+			if mode == "general" || mode == "different worker key" {
+				require.Equal(t, tv.WorkerInstanceKey(), queue.GeneralSessionWorkerInstanceKey())
+			} else {
+				require.Empty(t, queue.GeneralSessionWorkerInstanceKey())
+			}
+
+			generalMetadata := *metadata
+			generalMetadata.sessionOptions = &sessionpb.WorkerSessionOptions{}
+			generalMetadata.workerInstanceKey = tv.WorkerInstanceKey()
+			_, err = queue.PollTask(t.Context(), &generalMetadata)
+			require.ErrorIs(t, err, errNoTasks)
+			require.Equal(t, tv.WorkerInstanceKey(), queue.GeneralSessionWorkerInstanceKey())
+			queue.UpdatePollerInfo(pollerIdentity(tv.WorkerIdentity()), &generalMetadata)
+			queue.RemovePoller(pollerIdentity(tv.WorkerIdentity()))
+			require.Empty(t, queue.GetAllPollerInfo())
+			require.Equal(t, tv.WorkerInstanceKey(), queue.GeneralSessionWorkerInstanceKey())
+
+			if mode == "different worker key" {
+				metadata.workerInstanceKey = "other-worker"
+			}
+			_, err = queue.PollTask(t.Context(), metadata)
+			require.ErrorIs(t, err, errNoTasks)
+			require.Equal(t, tv.WorkerInstanceKey(), queue.GeneralSessionWorkerInstanceKey())
+		})
+	}
+}
+
+// TestGeneralSessionWorkerAssociationConcurrentPolls checks publication to concurrent readers and pollers from one worker.
+// Completing those polls must retain the worker association.
+func (s *PhysicalTaskQueueManagerTestSuite) TestGeneralSessionWorkerAssociationConcurrentPolls() {
+	t := s.T()
+	tv := testvars.New(t)
+	workerInstanceKey := tv.WorkerInstanceKey()
+	queue := s.tqMgr
+	partition := queue.partitionMgr.partition.TaskQueue().StickyPartition(tv.StickyTaskQueue().GetName())
+	queue.partitionMgr.partition = partition
+	queue.queue = UnversionedQueueKey(partition)
+	queue.matcher.partition = partition
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	const pollers = 10
+	start := make(chan struct{})
+	done := make(chan error, pollers)
+	for range pollers {
+		go func() {
+			select {
+			case <-start:
+			case <-ctx.Done():
+				done <- ctx.Err()
+				return
+			}
+			_, err := queue.PollTask(ctx, &pollMetadata{
+				sessionOptions: &sessionpb.WorkerSessionOptions{}, workerInstanceKey: workerInstanceKey,
+			})
+			done <- err
+		}()
+	}
+	close(start)
+	await.RequireTrue(t, func() bool {
+		return queue.currentPolls.Load() == pollers && queue.GeneralSessionWorkerInstanceKey() == workerInstanceKey
+	}, time.Second, time.Millisecond)
+	cancel()
+	for range pollers {
+		require.Error(t, await.Rcv(t, done))
+	}
+	require.Equal(t, workerInstanceKey, queue.GeneralSessionWorkerInstanceKey())
+}

@@ -120,6 +120,20 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) DispatchQueryTask(ctx, task
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).DispatchQueryTask), ctx, taskId, request)
 }
 
+// GeneralSessionWorkerInstanceKey mocks base method.
+func (m *MocktaskQueuePartitionManager) GeneralSessionWorkerInstanceKey() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GeneralSessionWorkerInstanceKey")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GeneralSessionWorkerInstanceKey indicates an expected call of GeneralSessionWorkerInstanceKey.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GeneralSessionWorkerInstanceKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GeneralSessionWorkerInstanceKey", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GeneralSessionWorkerInstanceKey))
+}
+
 // GetAllPollerInfo mocks base method.
 func (m *MocktaskQueuePartitionManager) GetAllPollerInfo() []*taskqueue.PollerInfo {
 	m.ctrl.T.Helper()
