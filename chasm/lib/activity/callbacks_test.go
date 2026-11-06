@@ -7,11 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -41,6 +44,33 @@ func newNexusCallback() *commonpb.Callback {
 			},
 		},
 	}
+}
+
+func TestRecordCompletedReleasesLimitersAndSchedulesCallbacks(t *testing.T) {
+	t.Parallel()
+	ctx := newCallbackTestContext()
+	a := newScheduledTestActivity()
+	limiters := []*taskqueuespb.LimiterRef{{
+		LimiterType: enumsspb.LIMITER_TYPE_CONCURRENCY,
+		Key:         "queue-key",
+		SlotId:      "slot-id",
+	}}
+	a.LastAttempt = chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Limiters: limiters})
+	require.NoError(t, callback.Attach(ctx, a, "req-id", timestamppb.New(ctx.Now(a)), []*commonpb.Callback{newNexusCallback()}))
+
+	err := a.RecordCompleted(ctx, func(chasm.MutableContext) error {
+		a.Status = activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, a.LastAttempt.Get(ctx).GetLimiters())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, a.Callbacks["req-id-0"].Get(ctx).GetStatus())
+	require.Len(t, ctx.Tasks, 2)
+	releaseTask, ok := ctx.Tasks[0].Payload.(*activitypb.ReleaseLimiterTask)
+	require.True(t, ok)
+	protorequire.ProtoEqual(t, &activitypb.ReleaseLimiterTask{Limiters: limiters}, releaseTask)
+	require.IsType(t, &callbackspb.InvocationTask{}, ctx.Tasks[1].Payload)
 }
 
 func TestAddCompletionCallbacks(t *testing.T) {

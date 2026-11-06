@@ -13,6 +13,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
@@ -283,6 +284,9 @@ message ActivityAttemptState {
   // The serialized ComponentRef that matching embedded in the task token sent to the worker.
   // Set when the attempt starts. Used to build the task token for worker commands.
   bytes component_ref = 17;
+
+  // Flow control limiters held by the currently started activity task.
+  repeated temporal.server.api.taskqueue.v1.LimiterRef limiters = 18;
 }
 
 message ActivityHeartbeatState {

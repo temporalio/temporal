@@ -129,6 +129,11 @@ func (a *Activity) recordFailedAttempt(
 	currentTime time.Time,
 	noRetriesLeft bool,
 ) error {
+	// Release this attempt's limiters even when the activity will retry or remain paused.
+	// Terminal failures also pass through RecordCompleted; clearing the refs prevents
+	// duplicate releases.
+	// TODO(fc): Include the attempt outcome in the release task for circuit breaker/adaptive.
+	a.releaseAttemptLimiters(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 
 	attemptFailure := failure
@@ -445,4 +450,15 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 			},
 		},
 	}
+}
+
+func (a *Activity) releaseAttemptLimiters(ctx chasm.MutableContext) {
+	attempt := a.LastAttempt.Get(ctx)
+	limiters := attempt.GetLimiters()
+	attempt.Limiters = nil
+	if len(limiters) == 0 {
+		return
+	}
+
+	ctx.AddTask(a, chasm.TaskAttributes{}, &activitypb.ReleaseLimiterTask{Limiters: limiters})
 }
