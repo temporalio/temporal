@@ -310,6 +310,47 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	env.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
+// SDKs wait for a workflow result by polling for the close event again after each empty response.
+// This test polls the same way with a 2s deadline. A poll that starts with one long poll buffer or
+// less left waits until the deadline, so the test sends only a few polls.
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_CloseEventLongPollNearDeadline(enableTransitionHistory bool) {
+	env := s.newTestEnv(enableTransitionHistory)
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           env.Tv().RequestID(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          env.Tv().WorkflowID(),
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           env.Tv().TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            env.Tv().WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	ctx, cancel := context.WithTimeout(s.Context(), 2*time.Second)
+	defer cancel()
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              env.Namespace().String(),
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+		WaitNewEvent:           true,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+	}
+	polls := 0
+	for ctx.Err() == nil {
+		polls++
+		resp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, req)
+		if err != nil {
+			break
+		}
+		s.Empty(resp.GetHistory().GetEvents(), "expected no close event while the workflow is running")
+		req.NextPageToken = resp.GetNextPageToken()
+	}
+
+	s.ErrorIs(ctx.Err(), context.DeadlineExceeded, "polling should only stop at the caller's deadline")
+	s.Less(polls, 30, "history long polls during a 2s wait")
+}
+
 func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	env := s.newTestEnv()
 
