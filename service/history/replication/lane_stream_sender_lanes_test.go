@@ -19,6 +19,8 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/queues"
@@ -164,6 +166,31 @@ func (s *laneStreamSenderSuite) requestLane(logicalKey string, limiter LaneLimit
 	s.streamSender.laneLimiters[logicalKey] = limiter
 }
 
+func (s *laneStreamSenderSuite) TestPaceLane_WaitsWhileReceiverPausesLane() {
+	logicalKey := namespaceLaneKey("ns-a")
+	limiter := &fakeLaneLimiter{}
+	s.requestLane(logicalKey, limiter)
+	lane, _, err := s.streamSender.laneRegistry.Create(logicalKey, namespaceLaneFilter("ns-a"), 0, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE},
+	})
+	// A handover lifts the lane's rate limit but not the receiver's pause.
+	s.streamSender.handoverInProgress.Store(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.streamSender.paceLane(ctx, logicalKey) }()
+	cancel()
+	s.ErrorIs(<-done, context.Canceled)
+
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME},
+	})
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Zero(limiter.calls)
+}
+
 func (s *laneStreamSenderSuite) TestPaceLane_StreamEnded() {
 	logicalKey := namespaceLaneKey("ns-a")
 	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
@@ -196,7 +223,24 @@ func (s *laneStreamSenderSuite) TestPaceLane_NotPaced() {
 
 	// A lane the policy no longer requests catches up without its limiter.
 	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+
+	// So does every lane while a handover is in progress on the shard.
+	s.requestLane(logicalKey, limiter)
+	s.streamSender.handoverInProgress.Store(true)
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
 	s.Zero(limiter.calls)
+}
+
+func (s *laneStreamSenderSuite) TestPaceLane_HandoverWhileRefused() {
+	logicalKey := namespaceLaneKey("ns-a")
+	// The limiter asks for an hour, and a handover starts meanwhile. The lane re-checks within
+	// laneMaxRetryAfter and sends without asking the limiter again.
+	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
+	limiter.onReserve = func() { s.streamSender.handoverInProgress.Store(true) }
+	s.requestLane(logicalKey, limiter)
+
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Equal(1, limiter.calls)
 }
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
@@ -295,6 +339,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	policy := NewMockLaneStreamPolicy(s.controller)
 	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID}).Return(policy, nil)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(200)).AnyTimes()
 	readerID := shard.ReplicationReaderIDFromClusterShardID(int64(s.clientShardKey.ClusterID), s.clientShardKey.ShardID)
 	logicalKey := namespaceLaneKey("ns-a")
@@ -432,6 +477,28 @@ func (s *laneStreamSenderSuite) TestIsValid_SenderLanesEnabledChanged() {
 	s.False(s.streamSender.IsValid())
 }
 
+func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
+	registry, err := newSenderLaneRegistry(0, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	policy := NewMockLaneStreamPolicy(s.controller)
+	s.streamSender.lanePolicy = policy
+	logicalKey := namespaceLaneKey("ns-a")
+	policy.EXPECT().Evaluate(gomock.Any()).Return([]DesiredLane{{Key: logicalKey, Filter: namespaceLaneFilter("ns-a")}}, nil).Times(2)
+	policy.EXPECT().Limiter(logicalKey).Return(&fakeLaneLimiter{})
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100)).AnyTimes()
+	attr := syncReplicationState(100, 100, 100)
+	attr.MaxLanes = 100
+
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, map[string]*historyservice.HandoverNamespaceInfo{"ns-b": {}}, nil)
+	s.NoError(s.streamSender.reconcileLanes(attr, false))
+	s.False(s.streamSender.laneShouldBeRateLimited(logicalKey))
+
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil)
+	s.NoError(s.streamSender.reconcileLanes(attr, false))
+	s.True(s.streamSender.laneShouldBeRateLimited(logicalKey))
+}
+
 func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
 	registry, err := newSenderLaneRegistry(0, nil)
 	s.NoError(err)
@@ -445,6 +512,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
 	}, nil)
 	policy.EXPECT().Limiter(gomock.Any()).Return(&fakeLaneLimiter{}).Times(2)
 	s.streamSender.lanePolicy = policy
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 	attr := syncReplicationState(100, 100, 100)
 	attr.MaxLanes = 100
@@ -467,6 +535,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
 	policy := NewMockLaneStreamPolicy(s.controller)
 	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, errors.New("invalid config"))
 	s.streamSender.lanePolicy = policy
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
@@ -480,6 +549,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_WithoutPolicy() {
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 0, nil)
 	s.NoError(err)
 	s.streamSender.requestedLanes = map[string]struct{}{namespaceLaneKey("ns-a"): {}}
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
@@ -572,6 +642,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_FirstAckDropsRestoredLanesOve
 		{Key: namespaceLaneKey("ns-a"), Filter: namespaceLaneFilter("ns-a")},
 	}, nil)
 	policy.EXPECT().Limiter(gomock.Any()).Return(&fakeLaneLimiter{}).Times(2)
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 	attr := syncReplicationState(100, 100, 100)
 	attr.MaxLanes = 2
@@ -758,4 +829,31 @@ func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryError() {
 
 	s.streamSender.startLanePolicy()
 	s.Nil(s.streamSender.lanePolicy)
+}
+
+func (s *laneStreamSenderSuite) TestRecordLaneLag() {
+	registry, err := newSenderLaneRegistry(0, nil)
+	s.NoError(err)
+	behind, _, err := registry.Create(namespaceLaneKey("ns-behind"), namespaceLaneFilter("ns-behind"), 0, nil)
+	s.NoError(err)
+	current, _, err := registry.Create(namespaceLaneKey("ns-current"), namespaceLaneFilter("ns-current"), 0, nil)
+	s.NoError(err)
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		behind.id:  {InclusiveLowWatermark: 1, InclusiveLowWatermarkTime: timestamppb.New(time.Now().Add(-time.Hour))},
+		current.id: {InclusiveLowWatermark: 1, InclusiveLowWatermarkTime: timestamppb.New(time.Now())},
+	})
+	s.streamSender.laneRegistry = registry
+	s.streamSender.config.ReplicationLaneMaxLag = dynamicconfig.GetDurationPropertyFn(30 * time.Minute)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.streamSender.metrics = captureHandler
+	// Only the lane over the limit is reported, with the shard's newest task for comparison.
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(500))
+
+	s.streamSender.recordLaneLag()
+	s.Len(capture.Snapshot()[metrics.ReplicationLaneLag.Name()], 2)
+	exceeded := capture.Snapshot()[metrics.ReplicationLaneMaxLagExceeded.Name()]
+	s.Len(exceeded, 1)
+	s.Equal(namespaceLaneKey("ns-behind"), exceeded[0].Tags["replication_lane"])
 }

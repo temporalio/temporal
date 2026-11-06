@@ -22,6 +22,7 @@ import (
 )
 
 func (s *laneStreamSenderSuite) TestRestoreFailureReplaysBeforeNewLaneHandoff() {
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.streamSender.isTieredStackEnabled = true
 	reader := s.laneTestReaderState(500, 500, 900)
 	reader.ReplicationLaneDefaultCursor = shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(950))
@@ -155,6 +156,7 @@ func (s *laneStreamSenderSuite) TestRestoredEmptyRetirementPrimesItsNewReceiverT
 }
 
 func (s *laneStreamSenderSuite) TestReconcileRecreatesKeyAfterRetirementCompletes() {
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	registry, err := newSenderLaneRegistry(100, nil)
 	s.NoError(err)
 	key := namespaceLaneKey("ns-a")
@@ -185,6 +187,7 @@ func (s *laneStreamSenderSuite) TestReconcileRecreatesKeyAfterRetirementComplete
 }
 
 func (s *laneStreamSenderSuite) TestReconcileInstallsLimiterBeforePublishingLane() {
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	registry, err := newSenderLaneRegistry(100, nil)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
@@ -263,11 +266,12 @@ func (s *laneStreamSenderSuite) TestStopWithHangingCloseAllowsStreamReplacement(
 }
 
 func (s *laneStreamSenderSuite) TestRetirementSendDoesNotBlockAckProcessing() {
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	registry, err := newSenderLaneRegistry(100, nil)
 	s.NoError(err)
 	lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
-	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 100}})
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 100, InclusiveLowWatermarkTime: timestamppb.Now()}})
 	s.True(registry.RequestRetirement("a"))
 	s.streamSender.laneRegistry = registry
 	policy := NewMockLaneStreamPolicy(s.controller)
@@ -329,4 +333,27 @@ func (s *laneStreamSenderSuite) TestRetirementSendDoesNotBlockAckProcessing() {
 	releaseSend()
 	s.Require().NoError(await.Rcv(s.T(), sent))
 	sendFinished = true
+}
+
+func (s *laneStreamSenderSuite) TestPaceLaneRechecksPauseAfterLimiterRefuses() {
+	registry, err := newSenderLaneRegistry(100, nil)
+	s.NoError(err)
+	key := namespaceLaneKey("ns-a")
+	lane, _, err := registry.Create(key, namespaceLaneFilter("ns-a"), 100, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	limiter := &fakeLaneLimiter{refusals: 1}
+	limiter.onReserve = func() {
+		registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+		}})
+		s.streamSender.handoverInProgress.Store(true)
+	}
+	s.requestLane(key, limiter)
+	// A handover lifts the limiter, but the PAUSE received during its refusal still
+	// prevents sending. It must wait for RESUME or cancellation.
+	ctx, cancel := context.WithTimeout(s.T().Context(), 100*time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.streamSender.paceLane(ctx, key), context.DeadlineExceeded)
+	s.Equal(1, limiter.calls)
 }

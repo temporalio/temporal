@@ -3238,6 +3238,13 @@ the stream if a sender does. A lane counts until the sender sends its retirement
 default leaves room above the sender's default of 4 for a lane to be replaced while another
 retires. Changing it restarts lane stream receivers.`,
 	)
+	ReplicationLaneMaxLag = NewGlobalDurationSetting(
+		"history.ReplicationLaneMaxLag",
+		30*time.Minute,
+		`ReplicationLaneMaxLag is how far a replication lane may fall behind before the sender reports
+it with the replication_lane_max_lag_exceeded metric and a warning log. It does not change how the
+lane sends.`,
+	)
 	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
 		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
 		4096,
@@ -3280,6 +3287,21 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
 		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
+	ReplicationReceiverLaneMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverLaneMaxOutstandingTaskCount",
+		100,
+		`Maximum number of outstanding tasks of one replication lane in a lane stream receiver. Past
+it, the receiver pauses that lane alone. The default HIGH priority lane keeps sending, and counts
+only its own tasks toward ReplicationReceiverMaxOutstandingTaskCount.`,
+	)
+	ReplicationReceiverMaxTotalOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxTotalOutstandingTaskCount",
+		1000,
+		`Maximum number of outstanding HIGH priority tasks of a lane stream receiver across the default
+lane and every replication lane. Past it, the receiver pauses all HIGH priority traffic, lanes
+included. Set it above ReplicationReceiverMaxOutstandingTaskCount plus the lanes' share, so that it
+only acts as a backstop for receiver memory.`,
 	)
 	ReplicationReceiverSlowSubmissionLatencyThreshold = NewGlobalDurationSetting(
 		"history.ReplicationReceiverSubmissionLatencyThreshold",
