@@ -213,7 +213,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	taskID := int64(12345)
+	taskID := int64(123)
 	version := int64(2333)
 	firstEventID := int64(144)
 	nextEventID := int64(233)
@@ -272,17 +272,14 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
 	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
-	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
-		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             s.mockShard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+	s.executionManager.EXPECT().DeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.DeleteReplicationTaskFromDLQRequest{
+		CompleteHistoryTaskRequest: persistence.CompleteHistoryTaskRequest{
+			ShardID:      s.mockShard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			TaskKey:      tasks.NewImmediateKey(taskID),
 		},
 		SourceClusterName: s.sourceCluster,
 	}).Return(nil)
-
-	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 
 	token, err := s.replicationMessageHandler.MergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
