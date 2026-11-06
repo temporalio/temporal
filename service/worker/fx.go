@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -57,6 +58,7 @@ var Module = fx.Options(
 	dlq.Module,
 	dummy.Module,
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(links.ValidatorProvider),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
