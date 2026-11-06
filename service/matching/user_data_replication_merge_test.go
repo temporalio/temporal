@@ -276,6 +276,50 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReordere
 	}
 }
 
+// Each deployment forgets one old version and registers one new version; the passive must retain the same bounded set.
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRepeatedDeletionsDoNotAccumulateVersions() {
+	const retainedVersions = 12
+	const rollouts = 50
+	initialCurrentBuildID := fmt.Sprintf("build-%03d", retainedVersions-1)
+	s.matchingEngine.config.EnableTaskQueueUserDataRevisionMerge = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	active := &persistencespb.TaskQueueUserData{
+		Clock:   &clockspb.HybridLogicalClock{WallClock: 100, ClusterId: 1},
+		PerType: make(map[int32]*persistencespb.TaskQueueTypeUserData),
+	}
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		versions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+		for i := 0; i < retainedVersions; i++ {
+			versions[fmt.Sprintf("build-%03d", i)] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED)
+		}
+		versions[initialCurrentBuildID].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
+		active.PerType[int32(taskType)] = taskQueueUserDataWithDeployment(nil, taskType, "deployment", &persistencespb.WorkerDeploymentData{
+			RoutingConfig: newTestRoutingConfig(1, initialCurrentBuildID),
+			Versions:      versions,
+		}).PerType[int32(taskType)]
+	}
+	taskQueue := testvars.New(s.T()).TaskQueue().Name
+	s.seedTaskQueueUserData(taskQueue, common.CloneProto(active))
+
+	for nextBuild := retainedVersions; nextBuild < retainedVersions+rollouts; nextBuild++ {
+		active = common.CloneProto(active)
+		active.Clock.WallClock++
+		for _, perType := range active.PerType {
+			deployment := perType.DeploymentData.DeploymentsData["deployment"]
+			previous := deployment.Versions[fmt.Sprintf("build-%03d", nextBuild-1)]
+			previous.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+			previous.RevisionNumber++
+			delete(deployment.Versions, fmt.Sprintf("build-%03d", nextBuild-retainedVersions))
+			buildID := fmt.Sprintf("build-%03d", nextBuild)
+			deployment.Versions[buildID] = newTestWorkerDeploymentVersionData(1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT)
+			deployment.RoutingConfig = newTestRoutingConfig(int64(nextBuild+1), buildID)
+		}
+
+		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, active)
+
+		protorequire.ProtoEqual(s.T(), active, got)
+	}
+}
+
 //nolint:staticcheck // SA1019 verifies that deprecated deployment fields are selected by the parent clock.
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventImportsOnlyDeploymentDataForMissingType() {
 	current := taskQueueUserDataWithDeployment(
