@@ -65,7 +65,9 @@ type (
 		) ManagedStreamReceiver
 	}
 
-	streamSenderFactory   struct{}
+	streamSenderFactory struct {
+		lanePolicyFactory LaneStreamPolicyFactory
+	}
 	streamReceiverFactory struct {
 		laneFeedback LaneFeedbackProvider
 	}
@@ -90,9 +92,10 @@ type (
 )
 
 // NewStreamSenderFactory returns a factory that creates the sender implementation selected by
-// the ReplicationStreamImplementation dynamic config.
-func NewStreamSenderFactory() StreamSenderFactory {
-	return streamSenderFactory{}
+// the ReplicationStreamImplementation dynamic config. Lane senders get each stream's lane
+// policy from lanePolicyFactory.
+func NewStreamSenderFactory(lanePolicyFactory LaneStreamPolicyFactory) StreamSenderFactory {
+	return streamSenderFactory{lanePolicyFactory: lanePolicyFactory}
 }
 
 // NewStreamReceiverFactory returns a factory that creates the receiver implementation selected
@@ -102,7 +105,7 @@ func NewStreamReceiverFactory(laneFeedback LaneFeedbackProvider) StreamReceiverF
 	return streamReceiverFactory{laneFeedback: laneFeedback}
 }
 
-func (streamSenderFactory) NewStreamSender(
+func (f streamSenderFactory) NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext historyi.ShardContext,
 	historyEngine historyi.Engine,
@@ -144,6 +147,7 @@ func (streamSenderFactory) NewStreamSender(
 			clientShardKey,
 			serverShardKey,
 			config,
+			f.lanePolicyFactory,
 		)
 	} else {
 		sender = NewStreamSender(
