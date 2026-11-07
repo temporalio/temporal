@@ -1034,6 +1034,69 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_SQL() {
 	}
 }
 
+// Test_RemoveSearchAttributes_DualVisibility pins the fix for #12126. Under dual
+// visibility the remove path loops over primary and secondary, but resolved the index
+// name from the handler's (dual) manager rather than the one it was handed — so it
+// rewrote the primary's metadata twice and never touched the secondary's. The call
+// reported success and the attribute reappeared when the secondary was promoted.
+//
+// Both stores are Elasticsearch here so each one takes the same code path and the only
+// thing that differs is the index name. Before the fix, SaveSearchAttributes is called
+// twice with testIndexName1 and the testIndexName2 expectation goes unmet.
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_DualVisibility() {
+	ctx := context.Background()
+
+	mockVisManager1 := manager.NewMockVisibilityManager(s.controller)
+	mockVisManager2 := manager.NewMockVisibilityManager(s.controller)
+	mockManagerSelector := visibility.NewMockmanagerSelector(s.controller)
+	mockDualVisManager := visibility.NewVisibilityManagerDual(
+		mockVisManager1,
+		mockVisManager2,
+		mockManagerSelector,
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+	s.handler.visibilityMgr = mockDualVisManager
+
+	testIndexName1 := testIndexName + "-1"
+	testIndexName2 := testIndexName + "-2"
+	mockVisManager1.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	mockVisManager1.EXPECT().GetIndexName().Return(testIndexName1).AnyTimes()
+	mockVisManager2.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	mockVisManager2.EXPECT().GetIndexName().Return(testIndexName2).AnyTimes()
+
+	saTypeMap := searchattribute.TestEsNameTypeMap()
+	expectedNewCustomSA := maps.Clone(saTypeMap.Custom())
+	delete(expectedNewCustomSA, "CustomKeywordField")
+
+	// One read and one write per store, each against its own index.
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName1, true).
+		Return(saTypeMap, nil).
+		Times(1)
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName2, true).
+		Return(saTypeMap, nil).
+		Times(1)
+	s.mockResource.SearchAttributesManager.EXPECT().
+		SaveSearchAttributes(gomock.Any(), testIndexName1, expectedNewCustomSA).
+		Return(nil).
+		Times(1)
+	s.mockResource.SearchAttributesManager.EXPECT().
+		SaveSearchAttributes(gomock.Any(), testIndexName2, expectedNewCustomSA).
+		Return(nil).
+		Times(1)
+
+	resp, err := s.handler.RemoveSearchAttributes(
+		ctx,
+		&operatorservice.RemoveSearchAttributesRequest{
+			SearchAttributes: []string{"CustomKeywordField"},
+			Namespace:        testNamespace,
+		},
+	)
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
 func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	handler := s.handler
 	ctx := context.Background()
