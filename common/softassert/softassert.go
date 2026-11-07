@@ -43,3 +43,9 @@ func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.T
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
 	logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }
+
+// Unreachable reports a path that must never be reached. The message must be a
+// string literal; dynamic context belongs in tags.
+func Unreachable(logger log.Logger, staticMessage string, tags ...tag.Tag) {
+	Fail(logger, staticMessage, tags...)
+}

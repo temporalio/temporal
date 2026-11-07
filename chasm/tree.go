@@ -940,7 +940,7 @@ func (n *Node) syncSubComponents() error {
 
 		switch field.kind {
 		case fieldKindUnspecified:
-			softassert.Fail(n.logger,
+			softassert.Unreachable(n.logger,
 				"field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
 			// Nothing to sync.
