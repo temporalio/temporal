@@ -990,7 +990,27 @@ var (
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
-	PendingTasksCounter         = NewDimensionlessHistogramDef(
+	TaskThrottleGateAdmitted    = NewCounterDef(
+		"task_throttle_gate_admitted",
+		WithDescription("The number of task releases admitted by the throttle controller gate."),
+	)
+	TaskThrottleGateSuppressed = NewCounterDef(
+		"task_throttle_gate_suppressed",
+		WithDescription("The number of task releases suppressed by the throttle controller gate, i.e. attempts the controller prevented from being wasted."),
+	)
+	TaskThrottleRejections = NewCounterDef(
+		"task_throttle_rejections",
+		WithDescription("The number of throttle rejections fed into the throttle controller, by cause."),
+	)
+	TaskThrottleAdmittedRate = NewGaugeDef(
+		"task_throttle_admitted_rate",
+		WithDescription("The current admitted rate, in task releases per second, for one throttle controller key."),
+	)
+	TaskThrottleKeysTracked = NewGaugeDef(
+		"task_throttle_keys_tracked",
+		WithDescription("The number of keys tracked by the throttle controller."),
+	)
+	PendingTasksCounter = NewDimensionlessHistogramDef(
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
@@ -1676,6 +1696,14 @@ var (
 	NamespaceReplicationCHASMPeerPendingThresholdExceeded = NewCounterDef(
 		"namespace_replication_chasm_peer_pending_threshold_exceeded",
 		WithDescription("Persisted peer retries at or beyond the one-minute pending-age threshold."),
+	)
+	NamespaceReplicationCHASMLocalPendingAge = NewTimerDef(
+		"namespace_replication_chasm_local_pending_age",
+		WithDescription("Age of an unresolved authoritative CHASM local apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMLocalPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_local_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM local retries durably scheduled after the local apply has been pending for at least one minute."),
 	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",

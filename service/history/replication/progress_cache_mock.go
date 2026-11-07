@@ -55,6 +55,30 @@ func (mr *MockProgressCacheMockRecorder) Get(runID, targetClusterID any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockProgressCache)(nil).Get), runID, targetClusterID)
 }
 
+// Start mocks base method.
+func (m *MockProgressCache) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockProgressCacheMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockProgressCache)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockProgressCache) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockProgressCacheMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockProgressCache)(nil).Stop))
+}
+
 // Update mocks base method.
 func (m *MockProgressCache) Update(runID string, targetClusterID int32, versionedTransitions []*persistence.VersionedTransition, eventVersionHistoryItems []*history.VersionHistoryItem) error {
 	m.ctrl.T.Helper()
