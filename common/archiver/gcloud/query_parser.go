@@ -5,9 +5,12 @@ package gcloud
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -20,6 +23,7 @@ type (
 	queryParser struct{}
 
 	parsedQuery struct {
+		status          *enumspb.WorkflowExecutionStatus
 		workflowID      *string
 		workflowType    *string
 		startTime       time.Time
@@ -38,6 +42,7 @@ const (
 	CloseTime       = "CloseTime"
 	StartTime       = "StartTime"
 	SearchPrecision = "SearchPrecision"
+	ExecutionStatus = "ExecutionStatus"
 )
 
 // Precision specific values
@@ -143,6 +148,23 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return nil
 		}
 		parsedQuery.runID = new(val)
+	case ExecutionStatus:
+		val, err := sqlquery.ExtractStringValue(valStr)
+		if err != nil {
+			val = valStr
+		}
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
+		}
+		status, err := convertStatusStr(val)
+		if err != nil {
+			return err
+		}
+		if parsedQuery.status != nil && *parsedQuery.status != status {
+			parsedQuery.emptyResult = true
+			return nil
+		}
+		parsedQuery.status = &status
 	case CloseTime:
 		closeTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
@@ -200,4 +222,24 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	}
 
 	return nil
+}
+
+func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
+	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
+	switch statusStr {
+	case "completed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
+	case "failed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
+	case "canceled", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "terminated", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
+	case "continuedasnew", "continued_as_new", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
+	case "timedout", "timed_out", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
+	default:
+		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
+	}
 }
