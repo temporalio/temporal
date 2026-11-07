@@ -67,6 +67,8 @@ var Module = fx.Provide(
 		Target: replicationStreamLowPrioritySchedulerProvider,
 	},
 	executableTaskConverterProvider,
+	NewStreamSenderFactory,
+	NewStreamReceiverFactory,
 	streamReceiverMonitorProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
@@ -324,10 +326,12 @@ func executableTaskConverterProvider(
 func streamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
+	receiverFactory StreamReceiverFactory,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
 		taskConverter,
+		receiverFactory,
 		processToolBox.Config.EnableReplicationStream(),
 	)
 }
