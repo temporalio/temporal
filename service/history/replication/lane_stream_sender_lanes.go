@@ -370,8 +370,8 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 			AckedTime:   lane.ackedTime,
 			Retiring:    lane.retiring,
 			LastRefused: s.laneRefusedAt[lane.logicalKey],
-			PolicyState: slices.Clone(lane.policyState),
 			Paused:      lane.paused,
+			PolicyState: slices.Clone(lane.policyState),
 		})
 	}
 	s.laneStateMu.Unlock()
