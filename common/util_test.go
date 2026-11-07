@@ -669,9 +669,11 @@ func TestGrantEagerDispatchWithoutClient(t *testing.T) {
 func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testing.T) {
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		name    string
-		state   *commonpb.TimeSkippingStatePropagation
-		skipped time.Duration
+		name            string
+		state           *commonpb.TimeSkippingStatePropagation
+		skipped         time.Duration
+		cronSchedule    string
+		wantCronBackoff time.Duration
 	}{
 		{name: "NoPropagation"},
 		{
@@ -679,12 +681,21 @@ func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testin
 			state:   &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)},
 			skipped: 2 * time.Hour,
 		},
+		{name: "CronNoPropagation", cronSchedule: "0 13 * * *", wantCronBackoff: time.Hour},
+		{
+			name:            "CronInheritedSkippedDuration",
+			state:           &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)},
+			skipped:         2 * time.Hour,
+			cronSchedule:    "0 13 * * *",
+			wantCronBackoff: 23 * time.Hour,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			startRequest := &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:                    uuid.NewString(),
 				WorkflowId:                   uuid.NewString(),
 				WorkflowExecutionTimeout:     durationpb.New(time.Hour),
+				CronSchedule:                 tc.cronSchedule,
 				TimeSkippingStatePropagation: tc.state,
 			}
 
@@ -692,6 +703,7 @@ func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testin
 
 			require.Equal(t, tc.state, historyRequest.GetTimeSkippingStatePropagation())
 			require.Equal(t, now.Add(tc.skipped).Add(time.Hour), historyRequest.GetWorkflowExecutionExpirationTime().AsTime())
+			require.Equal(t, tc.wantCronBackoff, historyRequest.GetFirstWorkflowTaskBackoff().AsDuration())
 		})
 	}
 }
