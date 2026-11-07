@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -354,14 +355,17 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================
 
-// isWorkflowSkippable checks if current workflow can skip time,
-// if checks if time skipping is enabled, if the workflow has in-flight work,
-// and if the workflow is at the correct state and status to skip time.
-// And if there is a time point to skip to is not the scope of this method.
-func (ms *MutableStateImpl) isWorkflowSkippable() bool {
+type workflowSkipEligibility struct {
+	eligible            bool
+	hsmNexusTargetTimes []time.Time
+}
+
+// evaluateWorkflowSkipEligibility checks whether current workflow state is safe to skip and
+// captures Nexus deadlines that may have been created before HSM tasks are materialized.
+func (ms *MutableStateImpl) evaluateWorkflowSkipEligibility() workflowSkipEligibility {
 	// (1) gate by time skipping configuration; runs for every workflow, so it is not logged
 	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() {
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	noSkippingReason := ""
@@ -374,24 +378,24 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	// The feature flag may be disabled after a workflow enabled time skipping.
 	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
 		noSkippingReason = "time skipping feature flag is disabled"
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	// (2) gate by workflow state and status
 	if !ms.IsWorkflowExecutionRunning() {
 		noSkippingReason = "workflow is not running"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if ms.IsWorkflowExecutionStatusPaused() {
 		noSkippingReason = "workflow is paused"
-		return false
+		return workflowSkipEligibility{}
 	}
 
 	// (3) gate by inflight work
 	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
 	if ms.HasPendingWorkflowTask() {
 		noSkippingReason = "has pending workflow task"
-		return false
+		return workflowSkipEligibility{}
 	}
 	// A pending activity blocks time skipping unless it has failed and is still
 	// waiting out its retry backoff (next attempt strictly in the future) — that one
@@ -404,43 +408,52 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 			continue
 		}
 		noSkippingReason = "has pending activity"
-		return false
+		return workflowSkipEligibility{}
 	}
-	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+	hsmNexusTargetTimes, nexusOperationsSkippable, err := ms.hsmNexusOperationSkipTargets(ms.Now())
+	if err != nil {
+		ms.logger.Debug("workflow time skipping skipped",
+			tag.String("reason", "failed to inspect HSM Nexus operations"),
+			tag.Error(err))
+		return workflowSkipEligibility{}
+	}
+	if !nexusOperationsSkippable {
 		noSkippingReason = "has pending nexus operations"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if ms.ChasmEnabled() {
 		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
 		if err != nil {
 			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
 			ms.logger.Error("failed to check CHASM workflow time skipping eligibility", tag.Error(err))
-			return false
+			return workflowSkipEligibility{}
 		}
 		if !wf.IsExecutionSkippable(chasmCtx) {
 			noSkippingReason = "has pending CHASM nexus operations"
-			return false
+			return workflowSkipEligibility{}
 		}
 	}
 	if len(ms.GetPendingChildExecutionInfos()) > 0 {
 		noSkippingReason = "has pending child execution"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if len(ms.GetPendingSignalExternalInfos()) > 0 {
 		noSkippingReason = "has pending signal external"
-		return false
+		return workflowSkipEligibility{}
 	}
 	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
 		noSkippingReason = "has pending request cancel external"
-		return false
+		return workflowSkipEligibility{}
 	}
-	return true
+	return workflowSkipEligibility{eligible: true, hsmNexusTargetTimes: hsmNexusTargetTimes}
 }
 
 // findNextSkipTarget finds the earliest future target time among pending timers, activity retries,
 // workflow backoff, and execution timeouts, then applies the fast-forward bound. A pending task due
-// now or earlier blocks time skipping until it is processed. Call only after isWorkflowSkippable returns true.
-func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
+// now or earlier blocks time skipping until it is processed. Call only after eligibility succeeds.
+//
+//nolint:revive // Keep target classes in one ordered scan so due work short-circuits consistently.
+func (ms *MutableStateImpl) findNextSkipTarget(hsmNexusTargetTimes ...time.Time) *chasm.TimeSkippingTransition {
 	transition := chasm.NewTimeSkippingTransition(ms.Now())
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerInfo.ExpiryTime.AsTime(), "user timer") {
@@ -457,6 +470,9 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		if ms.trackFutureOrReportDueTaskForWorkflow(transition, ai.GetScheduledTime().AsTime(), "activity retry") {
 			return nil
 		}
+	}
+	if ms.trackHSMTimerTargetsForWorkflow(transition, hsmNexusTargetTimes) {
+		return nil
 	}
 	if !ms.HadOrHasWorkflowTask() {
 		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
@@ -502,6 +518,42 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 	return nil
 }
 
+func (ms *MutableStateImpl) trackHSMTimerTargetsForWorkflow(
+	transition *chasm.TimeSkippingTransition,
+	hsmNexusTargetTimes []time.Time,
+) (hasDueTask bool) {
+	for _, timerGroup := range ms.GetExecutionInfo().GetStateMachineTimers() {
+		if len(timerGroup.GetInfos()) == 0 {
+			continue
+		}
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerGroup.GetDeadline().AsTime(), "state machine timer") {
+			return true
+		}
+	}
+	for _, targetTime := range hsmNexusTargetTimes {
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, targetTime, "HSM Nexus timer") {
+			return true
+		}
+	}
+	return false
+}
+
+func (ms *MutableStateImpl) hsmNexusOperationSkipTargets(now time.Time) ([]time.Time, bool, error) {
+	var targetTimes []time.Time
+	for _, node := range nexusoperations.MachineCollection(ms.HSM()).List() {
+		operation, err := hsm.MachineData[nexusoperations.Operation](node)
+		if err != nil {
+			return nil, false, err
+		}
+		operationTargetTimes, skippable, err := operation.TimeSkippingTargets(node, now)
+		if err != nil || !skippable {
+			return nil, false, err
+		}
+		targetTimes = append(targetTimes, operationTargetTimes...)
+	}
+	return targetTimes, true, nil
+}
+
 // trackFutureOrReportDueTaskForWorkflow reports whether a due task blocks skipping and tracks a
 // future task time as a skip target.
 func (ms *MutableStateImpl) trackFutureOrReportDueTaskForWorkflow(
@@ -529,11 +581,12 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
-		if !ms.isWorkflowSkippable() {
+		eligibility := ms.evaluateWorkflowSkipEligibility()
+		if !eligibility.eligible {
 			return false
 		}
 		// 2. find the next skip target; if there is none, time skipping is not needed
-		transition := ms.findNextSkipTarget()
+		transition := ms.findNextSkipTarget(eligibility.hsmNexusTargetTimes...)
 		if !transition.IsValid() {
 			return false
 		}
@@ -693,15 +746,17 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 	preAccumulatedSkipDuration time.Duration,
 ) {
-	if ms.IsWorkflow() {
-		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
-		return
-	}
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
 		return
 	}
 	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
+		return
+	}
+	if ms.IsWorkflow() {
+		// TaskRefresher runs after this hook. Reset the persisted status first so its normal
+		// state-machine timer path emits the earliest surviving group with the replicated offset.
+		refreshStateMachineTimerTasksForTimeSkipping(ms)
 		return
 	}
 	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
