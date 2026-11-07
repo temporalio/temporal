@@ -271,7 +271,7 @@ func (s *laneStreamSenderSuite) TestRetirementSendDoesNotBlockAckProcessing() {
 	s.streamSender.lanePolicy = policy
 	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, nil)
 	policy.EXPECT().LaneRetired("a")
-	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(1000))
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(1000)).Times(2)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any())
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(gomock.Any(), gomock.Any()).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
