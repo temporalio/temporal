@@ -197,6 +197,11 @@ func (h *CompletionHandler) Handle(
 		// If the operation has not started yet, this completion arrived before the start response and
 		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
 		// schedule-to-start in that case, so we emit it here.
+		// A retry may have started a different operation; reject completions for a token other than the recorded one.
+		if operation.OperationToken != "" && operationToken != "" && operation.OperationToken != operationToken {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
 		fabricatedStart := TransitionStarted.Possible(operation)
 		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
