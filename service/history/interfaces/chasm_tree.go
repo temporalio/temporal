@@ -50,6 +50,13 @@ type ChasmTree interface {
 		ctx context.Context,
 		task *tasks.ChasmTask,
 	) (isTaskInTree bool, isValidByComponent bool, err error)
+	IsSideEffectTaskInTree(context.Context, *tasks.ChasmTask) (bool, error)
+	ValidateStandbySideEffectTask(
+		context.Context,
+		chasm.ExecutionKey,
+		*tasks.ChasmTask,
+		func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+	) (bool, error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)
