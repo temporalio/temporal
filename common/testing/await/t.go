@@ -11,9 +11,7 @@ import (
 
 type attemptFailed struct{}
 
-// T is passed to the condition callback. It intercepts assertion failures
-// so the polling loop can retry.
-//
+// T is passed to the condition callback and intercepts assertion failures.
 // Only use T for assertions (require.*, assert.*, t.Errorf, t.Fatal, t.FailNow).
 type T struct {
 	tb     testing.TB
