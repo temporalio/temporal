@@ -34,6 +34,20 @@ func TestLoadTestDataUsesRuntimeShardingUnits(t *testing.T) {
 	}, got)
 }
 
+func TestAggregateRunsUsesMedianRunTime(t *testing.T) {
+	got := aggregateRuns(map[string][]float64{
+		"TestStandalone":    {7, 9, 8},
+		"TestSuite/TestOne": {10, 12, 200, 11, 13},
+		"TestSuite/TestTwo": {4, 6},
+	})
+
+	require.Equal(t, map[string]float64{
+		"TestStandalone":    8,
+		"TestSuite/TestOne": 12,
+		"TestSuite/TestTwo": 5,
+	}, got)
+}
+
 func TestLoadTestDataCombinesArtifactsWithinRun(t *testing.T) {
 	dir := t.TempDir()
 	writeJUnitReport(t, filepath.Join(dir, "run-1", "database-job-1", "results.xml"), `<testsuite name="functional">
