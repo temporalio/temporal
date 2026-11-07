@@ -78,8 +78,12 @@ const (
 	MigrationHandoffFixes = 13
 	// update the desired time for a buffered start when refresh discovers the prior action completed
 	RefreshCompletionDesiredTime = 14
+	// Bound catch-up work per workflow task: walk at most MaxCatchupMatchesPerTask matches,
+	// then continue-as-new to commit progress. Stop walking a range once no further match
+	// in it can be started (Skip with a start already buffered, or a full buffer).
+	ChunkedCatchup = 15
 	// LatestSchedulerWorkflowVersion is the newest workflow behavior this binary can activate.
-	LatestSchedulerWorkflowVersion SchedulerWorkflowVersion = RefreshCompletionDesiredTime
+	LatestSchedulerWorkflowVersion SchedulerWorkflowVersion = ChunkedCatchup
 )
 
 const (
@@ -144,6 +148,9 @@ type (
 		// versionOverride reads worker.schedulerV1VersionOverride to select a newer supported
 		// V1 scheduler version while preserving the recorded version as a monotonic floor.
 		versionOverride func() int
+		// catchupMatchesPerTask reads worker.schedulerV1CatchupMatchesPerTask; negative means
+		// CurrentTweakablePolicies.MaxCatchupMatchesPerTask.
+		catchupMatchesPerTask func() int
 
 		// State produced by updateTweakables must remain in TweakablePolicies. MutableSideEffect
 		// callbacks do not run during replay, so scheduler fields are not restored from history.
@@ -187,6 +194,7 @@ type (
 		ReuseTimer                        bool          // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int           // Size of next time cache (v2)
 		SpecFieldLengthLimit              int           // item limit per spec field on the ScheduleInfo memo
+		MaxCatchupMatchesPerTask          int           // matches walked per workflow task before continue-as-new; 0 = unlimited (ChunkedCatchup)
 
 		// Dynamic-config-derived values are captured in the "tweakables" MutableSideEffect. Replay
 		// reads the recorded values, rather than querying the current dynamic-config values.
@@ -253,6 +261,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
+		MaxCatchupMatchesPerTask:          5000,
 		// TODO: bump to MigrationHandoffFixes (13) in a follow-up deploy to
 		// activate both v13 fixes at once.
 		Version: TriggerImmediatelyTimestamp,
@@ -273,6 +282,7 @@ type schedulerDynamicConfig struct {
 	migrateWithRunningWorkflows func() bool
 	versionCeiling              func() int
 	versionOverride             func() int
+	catchupMatchesPerTask       func() int
 }
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
@@ -297,6 +307,9 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 	if config.versionOverride == nil {
 		config.versionOverride = func() int { return -1 }
 	}
+	if config.catchupMatchesPerTask == nil {
+		config.catchupMatchesPerTask = func() int { return -1 }
+	}
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -311,6 +324,7 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		migrateWithRunningWorkflows: config.migrateWithRunningWorkflows,
 		versionCeiling:              config.versionCeiling,
 		versionOverride:             config.versionOverride,
+		catchupMatchesPerTask:       config.catchupMatchesPerTask,
 	}
 	return scheduler.run()
 }
@@ -369,21 +383,33 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextWakeup, lastAction := s.processTimeRange(
+		r := s.walkTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
 			false,
 			nil,
+			s.catchupMatchLimit(),
 		)
-		if s.hasMinVersion(UseLastAction) {
-			s.State.LastProcessedTime = timestamppb.New(lastAction)
-		} else {
+		nextWakeup := r.next
+		switch {
+		case s.hasMinVersion(ChunkedCatchup):
+			// Resume after the last match considered, including ones not started.
+			s.State.LastProcessedTime = timestamppb.New(util.MaxTime(t1, r.lastWalked))
+		case s.hasMinVersion(UseLastAction):
+			s.State.LastProcessedTime = timestamppb.New(r.lastAction)
+		default:
 			s.State.LastProcessedTime = timestamppb.New(t2)
 		}
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
-		if scheduleChanged {
+		if r.more {
+			// This run continues-as-new below without sleeping, which is where signals are
+			// received: receive the ones that have arrived now, so they aren't dropped.
+			s.receiveSignalsNoWait()
+		}
+		// While catching up, the next wakeup is irrelevant: this run continues-as-new below.
+		if scheduleChanged && !r.more {
 			// need to calculate sleep again
 			nextWakeup, _ = s.processTimeRange(
 				s.State.LastProcessedTime.AsTime(),
@@ -436,6 +462,16 @@ func (s *scheduler) run() error {
 			s.metrics.WithTags(map[string]string{
 				metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
 			}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
+		}
+
+		if r.more {
+			// Commit this chunk and resume the catch-up in a fresh run. Don't start from the
+			// buffer or backfills yet: the buffer has to build up across chunks as it would in
+			// a single walk, so that it fills, and the walk stops, at the same match. Starting
+			// from it here would empty it each chunk, and later chunks would start what the
+			// single walk dropped.
+			s.updateMemoAndSearchAttributes()
+			break
 		}
 
 		// process backfills if we have any too
@@ -787,10 +823,43 @@ func (s *scheduler) processTimeRange(
 	manual bool,
 	limit *int,
 ) (time.Time, time.Time) {
+	r := s.walkTimeRange(start, end, overlapPolicy, manual, limit, 0)
+	return r.next, r.lastAction
+}
+
+// timeRangeResult is the outcome of walkTimeRange.
+type timeRangeResult struct {
+	// next is the first match not processed: after end, or where a chunk stopped.
+	next       time.Time
+	lastAction time.Time
+	// lastWalked is the last match considered, whether or not it was started.
+	lastWalked time.Time
+	// more is set when maxMatches stopped the walk before end.
+	more bool
+}
+
+// catchupMatchLimit is the maxMatches for the automatic (non-backfill) walk.
+func (s *scheduler) catchupMatchLimit() int {
+	if !s.hasMinVersion(ChunkedCatchup) {
+		return 0
+	}
+	return s.tweakables.MaxCatchupMatchesPerTask
+}
+
+// walkTimeRange is processTimeRange that stops after maxMatches matches (0 = no limit).
+// Unlike limit, which counts starts, maxMatches counts every match, including ones
+// outside the catchup window.
+func (s *scheduler) walkTimeRange(
+	start, end time.Time,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	manual bool,
+	limit *int,
+	maxMatches int,
+) timeRangeResult {
 	s.logger.Debug("processTimeRange", "start", start, "end", end, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return time.Time{}, end
+		return timeRangeResult{lastAction: end, lastWalked: end}
 	}
 
 	catchupWindow := s.getCatchupWindow()
@@ -804,43 +873,48 @@ func (s *scheduler) processTimeRange(
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
 			// use end as last action time so that we don't reprocess time spent paused
-			return s.getNextTime(end).Next, end
+			return timeRangeResult{next: s.getNextTime(end).Next, lastAction: end, lastWalked: end}
 		}
 	}
 
+	shortcuts := !manual && s.hasMinVersion(ChunkedCatchup)
+	jitter := timestamp.DurationValue(s.Schedule.GetSpec().GetJitter())
+	skipPolicy := s.resolveOverlapPolicy(overlapPolicy) == enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
+	// Set once no later match in this range can be started.
+	var stopReason string
 	lastAction := start
+	var lastWalked time.Time
+	walked := 0
 	recordedGenerateLatency := false
 	var next GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
-		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
+		if stopReason != "" {
+			// next and every later match in the range would be skipped or dropped. Skip the
+			// due ones; for an unjittered spec, that's all of them.
+			var noneDue bool
+			next, lastWalked, noneDue = s.skipDueBeforeJitter(stopReason, start, end, jitter, next, lastWalked)
+			// The walk from end-jitter can't be shortened further.
+			stopReason, shortcuts = "", false
+			if noneDue {
+				break
+			}
+		}
+		if maxMatches > 0 && walked >= maxMatches {
+			s.recordChunkedCatchup(start, end, lastWalked, walked)
+			// next is the first match of the following chunk.
+			return timeRangeResult{next: next.Next, lastAction: lastAction, lastWalked: lastWalked, more: true}
+		}
+		walked++
+		lastWalked = next.Next
+		if s.matchNotStarted(next.Next, end, manual, catchupWindow, &recordedGenerateLatency) {
 			continue
 		}
-		if !manual && s.Info.UpdateTime.AsTime().After(next.Next) {
-			// We're reprocessing since the most recent event after an update. Discard actions before
-			// the update time (which was just set to "now"). This doesn't have to be guarded with
-			// hasMinVersion because this condition couldn't happen in previous versions.
-			continue
-		}
-		// Record generate latency only for the first action in the batch to
-		// avoid inflating the metric when catching up over a large time range.
-		if !manual && !recordedGenerateLatency {
-			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
-			recordedGenerateLatency = true
-		}
-		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
-			// Action's nominal time was already past the catchup window when
-			// the scheduler woke up. It was never buffered for execution.
-			// action_running is not included: the action was never a candidate
-			// for execution, so whether something is running is irrelevant.
-			s.metrics.WithTags(map[string]string{
-				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
-			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
-			s.Info.MissedCatchupWindow++
-			continue
-		}
+		buffered := len(s.State.BufferedStarts)
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 		lastAction = next.Next
+		if shortcuts {
+			stopReason = s.catchupStopReason(skipPolicy, buffered)
+		}
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -848,7 +922,112 @@ func (s *scheduler) processTimeRange(
 			}
 		}
 	}
-	return next.Next, lastAction
+	return timeRangeResult{next: next.Next, lastAction: lastAction, lastWalked: lastWalked}
+}
+
+// skipDueBeforeJitter skips, from next on, every match whose nominal time is at or before
+// end-jitter, and returns the first match after them, the new lastWalked, and whether that
+// match is past end. Without jitter, that's every match up to end.
+//
+// With jitter, jumping to end could lose a match whose nominal time is at or before end but
+// whose jittered time isn't, because next-match lookups go by nominal time. A match's jitter
+// is less than the spec's, so every match with a nominal time at or before end-jitter is
+// due. The caller walks the rest as before: they're skipped or dropped as they would have
+// been, and one that isn't due yet stays ahead.
+func (s *scheduler) skipDueBeforeJitter(
+	reason string,
+	start, end time.Time,
+	jitter time.Duration,
+	next GetNextTimeResult,
+	lastWalked time.Time,
+) (GetNextTimeResult, time.Time, bool) {
+	skipTo := end.Add(-jitter)
+	if skipTo.Before(next.Nominal) {
+		return next, lastWalked, false
+	}
+	s.recordSkippedRange(reason, start, next.Next, skipTo)
+	next = s.getNextTime(skipTo)
+	return next, skipTo, next.Next.IsZero() || next.Next.After(end)
+}
+
+// matchNotStarted applies the checks that keep a match from being passed to addStart, and
+// reports whether it was kept out. It records the generate latency for the first match
+// that reaches the catchup-window check.
+func (s *scheduler) matchNotStarted(
+	next, end time.Time,
+	manual bool,
+	catchupWindow time.Duration,
+	recordedGenerateLatency *bool,
+) bool {
+	if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
+		return true
+	}
+	if !manual && s.Info.UpdateTime.AsTime().After(next) {
+		// We're reprocessing since the most recent event after an update. Discard actions before
+		// the update time (which was just set to "now"). This doesn't have to be guarded with
+		// hasMinVersion because this condition couldn't happen in previous versions.
+		return true
+	}
+	// Record generate latency only for the first action in the batch to
+	// avoid inflating the metric when catching up over a large time range.
+	if !manual && !*recordedGenerateLatency {
+		s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next))
+		*recordedGenerateLatency = true
+	}
+	if !manual && end.Sub(next) > catchupWindow {
+		s.logger.Warn("Schedule missed catchup window", "now", end, "time", next)
+		// Action's nominal time was already past the catchup window when
+		// the scheduler woke up. It was never buffered for execution.
+		// action_running is not included: the action was never a candidate
+		// for execution, so whether something is running is irrelevant.
+		s.metrics.WithTags(map[string]string{
+			metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
+		}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
+		s.Info.MissedCatchupWindow++
+		return true
+	}
+	return false
+}
+
+// catchupStopReason reports why no later match in the range can be started, after a match
+// was passed to addStart with bufferedBefore starts already buffered, or "" if one can.
+// Under Skip, ProcessBuffer starts at most one of the starts buffered from a range and
+// skips the rest; with a full buffer, addStart drops them. Their OverlapSkipped/BufferDropped
+// counts are not recorded.
+func (s *scheduler) catchupStopReason(skipPolicy bool, bufferedBefore int) string {
+	switch {
+	case skipPolicy && len(s.State.BufferedStarts) > bufferedBefore:
+		return metrics.ScheduleCatchupSkipReasonSkipPolicy
+	case len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize:
+		return metrics.ScheduleCatchupSkipReasonBufferFull
+	default:
+		return ""
+	}
+}
+
+// skippedRangeWarnThreshold is the skipped span from which a skip is a warning and is
+// recorded in schedule_catchup_range. Shorter skips are routine for frequent schedules
+// (e.g. a wakeup a few seconds late), so they log at info.
+const skippedRangeWarnThreshold = time.Minute
+
+const skippedRangeLogMessage = "Schedule skipped rest of catch-up range: no later match could start"
+
+func (s *scheduler) recordSkippedRange(reason string, start, from, end time.Time) {
+	s.metrics.WithTags(map[string]string{metrics.ScheduleMissedReasonTag: reason}).
+		Counter(metrics.ScheduleCatchupRangeSkipped.Name()).Inc(1)
+	logFn := s.logger.Info
+	if end.Sub(from) >= skippedRangeWarnThreshold {
+		s.metrics.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
+		logFn = s.logger.Warn
+	}
+	logFn(skippedRangeLogMessage, "reason", reason, "range-start", start, "skipped-from", from, "to", end)
+}
+
+func (s *scheduler) recordChunkedCatchup(start, end, lastWalked time.Time, walked int) {
+	s.metrics.Counter(metrics.ScheduleCatchupChunked.Name()).Inc(1)
+	s.metrics.Timer(metrics.ScheduleCatchupRange.Name()).Record(end.Sub(start))
+	s.logger.Warn("Schedule catch-up hit the per-task match limit; continuing in a new run",
+		"matches", walked, "range-start", start, "resume-after", lastWalked, "to", end)
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -876,9 +1055,8 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextWakeup time.Time) {
-	sel := workflow.NewSelector(s.ctx)
-
+// addSignalReceives adds a receive for each signal the scheduler handles.
+func (s *scheduler) addSignalReceives(sel workflow.Selector) {
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
 	sel.AddReceive(upCh, func(ch workflow.ReceiveChannel, _ bool) {
 		ch.Receive(s.ctx, &s.pendingUpdate)
@@ -897,6 +1075,29 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 
 	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrateToChasm)
 	sel.AddReceive(migrateCh, s.handleMigrateSignal)
+}
+
+// receiveSignalsNoWait receives and applies every signal that has already arrived, without
+// blocking. Signals are otherwise only received in sleep, so a run that continues-as-new
+// without sleeping, as a chunked catch-up does, would drop them.
+func (s *scheduler) receiveSignalsNoWait() {
+	for {
+		received := true
+		sel := workflow.NewSelector(s.ctx)
+		s.addSignalReceives(sel)
+		sel.AddDefault(func() { received = false })
+		sel.Select(s.ctx)
+		if !received {
+			return
+		}
+		// One at a time: a second update or patch would overwrite the pending one.
+		s.processSignals()
+	}
+}
+
+func (s *scheduler) sleep(nextWakeup time.Time) {
+	sel := workflow.NewSelector(s.ctx)
+	s.addSignalReceives(sel)
 
 	if s.hasMoreAllowAllBackfills() {
 		// if we have more allow-all backfills to do, do a short sleep and continue
@@ -1446,6 +1647,13 @@ func (s *scheduler) updateTweakables() {
 		if p.Version >= TriggerImmediatelyTimestamp {
 			p.EnableCHASMMigration = s.enableCHASMMigration()
 			p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
+		}
+		if p.Version < ChunkedCatchup {
+			// Unused below ChunkedCatchup; zero keeps older runs' recorded tweakables
+			// unchanged, so this field doesn't add a marker to every running schedule.
+			p.MaxCatchupMatchesPerTask = 0
+		} else if v := s.catchupMatchesPerTask(); v >= 0 {
+			p.MaxCatchupMatchesPerTask = v
 		}
 		return p
 	}
