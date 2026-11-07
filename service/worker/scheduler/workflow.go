@@ -464,6 +464,16 @@ func (s *scheduler) run() error {
 			}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
 		}
 
+		if r.more {
+			// Commit this chunk and resume the catch-up in a fresh run. Don't start from the
+			// buffer or backfills yet: the buffer has to build up across chunks as it would in
+			// a single walk, so that it fills, and the walk stops, at the same match. Starting
+			// from it here would empty it each chunk, and later chunks would start what the
+			// single walk dropped.
+			s.updateMemoAndSearchAttributes()
+			break
+		}
+
 		// process backfills if we have any too
 		s.processBackfills()
 		// try starting workflows in the buffer
@@ -471,11 +481,6 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
-
-		if r.more {
-			// Commit this chunk and resume the catch-up in a fresh run.
-			break
-		}
 
 		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
 		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {

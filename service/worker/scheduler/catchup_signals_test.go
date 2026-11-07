@@ -67,8 +67,23 @@ func TestChunkedCatchupSignals(t *testing.T) {
 			patchSignal(&schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{}}),
 			patchSignal(&schedulepb.SchedulePatch{Pause: "p"}),
 		)
-		require.Equal(t, []string{"myid-" + baseStartTime.Format(time.RFC3339)}, r.startedIDs, "the trigger started in this run")
 		require.True(t, r.next.Schedule.State.Paused)
+		// Nothing starts until the catch-up finishes: the trigger waits in the buffer.
+		require.Empty(t, r.startedIDs)
+		require.Equal(t, []time.Time{baseStartTime}, bufferedNominalTimes(r.next))
+
+		// Paused, the next run skips the rest of the range, finishing the catch-up, and
+		// starts the trigger (manual starts run while paused). It's unpaused a minute later
+		// only so that it wakes up and continues-as-new: paused, it would sleep until the
+		// harness's long-poll stub times out.
+		r2 := runCatchupRepro(t, catchupCase{chunked: chunk, args: r.next, beforeRun: func(env *testsuite.TestWorkflowEnvironment) {
+			env.RegisterDelayedCallback(func() {
+				env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "u"})
+			}, time.Minute)
+		}})
+		require.NoError(t, r2.err)
+		require.Equal(t, []string{"myid-" + baseStartTime.Format(time.RFC3339)}, r2.startedIDs)
+		require.Empty(t, r2.next.State.BufferedStarts)
 	})
 
 	t.Run("update", func(t *testing.T) {
