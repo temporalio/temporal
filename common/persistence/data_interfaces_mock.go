@@ -132,6 +132,21 @@ func (mr *MockShardManagerMockRecorder) GetOrCreateShard(ctx, request any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardManager)(nil).GetOrCreateShard), ctx, request)
 }
 
+// GetShard mocks base method.
+func (m *MockShardManager) GetShard(ctx context.Context, request *GetShardRequest) (*GetShardResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShard", ctx, request)
+	ret0, _ := ret[0].(*GetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockShardManagerMockRecorder) GetShard(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockShardManager)(nil).GetShard), ctx, request)
+}
+
 // UpdateShard mocks base method.
 func (m *MockShardManager) UpdateShard(ctx context.Context, request *UpdateShardRequest) error {
 	m.ctrl.T.Helper()

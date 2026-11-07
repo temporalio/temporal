@@ -239,6 +239,18 @@ func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(
 	return response, err
 }
 
+func (p *shardRateLimitedPersistenceClient) GetShard(
+	ctx context.Context,
+	request *GetShardRequest,
+) (*GetShardResponse, error) {
+	if err := allow(ctx, "GetShard", request.ShardID, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return nil, err
+	}
+
+	response, err := p.persistence.GetShard(ctx, request)
+	return response, err
+}
+
 func (p *shardRateLimitedPersistenceClient) UpdateShard(
 	ctx context.Context,
 	request *UpdateShardRequest,

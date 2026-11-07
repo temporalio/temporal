@@ -4,6 +4,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -37,6 +38,9 @@ func (m *shardManagerImpl) GetOrCreateShard(
 	ctx context.Context,
 	request *GetOrCreateShardRequest,
 ) (*GetOrCreateShardResponse, error) {
+	if request.LifecycleContext == nil {
+		return nil, serviceerror.NewInvalidArgument("GetOrCreateShard: LifecycleContext is required")
+	}
 	createShardInfo := func() (int64, *commonpb.DataBlob, error) {
 		shardInfo := request.InitialShardInfo
 		if shardInfo == nil {
@@ -63,6 +67,23 @@ func (m *shardManagerImpl) GetOrCreateShard(
 		return nil, err
 	}
 	return &GetOrCreateShardResponse{
+		ShardInfo: shardInfo,
+	}, nil
+}
+
+func (m *shardManagerImpl) GetShard(
+	ctx context.Context,
+	request *GetShardRequest,
+) (*GetShardResponse, error) {
+	internalResp, err := m.shardStore.GetShard(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &GetShardResponse{
 		ShardInfo: shardInfo,
 	}, nil
 }
