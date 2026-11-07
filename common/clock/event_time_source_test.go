@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 )
 
@@ -235,5 +236,28 @@ func TestEventTimeSource_NewTimerWithChannelAndReset(t *testing.T) {
 		assert.Equal(t, expectedFireTime, result)
 	default:
 		t.Error("should have fired")
+	}
+}
+
+func TestEventTimeSourceNewTimerResetUnreadTick(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewEventTimeSource()
+	ch, timer := source.NewTimer(time.Second)
+	source.Advance(time.Second)
+
+	require.False(t, timer.Reset(time.Second))
+	select {
+	case <-ch:
+		t.Fatal("reset left an unread tick from the previous expiration")
+	default:
+	}
+
+	source.Advance(time.Second)
+	select {
+	case got := <-ch:
+		require.Equal(t, source.Now(), got)
+	default:
+		t.Fatal("reset timer did not fire")
 	}
 }
