@@ -463,10 +463,13 @@ func (x *NotPredicateAttributes) GetPredicate() *Predicate {
 }
 
 type NamespaceIdPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceIds  []string               `protobuf:"bytes,1,rep,name=namespace_ids,json=namespaceIds,proto3" json:"namespace_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceIds []string               `protobuf:"bytes,1,rep,name=namespace_ids,json=namespaceIds,proto3" json:"namespace_ids,omitempty"`
+	// Indexes into QueueState.namespace_id_table. The effective namespace set is the union of
+	// namespace_ids and the resolved indexes.
+	NamespaceIdIndexes []int32 `protobuf:"varint,2,rep,packed,name=namespace_id_indexes,json=namespaceIdIndexes,proto3" json:"namespace_id_indexes,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NamespaceIdPredicateAttributes) Reset() {
@@ -502,6 +505,13 @@ func (*NamespaceIdPredicateAttributes) Descriptor() ([]byte, []int) {
 func (x *NamespaceIdPredicateAttributes) GetNamespaceIds() []string {
 	if x != nil {
 		return x.NamespaceIds
+	}
+	return nil
+}
+
+func (x *NamespaceIdPredicateAttributes) GetNamespaceIdIndexes() []int32 {
+	if x != nil {
+		return x.NamespaceIdIndexes
 	}
 	return nil
 }
@@ -777,9 +787,10 @@ const file_temporal_server_api_persistence_v1_predicates_proto_rawDesc = "" +
 	"predicates\x18\x01 \x03(\v2-.temporal.server.api.persistence.v1.PredicateR\n" +
 	"predicates\"e\n" +
 	"\x16NotPredicateAttributes\x12K\n" +
-	"\tpredicate\x18\x01 \x01(\v2-.temporal.server.api.persistence.v1.PredicateR\tpredicate\"E\n" +
+	"\tpredicate\x18\x01 \x01(\v2-.temporal.server.api.persistence.v1.PredicateR\tpredicate\"w\n" +
 	"\x1eNamespaceIdPredicateAttributes\x12#\n" +
-	"\rnamespace_ids\x18\x01 \x03(\tR\fnamespaceIds\"d\n" +
+	"\rnamespace_ids\x18\x01 \x03(\tR\fnamespaceIds\x120\n" +
+	"\x14namespace_id_indexes\x18\x02 \x03(\x05R\x12namespaceIdIndexes\"d\n" +
 	"\x1bTaskTypePredicateAttributes\x12E\n" +
 	"\n" +
 	"task_types\x18\x01 \x03(\x0e2&.temporal.server.api.enums.v1.TaskTypeR\ttaskTypes\"D\n" +
