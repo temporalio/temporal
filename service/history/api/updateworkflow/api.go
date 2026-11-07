@@ -118,6 +118,7 @@ func (u *Updater) Invoke(
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
 		if u.firstBufferedForWorkflowHeartbeatNotification {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+			workflow.SendWorkflowHeartbeatNotification(u.shardCtx, u.req.Request.Namespace)
 		}
 	}
 
