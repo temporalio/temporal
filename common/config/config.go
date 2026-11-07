@@ -697,6 +697,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.Global.Metrics.Validate(); err != nil {
+		return err
+	}
+
 	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
 		return err
 	}

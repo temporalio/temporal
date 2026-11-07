@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_prometheus || temporal_with_statsd
+
 package metrics
 
 import (
@@ -6,9 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.temporal.io/server/common/log"
@@ -17,70 +16,11 @@ import (
 
 var _ OpenTelemetryProvider = (*openTelemetryProviderImpl)(nil)
 
-type (
-	OpenTelemetryProvider interface {
-		Stop(logger log.Logger)
-		GetMeter() metric.Meter
-	}
-
-	openTelemetryProviderImpl struct {
-		meter          metric.Meter
-		config         *PrometheusConfig
-		server         *http.Server
-		statsdExporter *statsdExporter
-	}
-)
-
-// NewOpenTelemetryProviderWithStatsd creates a new OpenTelemetry provider with a StatsD exporter.
-func NewOpenTelemetryProviderWithStatsd(
-	logger log.Logger,
-	statsdConfig *StatsdConfig,
-	clientConfig *ClientConfig,
-) (*openTelemetryProviderImpl, error) {
-	// Set up StatsD exporter if config is provided
-	if statsdConfig == nil {
-		return nil, errors.New("statsd config is required to provide statsd metrics")
-	}
-	var err error
-	statsdExp, err := NewStatsdExporter(statsdConfig, logger)
-	if err != nil {
-		logger.Error("Failed to initialize statsd exporter.", tag.Error(err))
-		return nil, err
-	}
-	// Create a PeriodicReader with the StatsD exporter
-	statsdReader := sdkmetrics.NewPeriodicReader(statsdExp)
-	return newOpenTelemetryProvider(logger, statsdReader, statsdConfig, statsdExp, nil, nil, clientConfig)
-}
-
-// NewOpenTelemetryProviderWithPrometheus creates a new OpenTelemetry provider with a Prometheus exporter.
-func NewOpenTelemetryProviderWithPrometheus(
-	logger log.Logger,
-	prometheusConfig *PrometheusConfig,
-	clientConfig *ClientConfig,
-	fatalOnListenerError bool,
-) (*openTelemetryProviderImpl, error) {
-	// Set up Prometheus exporter if config is provided
-	if prometheusConfig == nil {
-		return nil, errors.New("prometheus config is required to provide prometheus metrics")
-	}
-	reg := prometheus.NewRegistry()
-	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
-	if clientConfig.WithoutUnitSuffix {
-		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
-	}
-	if clientConfig.WithoutCounterSuffix {
-		exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
-	}
-	if clientConfig.Prefix != "" {
-		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
-	}
-	exporter, err := exporters.New(exporterOpts...)
-	if err != nil {
-		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
-		return nil, err
-	}
-	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
-	return newOpenTelemetryProvider(logger, exporter, nil, nil, prometheusConfig, metricServer, clientConfig)
+type openTelemetryProviderImpl struct {
+	meter          metric.Meter
+	config         *PrometheusConfig
+	server         *http.Server
+	statsdExporter *statsdExporter
 }
 
 func newOpenTelemetryProvider(
@@ -119,44 +59,6 @@ func newOpenTelemetryProvider(
 	}
 
 	return reporter, nil
-}
-
-func initPrometheusListener(
-	config *PrometheusConfig,
-	reg *prometheus.Registry,
-	logger log.Logger,
-	fatalOnListenerError bool,
-) *http.Server {
-	handlerPath := config.HandlerPath
-	if handlerPath == "" {
-		handlerPath = "/metrics"
-	}
-
-	handler := http.NewServeMux()
-	handler.HandleFunc(handlerPath, promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}).ServeHTTP)
-
-	if config.ListenAddress == "" {
-		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))
-	}
-	server := &http.Server{Addr: config.ListenAddress, Handler: handler}
-
-	go func() {
-		err := server.ListenAndServe()
-		if errors.Is(err, http.ErrServerClosed) {
-			return
-		}
-		msg := "Failed to initialize prometheus listener."
-		logger := log.With(logger, tag.Error(err), tag.Address(config.ListenAddress))
-		if fatalOnListenerError {
-			logger.Fatal(msg)
-		} else {
-			// For backward compatibility, we log as Warn instead of Error/Fatal
-			// to match the behavior of tally framework.
-			logger.Warn(msg)
-		}
-	}()
-
-	return server
 }
 
 func (r *openTelemetryProviderImpl) GetMeter() metric.Meter {
