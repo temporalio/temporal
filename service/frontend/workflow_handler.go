@@ -7998,6 +7998,9 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if request.GetWorkflowExecution().GetRunId() != "" {
+		return nil, serviceerror.NewInvalidArgument("polling workflow execution time skipping for a specific run ID is not supported")
+	}
 	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
 		return nil, err
 	}

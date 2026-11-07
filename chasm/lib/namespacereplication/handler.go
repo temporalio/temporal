@@ -85,14 +85,19 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 	if !req.GetMutation().GetIsGlobalNamespace() {
 		return serviceerror.NewInvalidArgument("mutation.is_global_namespace must be true")
 	}
-	if !req.GetMutation().GetShadow() {
-		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
 	}
-	if len(req.GetMutation().GetShadowLegacyTaskPayload()) == 0 {
-		return serviceerror.NewInvalidArgument("mutation.shadow_legacy_task_payload is required")
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE {
+		return serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
 	}
-	if err := proto.Unmarshal(req.GetMutation().GetShadowLegacyTaskPayload(), &replicationspb.NamespaceTaskAttributes{}); err != nil {
-		return serviceerror.NewInvalidArgumentf("decode mutation.shadow_legacy_task_payload: %v", err)
+	if req.GetMutation().GetShadow() {
+		if len(req.GetMutation().GetShadowLegacyTaskPayload()) == 0 {
+			return serviceerror.NewInvalidArgument("mutation.shadow_legacy_task_payload is required")
+		}
+		if err := proto.Unmarshal(req.GetMutation().GetShadowLegacyTaskPayload(), &replicationspb.NamespaceTaskAttributes{}); err != nil {
+			return serviceerror.NewInvalidArgumentf("decode mutation.shadow_legacy_task_payload: %v", err)
+		}
 	}
 	if req.GetNamespaceId() == "" {
 		return serviceerror.NewInvalidArgument("namespace_id is required")
