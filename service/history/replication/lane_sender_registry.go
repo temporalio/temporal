@@ -133,7 +133,7 @@ func (r *senderLaneRegistry) newLane(logicalKey string, filter LaneFilter, scope
 	return &senderLane{senderLaneSnapshot: senderLaneSnapshot{
 		id:          laneID,
 		logicalKey:  logicalKey,
-		filter:      filter,
+		filter:      LaneFilter{NamespaceIDs: slices.Clone(filter.NamespaceIDs)},
 		scope:       scope,
 		cursor:      scope.Range.InclusiveMin.TaskID,
 		retiring:    scope.Range.ExclusiveMax.TaskID != math.MaxInt64,
