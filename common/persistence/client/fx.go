@@ -21,6 +21,8 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	otel "go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/persistencefaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -193,6 +195,7 @@ func DataStoreFactoryProvider(
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
 	serializer serialization.Serializer,
+	testHooks testhooks.TestHooks,
 ) persistence.DataStoreFactory {
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
@@ -207,8 +210,8 @@ func DataStoreFactoryProvider(
 		logger.Fatal("invalid config: one of cassandra, sql, or custom datastore params must be specified")
 	}
 
-	if defaultStoreCfg.FaultInjection != nil {
-		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
+	if fiConfig := persistencefaultstest.WithFailpoints(defaultStoreCfg.FaultInjection, testHooks); fiConfig != nil {
+		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(fiConfig, dataStoreFactory)
 	}
 
 	tracer := tracerProvider.Tracer(otel.ComponentPersistence)

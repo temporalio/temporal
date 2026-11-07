@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 )
@@ -108,4 +109,30 @@ func TestNewCallbackGenerator_RequiresNamespaceScope(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+func TestWrap_Failpoint(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	injectedErr := errors.New("injected")
+	key := failpoint.HTTPKey("POST /cb1").ForNamespace("namespace-id")
+	fp := failpoint.NewFailpoint[error](key)
+	fp.Return(injectedErr, failpoint.Once)
+	testHooks.Failpoints().Set(key, fp)
+	handlerCalls := 0
+	next := func(*http.Request) (*http.Response, error) {
+		handlerCalls++
+		return &http.Response{StatusCode: http.StatusOK}, nil
+	}
+	wrapped := httpfaults.Wrap(httpfaultstest.NewGenerator(testHooks), httpfaults.Scope{NamespaceID: "namespace-id"}, next)
+
+	_, err := wrapped(newRequest(t))
+	require.ErrorIs(t, err, injectedErr)
+	require.Equal(t, 0, handlerCalls)
+
+	resp, err := wrapped(newRequest(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 1, handlerCalls)
 }

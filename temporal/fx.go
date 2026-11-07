@@ -632,6 +632,7 @@ func ApplyClusterMetadataConfigProvider(
 		metricsHandler,
 		telemetry.NoopTracerProvider,
 		serializer,
+		testhooks.TestHooks{},
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
