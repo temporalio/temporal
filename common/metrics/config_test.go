@@ -1,8 +1,13 @@
 package metrics
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -17,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/testx/freeport"
 	"go.uber.org/mock/gomock"
 )
@@ -260,4 +266,83 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			assert.IsType(t, c.expectedType, handler)
 		})
 	}
+}
+
+func TestPrometheusTLS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("serves https", func(t *testing.T) {
+		t.Parallel()
+
+		chain, err := testutils.GenerateTestChain(t.TempDir(), "127.0.0.1")
+		require.NoError(t, err)
+		caPEM, err := os.ReadFile(chain.CaPubFile)
+		require.NoError(t, err)
+		rootCAs := x509.NewCertPool()
+		require.True(t, rootCAs.AppendCertsFromPEM(caPEM))
+
+		logger := log.NewTestLogger()
+		address := fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
+		handler, err := MetricsHandlerFromConfig(logger, &Config{
+			Prometheus: &PrometheusConfig{
+				Framework:     FrameworkOpentelemetry,
+				ListenAddress: address,
+				TLS: &PrometheusTLSConfig{
+					CertFile: chain.CertPubFile,
+					KeyFile:  chain.CertKeyFile,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { handler.Stop(logger) })
+		handler.Counter("tls_test_counter").Record(1)
+
+		client := &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: rootCAs, MinVersion: tls.VersionTLS12},
+		}}
+		await.Require(t.Context(), t, func(t *await.T) {
+			resp, err := client.Get("https://" + address + "/metrics")
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Contains(t, string(body), "tls_test_counter")
+		}, 5*time.Second, 10*time.Millisecond)
+
+		resp, err := http.Get("http://" + address + "/metrics")
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("missing certificate", func(t *testing.T) {
+		t.Parallel()
+
+		missing := filepath.Join(t.TempDir(), "missing.pem")
+		_, err := NewOpenTelemetryProviderWithPrometheus(log.NewNoopLogger(), &PrometheusConfig{
+			ListenAddress: "127.0.0.1:0",
+			TLS: &PrometheusTLSConfig{
+				CertFile: missing,
+				KeyFile:  missing,
+			},
+		}, &ClientConfig{}, false)
+		require.ErrorContains(t, err, "unable to load prometheus tls certificate")
+	})
+
+	t.Run("tally framework", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := MetricsHandlerFromConfig(log.NewNoopLogger(), &Config{
+			Prometheus: &PrometheusConfig{
+				Framework:     FrameworkTally,
+				ListenAddress: "127.0.0.1:0",
+				TLS: &PrometheusTLSConfig{
+					CertFile: "cert.pem",
+					KeyFile:  "key.pem",
+				},
+			},
+		})
+		require.ErrorContains(t, err, "only supported with the opentelemetry framework")
+	})
 }
