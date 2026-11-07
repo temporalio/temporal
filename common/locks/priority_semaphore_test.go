@@ -205,6 +205,22 @@ func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 	s.ErrorIs(semaphore.Acquire(context.Background(), PriorityHigh, 2), ErrRequestTooLarge)
 }
 
+func (s *prioritySemaphoreSuite) Test_ReleaseMoreThanHeld() {
+	semaphore := NewPrioritySemaphore(1)
+	// An invalid release should panic without leaving the mutex locked.
+	s.PanicsWithValue("semaphore: released more than held", func() {
+		semaphore.Release(1)
+	})
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+	// A failed release must also preserve permits already acquired.
+	s.PanicsWithValue("semaphore: released more than held", func() {
+		semaphore.Release(2)
+	})
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
+	semaphore.Release(1)
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+}
+
 // Checks if n number of threads are blocked in semaphore.
 func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
 	pattern := `\[select\]\:\n\S*\(\*PrioritySemaphoreImpl\)\.Acquire`
