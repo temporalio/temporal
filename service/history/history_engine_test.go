@@ -2265,6 +2265,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	for _, tc := range []struct {
 		name     string
 		enabled  bool
+		nilInfo  bool
 		skipped  time.Duration
 		elapsed  time.Duration
 		noForce  bool
@@ -2272,6 +2273,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 		messages []*protocolpb.Message
 		wantErr  string
 	}{
+		{name: "NilInfoWithinLimit", nilInfo: true, elapsed: time.Minute},
+		{name: "NilInfoExpired", nilInfo: true, elapsed: time.Hour, wantErr: "workflow task heartbeat timeout"},
 		{name: "NoOffsetWithinLimit", elapsed: time.Minute},
 		{name: "NoOffsetExpired", elapsed: time.Hour, wantErr: "workflow task heartbeat timeout"},
 		{name: "TimeSkippingEnabledWithinLimit", enabled: true, skipped: 24 * time.Hour, elapsed: time.Minute},
@@ -2314,6 +2317,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 				Config:                     &commonpb.TimeSkippingConfig{Enabled: tc.enabled},
 				AccumulatedSkippedDuration: durationpb.New(tc.skipped),
+			}
+			if tc.nilInfo {
+				state.ExecutionInfo.TimeSkippingInfo = nil
 			}
 			originalScheduledTime := timestamppb.New(
 				s.mockShard.GetTimeSource().Now().Add(tc.skipped).Add(-tc.elapsed))

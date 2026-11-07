@@ -3951,16 +3951,29 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 
 func (s *mutableStateSuite) TestRetryActivity_WorkflowRuleExpirationUsesRealTime() {
 	for _, tc := range []struct {
-		name    string
-		skipped time.Duration
+		name         string
+		skipped      time.Duration
+		noRules      bool
+		noExpiration bool
+		expired      bool
 	}{
 		{name: "NoTimeSkipping"},
 		{name: "TimeSkipped", skipped: time.Hour},
+		{name: "NoRules", noRules: true},
+		{name: "NoRulesWithOffset", noRules: true, skipped: time.Hour},
+		{name: "NoExpiration", noExpiration: true},
+		{name: "NoExpirationWithOffset", noExpiration: true, skipped: time.Hour},
+		{name: "Expired", expired: true},
+		{name: "ExpiredWithOffset", expired: true, skipped: time.Hour},
 	} {
 		s.Run(tc.name, func() {
+			check := require.New(s.T())
 			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 			realNow := s.mockShard.GetTimeSource().Now()
 			ruleExpiration := realNow.Add(30 * time.Minute)
+			if tc.expired {
+				ruleExpiration = realNow.Add(-time.Minute)
+			}
 			nsEntry := namespace.NewGlobalNamespaceForTest(
 				&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
 				&persistencespb.NamespaceConfig{
@@ -3982,12 +3995,19 @@ func (s *mutableStateSuite) TestRetryActivity_WorkflowRuleExpirationUsesRealTime
 				},
 				tests.Version,
 			)
-			ms := NewMutableState(s.mockShard, s.mockEventsCache, s.logger, nsEntry, tests.WorkflowID, tests.RunID, realNow)
-			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(tc.skipped),
+			if tc.noRules {
+				nsEntry.Config().WorkflowRules = nil
+			} else if tc.noExpiration {
+				nsEntry.Config().WorkflowRules["rule"].Spec.ExpirationTime = nil
 			}
-			ms.wrapTimeSourceWithTimeSkipping()
+			ms := NewMutableState(s.mockShard, s.mockEventsCache, s.logger, nsEntry, tests.WorkflowID, tests.RunID, realNow)
+			if tc.skipped != 0 {
+				ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+					Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+					AccumulatedSkippedDuration: durationpb.New(tc.skipped),
+				}
+				ms.wrapTimeSourceWithTimeSkipping()
+			}
 
 			_, ai, err := ms.AddActivityTaskScheduledEvent(4, &commandpb.ScheduleActivityTaskCommandAttributes{
 				ActivityId:   "activity",
@@ -3995,18 +4015,25 @@ func (s *mutableStateSuite) TestRetryActivity_WorkflowRuleExpirationUsesRealTime
 				TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
 				RetryPolicy:  &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second)},
 			}, false)
-			s.NoError(err)
+			check.NoError(err)
 			_, err = ms.AddActivityTaskStartedEvent(ai, ai.ScheduledEventId, uuid.NewString(), "worker", nil, nil, nil, "", nil)
-			s.NoError(err)
+			check.NoError(err)
 
 			_, err = ms.RetryActivity(ai, &failurepb.Failure{Message: "activity failure"})
-			s.NoError(err)
+			check.NoError(err)
 
 			updated, ok := ms.GetActivityInfo(ai.ScheduledEventId)
-			s.True(ok)
-			s.True(updated.Paused)
-			s.Equal("rule", updated.GetPauseInfo().GetRuleId())
-			s.True(updated.GetPauseInfo().GetPauseTime().AsTime().Before(ruleExpiration))
+			check.True(ok)
+			if tc.noRules || tc.expired {
+				check.False(updated.Paused)
+				check.Nil(updated.PauseInfo)
+			} else {
+				check.True(updated.Paused)
+				check.Equal("rule", updated.GetPauseInfo().GetRuleId())
+				pauseTime := updated.GetPauseInfo().GetPauseTime().AsTime()
+				check.False(pauseTime.Before(realNow))
+				check.False(pauseTime.After(s.mockShard.GetTimeSource().Now()))
+			}
 		})
 	}
 }

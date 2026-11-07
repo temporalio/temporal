@@ -667,42 +667,46 @@ func TestGrantEagerDispatchWithoutClient(t *testing.T) {
 }
 
 func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		name            string
-		state           *commonpb.TimeSkippingStatePropagation
-		skipped         time.Duration
-		cronSchedule    string
-		wantCronBackoff time.Duration
+		name             string
+		state            *commonpb.TimeSkippingStatePropagation
+		skipped          time.Duration
+		executionTimeout *durationpb.Duration
+		runTimeout       *durationpb.Duration
+		cronSchedule     string
+		wantCronBackoff  time.Duration
 	}{
-		{name: "NoPropagation"},
-		{
-			name:    "InheritedSkippedDuration",
-			state:   &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)},
-			skipped: 2 * time.Hour,
-		},
-		{name: "CronNoPropagation", cronSchedule: "0 13 * * *", wantCronBackoff: time.Hour},
-		{
-			name:            "CronInheritedSkippedDuration",
-			state:           &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)},
-			skipped:         2 * time.Hour,
-			cronSchedule:    "0 13 * * *",
-			wantCronBackoff: 23 * time.Hour,
-		},
+		{name: "NoPropagation", executionTimeout: durationpb.New(time.Hour)},
+		{name: "EmptyPropagation", state: &commonpb.TimeSkippingStatePropagation{}, executionTimeout: durationpb.New(time.Hour)},
+		{name: "ZeroOffset", state: &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(0)}, executionTimeout: durationpb.New(time.Hour)},
+		{name: "InheritedSkippedDuration", state: &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)}, skipped: 2 * time.Hour, executionTimeout: durationpb.New(time.Hour)},
+		{name: "CronNoPropagation", cronSchedule: "0 13 * * *", wantCronBackoff: time.Hour, executionTimeout: durationpb.New(time.Hour)},
+		{name: "CronInheritedSkippedDuration", state: &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)}, skipped: 2 * time.Hour, cronSchedule: "0 13 * * *", wantCronBackoff: 23 * time.Hour, executionTimeout: durationpb.New(time.Hour)},
+		{name: "NoExecutionTimeout"},
+		{name: "ZeroExecutionTimeout", executionTimeout: durationpb.New(0)},
+		{name: "InheritedOffsetWithoutExecutionTimeout", state: &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)}, skipped: 2 * time.Hour},
+		{name: "InheritedOffsetWithZeroExecutionTimeout", state: &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(2 * time.Hour)}, skipped: 2 * time.Hour, executionTimeout: durationpb.New(0)},
+		{name: "RunTimeoutOnly", runTimeout: durationpb.New(time.Hour)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			startRequest := &workflowservice.StartWorkflowExecutionRequest{
-				Namespace:                    uuid.NewString(),
-				WorkflowId:                   uuid.NewString(),
-				WorkflowExecutionTimeout:     durationpb.New(time.Hour),
+				Namespace: uuid.NewString(), WorkflowId: uuid.NewString(),
+				WorkflowExecutionTimeout:     tc.executionTimeout,
+				WorkflowRunTimeout:           tc.runTimeout,
 				CronSchedule:                 tc.cronSchedule,
 				TimeSkippingStatePropagation: tc.state,
 			}
-
 			historyRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, now)
-
 			require.Equal(t, tc.state, historyRequest.GetTimeSkippingStatePropagation())
-			require.Equal(t, now.Add(tc.skipped).Add(time.Hour), historyRequest.GetWorkflowExecutionExpirationTime().AsTime())
+			if tc.executionTimeout.AsDuration() > 0 {
+				require.Equal(t, now.Add(tc.skipped).Add(tc.executionTimeout.AsDuration()), historyRequest.GetWorkflowExecutionExpirationTime().AsTime())
+			} else {
+				require.Nil(t, historyRequest.GetWorkflowExecutionExpirationTime())
+			}
+			require.Equal(t, tc.runTimeout, historyRequest.GetStartRequest().GetWorkflowRunTimeout())
 			require.Equal(t, tc.wantCronBackoff, historyRequest.GetFirstWorkflowTaskBackoff().AsDuration())
 		})
 	}

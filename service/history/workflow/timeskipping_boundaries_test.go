@@ -118,8 +118,17 @@ func TestPendingActivityRetryUsesVirtualTime(t *testing.T) {
 
 func TestWorkflowTaskTimeoutDeletionWithTimeSkipping(t *testing.T) {
 	t.Parallel()
-	for _, skipped := range []time.Duration{0, time.Hour} {
-		t.Run(skipped.String(), func(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		info    *persistencespb.TimeSkippingInfo
+		skipped time.Duration
+	}{
+		{name: "NilInfo"},
+		{name: "EmptyInfo", info: &persistencespb.TimeSkippingInfo{}},
+		{name: "ZeroOffset", info: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(0)}},
+		{name: "Skipped", info: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(time.Hour)}, skipped: time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			for _, timeout := range []time.Duration{time.Minute, 2 * time.Minute, 5 * time.Minute} {
 				t.Run(timeout.String(), func(t *testing.T) {
@@ -131,13 +140,13 @@ func TestWorkflowTaskTimeoutDeletionWithTimeSkipping(t *testing.T) {
 						}
 						t.Run(name, func(t *testing.T) {
 							t.Parallel()
-							virtualNow := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC).Add(skipped)
+							virtualNow := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC).Add(tc.skipped)
 							ts := clock.NewEventTimeSource()
 							ts.Update(virtualNow)
 							ms := &MutableStateImpl{
 								timeSource: ts,
 								executionInfo: &persistencespb.WorkflowExecutionInfo{
-									TimeSkippingInfo: &persistencespb.TimeSkippingInfo{AccumulatedSkippedDuration: durationpb.New(skipped)},
+									TimeSkippingInfo: tc.info,
 								},
 								InsertTasks:           make(map[tasks.Category][]tasks.Task),
 								BestEffortDeleteTasks: make(map[tasks.Category][]tasks.Key),
