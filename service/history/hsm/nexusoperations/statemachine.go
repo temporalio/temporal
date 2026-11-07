@@ -125,6 +125,36 @@ func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
 	return child, err
 }
 
+// TimeSkippingTargets returns the logical deadlines that bound a skip while the operation waits
+// for an invocation retry. Any other state, a pending cancellation, or an already-due deadline
+// represents work that must run before workflow time can advance.
+func (o Operation) TimeSkippingTargets(node *hsm.Node, now time.Time) ([]time.Time, bool, error) {
+	if o.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
+		return nil, false, nil
+	}
+	cancelRequested, err := o.cancelRequested(node)
+	if err != nil {
+		return nil, false, err
+	}
+	if cancelRequested {
+		return nil, false, nil
+	}
+
+	targets := []time.Time{o.GetNextAttemptScheduleTime().AsTime()}
+	if timeout := o.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
+	}
+	if timeout := o.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		targets = append(targets, o.GetScheduledTime().AsTime().Add(timeout))
+	}
+	for _, target := range targets {
+		if !target.After(now) {
+			return nil, false, nil
+		}
+	}
+	return targets, true, nil
+}
+
 // transitionTasks returns tasks that are emitted as transition outputs.
 func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	switch o.State() { // nolint:exhaustive
