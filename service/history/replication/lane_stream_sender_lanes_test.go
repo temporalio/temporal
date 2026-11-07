@@ -858,3 +858,53 @@ func (s *laneStreamSenderSuite) TestRecordLaneLag() {
 	s.Len(exceeded, 1)
 	s.Equal(namespaceLaneKey("ns-behind"), exceeded[0].Tags["replication_lane"])
 }
+
+func (s *laneStreamSenderSuite) TestRecordLaneLagBoundaries() {
+	for _, tc := range []struct {
+		name          string
+		sourceHigh    int64
+		retirementEnd int64
+		wantLag       bool
+	}{
+		{name: "IdleActiveLane", sourceHigh: 100},
+		{name: "UnsentBacklog", sourceHigh: 500, wantLag: true},
+		{name: "RetiringPrefixAcknowledged", sourceHigh: 500, retirementEnd: 100},
+		{name: "RetiringPrefixPending", sourceHigh: 500, retirementEnd: 200, wantLag: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			registry, err := newSenderLaneRegistry(100, nil)
+			require.NoError(t, err)
+			lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
+			require.NoError(t, err)
+			if tc.retirementEnd != 0 {
+				registry.AdvanceLaneCursor(lane.id, tc.retirementEnd)
+				require.True(t, registry.RequestRetirement("a"))
+			}
+			registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+				InclusiveLowWatermark:     100,
+				InclusiveLowWatermarkTime: timestamppb.New(time.Now().Add(-time.Hour)),
+			}})
+			s.streamSender.laneRegistry = registry
+			s.streamSender.config.ReplicationLaneMaxLag = dynamicconfig.GetDurationPropertyFn(30 * time.Minute)
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+			s.streamSender.metrics = captureHandler
+			s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(tc.sourceHigh))
+
+			s.streamSender.recordLaneLag()
+
+			snapshot := capture.Snapshot()
+			lag := snapshot[metrics.ReplicationLaneLag.Name()]
+			require.Len(t, lag, 1)
+			if tc.wantLag {
+				require.GreaterOrEqual(t, lag[0].Value, time.Hour)
+				require.Len(t, snapshot[metrics.ReplicationLaneMaxLagExceeded.Name()], 1)
+			} else {
+				require.Equal(t, time.Duration(0), lag[0].Value)
+				require.Empty(t, snapshot[metrics.ReplicationLaneMaxLagExceeded.Name()])
+			}
+		})
+	}
+}
