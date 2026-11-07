@@ -33,29 +33,6 @@ func TestFailpointReturn(t *testing.T) {
 	}
 }
 
-func TestFailpoint2Return(t *testing.T) {
-	f := new(failpoint.Failpoint2[int, int])
-	f.Return(42, 43, failpoint.Once)
-	ret1, ret2 := f.Do(func() (int, int) {
-		return 66, 67
-	})
-
-	if ret1 != 42 || ret2 != 43 {
-		t.Errorf("expected (42, 43), got (%d, %d)", ret1, ret2)
-	}
-
-	// Always
-	f.Return(44, 45, failpoint.Always)
-	for range 10 {
-		ret1, ret2 := f.Do(func() (int, int) {
-			return 66, 67
-		})
-		if ret1 != 44 || ret2 != 45 {
-			t.Errorf("expected (44, 45), got (%d, %d)", ret1, ret2)
-		}
-	}
-}
-
 // === Panic ===
 func checkPanic(t *testing.T, value any, cb func()) {
 	defer func() {
@@ -81,26 +58,6 @@ func TestFailpointPanic(t *testing.T) {
 		checkPanic(t, 43, func() {
 			f.Do(func() int {
 				return 66
-			})
-		})
-	}
-}
-
-func TestFailpoint2Panic(t *testing.T) {
-	f := new(failpoint.Failpoint2[int, int])
-	f.Panic(42, failpoint.Once)
-	checkPanic(t, 42, func() {
-		f.Do(func() (int, int) {
-			return 66, 67
-		})
-	})
-
-	// Always
-	f.Panic(44, failpoint.Always)
-	for range 10 {
-		checkPanic(t, 44, func() {
-			f.Do(func() (int, int) {
-				return 66, 67
 			})
 		})
 	}
@@ -242,45 +199,6 @@ func TestFailpointBlock_DisableWakesWait(t *testing.T) {
 	}
 }
 
-// TestFailpoint2Block_WaitBeforeArrival mirrors the Failpoint[T] Block test for Failpoint2.
-func TestFailpoint2Block_WaitBeforeArrival(t *testing.T) {
-	f := new(failpoint.Failpoint2[struct{}, struct{}])
-	f.Block(failpoint.Always)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		f.Execute()
-	}()
-
-	if err := f.Wait(t.Context()); err != nil {
-		t.Fatalf("Wait returned unexpected error: %v", err)
-	}
-	f.Disable()
-	<-done
-}
-
-// TestFailpoint2Block_WaitChBeforeArrival mirrors the Failpoint[T] WaitCh test for Failpoint2.
-func TestFailpoint2Block_WaitChBeforeArrival(t *testing.T) {
-	f := new(failpoint.Failpoint2[struct{}, struct{}])
-	f.Block(failpoint.Always)
-
-	ch := f.WaitCh()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		f.Execute()
-	}()
-
-	select {
-	case <-ch:
-	case <-t.Context().Done():
-		t.Fatal("timed out waiting for failpoint to be reached")
-	}
-	f.Disable()
-	<-done
-}
-
 // TestFailpointBlock_BlockCalledTwice_WakesWaiter verifies that calling Block()
 // a second time closes the old arrivedCh so any waiter holding a reference to
 // it is woken rather than stranded.
@@ -356,79 +274,33 @@ func TestFailpointBlock_BlockCalledTwice_StillFunctional(t *testing.T) {
 	}
 }
 
-// TestFailpoint2Block_BlockCalledTwice_WakesWaiter mirrors the Failpoint[T]
-// double-Block waiter test for Failpoint2.
-func TestFailpoint2Block_BlockCalledTwice_WakesWaiter(t *testing.T) {
-	f := new(failpoint.Failpoint2[struct{}, struct{}])
-	f.Block(failpoint.Always)
-
-	ch := f.WaitCh()
-
-	f.Block(failpoint.Always)
-
-	select {
-	case <-ch:
-	case <-t.Context().Done():
-		t.Fatal("old arrivedCh was not closed when Block() was called a second time; waiter was stranded")
-	}
-
-	f.Disable()
-}
-
 // === Call ===
 // Note: these are lame uses of call, but they exercise the functionality nonetheless
 
 func TestFailpointCall(t *testing.T) {
-	f := new(failpoint.Failpoint2[int, int])
-	f.Call(func() (int, int) {
-		return 42, 43
+	f := new(failpoint.Failpoint[int])
+	f.Call(func() int {
+		return 42
 	}, failpoint.Once)
-	ret1, ret2 := f.Do(func() (int, int) {
-		return 66, 67
+	ret := f.Do(func() int {
+		return 66
 	})
 
-	if ret1 != 42 || ret2 != 43 {
-		t.Errorf("expected (42, 43), got (%d, %d)", ret1, ret2)
+	if ret != 42 {
+		t.Errorf("expected 42, got %d", ret)
 	}
 
 	// Always
-	f.Call(func() (int, int) {
-		return 44, 45
+	f.Call(func() int {
+		return 44
 	}, failpoint.Always)
 
 	for range 10 {
-		ret1, ret2 := f.Do(func() (int, int) {
-			return 66, 67
+		ret := f.Do(func() int {
+			return 66
 		})
-		if ret1 != 44 || ret2 != 45 {
-			t.Errorf("expected (44, 45), got (%d, %d)", ret1, ret2)
-		}
-	}
-}
-
-func TestFailpointCall2(t *testing.T) {
-	f := new(failpoint.Failpoint2[int, int])
-	f.Call(func() (int, int) {
-		return 42, 43
-	}, failpoint.Once)
-	ret1, ret2 := f.Do(func() (int, int) {
-		return 66, 67
-	})
-
-	if ret1 != 42 || ret2 != 43 {
-		t.Errorf("expected (42, 43), got (%d, %d)", ret1, ret2)
-	}
-
-	// Always
-	f.Call(func() (int, int) {
-		return 44, 45
-	}, failpoint.Always)
-	for range 10 {
-		ret1, ret2 := f.Do(func() (int, int) {
-			return 66, 67
-		})
-		if ret1 != 44 || ret2 != 45 {
-			t.Errorf("expected (44, 45), got (%d, %d)", ret1, ret2)
+		if ret != 44 {
+			t.Errorf("expected 44, got %d", ret)
 		}
 	}
 }
