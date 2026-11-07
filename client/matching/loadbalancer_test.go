@@ -160,6 +160,27 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 }
 
+func TestTQLoadBalancer_PreservesPollsAcrossPartitionResizes(t *testing.T) {
+	f := newTestTaskQueueFamily(t)
+	lb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+
+	original := lb.forceReadPartition(4, 3)
+	lb.pickReadPartition(2, nil, 0).Release() // scale down while partition 3 is still polled
+	require.Len(t, lb.pollerCounts, 4)
+	require.Equal(t, 1, lb.pollerCounts[3])
+
+	recent := lb.forceReadPartition(4, 3) // scale up before the original poll completes
+	require.Equal(t, 2, lb.pollerCounts[3])
+	original.Release()
+	require.Equal(t, 1, lb.pollerCounts[3], "releasing the old poll must not erase the new one")
+
+	lb.pickReadPartition(2, nil, 0).Release()
+	require.Len(t, lb.pollerCounts, 4, "keep inactive partitions with outstanding polls")
+	recent.Release()
+	lb.pickReadPartition(2, nil, 0).Release()
+	require.Len(t, lb.pollerCounts, 2, "trim inactive partitions after their polls finish")
+}
+
 func TestHasCompleteAndPositiveBacklog(t *testing.T) {
 	positive := number.EncodeCompact8(32)
 	require.False(t, hasCompleteAndPositiveBacklog(4, nil))

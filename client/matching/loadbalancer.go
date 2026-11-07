@@ -330,18 +330,17 @@ func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) in
 
 // caller to ensure that lock is obtained before call this function
 func (b *tqLoadBalancer) ensurePartitionCountLocked(partitionCount int) {
-	if len(b.pollerCounts) == partitionCount {
-		return
-	}
-
+	// Keep counts for partitions with outstanding polls after scale-down. Their
+	// tokens must still be able to release them if the partition count grows again.
 	if len(b.pollerCounts) < partitionCount {
-		// add more partition entries
 		for i := len(b.pollerCounts); i < partitionCount; i++ {
 			b.pollerCounts = append(b.pollerCounts, 0)
 		}
-	} else {
-		// truncate existing partition entries
-		b.pollerCounts = b.pollerCounts[:partitionCount]
+	}
+
+	// Drop only inactive partitions with no outstanding polls.
+	for len(b.pollerCounts) > partitionCount && b.pollerCounts[len(b.pollerCounts)-1] == 0 {
+		b.pollerCounts = b.pollerCounts[:len(b.pollerCounts)-1]
 	}
 }
 
