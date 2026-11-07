@@ -19,7 +19,16 @@ linters:
     - godox
     - iotamixing
     - testifylint
+    - gocritic
   settings:
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - ruleguard
+      settings:
+        ruleguard:
+          failOn: dsl,import
+          rules: "${config-path}/../tools/lint/throttled_log_messages.go"
     staticcheck:
       checks:
         - "all"
@@ -172,6 +181,10 @@ linters:
       - ^proto
       - ^.git
     rules:
+      - path: _test\.go$
+        text: "throttled log message must be a compile-time string constant"
+        linters:
+          - gocritic
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"
         linters:
