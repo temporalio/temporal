@@ -9,6 +9,7 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 )
 
@@ -16,14 +17,14 @@ type (
 	// faultInjectionExecutionStore implements ExecutionStore interface with fault injection.
 	faultInjectionExecutionStore struct {
 		_sourcePersistence.ExecutionStore
-		generator faultGenerator
+		generator faultinjection.Generator[any, struct{}]
 	}
 )
 
 // newFaultInjectionExecutionStore returns faultInjectionExecutionStore.
 func newFaultInjectionExecutionStore(
 	baseStore _sourcePersistence.ExecutionStore,
-	generator faultGenerator,
+	generator faultinjection.Generator[any, struct{}],
 ) *faultInjectionExecutionStore {
 	return &faultInjectionExecutionStore{
 		ExecutionStore: baseStore,
@@ -33,225 +34,225 @@ func newFaultInjectionExecutionStore(
 
 // AddHistoryTasks wraps ExecutionStore.AddHistoryTasks.
 func (d faultInjectionExecutionStore) AddHistoryTasks(ctx context.Context, request *_sourcePersistence.InternalAddHistoryTasksRequest) (err error) {
-	err = d.generator.generate("AddHistoryTasks", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "AddHistoryTasks", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.AddHistoryTasks(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // AppendHistoryNodes wraps ExecutionStore.AppendHistoryNodes.
 func (d faultInjectionExecutionStore) AppendHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalAppendHistoryNodesRequest) (err error) {
-	err = d.generator.generate("AppendHistoryNodes", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "AppendHistoryNodes", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.AppendHistoryNodes(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
 func (d faultInjectionExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
-	err = d.generator.generate("CompleteHistoryTask", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "CompleteHistoryTask", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.CompleteHistoryTask(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ConflictResolveWorkflowExecution wraps ExecutionStore.ConflictResolveWorkflowExecution.
 func (d faultInjectionExecutionStore) ConflictResolveWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("ConflictResolveWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ConflictResolveWorkflowExecution", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // CreateWorkflowExecution wraps ExecutionStore.CreateWorkflowExecution.
 func (d faultInjectionExecutionStore) CreateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalCreateWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalCreateWorkflowExecutionResponse, err error) {
-	err = d.generator.generate("CreateWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "CreateWorkflowExecution", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.CreateWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteCurrentWorkflowExecution wraps ExecutionStore.DeleteCurrentWorkflowExecution.
 func (d faultInjectionExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("DeleteCurrentWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteCurrentWorkflowExecution", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteHistoryBranch wraps ExecutionStore.DeleteHistoryBranch.
 func (d faultInjectionExecutionStore) DeleteHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryBranchRequest) (err error) {
-	err = d.generator.generate("DeleteHistoryBranch", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteHistoryBranch", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.DeleteHistoryBranch(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteHistoryNodes wraps ExecutionStore.DeleteHistoryNodes.
 func (d faultInjectionExecutionStore) DeleteHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryNodesRequest) (err error) {
-	err = d.generator.generate("DeleteHistoryNodes", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteHistoryNodes", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.DeleteHistoryNodes(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteReplicationTaskFromDLQ wraps ExecutionStore.DeleteReplicationTaskFromDLQ.
 func (d faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
-	err = d.generator.generate("DeleteReplicationTaskFromDLQ", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteReplicationTaskFromDLQ", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteWorkflowExecution wraps ExecutionStore.DeleteWorkflowExecution.
 func (d faultInjectionExecutionStore) DeleteWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("DeleteWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteWorkflowExecution", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
 func (d faultInjectionExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
-	err = d.generator.generate("ForkHistoryBranch", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ForkHistoryBranch", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetAllHistoryTreeBranches wraps ExecutionStore.GetAllHistoryTreeBranches.
 func (d faultInjectionExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, request *_sourcePersistence.GetAllHistoryTreeBranchesRequest) (ip1 *_sourcePersistence.InternalGetAllHistoryTreeBranchesResponse, err error) {
-	err = d.generator.generate("GetAllHistoryTreeBranches", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetAllHistoryTreeBranches", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetCurrentExecution wraps ExecutionStore.GetCurrentExecution.
 func (d faultInjectionExecutionStore) GetCurrentExecution(ctx context.Context, request *_sourcePersistence.GetCurrentExecutionRequest) (ip1 *_sourcePersistence.InternalGetCurrentExecutionResponse, err error) {
-	err = d.generator.generate("GetCurrentExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetCurrentExecution", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetCurrentExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetHistoryTasks wraps ExecutionStore.GetHistoryTasks.
 func (d faultInjectionExecutionStore) GetHistoryTasks(ctx context.Context, request *_sourcePersistence.GetHistoryTasksRequest) (ip1 *_sourcePersistence.InternalGetHistoryTasksResponse, err error) {
-	err = d.generator.generate("GetHistoryTasks", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetHistoryTasks", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetHistoryTasks(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetHistoryTreeContainingBranch wraps ExecutionStore.GetHistoryTreeContainingBranch.
 func (d faultInjectionExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest) (ip1 *_sourcePersistence.InternalGetHistoryTreeContainingBranchResponse, err error) {
-	err = d.generator.generate("GetHistoryTreeContainingBranch", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetHistoryTreeContainingBranch", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetReplicationTasksFromDLQ wraps ExecutionStore.GetReplicationTasksFromDLQ.
 func (d faultInjectionExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (ip1 *_sourcePersistence.InternalGetReplicationTasksFromDLQResponse, err error) {
-	err = d.generator.generate("GetReplicationTasksFromDLQ", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetReplicationTasksFromDLQ", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetWorkflowExecution wraps ExecutionStore.GetWorkflowExecution.
 func (d faultInjectionExecutionStore) GetWorkflowExecution(ctx context.Context, request *_sourcePersistence.GetWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalGetWorkflowExecutionResponse, err error) {
-	err = d.generator.generate("GetWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetWorkflowExecution", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.GetWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // IsReplicationDLQEmpty wraps ExecutionStore.IsReplicationDLQEmpty.
 func (d faultInjectionExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (b1 bool, err error) {
-	err = d.generator.generate("IsReplicationDLQEmpty", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "IsReplicationDLQEmpty", any(request), func() (struct{}, error) {
 		b1, err = d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ListConcreteExecutions wraps ExecutionStore.ListConcreteExecutions.
 func (d faultInjectionExecutionStore) ListConcreteExecutions(ctx context.Context, request *_sourcePersistence.ListConcreteExecutionsRequest) (ip1 *_sourcePersistence.InternalListConcreteExecutionsResponse, err error) {
-	err = d.generator.generate("ListConcreteExecutions", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ListConcreteExecutions", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.ListConcreteExecutions(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // PutReplicationTaskToDLQ wraps ExecutionStore.PutReplicationTaskToDLQ.
 func (d faultInjectionExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, request *_sourcePersistence.PutReplicationTaskToDLQRequest) (err error) {
-	err = d.generator.generate("PutReplicationTaskToDLQ", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "PutReplicationTaskToDLQ", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // RangeCompleteHistoryTasks wraps ExecutionStore.RangeCompleteHistoryTasks.
 func (d faultInjectionExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, request *_sourcePersistence.RangeCompleteHistoryTasksRequest) (err error) {
-	err = d.generator.generate("RangeCompleteHistoryTasks", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "RangeCompleteHistoryTasks", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // RangeDeleteReplicationTaskFromDLQ wraps ExecutionStore.RangeDeleteReplicationTaskFromDLQ.
 func (d faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest) (err error) {
-	err = d.generator.generate("RangeDeleteReplicationTaskFromDLQ", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "RangeDeleteReplicationTaskFromDLQ", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ReadHistoryBranch wraps ExecutionStore.ReadHistoryBranch.
 func (d faultInjectionExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
-	err = d.generator.generate("ReadHistoryBranch", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ReadHistoryBranch", any(request), func() (struct{}, error) {
 		ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // SetWorkflowExecution wraps ExecutionStore.SetWorkflowExecution.
 func (d faultInjectionExecutionStore) SetWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalSetWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("SetWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "SetWorkflowExecution", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.SetWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // UpdateWorkflowExecution wraps ExecutionStore.UpdateWorkflowExecution.
 func (d faultInjectionExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("UpdateWorkflowExecution", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "UpdateWorkflowExecution", any(request), func() (struct{}, error) {
 		err = d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }

@@ -291,6 +291,62 @@ gate.Release() // Or gate.ReleaseWithError(err) to fail the blocked call.
 
 The test fails if no matching call reaches the gate.
 
+### Configured transport fault injection
+
+The server's top-level `faultInjection` YAML config enables random transient failures
+without `test_dep`. Each transport has independent inbound/outbound policies, each
+with request and response stages. Settings apply uniformly to all calls at that boundary.
+
+```yaml
+faultInjection:
+  grpc:
+    inbound:
+      request:
+        errors:
+          Unavailable: 0.05
+          ResourceExhausted: 0.03
+        seed: 42
+      response:
+        errors:
+          Internal: 0.02
+    outbound:
+      request:
+        errors:
+          Unavailable: 0.01
+  http:
+    inbound:
+      response:
+        errors:
+          Internal: 0.02
+    outbound:
+      request:
+        errors:
+          Unavailable: 0.05
+```
+
+HTTP covers the frontend router (including Nexus routes) and outbound frontend,
+callback, and Nexus clients. Its fault names map to HTTP statuses: `Unavailable` → 503,
+`Internal` → 500, and `ResourceExhausted` → 429. HTTP error responses are preserved.
+Replaced response bodies are closed. Inbound responses are buffered while injection
+is enabled; flushing or hijacking commits the response and prevents response replacement.
+Each transport/direction samples independently, so faults can compound across boundaries.
+
+Request faults skip execution. Configured response faults replace successful results;
+actual failures are preserved. gRPC covers unary and streaming server calls and connections
+created by the RPC and SDK factories. Stream response faults occur once at completion;
+messages already delivered remain delivered.
+
+Supported transient errors are `Unavailable`, `Internal`, and `ResourceExhausted`.
+Probabilities must be finite, in [0, 1], and sum to at most 1 per stage. Omitted or all-zero
+settings disable configured faults. A nonzero seed makes the sequence repeatable; zero
+uses the current time. Concurrent calls consume draws in scheduling order.
+
+Persistence and transports use the same fault selection and execution engine in
+`common/faultinjection`. Programmatic hooks take precedence over configured random faults.
+Persistence's `ExecuteAndTimeout` selects before execution, runs the operation, and injects
+a timeout only if it succeeds. Configured gRPC faults apply only to gRPC entry points;
+the HTTP gateway retains shared service-method test hooks separately.
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise

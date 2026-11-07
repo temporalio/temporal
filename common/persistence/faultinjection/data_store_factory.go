@@ -2,6 +2,7 @@ package faultinjection
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -38,11 +39,15 @@ func (d *FaultInjectionDataStoreFactory) Close() {
 
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
 	if d.taskStore == nil {
+		generator, err := d.storeFaultInjector(config.TaskStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewTaskStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.TaskStoreName); ok {
+		if generator != nil {
 			d.taskStore = newFaultInjectionTaskStore(
 				baseStore,
 				generator,
@@ -56,11 +61,15 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 
 func (d *FaultInjectionDataStoreFactory) NewFairTaskStore() (persistence.TaskStore, error) {
 	if d.fairTaskStore == nil {
+		generator, err := d.storeFaultInjector(config.TaskStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewFairTaskStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.TaskStoreName); ok {
+		if generator != nil {
 			d.fairTaskStore = newFaultInjectionTaskStore(
 				baseStore,
 				generator,
@@ -74,11 +83,15 @@ func (d *FaultInjectionDataStoreFactory) NewFairTaskStore() (persistence.TaskSto
 
 func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
 	if d.shardStore == nil {
+		generator, err := d.storeFaultInjector(config.ShardStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewShardStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.ShardStoreName); ok {
+		if generator != nil {
 			d.shardStore = newFaultInjectionShardStore(
 				baseStore,
 				generator,
@@ -91,11 +104,15 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 }
 func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
 	if d.metadataStore == nil {
+		generator, err := d.storeFaultInjector(config.MetadataStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewMetadataStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.MetadataStoreName); ok {
+		if generator != nil {
 			d.metadataStore = newFaultInjectionMetadataStore(
 				baseStore,
 				generator,
@@ -109,11 +126,15 @@ func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.Metadat
 
 func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.ExecutionStore, error) {
 	if d.executionStore == nil {
+		generator, err := d.storeFaultInjector(config.ExecutionStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewExecutionStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.ExecutionStoreName); ok {
+		if generator != nil {
 			d.executionStore = newFaultInjectionExecutionStore(
 				baseStore,
 				generator,
@@ -127,11 +148,15 @@ func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.Execut
 
 func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
 	if d.queue == nil {
+		generator, err := d.storeFaultInjector(config.QueueName)
+		if err != nil {
+			return nil, err
+		}
 		baseQueue, err := d.baseFactory.NewQueue(queueType)
 		if err != nil {
 			return baseQueue, err
 		}
-		if generator, ok := d.storeFaultInjector(config.QueueName); ok {
+		if generator != nil {
 			d.queue = newFaultInjectionQueue(
 				baseQueue,
 				generator,
@@ -145,11 +170,15 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 
 func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
 	if d.queueV2 == nil {
+		generator, err := d.storeFaultInjector(config.QueueV2Name)
+		if err != nil {
+			return nil, err
+		}
 		baseQueue, err := d.baseFactory.NewQueueV2()
 		if err != nil {
 			return baseQueue, err
 		}
-		if generator, ok := d.storeFaultInjector(config.QueueV2Name); ok {
+		if generator != nil {
 			d.queueV2 = newFaultInjectionQueueV2(
 				baseQueue,
 				generator,
@@ -163,11 +192,15 @@ func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, erro
 
 func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
 	if d.clusterMDStore == nil {
+		generator, err := d.storeFaultInjector(config.ClusterMDStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewClusterMetadataStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.ClusterMDStoreName); ok {
+		if generator != nil {
 			d.clusterMDStore = newFaultInjectionClusterMetadataStore(
 				baseStore,
 				generator,
@@ -181,11 +214,15 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 
 func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.NexusEndpointStore, error) {
 	if d.nexusEndpointStore == nil {
+		generator, err := d.storeFaultInjector(config.NexusEndpointStoreName)
+		if err != nil {
+			return nil, err
+		}
 		baseStore, err := d.baseFactory.NewNexusEndpointStore()
 		if err != nil {
 			return nil, err
 		}
-		if generator, ok := d.storeFaultInjector(config.NexusEndpointStoreName); ok {
+		if generator != nil {
 			d.nexusEndpointStore = newFaultInjectionNexusEndpointStore(
 				baseStore,
 				generator,
@@ -197,7 +234,7 @@ func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.Ne
 	return d.nexusEndpointStore, nil
 }
 
-func (d *FaultInjectionDataStoreFactory) storeFaultInjector(storeName config.DataStoreName) (faultGenerator, bool) {
+func (d *FaultInjectionDataStoreFactory) storeFaultInjector(storeName config.DataStoreName) (faultinjection.Generator[any, struct{}], error) {
 	storeConfig, ok := d.fiConfig.Targets.DataStores[storeName]
 	if !ok {
 		storeConfig = config.FaultInjectionDataStoreConfig{}
