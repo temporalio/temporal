@@ -3,6 +3,8 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	mathbits "math/bits"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +26,11 @@ type (
 		// of week starts at 0 == Sunday. A time matches this compiled calendar
 		// when all fields match.
 		year, month, dayOfMonth, dayOfWeek, hour, minute, second func(int) bool
+
+		// Bitsets and next-year lookup backing the matchers above, used by next to skip
+		// directly to the following candidate value.
+		monthBits, hourBits, minuteBits, secondBits uint64
+		nextYear                                    func(int) int
 	}
 )
 
@@ -89,6 +96,11 @@ func newCompiledCalendar(cal *schedulepb.StructuredCalendarSpec, tz *time.Locati
 		hour:       makeBitMatcher(cal.Hour),
 		minute:     makeBitMatcher(cal.Minute),
 		second:     makeBitMatcher(cal.Second),
+		monthBits:  makeBits(cal.Month),
+		hourBits:   makeBits(cal.Hour),
+		minuteBits: makeBits(cal.Minute),
+		secondBits: makeBits(cal.Second),
+		nextYear:   makeNextYear(cal.Year),
 	}
 }
 
@@ -160,13 +172,15 @@ Outer:
 			break Outer
 		}
 		// try to match year, month, etc. from outside in
+		// Jumps below to the next set bit are equivalent to stepping one unit at a time until
+		// a match or overflow, but avoid O(range) scans (e.g. a year-2100 calendar).
 		if !cc.year(y) {
-			y, mo, d, h, m, s = y+1, time.January, 1, 0, 0, 0
+			y, mo, d, h, m, s = cc.nextYear(y), time.January, 1, 0, 0, 0
 			dstoffset = 0
 			continue Outer
 		}
-		for !cc.month(int(mo)) {
-			mo, d, h, m, s = mo+1, 1, 0, 0, 0
+		if !cc.month(int(mo)) {
+			mo, d, h, m, s = time.Month(nextSetBit(cc.monthBits, int(mo)+1, int(time.December)+1)), 1, 0, 0, 0
 			dstoffset = 0
 			if mo > time.December {
 				continue Outer
@@ -179,21 +193,21 @@ Outer:
 				continue Outer
 			}
 		}
-		for !cc.hour(h) {
-			h, m, s = h+1, 0, 0
+		if !cc.hour(h) {
+			h, m, s = nextSetBit(cc.hourBits, h+1, 24), 0, 0
 			dstoffset = 0
 			if h >= 24 {
 				continue Outer
 			}
 		}
-		for !cc.minute(m) {
-			m, s = m+1, 0
+		if !cc.minute(m) {
+			m, s = nextSetBit(cc.minuteBits, m+1, 60), 0
 			if m >= 60 {
 				continue Outer
 			}
 		}
-		for !cc.second(s) {
-			s = s + 1
+		if !cc.second(s) {
+			s = nextSetBit(cc.secondBits, s+1, 60)
 			if s >= 60 {
 				continue Outer
 			}
@@ -341,11 +355,42 @@ func handlePredefinedCronStrings(c string) string {
 	}
 }
 
-func makeBitMatcher(ranges []*schedulepb.Range) func(int) bool {
+func makeBits(ranges []*schedulepb.Range) uint64 {
 	var bits uint64
-	add := func(i int) { bits |= 1 << i }
-	iterateRanges(ranges, add)
+	iterateRanges(ranges, func(i int) { bits |= 1 << i })
+	return bits
+}
+
+func makeBitMatcher(ranges []*schedulepb.Range) func(int) bool {
+	bits := makeBits(ranges)
 	return func(v int) bool { return (1<<v)&bits != 0 }
+}
+
+// nextSetBit returns the smallest set bit >= from, or limit if there is none below limit.
+func nextSetBit(bits uint64, from, limit int) int {
+	if from >= limit || from >= 64 {
+		return limit
+	}
+	rest := bits >> from
+	if rest == 0 {
+		return limit
+	}
+	return min(from+mathbits.TrailingZeros64(rest), limit)
+}
+
+// makeNextYear returns a func giving the smallest matching year > y, or
+// maxCalendarYear+1 if there is none. Only called when year ranges are non-empty.
+func makeNextYear(ranges []*schedulepb.Range) func(int) int {
+	var years []int
+	iterateRanges(ranges, func(i int) { years = append(years, i) })
+	slices.Sort(years)
+	return func(y int) int {
+		i, _ := slices.BinarySearch(years, y+1)
+		if i == len(years) {
+			return maxCalendarYear + 1
+		}
+		return min(years[i], maxCalendarYear+1)
+	}
 }
 
 func makeYearMatcher(ranges []*schedulepb.Range) func(int) bool {

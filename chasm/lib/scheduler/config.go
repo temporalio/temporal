@@ -22,6 +22,8 @@ type (
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
 		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
+		MaxCatchupMatchesPerTask          int           // Spec matches the generator walks per task while catching up; the rest is walked by a follow-up task. 0 = unlimited.
+		EnableCatchupSkipShortcut         bool          // Stop walking a range once no later match in it can start (Skip with one buffered, or a full buffer); the skipped tail is not counted.
 	}
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
@@ -98,6 +100,8 @@ var (
 		IdleTime:                          7 * 24 * time.Hour,
 		EventLogMaxEntries:                30,
 		EventLogMaxMessageLen:             1000,
+		MaxCatchupMatchesPerTask:          5000,
+		EnableCatchupSkipShortcut:         false,
 	}
 )
 
