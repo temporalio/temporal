@@ -299,7 +299,8 @@ func (s *laneStreamSender) reconcileLanes(attr *replicationspb.SyncReplicationSt
 	// Obtain limiters before publishing new lanes to the send-loop manager.
 	s.setRequestedLanes(requested)
 	if s.lanePolicyDisabled.Load() {
-		clear(requested)
+		// Send loops can already read the published map. Replace it instead of mutating it.
+		requested = nil
 		s.setRequestedLanes(requested)
 	}
 	for _, lane := range desired {
@@ -349,13 +350,13 @@ func (s *laneStreamSender) laneSignals(attr *replicationspb.SyncReplicationState
 	for _, lane := range snapshots {
 		lanes = append(lanes, LaneStatus{
 			Key:         lane.logicalKey,
-			Filter:      lane.filter,
+			Filter:      LaneFilter{NamespaceIDs: slices.Clone(lane.filter.NamespaceIDs)},
 			SentCursor:  lane.cursor,
 			Acked:       lane.acked,
 			AckedTime:   lane.ackedTime,
 			Retiring:    lane.retiring,
 			LastRefused: s.laneRefusedAt[lane.logicalKey],
-			PolicyState: lane.policyState,
+			PolicyState: slices.Clone(lane.policyState),
 		})
 	}
 	s.laneStateMu.Unlock()
