@@ -1366,6 +1366,9 @@ var (
 		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
+	WorkflowHeartbeatNotificationBufferedInput               = NewCounterDef("workflow_heartbeat_notification_buffered_input")
+	WorkflowHeartbeatNotificationEstimatedFirstBufferedInput = NewCounterDef("workflow_heartbeat_notification_estimated_first_buffered_input")
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
