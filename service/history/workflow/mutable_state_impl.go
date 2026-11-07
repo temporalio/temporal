@@ -8536,6 +8536,12 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 
+	if regenerateTimerTasksForTimeSkipping {
+		// Reset before dirty HSM tasks are materialized so the normal generator emits exactly one
+		// earliest timer using the new workflow clock offset.
+		refreshStateMachineTimerTasksForTimeSkipping(ms)
+	}
+
 	if err := ms.taskGenerator.GenerateDirtySubStateMachineTasks(ms.shard.StateMachineRegistry()); err != nil {
 		return err
 	}
