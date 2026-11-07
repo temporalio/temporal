@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -69,7 +70,7 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 					Namespace:         env.Namespace().String(),
 					WorkflowExecution: tv.WorkflowExecution(),
 					SignalName:        "test-signal",
-					RequestId:         tv.Any().String(),
+					RequestId:         uuid.NewString(),
 				})
 				require.NoError(t, err)
 			case "timer":
