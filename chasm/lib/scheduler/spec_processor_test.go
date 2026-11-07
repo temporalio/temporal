@@ -45,6 +45,52 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 	}
 }
 
+// A completion callback can wake the generator between an occurrence's nominal
+// time and its jittered start. Passing the returned high water mark to the next
+// invocation must preserve that occurrence, even if the early wake buffered nothing.
+func TestProcessTimeRange_JitteredStartSurvivesExtraWakeup(t *testing.T) {
+	for _, extraWakeup := range []bool{false, true} {
+		name := "scheduled_wakeup_only"
+		if extraWakeup {
+			name = "extra_wakeup_during_jitter"
+		}
+		t.Run(name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := chasm.NewMutableContext(context.Background(), env.Node)
+			schedule := defaultSchedule()
+			schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+			schedule.Policies.CatchupWindow = durationpb.New(2 * time.Hour)
+			schedule.Spec = &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+				Jitter:   durationpb.New(time.Hour),
+			}
+			sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+			require.NoError(t, err)
+			processor := newTestSpecProcessor(env.Ctrl)
+			start := time.Date(2025, 3, 31, 0, 59, 0, 0, time.UTC)
+			next, err := processor.NextTime(sched, start)
+			require.NoError(t, err)
+			require.True(t, next.Next.After(next.Nominal), "fixture must have nonzero jitter")
+
+			if extraWakeup {
+				wake := next.Nominal.Add(next.Next.Sub(next.Nominal) / 2)
+				res, err := processor.ProcessTimeRange(sched, start, wake, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, sched.WorkflowID(), "", false, nil)
+				require.NoError(t, err)
+				require.Empty(t, res.BufferedStarts)
+				require.Equal(t, next.Next, res.NextWakeupTime)
+				// GeneratorTaskHandler persists LastActionTime as LastProcessedTime.
+				start = res.LastActionTime
+			}
+
+			res, err := processor.ProcessTimeRange(sched, start, next.Next, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, sched.WorkflowID(), "", false, nil)
+			require.NoError(t, err)
+			require.Len(t, res.BufferedStarts, 1, "an extra wakeup must not skip the pending jittered occurrence")
+			require.Equal(t, next.Nominal, res.BufferedStarts[0].GetNominalTime().AsTime())
+			require.Equal(t, next.Next, res.BufferedStarts[0].GetActualTime().AsTime())
+		})
+	}
+}
+
 func TestProcessTimeRange_LimitedActions(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := chasm.NewMutableContext(context.Background(), env.Node)
