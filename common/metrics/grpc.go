@@ -27,6 +27,13 @@ var (
 	// If trailer key has such a suffix, value will be base64 encoded.
 	metricsTrailerKey = "metrics-trailer-bin"
 	metricsCtxKey     = metricsContextKey{}
+	metricsCtxPool    = &sync.Pool{
+		New: func() any {
+			return &metricsContext{
+				CountersInt: make(map[string]int64, 4),
+			}
+		},
+	}
 )
 
 // NewServerMetricsContextInjectorInterceptor returns grpc server interceptor that adds metrics context to golang
@@ -98,6 +105,12 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		if metricsCtx == nil {
 			return resp, err
 		}
+		defer func() {
+			metricsCtx.Lock()
+			clear(metricsCtx.CountersInt)
+			metricsCtx.Unlock()
+			metricsCtxPool.Put(metricsCtx)
+		}()
 
 		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 
@@ -132,7 +145,7 @@ func getMetricsContext(ctx context.Context) *metricsContext {
 }
 
 func AddMetricsContext(ctx context.Context) context.Context {
-	metricsCtx := &metricsContext{}
+	metricsCtx := metricsCtxPool.Get().(*metricsContext)
 	return context.WithValue(ctx, metricsCtxKey, metricsCtx)
 }
 
