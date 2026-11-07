@@ -29,7 +29,5 @@ func (it *iter) PageState() []byte {
 }
 
 func (it *iter) Close() (retError error) {
-	defer func() { it.session.handleError(retError) }()
-
 	return it.gocqlIter.Close()
 }
