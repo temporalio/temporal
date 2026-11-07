@@ -23,6 +23,7 @@ type (
 		goType                   reflect.Type
 		componentGoType          reflect.Type // It is not clear how this one is used.
 		validateFn               validateFn
+		validateStandbyFn        func(context.Context, ComponentRef, TaskInvocation, any) (bool, error)
 		pureTaskExecuteFn        pureTaskExecuteFn
 		sideEffectTaskExecuteFn  sideEffectTaskExecuteFn
 		sideEffectTaskDiscardFn  sideEffectTaskDiscardFn
@@ -45,13 +46,13 @@ type (
 )
 
 // NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
-// The handler's Discard method is called on standby clusters when a task has been pending past the discard delay.
+// The handler's Discard method is called when standby validation returns false.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
 	handler SideEffectTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
-	return newRegistrableTask(
+	rt := newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
@@ -84,6 +85,17 @@ func NewRegistrableSideEffectTask[C any, T any](
 		},
 		opts...,
 	)
+	rt.validateStandbyFn = func(ctx context.Context, ref ComponentRef, invocation TaskInvocation, task any) (bool, error) {
+		return ReadComponent(ctx, ref, func(component C, ctx Context, _ struct{}) (bool, error) {
+			return handler.Validate(ctx, component, invocation, task.(T))
+		}, struct{}{})
+	}
+	if validator, ok := handler.(StandbyTaskValidator[T]); ok {
+		rt.validateStandbyFn = func(ctx context.Context, ref ComponentRef, invocation TaskInvocation, task any) (bool, error) {
+			return validator.ValidateStandby(ctx, ref, invocation, task.(T))
+		}
+	}
+	return rt
 }
 
 func NewRegistrablePureTask[C any, T any](
