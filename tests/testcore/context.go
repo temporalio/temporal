@@ -9,7 +9,7 @@ import (
 
 // NewContext creates a context with default timeout and RPC headers.
 //
-// NOTE: If you're using testcore.NewEnv, you can use env.Context() directly - it already
+// NOTE: If you're using testcore.NewEnv in a suite, use the suite's Context() directly - it already
 // includes RPC headers. This function is primarily for legacy tests or creating standalone
 // contexts outside of the TestEnv framework.
 //

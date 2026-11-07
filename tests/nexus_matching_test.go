@@ -29,9 +29,13 @@ func TestNexusMatchingTestSuite(t *testing.T) {
 }
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
-	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, b testcore.MatchingBehavior) {
-		dispatchAndCompleteNexusTask(s.T(), env, b.ForceTaskForward, b.ForcePollForward)
-	})
+	for _, behavior := range testcore.AllMatchingBehaviors() {
+		s.RunSequential(behavior.Name(), func(s *NexusMatchingTestSuite) {
+			env := testcore.NewEnv(s.T(), behavior.Options()...)
+			behavior.InjectHooks(env)
+			dispatchAndCompleteNexusTask(s.T(), env, behavior.ForceTaskForward, behavior.ForcePollForward)
+		})
+	}
 }
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwarding() {
