@@ -42,6 +42,33 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 	}
 }
 
+func ApplyTypeMapWithMapper(
+	searchAttributes *commonpb.SearchAttributes,
+	typeMap NameTypeMap,
+	mapper Mapper,
+	namespace string,
+) {
+	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		_, metadataHasValueType := saPayload.Metadata[MetadataType]
+		if metadataHasValueType {
+			continue
+		}
+		saFieldName := saName
+		if mapper != nil && sadefs.IsMappable(saName) {
+			fieldName, err := mapper.GetFieldName(saName, namespace)
+			if err != nil {
+				continue
+			}
+			saFieldName = fieldName
+		}
+		valueType, err := typeMap.getType(saFieldName, customCategory|predefinedCategory)
+		if err != nil {
+			continue
+		}
+		sadefs.SetMetadataType(saPayload, valueType)
+	}
+}
+
 // This may mutate saPtr and *saPtr
 func AddSearchAttributes(saPtr **commonpb.SearchAttributes, sas ...chasm.SearchAttributeKeyValue) {
 	if *saPtr == nil {

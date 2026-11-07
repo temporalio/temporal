@@ -49,6 +49,12 @@ const (
 
 	ReservedPrefix = "Temporal"
 
+	// Not a real search attribute. This is a special key that can be added to search attributes map
+	// to indicate the keys are aliases.
+	// Eg: In frontend, StartWorkflowExecution can add this key to the search attributes map before
+	// sending the request to history which can handle it accordingly.
+	TemporalAliasedSearchAttributes = "TemporalAliasedSearchAttributes"
+
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
 	// search attribute in visibility.
 	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` IS NULL OR ` + TemporalNamespaceDivision + ` IS NOT NULL`
@@ -267,6 +273,9 @@ var (
 		}
 		return res
 	}()
+
+	// Payload stored in TemporalAliasedSearchAttributesPayload.
+	TemporalAliasedSearchAttributesPayload = MustEncodeValue(true, enumspb.INDEXED_VALUE_TYPE_BOOL)
 )
 
 // System returns a clone of the system search attributes map.
