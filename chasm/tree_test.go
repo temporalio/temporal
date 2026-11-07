@@ -6203,6 +6203,25 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	// TestComponent (the root of testComponentTree) does not implement TimeSkippingRuntimeGate,
 	// which is exactly what the "gate not implemented" cases below rely on.
+	s.Run("WorkflowWithoutTaskRegenMarkerIsNoOp", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		featureFlagChecked := false
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool {
+			featureFlagChecked = true
+			return true
+		}
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		})
+		root, err := s.newTestTree(nil)
+		s.Require().NoError(err)
+		s.Require().Equal(WorkflowArchetypeID, root.ArchetypeID())
+
+		err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
+		s.NoError(err)
+		s.False(featureFlagChecked)
+		s.Zero(s.nodeBackend.NumTasksAdded())
+	})
 
 	s.Run("NilTimeSkippingInfoIsSafeNoOp", func() {
 		s.nodeBackend = &MockNodeBackend{}
@@ -6211,7 +6230,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 		var err error
 		s.NotPanics(func() {
-			err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+			err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		})
 		s.NoError(err, "an execution without time-skipping info must be a safe no-op")
 	})
@@ -6249,7 +6268,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		// The FailOnAnyUnexpectedError logger also asserts that no error-level log is emitted.
 		var closeErr error
 		s.NotPanics(func() {
-			closeErr = child.closeTransactionHandleTimeSkipping(NewContext(context.Background(), child))
+			closeErr = child.closeTransactionHandleTimeSkipping(NewContext(context.Background(), child), true)
 		})
 		s.NoError(closeErr)
 	})
@@ -6263,7 +6282,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 		// Config disabled short-circuits before the gate check, so the missing
 		// TimeSkippingRuntimeGate on TestComponent must not surface as an error.
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 	})
 
@@ -6283,7 +6302,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Require().True(ok)
 		tl.Expect(testlogger.Error, "does not implement TimeSkippingRuntimeGate")
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.Require().Error(err, "enabled config with no gate implementation is a misconfiguration")
 		var internalErr *serviceerror.Internal
 		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
@@ -6298,7 +6317,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 		s.Nil(recorded)
 		s.True(s.nodeBackend.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled())
@@ -6317,7 +6336,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 			tag.Archetype(testTimeSkippingComponentName),
 		)
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 		s.True(expectedLog.Matched())
 		s.Nil(recorded, "a gate that reports not-skippable must not record a transition")
@@ -6339,37 +6358,67 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 			tag.String("chasm-task-type", testPureTaskFQN),
 		)
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 		s.True(expectedLog.Matched())
 		s.Nil(recorded, "a nil transition must be handled as no time skip")
 		s.Equal(0, s.nodeBackend.NumTasksAdded(), "timer tasks are not regenerated when a timer is already due")
 	})
 
-	s.Run("GateSkippable_RecordsTransitionAndRegeneratesTasks", func() {
-		root := gateRoot(true)
-		var recorded *TimeSkippingTransition
-		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
-		tl, ok := s.logger.(*testlogger.TestLogger)
-		s.Require().True(ok)
-		expectedLog := tl.Expect(
-			testlogger.Debug,
-			"chasm time skipping transition recorded",
-			tag.Archetype(testTimeSkippingComponentName),
-		)
+	for _, dirty := range []bool{false, true} {
+		s.Run(fmt.Sprintf("ActiveSkippableExecution_SubtreeDirty=%t", dirty), func() {
+			root := gateRoot(true)
+			root.subtreeIsDirty = dirty
+			var recorded *TimeSkippingTransition
+			s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+			tl, ok := s.logger.(*testlogger.TestLogger)
+			s.Require().True(ok)
+			expectedLog := tl.Expect(
+				testlogger.Debug,
+				"chasm time skipping transition recorded",
+				tag.Archetype(testTimeSkippingComponentName),
+			)
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
-		s.NoError(err)
-		s.True(expectedLog.Matched())
-		s.Require().NotNil(recorded, "a skippable execution with a future timer must record a transition")
-		s.True(recorded.IsValid())
-		s.True(baseTime.Add(time.Hour).Equal(recorded.GetTargetTime()), "skips to the earliest future timer task")
-		// Two side-effect timer tasks are each regenerated, plus the single earliest pure task
-		// (only one physical pure task is generated regardless of pure-task count) => 3 total.
-		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
-		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
-			"pure-task deletion is anchored at the earliest pure scheduled time")
-	})
+			err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
+			s.NoError(err)
+			s.True(expectedLog.Matched())
+			s.Require().NotNil(recorded, "a skippable execution with a future timer must record a transition")
+			s.True(recorded.IsValid())
+			s.True(baseTime.Add(time.Hour).Equal(recorded.GetTargetTime()), "skips to the earliest future timer task")
+			// Two side-effect timer tasks are each regenerated, plus the single earliest pure task
+			// (only one physical pure task is generated regardless of pure-task count) => 3 total.
+			s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
+			s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
+				"pure-task deletion is anchored at the earliest pure scheduled time")
+		})
+	}
+
+	for _, tc := range []struct {
+		name           string
+		subtreeIsDirty bool
+		replicatedSkip bool
+		expectedTasks  int
+	}{
+		{name: "PassiveCleanWithoutReplicatedSkip"},
+		{name: "PassiveDirtyWithoutReplicatedSkip", subtreeIsDirty: true},
+		{name: "PassiveCleanWithReplicatedSkip", replicatedSkip: true, expectedTasks: 3},
+		{name: "PassiveDirtyWithReplicatedSkip", subtreeIsDirty: true, replicatedSkip: true, expectedTasks: 3},
+	} {
+		s.Run(tc.name, func() {
+			root := gateRoot(true)
+			root.subtreeIsDirty = tc.subtreeIsDirty
+			if tc.replicatedSkip {
+				root.MarkTotalTimeSkippedUpdatedInPassive()
+			}
+			var recorded *TimeSkippingTransition
+			s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+			err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), false)
+			s.NoError(err)
+			s.Nil(recorded, "passive transactions must not initiate a time skip even when the execution is skippable")
+			s.Equal(tc.expectedTasks, s.nodeBackend.NumTasksAdded())
+		})
+	}
 
 	s.Run("AccumulatedDurationCap_RejectsTransition", func() {
 		root := gateRoot(true)
@@ -6385,7 +6434,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		defer metricsHandler.StopCapture(capture)
 		root.metricsHandler = metricsHandler
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 		s.Nil(recorded)
 		s.Zero(s.nodeBackend.NumTasksAdded())
@@ -6403,7 +6452,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
 
-		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root), true)
 		s.NoError(err)
 		s.Require().NotNil(recorded)
 		s.True(recorded.IsValid())
@@ -6688,6 +6737,11 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(baseTime)
 
+		sideEffectTaskData, err := encodeChasmBlob(&commonpb.Payload{})
+		s.NoError(err)
+		pureTaskData, err := encodeChasmBlob(&TestPureTask{})
+		s.NoError(err)
+
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
@@ -6699,6 +6753,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
 								{
 									TypeId:                    testSideEffectTaskTypeID,
+									Data:                      sideEffectTaskData,
 									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
 									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 									VersionedTransitionOffset: 1,
@@ -6708,6 +6763,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 								{
 									TypeId:                    testPureTaskTypeID,
+									Data:                      pureTaskData,
 									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
 									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 									VersionedTransitionOffset: 2,
@@ -6723,45 +6779,58 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		return root
 	}
 
-	s.Run("WithoutFlagLeavesCreatedTasksUntouched", func() {
-		root := newTree()
-
-		_, err := root.CloseTransaction(context.Background(), true)
-		s.Require().NoError(err)
-
-		s.Equal(0, s.nodeBackend.NumTasksAdded(),
-			"already-created timer/pure tasks are not regenerated without the replication flag")
-	})
-
-	s.Run("WithFlagRegeneratesTimerAndPureTasks", func() {
-		root := newTree()
-
-		root.MarkTotalTimeSkippedUpdatedInPassive()
-		s.True(root.totalTimeSkippedUpdatedInPassive)
-
-		_, err := root.CloseTransaction(context.Background(), true)
-		s.Require().NoError(err)
-
-		s.Equal(2, s.nodeBackend.NumTasksAdded(),
-			"the timer side-effect task and the single earliest pure task are re-stamped")
-		var sideEffectTimers, pureTimers int
-		for _, task := range s.nodeBackend.TasksByCategory[tasks.CategoryTimer] {
-			switch task.(type) {
-			case *tasks.ChasmTask:
-				sideEffectTimers++
-			case *tasks.ChasmTaskPure:
-				pureTimers++
-			default:
+	for _, tc := range []struct {
+		name           string
+		isActive       bool
+		subtreeIsDirty bool
+		replicatedSkip bool
+		expectedTasks  int
+	}{
+		{name: "PassiveCleanWithoutReplicatedSkip"},
+		{name: "PassiveDirtyWithoutReplicatedSkip", subtreeIsDirty: true},
+		{name: "PassiveCleanWithReplicatedSkip", replicatedSkip: true, expectedTasks: 2},
+		{name: "PassiveDirtyWithReplicatedSkip", subtreeIsDirty: true, replicatedSkip: true, expectedTasks: 2},
+		{name: "ActiveCleanIgnoresPassiveMarker", isActive: true, replicatedSkip: true},
+		{name: "ActiveDirtyIgnoresPassiveMarker", isActive: true, subtreeIsDirty: true, replicatedSkip: true},
+	} {
+		s.Run(tc.name, func() {
+			root := newTree()
+			root.subtreeIsDirty = tc.subtreeIsDirty
+			if tc.subtreeIsDirty {
+				s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+					Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
+				s.testLibrary.mockPureTaskHandler.EXPECT().
+					Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
 			}
-		}
-		s.Equal(1, sideEffectTimers, "the side-effect timer physical task is regenerated")
-		s.Equal(1, pureTimers, "the single earliest pure physical task is regenerated")
+			if tc.replicatedSkip {
+				root.MarkTotalTimeSkippedUpdatedInPassive()
+			}
 
-		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
-		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
-		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
+			_, err := root.CloseTransaction(context.Background(), tc.isActive)
+			s.NoError(err)
+			s.False(root.totalTimeSkippedUpdatedInPassive,
+				"the flag is reset after the transaction closes")
+			s.Equal(tc.expectedTasks, s.nodeBackend.NumTasksAdded())
+			if tc.expectedTasks == 0 {
+				return
+			}
 
-		s.False(root.totalTimeSkippedUpdatedInPassive,
-			"the flag is reset after the transaction closes")
-	})
+			var sideEffectTimers, pureTimers int
+			for _, task := range s.nodeBackend.TasksByCategory[tasks.CategoryTimer] {
+				switch task.(type) {
+				case *tasks.ChasmTask:
+					sideEffectTimers++
+				case *tasks.ChasmTaskPure:
+					pureTimers++
+				default:
+				}
+			}
+			s.Equal(1, sideEffectTimers, "the side-effect timer physical task is regenerated")
+			s.Equal(1, pureTimers, "the single earliest pure physical task is regenerated")
+
+			rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
+			s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
+			s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
+		})
+	}
 }

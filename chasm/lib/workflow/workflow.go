@@ -78,6 +78,13 @@ func (w *Workflow) IsExecutionSkippable(_ chasm.Context) bool {
 	return w.pendingNexusOperationCount() == 0
 }
 
+// FindSkipToTarget returns an empty transition until CHASM-owned Workflow timers
+// can contribute skip targets.
+func (w *Workflow) FindSkipToTarget(ctx chasm.Context) chasm.TimeSkippingTransition {
+	// #todo: if a feature is migrated from workflow to chasm
+	return *chasm.NewTimeSkippingTransition(ctx.Now(w))
+}
+
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
 	return nil
