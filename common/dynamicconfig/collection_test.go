@@ -3,6 +3,7 @@ package dynamicconfig_test
 import (
 	"errors"
 	"maps"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ const (
 	testGetIntPropertyKey                             = "testGetIntPropertyKey"
 	testGetFloat64PropertyKey                         = "testGetFloat64PropertyKey"
 	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
+	testWithValidationKey                             = "testWithValidationKey"
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
@@ -171,6 +173,102 @@ func (s *collectionSuite) TestGetDurationProperty() {
 	s.Equal(33*time.Hour, value())
 	s.client.SetValue(testGetDurationPropertyKey, float32(33.5))
 	s.Equal(33*time.Second+500*time.Millisecond, value())
+}
+
+func (s *collectionSuite) TestGetPositiveDurationProperty() {
+	// ClusterMetadataRefreshInterval is a global setting validated with Positive, and its zero
+	// value panics time.NewTicker.
+	setting := dynamicconfig.ClusterMetadataRefreshInterval
+	key := setting.Key().String()
+	value := setting.Get(s.cln)
+	s.Equal(time.Minute, value())
+
+	// positive values are accepted in every form a duration setting takes
+	s.client.SetValue(key, 5*time.Minute)
+	s.Equal(5*time.Minute, value())
+	s.client.SetValue(key, 33)
+	s.Equal(33*time.Second, value())
+	s.client.SetValue(key, "33h")
+	s.Equal(33*time.Hour, value())
+
+	// zero and negative values fall back to the default, however they are written
+	for _, bad := range []any{0, -1, time.Duration(0), -time.Second, "0", "0s", "-5s", float64(0), float32(-0.5)} {
+		s.client.SetValue(key, time.Hour)
+		s.Equal(time.Hour, value())
+		s.client.SetValue(key, bad)
+		s.Equal(time.Minute, value(), "value %v (%T)", bad, bad)
+	}
+}
+
+func (s *collectionSuite) TestGetPositiveDurationPropertyConstrainedDefault() {
+	// MatchingUpdateAckInterval is a task queue setting with constrained defaults.
+	setting := dynamicconfig.MatchingUpdateAckInterval
+	key := setting.Key().String()
+	value := setting.Get(s.cln)
+	def := value("ns1", "tq1", 0)
+	s.Positive(def)
+
+	// a zero override on the unconstrained value is ignored and the matching default is used
+	s.client.Set(key, []dynamicconfig.ConstrainedValue{{Value: 0}})
+	s.Equal(def, value("ns1", "tq1", 0))
+
+	// a positive override still wins
+	s.client.Set(key, []dynamicconfig.ConstrainedValue{{Value: 7 * time.Second}})
+	s.Equal(7*time.Second, value("ns1", "tq1", 0))
+}
+
+func (s *collectionSuite) TestPositiveIntervalSettingsRejectZero() {
+	for _, setting := range []dynamicconfig.GenericSetting{
+		dynamicconfig.ClusterMetadataRefreshInterval,
+		dynamicconfig.NamespaceCacheRefreshInterval,
+		dynamicconfig.MatchingUpdateAckInterval,
+		dynamicconfig.MatchingGetUserDataRefresh,
+		dynamicconfig.MatchingNexusEndpointsRefreshInterval,
+		dynamicconfig.TimerProcessorUpdateAckInterval,
+		dynamicconfig.TimerProcessorMaxPollInterval,
+		dynamicconfig.ArchivalProcessorMaxPollInterval,
+		dynamicconfig.ArchivalProcessorUpdateAckInterval,
+	} {
+		s.Error(setting.Validate(0), setting.Key().String())
+		s.Error(setting.Validate("-1s"), setting.Key().String())
+		s.NoError(setting.Validate("1s"), setting.Key().String())
+	}
+}
+
+func (s *collectionSuite) TestWithValidation() {
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter(
+		testWithValidationKey,
+		dynamicconfig.WithValidation(
+			func(v any) (int, error) {
+				i, ok := v.(int)
+				if !ok {
+					return 0, errors.New("not an int")
+				}
+				return i, nil
+			},
+			dynamicconfig.Positive[int],
+			func(i int) error {
+				if i > 100 {
+					return errors.New("too large")
+				}
+				return nil
+			},
+		),
+		10,
+		"",
+	)
+	value := setting.Get(s.cln)
+	s.Equal(10, value())
+	s.client.SetValue(testWithValidationKey, 50)
+	s.Equal(50, value())
+	// every validator applies, and the converter's own error still wins
+	for _, bad := range []any{0, -3, 101, "7"} {
+		s.client.SetValue(testWithValidationKey, bad)
+		s.Equal(10, value(), "value %v", bad)
+		s.Error(setting.Validate(bad))
+	}
+	s.NoError(setting.Validate(100))
+	s.Error(dynamicconfig.Positive(math.NaN()))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
