@@ -64,6 +64,15 @@ func BuildCLIOptions() *cli.App {
 			EnvVar: "SQL_PASSWORD",
 		},
 		cli.StringFlag{
+			Name: schema.CLIFlagPasswordFile,
+			// Path to a file whose contents are read as the SQL password.
+			// Mutually exclusive with --password / $SQL_PASSWORD. Avoids
+			// exposing the password in /proc, shell history, and `ps` output
+			// (see #10028).
+			Usage:  "path to a file containing the password used for authentication when connecting to sql host (mutually exclusive with --password)",
+			EnvVar: "SQL_PASSWORD_FILE",
+		},
+		cli.StringFlag{
 			Name:   schema.CLIFlagDatabase,
 			Value:  "temporal",
 			Usage:  "name of the sql database",
