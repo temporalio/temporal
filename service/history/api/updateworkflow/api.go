@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
@@ -56,6 +58,8 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
+	bufferedForWHN         bool
+	firstBufferedForWHN    bool
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -105,6 +109,16 @@ func (u *Updater) Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+	if u.bufferedForWHN {
+		handler := u.shardCtx.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(u.req.Request.Namespace),
+			metrics.StringTag("input_type", workflow.WorkflowHeartbeatNotificationUpdateAdmittedInputType),
+		)
+		metrics.WorkflowHeartbeatNotificationBufferedInput.With(handler).Record(1)
+		if u.firstBufferedForWHN {
+			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+		}
 	}
 
 	return u.OnSuccess(ctx)
@@ -182,6 +196,13 @@ func (u *Updater) applyRequest(
 	if err := validateCallbacks(ctx, updateReg, ms, updateRequest); err != nil {
 		return nil, err
 	}
+	startedWorkflowTask := ms.HasStartedWorkflowTask()
+	hadWHNBufferedInput := false
+	if startedWorkflowTask {
+		hadWHNBufferedInput = ms.HasAnyBufferedEvent(func(event *historypb.HistoryEvent) bool {
+			return workflow.IsWorkflowHeartbeatNotificationInputType(event.GetEventType())
+		}) || updateReg.HasOutgoingMessages(false)
+	}
 
 	var (
 		alreadyExisted bool
@@ -197,6 +218,10 @@ func (u *Updater) applyRequest(
 	eventWritten, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
 	if err != nil {
 		return nil, err
+	}
+	if startedWorkflowTask && !alreadyExisted {
+		u.bufferedForWHN = true
+		u.firstBufferedForWHN = !hadWHNBufferedInput
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
