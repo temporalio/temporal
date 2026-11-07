@@ -94,6 +94,59 @@ func TestWorkflowHeartbeatNotificationMetricsWithoutStartedTask(t *testing.T) {
 	}
 }
 
+func TestWorkflowHeartbeatNotificationMetricsTimerFiredDuringStartedTask(t *testing.T) {
+	t.Parallel()
+	env := testcore.NewEnv(t)
+	tv := env.Tv()
+	start, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                tv.RequestID(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               tv.WorkflowID(),
+		WorkflowType:             tv.WorkflowType(),
+		TaskQueue:                tv.TaskQueue(),
+		Identity:                 tv.WorkerIdentity(),
+		WorkflowExecutionTimeout: durationpb.New(time.Minute),
+		WorkflowTaskTimeout:      durationpb.New(30 * time.Second),
+	})
+	require.NoError(t, err)
+	tv = tv.WithRunID(start.GetRunId())
+	capture := env.StartNamespaceMetricCapture()
+
+	resp, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+					Attributes: &commandpb.Command_StartTimerCommandAttributes{
+						StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+							TimerId:            "test-timer",
+							StartToFireTimeout: durationpb.New(time.Second),
+						},
+					},
+				}},
+				ForceCreateNewWorkflowTask: true,
+				ReturnNewWorkflowTask:      true,
+			}, nil
+		})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetWorkflowTask())
+
+	await.Require(t.Context(), t, func(t *await.T) {
+		buffered := capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name())
+		require.Len(t, buffered, 1)
+		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", buffered[0].Tags["input_type"])
+		first := capture.Metric(metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.Name())
+		require.Len(t, first, 1)
+		require.Equal(t, "EVENT_TYPE_TIMER_FIRED", first[0].Tags["input_type"])
+	}, 10*time.Second, 100*time.Millisecond)
+
+	_, err = env.TaskPoller().HandleWorkflowTask(tv, resp.GetWorkflowTask(),
+		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+		})
+	require.NoError(t, err)
+}
+
 func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasmEnabled bool) {
 	if chasmEnabled {
 		s.T().Skip("metric coverage uses the HSM Nexus operation path")
@@ -150,7 +203,6 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		activityFuture := workflow.ExecuteActivity(activityCtx, activity)
 		childFuture := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childID}), child)
 		nexusFuture := workflow.NewNexusClient(endpoint, "service").ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
-		timerFuture := workflow.NewTimer(ctx, 20*time.Second)
 		workflow.GetSignalChannel(ctx, "begin-local-activity").Receive(ctx, nil)
 		localCtx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
 			StartToCloseTimeout: time.Minute,
@@ -159,7 +211,7 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		if err := workflow.ExecuteLocalActivity(localCtx, localActivity).Get(ctx, nil); err != nil {
 			return err
 		}
-		for _, future := range []workflow.Future{activityFuture, childFuture, nexusFuture, timerFuture} {
+		for _, future := range []workflow.Future{activityFuture, childFuture, nexusFuture} {
 			if err := future.Get(ctx, nil); err != nil {
 				return err
 			}
@@ -182,6 +234,11 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 	s.Await(func(s *NexusWorkflowTestSuite) {
 		history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED)
+		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+	}, 10*time.Second, 100*time.Millisecond)
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: childID})
+		s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
 	}, 10*time.Second, 100*time.Millisecond)
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "begin-local-activity", nil))
 	await.Rcv(s.T(), localActivityStarted)
@@ -201,15 +258,6 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: op.CallbackHeader.Get(commonnexus.CallbackTokenHeader)},
 	}))
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "test-signal", nil))
-	// The timer is scheduled by the preceding Workflow Task and fires while the Local Activity holds this one open.
-	s.Await(func(s *NexusWorkflowTestSuite) {
-		for _, recording := range capture.Metric(metrics.WorkflowHeartbeatNotificationBufferedInput.Name()) {
-			if recording.Tags["input_type"] == "EVENT_TYPE_TIMER_FIRED" {
-				return
-			}
-		}
-		s.Fail("timer result was not buffered")
-	}, 30*time.Second, 100*time.Millisecond)
 	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
@@ -221,7 +269,6 @@ func (s *NexusWorkflowTestSuite) TestBufferedInputMetricsWithLocalActivity(chasm
 		"EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED":  1,
 		"EVENT_TYPE_NEXUS_OPERATION_COMPLETED":           1,
 		"EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED":         1,
-		"EVENT_TYPE_TIMER_FIRED":                         1,
 		"EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED": 1,
 	}
 	s.Await(func(s *NexusWorkflowTestSuite) {
