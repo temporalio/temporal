@@ -127,6 +127,7 @@ func (u *Updater) emitWorkflowHeartbeatNotificationMetrics(namespaceName string)
 
 	if u.firstBufferedForWorkflowHeartbeatNotification {
 		metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(handler).Record(1)
+		workflow.SendWorkflowHeartbeatNotification(u.shardCtx, namespaceName)
 	}
 }
 

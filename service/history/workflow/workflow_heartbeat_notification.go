@@ -4,6 +4,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/metrics"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // WorkflowHeartbeatNotificationUpdateAdmittedMetricTag is a dummy event type: admitting an Update writes no history
@@ -45,7 +46,8 @@ func isWorkflowHeartbeatNotificationInputType(eventType enumspb.EventType) bool 
 	}
 }
 
-func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
+func (c *ContextImpl) handleBufferedInputsForWorkflowHeartbeatNotification(
+	shardCtx historyi.ShardContext,
 	newBufferedEvents []*historypb.HistoryEvent,
 ) {
 	if len(newBufferedEvents) == 0 || !c.MutableState.HasStartedWorkflowTask() {
@@ -70,15 +72,24 @@ func (c *ContextImpl) emitWorkflowHeartbeatNotificationBufferedInputMetrics(
 	if namespaceEntry == nil {
 		return
 	}
-	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceEntry.Name().String()))
+	namespaceName := namespaceEntry.Name().String()
+	handler := c.metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
 
-	for _, eventType := range filteredNewBufferedEventTypes {
+	for i, eventType := range filteredNewBufferedEventTypes {
 		inputHandler := handler.WithTags(metrics.EventTypeTag(eventType))
 		metrics.WorkflowHeartbeatNotificationBufferedInput.With(inputHandler).Record(1)
-		if firstBufferedInput {
+		if firstBufferedInput && i == 0 {
 			metrics.WorkflowHeartbeatNotificationEstimatedFirstBufferedInput.With(inputHandler).Record(1)
-			firstBufferedInput = false
 		}
+	}
+	if firstBufferedInput {
+		SendWorkflowHeartbeatNotification(shardCtx, namespaceName)
+	}
+}
+
+func SendWorkflowHeartbeatNotification(shardCtx historyi.ShardContext, namespaceName string) {
+	if !shardCtx.GetConfig().EnableWorkflowHeartbeatNotification(namespaceName) {
+		return
 	}
 }
 
