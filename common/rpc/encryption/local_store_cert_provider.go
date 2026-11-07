@@ -456,22 +456,22 @@ func buildCAPool(cas []string, getBytes loadOrDecodeDataFunc) (*x509.CertPool, [
 			return nil, nil, errors.New("unknown failure constructing cert pool for ca")
 		}
 
-		cert, err := parseCert(caBytes)
+		parsed, err := parseCerts(caBytes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse x509 certificate: %w", err)
 		}
-		certs = append(certs, cert)
+		certs = append(certs, parsed...)
 	}
 	return caPool, certs, nil
 }
 
 // logic borrowed from tls.X509KeyPair()
-func parseCert(bytes []byte) (*x509.Certificate, error) {
+func parseCerts(pemBytes []byte) ([]*x509.Certificate, error) {
 
 	var certBytes [][]byte
 	for {
 		var certDERBlock *pem.Block
-		certDERBlock, bytes = pem.Decode(bytes)
+		certDERBlock, pemBytes = pem.Decode(pemBytes)
 		if certDERBlock == nil {
 			break
 		}
@@ -481,9 +481,18 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 	}
 
 	if len(certBytes) == 0 || len(certBytes[0]) == 0 {
-		return nil, fmt.Errorf("failed to decode PEM certificate data")
+		return nil, errors.New("failed to decode PEM certificate data")
 	}
-	return x509.ParseCertificate(certBytes[0])
+
+	certs := make([]*x509.Certificate, 0, len(certBytes))
+	for _, der := range certBytes {
+		cert, err := x509.ParseCertificate(der)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, cert)
+	}
+	return certs, nil
 }
 
 func appendError(aggregatedErr error, err error) error {
