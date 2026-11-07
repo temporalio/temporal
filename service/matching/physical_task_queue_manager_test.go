@@ -209,7 +209,7 @@ func TestReaderSignaling(t *testing.T) {
 	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	}, nil)
-	outcome, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
+	outcome, _, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
 	require.Equal(t, syncMatchSuccess, outcome)
 	require.Len(t, readerNotifications, 0,
@@ -256,6 +256,35 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
 	}
 	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
+// TestRecordTaskAdd_FairnessKeyTag verifies the inflow counter tasks_added carries the
+// task's fairness key, gated by breakdownByFairnessKey (mirroring the dispatch metrics).
+func (s *PhysicalTaskQueueManagerTestSuite) TestRecordTaskAdd_FairnessKeyTag() {
+	cases := []struct {
+		name      string
+		breakdown bool
+		wantKey   string
+	}{
+		{"breakdown enabled tags the real key", true, "orders"},
+		{"breakdown disabled omits the key", false, "__omitted__"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			handler := metricstest.NewCaptureHandler()
+			s.tqMgr.metricsHandler = handler
+			s.tqMgr.partitionMgr.config.BreakdownMetricsByFairnessKey = func() bool { return tc.breakdown }
+
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			s.tqMgr.RecordTaskAdd(metrics.TaskAddResultBacklog, false, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, "orders")
+
+			recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+			s.Require().Len(recs, 1)
+			s.Equal(tc.wantKey, recs[0].Tags[metrics.FairnessKeyTagName])
+		})
+	}
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
@@ -844,7 +873,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) syncMatchOneTask(forwardInfo *taskqu
 		CreateTime: timestamppb.New(time.Now()),
 	}, forwardInfo, 0, nil)
 
-	outcome, err := s.tqMgr.TrySyncMatch(context.Background(), task)
+	outcome, _, err := s.tqMgr.TrySyncMatch(context.Background(), task)
 	s.Require().NoError(err)
 	s.Require().Equal(syncMatchSuccess, outcome)
 	s.Require().IsType(&internalTask{}, <-pollResult, "poller should have received the task")

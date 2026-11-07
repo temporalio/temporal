@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -35,19 +36,28 @@ func TestGetDroppedTaskExpiryReason(t *testing.T) {
 }
 
 // TestRecordDroppedTask verifies the single tasks_dropped entry point records the counter
-// with the reason's tag, and is a no-op when the reason is dropReasonUnspecified.
+// with the reason and fairness_key tags, and is a no-op when the reason is dropReasonUnspecified.
 func TestRecordDroppedTask(t *testing.T) {
 	capture := metricstest.NewCaptureHandler()
 	c := capture.StartCapture()
 	defer capture.StopCapture(c)
 
+	breakdownOn := &taskQueueConfig{BreakdownMetricsByFairnessKey: func() bool { return true }}
+	breakdownOff := &taskQueueConfig{BreakdownMetricsByFairnessKey: func() bool { return false }}
+	pri := &commonpb.Priority{FairnessKey: "orders"}
+
 	// not dropped (normal completion): no-op.
-	recordDroppedTask(capture, dropReasonUnspecified)
+	recordDroppedTask(capture, breakdownOn, dropReasonUnspecified, pri)
 	require.Empty(t, c.Snapshot()[metrics.DroppedTasksCounter.Name()])
 
-	// dropped: counted with the reason's tag.
-	recordDroppedTask(capture, dropReasonNotFound)
+	// dropped, breakdown enabled: real fairness key tagged.
+	recordDroppedTask(capture, breakdownOn, dropReasonNotFound, pri)
+	// dropped, breakdown disabled: fairness key omitted.
+	recordDroppedTask(capture, breakdownOff, dropReasonNotFound, pri)
+
 	recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
-	require.Len(t, recordings, 1)
+	require.Len(t, recordings, 2)
 	require.Equal(t, dropReasonNotFound.tag().Value, recordings[0].Tags["reason"])
+	require.Equal(t, "orders", recordings[0].Tags[metrics.FairnessKeyTagName])
+	require.Equal(t, "__omitted__", recordings[1].Tags[metrics.FairnessKeyTagName])
 }
