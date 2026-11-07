@@ -445,7 +445,7 @@ func validateReplicateEventsRequest(
 	}
 
 	// validation on NewRunId is done in newReplicationTask,
-	// so that some backward compatiblity logic can be used by
+	// so that some backward compatibility logic can be used by
 	// newReplicationTaskFromBatch
 
 	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)

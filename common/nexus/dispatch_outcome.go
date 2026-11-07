@@ -97,7 +97,7 @@ type DispatchResult struct {
 // baseClassifyDispatchNexusTaskResponse converts a DispatchNexusTaskResponse into a DispatchResult.
 //
 // onResponseFn classifies a Response outcome. The DispatchNexusTaskResponse proto is shared by every
-// kind of Nexus task, so only the caller knows how to interpret a succesful response.
+// kind of Nexus task, so only the caller knows how to interpret a successful response.
 func baseClassifyDispatchNexusTaskResponse(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	onResponseFn func(*nexuspb.StartOperationResponse) DispatchResult,
