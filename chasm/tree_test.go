@@ -2736,6 +2736,56 @@ func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
 	s.Empty(mutations.DeletedNodes, "there should be no deleted nodes because tree was initialized with empty serialized nodes")
 }
 
+func (s *nodeSuite) TestCloseTransaction_EmptyIntermediateNode() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// Apply a child before its parent, which leaves "SubComponent1" as an empty
+	// intermediate node: applyUpdates only fills in paths present in the mutation, and
+	// closeTransactionSerializeNodes skips nodes below valueStateNeedSerialize.
+	err = root.ApplyMutation(NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"SubComponent1/SubComponent11": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	intermediate, ok := root.children["SubComponent1"]
+	s.True(ok)
+	s.Nil(intermediate.serializedNode, "the intermediate node should be empty because its own path never arrived")
+	s.Equal(valueStateUndefined, intermediate.valueState)
+
+	// Unlike TestApplyMutation_OutOfOrder the parent never arrives, so the intermediate is
+	// still empty on both of the paths that walk the whole tree.
+	//
+	// snapshotInternal recurses into every child. An empty node has no transition to
+	// compare, so it is skipped: only the root and the applied grandchild are returned.
+	snapshot := root.Snapshot(nil)
+	s.Len(snapshot.Nodes, 2, "the empty intermediate node should be skipped, not snapshotted")
+
+	_, err = root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+}
+
 func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	node := s.testComponentTree()
 
