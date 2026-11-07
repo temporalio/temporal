@@ -142,3 +142,34 @@ func TestRegistry_NamespaceScopedRequest(t *testing.T) {
 	require.Equal(t, "1", resp.Failpoints[0].Key)
 	require.Equal(t, "ns-1", resp.Failpoints[0].NamespaceId)
 }
+
+func TestCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	injected := errors.New("injected")
+	tests := []struct {
+		name      string
+		configure func(fp *failpoint.Failpoint[error])
+		want      error
+	}{
+		{name: "not configured", configure: func(*failpoint.Failpoint[error]) {}, want: nil},
+		{name: "return error", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(injected, failpoint.Always) }, want: injected},
+		{name: "return nil", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(nil, failpoint.Always) }, want: nil},
+		{name: "call returning nil", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Call(func() error { return nil }, failpoint.Always)
+		}, want: nil},
+		{name: "call returning error", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Call(func() error { return injected }, failpoint.Always)
+		}, want: injected},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := failpoint.NewRegistry()
+			fp := failpoint.NewFailpoint[error](key1)
+			tc.configure(fp)
+			registry.Set(key1, fp)
+			require.Equal(t, tc.want, failpoint.Checkpoint(registrySource{registry: registry}, key1))
+		})
+	}
+}

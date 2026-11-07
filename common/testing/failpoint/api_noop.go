@@ -21,3 +21,8 @@ func Execute[T any](src Source, key Key) (T, bool) {
 	var zero T
 	return zero, false
 }
+
+// Checkpoint executes an error failpoint for key in the registry of src and returns its error.
+func Checkpoint(src Source, key Key) error {
+	return nil
+}
