@@ -831,11 +831,20 @@ func (s *laneStreamSender) paceLane(ctx context.Context, logicalKey string) erro
 func (s *laneStreamSender) recordLaneLag() {
 	maxLag := s.config.ReplicationLaneMaxLag()
 	now := time.Now()
-	for _, lane := range s.laneRegistry.Snapshots() {
+	lanes := s.laneRegistry.Snapshots()
+	if len(lanes) == 0 {
+		return
+	}
+	sourceHighWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+	for _, lane := range lanes {
 		if lane.ackedTime.IsZero() {
 			continue
 		}
-		lag := now.Sub(lane.ackedTime)
+		var lag time.Duration
+		// An idle lane's ACK timestamp ages even when it has acknowledged its entire range.
+		if lane.acked < min(sourceHighWatermark, lane.scope.Range.ExclusiveMax.TaskID) {
+			lag = now.Sub(lane.ackedTime)
+		}
 		laneTag := metrics.ReplicationLaneTag(lane.logicalKey)
 		metrics.ReplicationLaneLag.With(s.metrics).Record(lag, metrics.ToClusterTag(s.clientClusterName), laneTag)
 		if maxLag > 0 && lag > maxLag {
@@ -850,7 +859,7 @@ func (s *laneStreamSender) recordLaneLag() {
 				tag.NewDurationTag("max-lag", maxLag),
 				tag.NewInt64("lane-sent-cursor", lane.cursor),
 				tag.NewInt64("lane-acked", lane.acked),
-				tag.NewInt64("source-high-watermark", s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID),
+				tag.NewInt64("source-high-watermark", sourceHighWatermark),
 				tag.NewBoolTag("lane-requested", requested),
 				tag.NewTimeTag("lane-last-refused", refusedAt),
 				tag.NewBoolTag("lane-paused", lane.paused),
