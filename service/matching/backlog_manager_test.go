@@ -1003,6 +1003,54 @@ func (s *BacklogManagerTestSuite) TestPhysicalBacklogGauges_AgeTaggedByPriority(
 	s.InDelta(90, ages[tag2], 5)
 }
 
+func (s *BacklogManagerTestSuite) TestClearPhysicalBacklogGauges_RemoveGaugesOnUnload() {
+	otelHandler, err := metricstest.NewHandler(s.logger, metrics.ClientConfig{})
+	s.Require().NoError(err)
+
+	sq := &dbSubqueue{oldestTime: time.Now().Add(-30 * time.Second)}
+	sq.Key = &persistencespb.SubqueueKey{Priority: 1}
+	sq.ApproximateBacklogCount = 3
+
+	db := s.blm.getDB()
+	db.Lock()
+	db.metricsHandler = otelHandler
+	db.subqueues = []*dbSubqueue{sq}
+	db.Unlock()
+
+	gaugeNames := []string{
+		metrics.PhysicalApproximateBacklogCount.Name(),
+		metrics.PhysicalApproximateBacklogAgeSeconds.Name(),
+		metrics.TaskLagPerTaskQueueGauge.Name(),
+	}
+	emitAndClear := func() {
+		db.Lock()
+		db.emitPhysicalBacklogGaugesLocked()
+		db.Unlock()
+		db.clearPhysicalBacklogGauges()
+	}
+	requireExported := func(exported bool) {
+		snap, err := otelHandler.Snapshot()
+		s.Require().NoError(err)
+		for _, name := range gaugeNames {
+			_, err := snap.Gauge(name)
+			if exported {
+				s.Require().NotErrorIs(err, metricstest.ErrMetricNotFound, name)
+			} else {
+				s.Require().ErrorIs(err, metricstest.ErrMetricNotFound, name)
+			}
+		}
+	}
+
+	// Disabled by default: the series stay exported with a zero value.
+	emitAndClear()
+	requireExported(true)
+
+	// The setting is read on each clear, so enabling it applies without a reload.
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingRemoveGaugesOnUnload, true)
+	emitAndClear()
+	requireExported(false)
+}
+
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
 		total += stats.ApproximateBacklogCount

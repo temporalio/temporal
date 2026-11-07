@@ -269,11 +269,11 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.liveness.Stop()
 	c.tqCtxCancel()
 
-	// Emitting zero values for backlog gauges to prevent stale values persisting after a partition is unloaded.
+	// Clearing backlog gauges to prevent stale values persisting after a partition is unloaded.
 	// The call is placed here instead of backlogMgr.Stop() since there could be a race condition where a task is
-	// added to the backlog after we have emitted the zero values inside of the backlogMgr.Stop() call. This happens
+	// added to the backlog after we have cleared the gauges inside of the backlogMgr.Stop() call. This happens
 	// since task reader's and writer's contexts are cancelled after the backlogMgr.Stop() call.
-	c.backlogMgr.getDB().emitZeroPhysicalBacklogGauges()
+	c.backlogMgr.getDB().clearPhysicalBacklogGauges()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)

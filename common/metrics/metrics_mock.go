@@ -361,6 +361,46 @@ func (mr *MockGaugeIfaceMockRecorder) Record(arg0 any, arg1 ...any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockGaugeIface)(nil).Record), varargs...)
 }
 
+// MockGaugeRemover is a mock of GaugeRemover interface.
+type MockGaugeRemover struct {
+	ctrl     *gomock.Controller
+	recorder *MockGaugeRemoverMockRecorder
+	isgomock struct{}
+}
+
+// MockGaugeRemoverMockRecorder is the mock recorder for MockGaugeRemover.
+type MockGaugeRemoverMockRecorder struct {
+	mock *MockGaugeRemover
+}
+
+// NewMockGaugeRemover creates a new mock instance.
+func NewMockGaugeRemover(ctrl *gomock.Controller) *MockGaugeRemover {
+	mock := &MockGaugeRemover{ctrl: ctrl}
+	mock.recorder = &MockGaugeRemoverMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGaugeRemover) EXPECT() *MockGaugeRemoverMockRecorder {
+	return m.recorder
+}
+
+// Remove mocks base method.
+func (m *MockGaugeRemover) Remove(arg0 ...Tag) {
+	m.ctrl.T.Helper()
+	varargs := []any{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "Remove", varargs...)
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockGaugeRemoverMockRecorder) Remove(arg0 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockGaugeRemover)(nil).Remove), arg0...)
+}
+
 // MockTimerIface is a mock of TimerIface interface.
 type MockTimerIface struct {
 	ctrl     *gomock.Controller

@@ -61,3 +61,12 @@ func recordDroppedTask(handler metrics.Handler, reason dropReason) {
 	}
 	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag())
 }
+
+// clearGauge removes the series of g if removeSeries is true. Otherwise it records 0.
+func clearGauge(removeSeries bool, g metrics.GaugeIface, tags ...metrics.Tag) {
+	if removeSeries {
+		metrics.RemoveGauge(g, tags...)
+		return
+	}
+	g.Record(0, tags...)
+}

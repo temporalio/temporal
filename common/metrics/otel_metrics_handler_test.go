@@ -270,6 +270,62 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 	}
 }
 
+func TestMeter_RemoveGauge(t *testing.T) {
+	ctx := context.Background()
+	rdr := sdkmetrics.NewManualReader()
+	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(rdr))
+	p, err := NewOtelMetricsHandler(
+		log.NewTestLogger(),
+		&testProvider{meter: provider.Meter("test")},
+		defaultConfig,
+		false,
+	)
+	require.NoError(t, err)
+
+	collectGauge := func() map[string]float64 {
+		var rm metricdata.ResourceMetrics
+		require.NoError(t, rdr.Collect(ctx, &rm))
+		points := make(map[string]float64)
+		for _, sm := range rm.ScopeMetrics {
+			for _, m := range sm.Metrics {
+				if m.Name != "temp" {
+					continue
+				}
+				for _, dp := range m.Data.(metricdata.Gauge[float64]).DataPoints {
+					loc, _ := dp.Attributes.Value("location")
+					points[loc.AsString()] = dp.Value
+				}
+			}
+		}
+		return points
+	}
+
+	tagged := p.WithTags(StringTag("location", "Mare Imbrium"))
+	tagged.Gauge("temp").Record(100)
+	p.Gauge("temp").Record(200, StringTag("location", "Mare Tranquillitatis"))
+	require.Equal(t, map[string]float64{"Mare Imbrium": 100, "Mare Tranquillitatis": 200}, collectGauge())
+
+	RemoveGauge(tagged.Gauge("temp"))
+	require.Equal(t, map[string]float64{"Mare Tranquillitatis": 200}, collectGauge())
+
+	RemoveGauge(p.Gauge("temp"), StringTag("location", "Mare Tranquillitatis"))
+	require.Empty(t, collectGauge())
+
+	tagged.Gauge("temp").Record(300)
+	require.Equal(t, map[string]float64{"Mare Imbrium": 300}, collectGauge())
+}
+
+func TestRemoveGauge_RecordsZeroWithoutRemover(t *testing.T) {
+	var got []float64
+	var gotTags []Tag
+	RemoveGauge(GaugeFunc(func(v float64, tags ...Tag) {
+		got = append(got, v)
+		gotTags = append(gotTags, tags...)
+	}), StringTag("location", "Mare Imbrium"))
+	require.Equal(t, []float64{0}, got)
+	require.Equal(t, []Tag{StringTag("location", "Mare Imbrium")}, gotTags)
+}
+
 func recordMetrics(mp Handler) {
 	hitsCounter := mp.Counter("hits")
 	gauge := mp.Gauge("temp")

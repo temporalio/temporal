@@ -58,6 +58,11 @@ type (
 		// Tags provided are merged with the source MetricsHandler
 		Record(float64, ...Tag)
 	}
+	// GaugeRemover is implemented by gauges that can stop reporting a tag set. Use [RemoveGauge].
+	GaugeRemover interface {
+		// Remove stops reporting the gauge for the tags merged with the source MetricsHandler.
+		Remove(...Tag)
+	}
 
 	// TimerIface records time durations.
 	TimerIface interface {
@@ -83,3 +88,13 @@ func (c CounterFunc) Record(v int64, tags ...Tag)       { c(v, tags...) }
 func (c GaugeFunc) Record(v float64, tags ...Tag)       { c(v, tags...) }
 func (c TimerFunc) Record(v time.Duration, tags ...Tag) { c(v, tags...) }
 func (c HistogramFunc) Record(v int64, tags ...Tag)     { c(v, tags...) }
+
+// RemoveGauge stops reporting g for tags, so the series does not stay after its source is gone.
+// If g can't remove a series, it records 0 instead.
+func RemoveGauge(g GaugeIface, tags ...Tag) {
+	if r, ok := g.(GaugeRemover); ok {
+		r.Remove(tags...)
+		return
+	}
+	g.Record(0, tags...)
+}
